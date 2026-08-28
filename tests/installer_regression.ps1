@@ -81,6 +81,7 @@ try {
         throw "unsupported PowerShell target unexpectedly succeeded"
     }
     Write-Host "ok: unsupported PowerShell target fails"
+    $global:LASTEXITCODE = 0
 } finally {
     Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $TemporaryRoot
 }
