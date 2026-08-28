@@ -34,12 +34,6 @@ The installer selects the correct release, verifies its SHA-256 checksum, and
 installs `kiss` in your user binary directory. The repository and its releases
 must be public for these commands to work without GitHub authentication.
 
-To build the current checkout instead:
-
-```bash
-cargo install --path crates/kiss
-```
-
 ## Quick start
 
 Sign in with your ChatGPT subscription and start KISS:
