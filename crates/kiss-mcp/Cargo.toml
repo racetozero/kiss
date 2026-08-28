@@ -7,13 +7,13 @@ repository.workspace = true
 description = "First-class MCP client support for KISS"
 
 [dependencies]
-kiss-ai.workspace = true
-kiss-agent.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
 dirs.workspace = true
 fs2.workspace = true
 http.workspace = true
+kiss-agent.workspace = true
+kiss-ai.workspace = true
 reqwest-mcp.workspace = true
 rmcp.workspace = true
 rustls.workspace = true

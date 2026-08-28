@@ -11,6 +11,7 @@ env:
 jobs:
   test:
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
@@ -29,3 +30,24 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Test
         run: cargo nextest run --workspace
+
+  installer:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check shell installer
+        if: runner.os != 'Windows'
+        run: |
+          bash -n install.sh tests/installer_regression.sh
+          bash tests/installer_regression.sh
+      - name: Check shell installer with ShellCheck
+        if: runner.os == 'Linux'
+        run: shellcheck -x install.sh tests/installer_regression.sh
+      - name: Check PowerShell installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./tests/installer_regression.ps1

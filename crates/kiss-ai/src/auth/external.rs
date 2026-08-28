@@ -29,6 +29,7 @@ pub struct ExternalCredentialSource {
 enum SourceFormat {
     Codex,
     ClaudeCode,
+    #[cfg(target_os = "macos")]
     ClaudeKeychain,
     OpenCode,
     Pi,
@@ -43,10 +44,12 @@ enum ImportedCredential {
 }
 
 pub fn discover() -> Vec<ExternalCredentialSource> {
-    let mut sources = dirs::home_dir()
+    let sources = dirs::home_dir()
         .as_deref()
         .map(discover_at)
         .unwrap_or_default();
+    #[cfg(target_os = "macos")]
+    let mut sources = sources;
     #[cfg(target_os = "macos")]
     if claude_keychain_secret(false).is_some() {
         sources.insert(
@@ -509,17 +512,13 @@ fn read_source(source: &ExternalCredentialSource) -> Result<ImportedCredential> 
                 .as_deref()
                 .context("Claude source has no path")?,
         )?)),
+        #[cfg(target_os = "macos")]
         SourceFormat::ClaudeKeychain => {
-            #[cfg(target_os = "macos")]
-            {
-                let secret = claude_keychain_secret(true)
-                    .context("Claude Code Keychain credential is unavailable")?;
-                let value: Value = serde_json::from_str(&secret)
-                    .context("Claude Code Keychain credential has invalid JSON")?;
-                Ok(ImportedCredential::OAuth(parse_claude_value(&value)?))
-            }
-            #[cfg(not(target_os = "macos"))]
-            anyhow::bail!("Claude Code Keychain import is available only on macOS")
+            let secret = claude_keychain_secret(true)
+                .context("Claude Code Keychain credential is unavailable")?;
+            let value: Value = serde_json::from_str(&secret)
+                .context("Claude Code Keychain credential has invalid JSON")?;
+            Ok(ImportedCredential::OAuth(parse_claude_value(&value)?))
         }
         format => {
             let path = source

@@ -8,16 +8,16 @@ description = "Differential-rendering terminal UI library for kiss"
 
 [dependencies]
 anyhow.workspace = true
+crossterm.workspace = true
+dirs.workspace = true
+mdwright-latex.workspace = true
+mermaid-text.workspace = true
+pulldown-cmark.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-crossterm.workspace = true
-unicode-width.workspace = true
-unicode-segmentation.workspace = true
-pulldown-cmark.workspace = true
-mermaid-text.workspace = true
-mdwright-latex.workspace = true
 tokio.workspace = true
-dirs.workspace = true
+unicode-segmentation.workspace = true
+unicode-width.workspace = true
 
 [dev-dependencies]
 kiss-bench.workspace = true

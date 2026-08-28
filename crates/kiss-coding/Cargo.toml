@@ -7,27 +7,27 @@ repository.workspace = true
 description = "Coding harness: sessions, tools, compaction, settings, skills"
 
 [dependencies]
-kiss-ai.workspace = true
-kiss-agent.workspace = true
 anyhow.workspace = true
-thiserror.workspace = true
+async-trait.workspace = true
+chrono.workspace = true
+dirs.workspace = true
+futures.workspace = true
+globset.workspace = true
+grep-matcher.workspace = true
+grep-regex.workspace = true
+grep-searcher.workspace = true
+ignore.workspace = true
+kiss-agent.workspace = true
+kiss-ai.workspace = true
+rand.workspace = true
+regex.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 serde_yaml.workspace = true
+thiserror.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
-futures.workspace = true
 uuid.workspace = true
-rand.workspace = true
-dirs.workspace = true
-chrono.workspace = true
-ignore.workspace = true
-globset.workspace = true
-grep-searcher.workspace = true
-grep-regex.workspace = true
-grep-matcher.workspace = true
-regex.workspace = true
-async-trait.workspace = true
 
 [dev-dependencies]
 kiss-bench.workspace = true
