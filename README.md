@@ -42,22 +42,13 @@ page, or use the checked-in installer. Because this repository is private,
 the command uses your active GitHub CLI login:
 
 ```bash
-(
-  set -e
-  installer="$(mktemp)"
-  trap 'rm -f "$installer"' EXIT
-  gh api -H "Accept: application/vnd.github.raw+json" \
-    repos/racetozero/kiss/contents/install.sh > "$installer"
-  sh "$installer"
-)
+(installer="$(mktemp)" && trap 'rm -f "$installer"' EXIT && gh api -H "Accept: application/vnd.github.raw+json" repos/racetozero/kiss/contents/install.sh > "$installer" && sh "$installer")
 ```
 
 On Windows PowerShell:
 
 ```powershell
-$installer = gh api -H "Accept: application/vnd.github.raw+json" repos/racetozero/kiss/contents/install.ps1
-if ($LASTEXITCODE -ne 0) { throw "Could not download the KISS installer" }
-$installer | Invoke-Expression
+$installer = gh api -H "Accept: application/vnd.github.raw+json" repos/racetozero/kiss/contents/install.ps1; if ($LASTEXITCODE -ne 0) { throw "Could not download the KISS installer" }; $installer | Out-String | Invoke-Expression
 ```
 
 The installer verifies the release archive against its `.sha256` file. Set
