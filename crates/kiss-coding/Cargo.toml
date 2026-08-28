@@ -1,0 +1,34 @@
+[package]
+name = "kiss-coding"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Coding harness: sessions, tools, compaction, settings, skills"
+
+[dependencies]
+kiss-ai.workspace = true
+kiss-agent.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+futures.workspace = true
+uuid.workspace = true
+rand.workspace = true
+dirs.workspace = true
+chrono.workspace = true
+ignore.workspace = true
+globset.workspace = true
+grep-searcher.workspace = true
+grep-regex.workspace = true
+grep-matcher.workspace = true
+regex.workspace = true
+async-trait.workspace = true
+
+[dev-dependencies]
+kiss-bench.workspace = true
+tempfile.workspace = true

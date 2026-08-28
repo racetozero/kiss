@@ -1,0 +1,1046 @@
+//! AgentSession: the high-level facade every mode drives. Owns the session
+//! manager, tool set, queues, retry, auto-compaction, and cost accounting.
+
+use crate::compaction::{
+    self, estimate_context_tokens, extract_file_ops, file_ops_details, plan_compaction,
+    should_compact,
+};
+use crate::session::manager::SessionManager;
+use crate::settings::{QueueMode, Settings};
+use kiss_agent::{AgentContext, AgentEvent, AgentLoopConfig, AgentMessage, DynTool, EventSink};
+use kiss_ai::{Model, Registry, StopReason, ThinkingLevel, Usage};
+use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
+use tokio_util::sync::CancellationToken;
+
+/// Harness-level events layered over the loop's AgentEvents.
+#[derive(Debug, Clone)]
+pub enum SessionEvent {
+    Agent(Box<AgentEvent>),
+    QueueUpdate {
+        steering: Vec<String>,
+        follow_up: Vec<String>,
+    },
+    CompactionStart {
+        auto: bool,
+    },
+    CompactionEnd {
+        summary: String,
+        tokens_before: u64,
+        error: Option<String>,
+    },
+    Retry {
+        attempt: u32,
+        max: u32,
+        delay_ms: u64,
+        error: String,
+    },
+    ModelChanged {
+        provider: String,
+        model_id: String,
+    },
+}
+
+pub type SessionEventSink = Arc<dyn Fn(SessionEvent) + Send + Sync>;
+
+pub struct TreeNavigationOutcome {
+    pub editor_text: Option<String>,
+    pub summarized: bool,
+    pub cancelled: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct EphemeralResponse {
+    pub text: String,
+    pub usage: Usage,
+}
+
+pub struct AgentSession {
+    pub manager: Mutex<SessionManager>,
+    pub registry: Registry,
+    tools: Mutex<Vec<DynTool>>,
+    settings: Mutex<Settings>,
+    system_prompt: Mutex<String>,
+    model: Mutex<Model>,
+    thinking: Mutex<ThinkingLevel>,
+    steering: Arc<Mutex<VecDeque<AgentMessage>>>,
+    follow_up: Arc<Mutex<VecDeque<AgentMessage>>>,
+    cancel: Mutex<CancellationToken>,
+    running: Mutex<bool>,
+    totals: Mutex<Usage>,
+    context_usage_cache: Mutex<Option<(u64, u64)>>,
+    api_key_override: Option<(String, String)>,
+    sink: SessionEventSink,
+}
+
+impl AgentSession {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        manager: SessionManager,
+        tools: Vec<DynTool>,
+        registry: Registry,
+        settings: Settings,
+        system_prompt: String,
+        model: Model,
+        thinking: ThinkingLevel,
+        api_key_override: Option<(String, String)>,
+        sink: SessionEventSink,
+    ) -> Arc<Self> {
+        Arc::new(AgentSession {
+            manager: Mutex::new(manager),
+            registry,
+            tools: Mutex::new(tools),
+            settings: Mutex::new(settings),
+            system_prompt: Mutex::new(system_prompt),
+            model: Mutex::new(model),
+            thinking: Mutex::new(thinking),
+            steering: Default::default(),
+            follow_up: Default::default(),
+            cancel: Mutex::new(CancellationToken::new()),
+            running: Mutex::new(false),
+            totals: Default::default(),
+            context_usage_cache: Default::default(),
+            api_key_override,
+            sink,
+        })
+    }
+
+    pub fn model(&self) -> Model {
+        self.model.lock().unwrap().clone()
+    }
+
+    pub fn thinking_level(&self) -> ThinkingLevel {
+        *self.thinking.lock().unwrap()
+    }
+
+    pub fn totals(&self) -> Usage {
+        *self.totals.lock().unwrap()
+    }
+
+    pub fn is_running(&self) -> bool {
+        *self.running.lock().unwrap()
+    }
+
+    pub fn settings(&self) -> Settings {
+        self.settings.lock().unwrap().clone()
+    }
+
+    pub fn update_settings(&self, settings: Settings) {
+        *self.settings.lock().unwrap() = settings;
+    }
+
+    /// Replace resources used by the next model request.
+    pub fn reload_runtime(&self, settings: Settings, system_prompt: String, tools: Vec<DynTool>) {
+        *self.settings.lock().unwrap() = settings;
+        *self.system_prompt.lock().unwrap() = system_prompt;
+        *self.tools.lock().unwrap() = tools;
+    }
+
+    /// Switch the active session without appending synthetic history.
+    pub fn replace_manager(&self, manager: SessionManager) {
+        let context = manager.build_session_context();
+        if let Some((provider, model_id)) = context.model
+            && let Some((model, _)) = self.registry.resolve(&model_id, Some(&provider))
+        {
+            *self.model.lock().unwrap() = model;
+        }
+        if let Some(thinking) = context.thinking_level {
+            *self.thinking.lock().unwrap() = thinking;
+        }
+        *self.manager.lock().unwrap() = manager;
+        *self.context_usage_cache.lock().unwrap() = None;
+        *self.totals.lock().unwrap() = Usage::default();
+    }
+
+    pub fn set_model(&self, model: Model) {
+        {
+            let mut m = self.manager.lock().unwrap();
+            let _ = m.append_model_change(&model.provider, &model.id);
+        }
+        (self.sink)(SessionEvent::ModelChanged {
+            provider: model.provider.clone(),
+            model_id: model.id.clone(),
+        });
+        *self.model.lock().unwrap() = model;
+    }
+
+    pub fn set_thinking_level(&self, level: ThinkingLevel) {
+        let _ = self
+            .manager
+            .lock()
+            .unwrap()
+            .append_thinking_level_change(level);
+        *self.thinking.lock().unwrap() = level;
+    }
+
+    /// Move the active leaf in the current session tree, with an optional
+    /// summary of the branch that is no longer active.
+    pub async fn navigate_tree(
+        self: &Arc<Self>,
+        target_id: &str,
+        summarize: bool,
+        custom_instructions: Option<String>,
+        cancel: CancellationToken,
+    ) -> anyhow::Result<TreeNavigationOutcome> {
+        let (old_leaf, new_leaf, editor_text, abandoned_messages) = {
+            let manager = self.manager.lock().unwrap();
+            let target = manager
+                .get_entry(target_id)
+                .cloned()
+                .ok_or_else(|| anyhow::anyhow!("unknown tree entry {target_id}"))?;
+            let old_leaf = manager.leaf_id().map(str::to_string);
+            if old_leaf.as_deref() == Some(target_id) {
+                return Ok(TreeNavigationOutcome {
+                    editor_text: None,
+                    summarized: false,
+                    cancelled: false,
+                });
+            }
+
+            let (new_leaf, editor_text) = match &target {
+                crate::session::entry::SessionEntry::Message {
+                    message: AgentMessage::User(user),
+                    ..
+                } => (
+                    target.parent_id().map(str::to_string),
+                    Some(user.content.as_text()),
+                ),
+                _ => (Some(target_id.to_string()), None),
+            };
+
+            let target_ancestors: std::collections::HashSet<String> = new_leaf
+                .as_deref()
+                .map(|leaf| {
+                    manager
+                        .branch_entries(Some(leaf))
+                        .into_iter()
+                        .map(|entry| entry.id().to_string())
+                        .collect()
+                })
+                .unwrap_or_default();
+            let common_ancestor = old_leaf.as_deref().and_then(|leaf| {
+                manager
+                    .branch_entries(Some(leaf))
+                    .into_iter()
+                    .rev()
+                    .find(|entry| target_ancestors.contains(entry.id()))
+                    .map(|entry| entry.id().to_string())
+            });
+            let abandoned_messages = old_leaf
+                .as_deref()
+                .map(|leaf| manager.branch_messages_after(leaf, common_ancestor.as_deref()))
+                .unwrap_or_default();
+            (old_leaf, new_leaf, editor_text, abandoned_messages)
+        };
+
+        let summary = if summarize && !abandoned_messages.is_empty() {
+            let model = self.model();
+            let api_key = self.resolve_api_key(&model.provider).await;
+            let serialized = compaction::serialize_agent_messages(&abandoned_messages);
+            let result = compaction::generate_summary(
+                &model,
+                api_key,
+                &serialized,
+                None,
+                custom_instructions.as_deref(),
+                cancel.clone(),
+            )
+            .await?;
+            if cancel.is_cancelled() {
+                return Ok(TreeNavigationOutcome {
+                    editor_text: None,
+                    summarized: false,
+                    cancelled: true,
+                });
+            }
+            Some(result)
+        } else {
+            None
+        };
+
+        let mut manager = self.manager.lock().unwrap();
+        if manager.leaf_id() != old_leaf.as_deref() {
+            anyhow::bail!("the session tree changed during navigation");
+        }
+        let summarized = if let Some(summary) = summary {
+            let (read, modified) = extract_file_ops(&abandoned_messages);
+            if let Some(usage) = &summary.usage {
+                self.totals.lock().unwrap().add(usage);
+            }
+            manager.branch_with_summary(
+                new_leaf.as_deref(),
+                old_leaf.as_deref().unwrap_or(target_id),
+                summary.summary,
+                summary.usage,
+                Some(file_ops_details(&read, &modified)),
+            )?;
+            true
+        } else {
+            if let Some(new_leaf) = new_leaf.as_deref() {
+                manager.branch(new_leaf)?;
+            } else {
+                manager.reset_leaf();
+            }
+            false
+        };
+
+        Ok(TreeNavigationOutcome {
+            editor_text,
+            summarized,
+            cancelled: false,
+        })
+    }
+
+    pub fn queue_steering(&self, message: AgentMessage) {
+        self.steering.lock().unwrap().push_back(message);
+        self.emit_queues();
+    }
+
+    pub fn queue_follow_up(&self, message: AgentMessage) {
+        self.follow_up.lock().unwrap().push_back(message);
+        self.emit_queues();
+    }
+
+    /// Drain both queues back to the caller (Escape restores to editor).
+    pub fn reclaim_queued(&self) -> Vec<AgentMessage> {
+        let mut out: Vec<AgentMessage> = self.steering.lock().unwrap().drain(..).collect();
+        out.extend(self.follow_up.lock().unwrap().drain(..));
+        self.emit_queues();
+        out
+    }
+
+    pub fn abort(&self) {
+        self.cancel.lock().unwrap().cancel();
+    }
+
+    fn emit_queues(&self) {
+        let preview = |q: &VecDeque<AgentMessage>| {
+            q.iter()
+                .map(|m| match m {
+                    AgentMessage::User(u) => u.content.as_text().chars().take(80).collect(),
+                    other => other.role().to_string(),
+                })
+                .collect::<Vec<String>>()
+        };
+        (self.sink)(SessionEvent::QueueUpdate {
+            steering: preview(&self.steering.lock().unwrap()),
+            follow_up: preview(&self.follow_up.lock().unwrap()),
+        });
+    }
+
+    async fn resolve_api_key(&self, provider: &str) -> Option<String> {
+        if let Some((override_provider, key)) = &self.api_key_override
+            && override_provider == provider
+        {
+            return Some(key.clone());
+        }
+        kiss_ai::auth::resolve_api_key_async(provider, &self.registry.declared_keys)
+            .await
+            .ok()
+            .flatten()
+    }
+
+    fn loop_config(&self, session_arc: &Arc<Self>) -> AgentLoopConfig {
+        let mut config = AgentLoopConfig::new(self.model());
+        config.thinking_level = self.thinking_level();
+        config.session_id = Some(self.manager.lock().unwrap().session_id().to_string());
+        let settings = self.settings();
+        config.transport = settings.transport;
+        let declared = self.registry.declared_keys.clone();
+        let api_key_override = self.api_key_override.clone();
+        config.get_api_key = Some(Arc::new(move |provider| {
+            let declared = declared.clone();
+            let api_key_override = api_key_override.clone();
+            Box::pin(async move {
+                if let Some((override_provider, key)) = api_key_override
+                    && override_provider == provider
+                {
+                    return Some(key);
+                }
+                kiss_ai::auth::resolve_api_key_async(&provider, &declared)
+                    .await
+                    .ok()
+                    .flatten()
+            })
+        }));
+
+        let steering = self.steering.clone();
+        let steering_mode = settings.steering_mode;
+        let session_for_queues = session_arc.clone();
+        config.get_steering_messages = Some(Arc::new(move || {
+            let drained = drain_queue(&steering, steering_mode);
+            session_for_queues.emit_queues();
+            Box::pin(async move { drained })
+        }));
+        let follow_up = self.follow_up.clone();
+        let follow_up_mode = settings.follow_up_mode;
+        let session_for_queues = session_arc.clone();
+        config.get_follow_up_messages = Some(Arc::new(move || {
+            let drained = drain_queue(&follow_up, follow_up_mode);
+            session_for_queues.emit_queues();
+            Box::pin(async move { drained })
+        }));
+        config
+    }
+
+    fn build_context(&self) -> AgentContext {
+        let model = self.model();
+        let manager = self.manager.lock().unwrap();
+        let (openai_responses_input, messages) =
+            if kiss_ai::api::openai_compaction::supports_remote_compaction(&model)
+                && let Some(remote) = manager.build_openai_compaction_context(&model)
+            {
+                (Some(remote.replacement_history), remote.messages)
+            } else {
+                (None, manager.build_session_context().messages)
+            };
+        drop(manager);
+        AgentContext {
+            system_prompt: self.system_prompt.lock().unwrap().clone(),
+            openai_responses_input,
+            messages,
+            tools: self.tools.lock().unwrap().clone(),
+        }
+    }
+
+    async fn run_ephemeral(
+        self: &Arc<Self>,
+        system_prompt: String,
+        prompt: String,
+        tools: Vec<DynTool>,
+        max_tokens: u64,
+        cancel: CancellationToken,
+    ) -> anyhow::Result<EphemeralResponse> {
+        let mut config = self.loop_config(self);
+        config.thinking_level = ThinkingLevel::Off;
+        config.max_tokens = Some(max_tokens);
+        config.session_id = Some(format!("ephemeral-{}", uuid::Uuid::new_v4()));
+        config.get_steering_messages = None;
+        config.get_follow_up_messages = None;
+
+        let context = AgentContext {
+            system_prompt,
+            openai_responses_input: None,
+            messages: Vec::new(),
+            tools,
+        };
+        let sink: EventSink = Arc::new(|_| {});
+        let messages = kiss_agent::run_agent_loop(
+            vec![AgentMessage::user(prompt)],
+            context,
+            config,
+            cancel.clone(),
+            sink,
+        )
+        .await;
+        if cancel.is_cancelled() {
+            anyhow::bail!("request cancelled");
+        }
+
+        let mut usage = Usage::default();
+        for message in &messages {
+            if let AgentMessage::Assistant(assistant) = message {
+                usage.add(&assistant.usage);
+            }
+        }
+        let assistant = messages.iter().rev().find_map(|message| match message {
+            AgentMessage::Assistant(assistant) => Some(assistant),
+            _ => None,
+        });
+        let Some(assistant) = assistant else {
+            anyhow::bail!("the provider returned no answer");
+        };
+        if assistant.stop_reason == StopReason::Error {
+            anyhow::bail!(
+                "{}",
+                assistant
+                    .error_message
+                    .as_deref()
+                    .unwrap_or("the provider request failed")
+            );
+        }
+        let text = assistant.text();
+        if text.trim().is_empty() {
+            anyhow::bail!("the provider returned an empty answer");
+        }
+        self.totals.lock().unwrap().add(&usage);
+        Ok(EphemeralResponse { text, usage })
+    }
+
+    /// Answer a short side question without changing the active session.
+    pub async fn answer_btw(
+        self: &Arc<Self>,
+        question: &str,
+        cancel: CancellationToken,
+    ) -> anyhow::Result<EphemeralResponse> {
+        let messages = self
+            .manager
+            .lock()
+            .unwrap()
+            .build_session_context()
+            .messages;
+        let transcript = transcript_excerpt(&messages, 4, 4_000);
+        let prompt = if transcript.is_empty() {
+            format!("Side question:\n{question}")
+        } else {
+            format!("Recent session context:\n{transcript}\n\nSide question:\n{question}")
+        };
+        let read_tools = self
+            .tools
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|tool| tool.name() == "read")
+            .cloned()
+            .collect();
+        self.run_ephemeral(
+            "Answer the side question from the supplied session context. This is a read-only request. Use the read tool only when a file is needed. Do not propose or perform edits. Give no more than 150 words or 600 characters. Use no more than five bullets. Return only the answer.".into(),
+            prompt,
+            read_tools,
+            500,
+            cancel,
+        )
+        .await
+    }
+
+    /// Create a one-line recap without changing the active session.
+    pub async fn generate_recap(
+        self: &Arc<Self>,
+        previous_recap: Option<&str>,
+        cancel: CancellationToken,
+    ) -> anyhow::Result<EphemeralResponse> {
+        let messages = self
+            .manager
+            .lock()
+            .unwrap()
+            .build_session_context()
+            .messages;
+        let transcript = transcript_excerpt(&messages, 12, 12_000);
+        if transcript.is_empty() {
+            anyhow::bail!("the session has no conversation to recap");
+        }
+        let previous = previous_recap
+            .filter(|recap| !recap.trim().is_empty())
+            .map(|recap| format!("\n\nPrevious recap:\n{recap}"))
+            .unwrap_or_default();
+        self.run_ephemeral(
+            "Summarize the supplied coding session in one plain-text line of at most 120 characters. State what was done and the next action when one is clear. Do not use a prefix, Markdown, or a newline. Return only the recap.".into(),
+            format!("Session transcript:\n{transcript}{previous}"),
+            Vec::new(),
+            160,
+            cancel,
+        )
+        .await
+    }
+
+    /// Run one prompt to completion, including retry and auto-compaction.
+    pub async fn prompt(self: &Arc<Self>, prompts: Vec<AgentMessage>) {
+        {
+            let mut running = self.running.lock().unwrap();
+            if *running {
+                // Already running: enqueue as steering instead.
+                drop(running);
+                for p in prompts {
+                    self.queue_steering(p);
+                }
+                return;
+            }
+            *running = true;
+        }
+        let cancel = {
+            let mut guard = self.cancel.lock().unwrap();
+            *guard = CancellationToken::new();
+            guard.clone()
+        };
+
+        // Persist prompts and run.
+        {
+            let mut manager = self.manager.lock().unwrap();
+            for p in &prompts {
+                let _ = manager.append_message(p.clone());
+            }
+        }
+
+        let session = self.clone();
+        let sink: EventSink = Arc::new(move |event: AgentEvent| {
+            session.on_agent_event(&event);
+            (session.sink)(SessionEvent::Agent(Box::new(event)));
+        });
+
+        let mut config = self.loop_config(self);
+        let mut context = self.build_context();
+        // The prompts were already persisted. Context includes them, so run
+        // as a continuation without a second prompt list.
+
+        let mut attempt: u32 = 0;
+        loop {
+            let messages = kiss_agent::run_agent_loop_continue(
+                context.clone(),
+                config.clone(),
+                cancel.clone(),
+                sink.clone(),
+            )
+            .await;
+
+            // Retry on transient error stops.
+            let last_error = messages.iter().rev().find_map(|m| match m {
+                AgentMessage::Assistant(a) if a.stop_reason == StopReason::Error => {
+                    Some(a.error_message.clone().unwrap_or_default())
+                }
+                _ => None,
+            });
+            let settings = self.settings();
+            let retry = &settings.retry;
+            if let Some(error) = last_error
+                && retry.enabled
+                && attempt < retry.max_retries
+                && is_transient(&error)
+                && !cancel.is_cancelled()
+            {
+                attempt += 1;
+                let delay = retry.base_delay_ms.saturating_mul(1u64 << (attempt - 1));
+                (self.sink)(SessionEvent::Retry {
+                    attempt,
+                    max: retry.max_retries,
+                    delay_ms: delay,
+                    error,
+                });
+                tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
+                context = self.build_context();
+                // Drop the trailing error assistant message from context.
+                while matches!(
+                    context.messages.last(),
+                    Some(AgentMessage::Assistant(a)) if a.stop_reason == StopReason::Error
+                ) {
+                    context.messages.pop();
+                }
+                config.model = self.model();
+                config.thinking_level = self.thinking_level();
+                continue;
+            }
+
+            // Auto-compaction check after a completed run.
+            if settings.compaction.enabled && !cancel.is_cancelled() {
+                let ctx = self.manager.lock().unwrap().build_session_context();
+                let tokens = estimate_context_tokens(&ctx.messages);
+                let window = self.model().context_window;
+                if should_compact(tokens, window, settings.compaction.reserve_tokens) {
+                    self.compact(None, true).await;
+                }
+            }
+            break;
+        }
+
+        *self.running.lock().unwrap() = false;
+    }
+
+    fn on_agent_event(&self, event: &AgentEvent) {
+        match event {
+            AgentEvent::MessageEnd { message } => {
+                // Persist assistant + tool results (prompts persisted earlier;
+                // steering/follow-up user messages arrive here too).
+                let persist = match message {
+                    AgentMessage::Assistant(a) => {
+                        let mut totals = self.totals.lock().unwrap();
+                        totals.add(&a.usage);
+                        true
+                    }
+                    AgentMessage::ToolResult(_)
+                    | AgentMessage::User(_)
+                    | AgentMessage::Custom(_) => true,
+                    _ => false,
+                };
+                if persist {
+                    // User prompts were persisted in prompt(); avoid double
+                    // writes by checking the current leaf message identity.
+                    let mut manager = self.manager.lock().unwrap();
+                    let duplicate = matches!(
+                        (manager.entries().last(), message),
+                        (Some(crate::session::entry::SessionEntry::Message { message: last, .. }), m) if last == m
+                    );
+                    if !duplicate {
+                        let _ = manager.append_message(message.clone());
+                    }
+                }
+            }
+            AgentEvent::AgentEnd { .. } => {}
+            _ => {}
+        }
+    }
+
+    /// Manual or automatic compaction.
+    pub async fn compact(self: &Arc<Self>, custom_instructions: Option<String>, auto: bool) {
+        (self.sink)(SessionEvent::CompactionStart { auto });
+        let ctx = self.manager.lock().unwrap().build_session_context();
+        let previous_summary = ctx.messages.iter().rev().find_map(|m| match m {
+            AgentMessage::CompactionSummary(c) => Some(c.summary.clone()),
+            _ => None,
+        });
+        let keep_recent_tokens = self.settings().compaction.keep_recent_tokens;
+        let plan = plan_compaction(&ctx.messages, keep_recent_tokens);
+        if plan.to_summarize.is_empty() && plan.turn_prefix.is_empty() {
+            (self.sink)(SessionEvent::CompactionEnd {
+                summary: String::new(),
+                tokens_before: plan.tokens_before,
+                error: Some("Nothing to compact".into()),
+            });
+            return;
+        }
+
+        let model = self.model();
+        let api_key = self.resolve_api_key(&model.provider).await;
+
+        let mut serialized = compaction::serialize_agent_messages(&plan.to_summarize);
+        if plan.is_split_turn {
+            serialized.push_str(
+                "\n\n[The following is the earlier part of the still-active task turn:]\n\n",
+            );
+            serialized.push_str(&compaction::serialize_agent_messages(&plan.turn_prefix));
+        }
+
+        let summary_cancel = self.cancel.lock().unwrap().clone();
+        let remote_request = if kiss_ai::api::openai_compaction::supports_remote_compaction(&model)
+        {
+            let context = self.build_context();
+            Some((
+                kiss_ai::Context {
+                    system_prompt: Some(context.system_prompt),
+                    openai_responses_input: context.openai_responses_input,
+                    messages: kiss_agent::convert_to_llm(&context.messages),
+                    tools: context.tools.iter().map(|tool| tool.to_def()).collect(),
+                },
+                kiss_ai::StreamOptions {
+                    api_key: api_key.clone(),
+                    reasoning: self.thinking_level(),
+                    session_id: Some(self.manager.lock().unwrap().session_id().to_string()),
+                    cancel: summary_cancel.clone(),
+                    ..Default::default()
+                },
+            ))
+        } else {
+            None
+        };
+        let local_future = compaction::generate_summary(
+            &model,
+            api_key.clone(),
+            &serialized,
+            previous_summary.as_deref(),
+            custom_instructions.as_deref(),
+            summary_cancel.clone(),
+        );
+        let remote_model = model.clone();
+        let remote_future = async move {
+            match remote_request {
+                Some((context, options)) => Some(
+                    kiss_ai::api::openai_compaction::compact(&remote_model, &context, &options)
+                        .await,
+                ),
+                None => None,
+            }
+        };
+        let (local_outcome, remote_outcome) = tokio::join!(local_future, remote_future);
+
+        match select_compaction_outcome(&model, local_outcome, remote_outcome) {
+            Ok(result) => {
+                let mut summarized_all = plan.to_summarize.clone();
+                summarized_all.extend(plan.turn_prefix.clone());
+                let (read, modified) = extract_file_ops(&summarized_all);
+                {
+                    let mut totals = self.totals.lock().unwrap();
+                    if let Some(u) = &result.local_usage {
+                        totals.add(u);
+                    }
+                    if let Some(u) = &result.remote_usage {
+                        totals.add(u);
+                    }
+                }
+                let details = merge_compaction_details(
+                    file_ops_details(&read, &modified),
+                    result.remote_details,
+                );
+                let mut manager = self.manager.lock().unwrap();
+                let _ = manager.append_compaction(
+                    result.summary.clone(),
+                    plan.tokens_before,
+                    plan.kept.clone(),
+                    result.local_usage,
+                    Some(details),
+                );
+                (self.sink)(SessionEvent::CompactionEnd {
+                    summary: result.summary,
+                    tokens_before: plan.tokens_before,
+                    error: None,
+                });
+            }
+            Err(error) => {
+                (self.sink)(SessionEvent::CompactionEnd {
+                    summary: String::new(),
+                    tokens_before: plan.tokens_before,
+                    error: Some(format!("{error:#}")),
+                });
+            }
+        }
+    }
+
+    /// Current estimated context tokens and window fraction.
+    pub fn context_usage(&self) -> (u64, u64) {
+        let manager = self.manager.lock().unwrap();
+        let revision = manager.context_revision();
+        let used = if let Some((cached_revision, tokens)) =
+            *self.context_usage_cache.lock().unwrap()
+            && cached_revision == revision
+        {
+            tokens
+        } else {
+            let tokens = estimate_context_tokens(&manager.build_session_context().messages);
+            *self.context_usage_cache.lock().unwrap() = Some((revision, tokens));
+            tokens
+        };
+        drop(manager);
+        (used, self.model().context_window)
+    }
+}
+
+struct SelectedCompaction {
+    summary: String,
+    local_usage: Option<Usage>,
+    remote_usage: Option<Usage>,
+    remote_details: Option<serde_json::Value>,
+}
+
+fn select_compaction_outcome(
+    model: &Model,
+    local: anyhow::Result<compaction::SummaryOutcome>,
+    remote: Option<anyhow::Result<kiss_ai::api::openai_compaction::RemoteCompactionResult>>,
+) -> anyhow::Result<SelectedCompaction> {
+    match (local, remote) {
+        (Ok(local), Some(Ok(remote))) => Ok(SelectedCompaction {
+            summary: local.summary,
+            local_usage: local.usage,
+            remote_usage: remote.usage,
+            remote_details: Some(
+                kiss_ai::api::openai_compaction::build_remote_compaction_details(model, &remote),
+            ),
+        }),
+        (Ok(local), Some(Err(_)) | None) => Ok(SelectedCompaction {
+            summary: local.summary,
+            local_usage: local.usage,
+            remote_usage: None,
+            remote_details: None,
+        }),
+        (Err(_), Some(Ok(remote))) => Ok(SelectedCompaction {
+            summary: format!(
+                "OpenAI server-side compaction was applied for {}/{}. The provider-native context is stored in this session, and this notice keeps the compaction boundary readable for other providers.",
+                model.provider, model.id
+            ),
+            local_usage: None,
+            remote_usage: remote.usage,
+            remote_details: Some(
+                kiss_ai::api::openai_compaction::build_remote_compaction_details(model, &remote),
+            ),
+        }),
+        (Err(local), Some(Err(remote))) => anyhow::bail!(
+            "local compaction failed: {local:#}; OpenAI remote compaction failed: {remote:#}"
+        ),
+        (Err(error), None) => Err(error),
+    }
+}
+
+fn merge_compaction_details(
+    mut local: serde_json::Value,
+    remote: Option<serde_json::Value>,
+) -> serde_json::Value {
+    let Some(remote) = remote else {
+        return local;
+    };
+    let Some(local_object) = local.as_object_mut() else {
+        return remote;
+    };
+    if let Some(remote_object) = remote.as_object() {
+        for (key, value) in remote_object {
+            local_object.insert(key.clone(), value.clone());
+        }
+    }
+    local
+}
+
+fn transcript_excerpt(messages: &[AgentMessage], max_messages: usize, max_chars: usize) -> String {
+    let mut entries = messages
+        .iter()
+        .rev()
+        .filter_map(|message| match message {
+            AgentMessage::User(user) => Some(("User", user.content.as_text())),
+            AgentMessage::Assistant(assistant) => Some(("Assistant", assistant.text())),
+            _ => None,
+        })
+        .filter(|(_, text)| !text.trim().is_empty())
+        .take(max_messages)
+        .collect::<Vec<_>>();
+    entries.reverse();
+    let transcript = entries
+        .into_iter()
+        .map(|(role, text)| format!("{role}: {}", text.trim()))
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    let count = transcript.chars().count();
+    if count <= max_chars {
+        return transcript;
+    }
+    let omitted = count - max_chars;
+    let tail = transcript.chars().skip(omitted).collect::<String>();
+    format!("[earlier text omitted]\n{tail}")
+}
+
+fn drain_queue(queue: &Arc<Mutex<VecDeque<AgentMessage>>>, mode: QueueMode) -> Vec<AgentMessage> {
+    let mut q = queue.lock().unwrap();
+    match mode {
+        QueueMode::All => q.drain(..).collect(),
+        QueueMode::OneAtATime => q.pop_front().into_iter().collect(),
+    }
+}
+
+fn is_transient(error: &str) -> bool {
+    let e = error.to_lowercase();
+    [
+        "429",
+        "500",
+        "502",
+        "503",
+        "504",
+        "overloaded",
+        "rate limit",
+        "timeout",
+        "timed out",
+        "connection",
+        "stream error",
+        "request failed",
+        "unexpectedly",
+    ]
+    .iter()
+    .any(|needle| e.contains(needle))
+}
+
+#[cfg(test)]
+mod ephemeral_tests {
+    use super::*;
+    use std::collections::BTreeMap;
+
+    fn openai_model() -> Model {
+        Model {
+            id: "gpt-test".into(),
+            name: "GPT test".into(),
+            api: "openai-responses".into(),
+            provider: "openai".into(),
+            base_url: "https://api.openai.com/v1".into(),
+            reasoning: true,
+            input: vec!["text".into()],
+            cost: Default::default(),
+            context_window: 100_000,
+            max_tokens: 1_000,
+            compat: None,
+            headers: BTreeMap::new(),
+        }
+    }
+
+    fn remote_result() -> kiss_ai::api::openai_compaction::RemoteCompactionResult {
+        kiss_ai::api::openai_compaction::RemoteCompactionResult {
+            replacement_history: vec![serde_json::json!({
+                "type": "compaction",
+                "encrypted_content": "opaque"
+            })],
+            usage: Some(Usage {
+                input: 10,
+                output: 2,
+                total_tokens: 12,
+                ..Default::default()
+            }),
+        }
+    }
+
+    #[test]
+    fn transcript_excerpt_keeps_only_recent_user_and_assistant_text() {
+        let messages = vec![
+            AgentMessage::user("old"),
+            AgentMessage::BashExecution(kiss_agent::BashExecutionMessage {
+                command: "pwd".into(),
+                output: "ignored".into(),
+                exit_code: Some(0),
+                cancelled: false,
+                truncated: false,
+                full_output_path: None,
+                exclude_from_context: false,
+                timestamp: 1,
+            }),
+            AgentMessage::user("new"),
+        ];
+        let excerpt = transcript_excerpt(&messages, 1, 100);
+        assert_eq!(excerpt, "User: new");
+    }
+
+    #[test]
+    fn transcript_excerpt_enforces_character_budget_from_the_tail() {
+        let excerpt = transcript_excerpt(&[AgentMessage::user("abcdefghij")], 4, 5);
+        assert!(excerpt.ends_with("fghij"));
+        assert!(excerpt.starts_with("[earlier text omitted]"));
+    }
+
+    #[test]
+    fn hybrid_compaction_keeps_local_summary_and_remote_details() {
+        let selected = select_compaction_outcome(
+            &openai_model(),
+            Ok(compaction::SummaryOutcome {
+                summary: "portable".into(),
+                usage: None,
+            }),
+            Some(Ok(remote_result())),
+        )
+        .unwrap();
+        assert_eq!(selected.summary, "portable");
+        assert_eq!(selected.remote_usage.unwrap().input, 10);
+        assert_eq!(
+            selected.remote_details.unwrap()["remoteCompaction"]["version"],
+            2
+        );
+    }
+
+    #[test]
+    fn remote_failure_falls_back_to_local_compaction() {
+        let selected = select_compaction_outcome(
+            &openai_model(),
+            Ok(compaction::SummaryOutcome {
+                summary: "portable".into(),
+                usage: None,
+            }),
+            Some(Err(anyhow::anyhow!("remote unavailable"))),
+        )
+        .unwrap();
+        assert_eq!(selected.summary, "portable");
+        assert!(selected.remote_details.is_none());
+    }
+
+    #[test]
+    fn remote_success_survives_local_summary_failure() {
+        let selected = select_compaction_outcome(
+            &openai_model(),
+            Err(anyhow::anyhow!("summary unavailable")),
+            Some(Ok(remote_result())),
+        )
+        .unwrap();
+        assert!(
+            selected
+                .summary
+                .contains("server-side compaction was applied")
+        );
+        assert!(selected.remote_details.is_some());
+    }
+
+    #[test]
+    fn details_merge_keeps_file_operations_and_remote_artifact() {
+        let merged = merge_compaction_details(
+            serde_json::json!({"readFiles": ["a.rs"], "modifiedFiles": []}),
+            Some(serde_json::json!({"remoteCompaction": {"version": 2}})),
+        );
+        assert_eq!(merged["readFiles"][0], "a.rs");
+        assert_eq!(merged["remoteCompaction"]["version"], 2);
+    }
+}

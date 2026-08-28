@@ -1,0 +1,38 @@
+[package]
+name = "kiss"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "kiss: a fast, minimal terminal coding agent"
+
+[[bin]]
+name = "kiss"
+path = "src/main.rs"
+
+[dependencies]
+kiss-ai.workspace = true
+kiss-agent.workspace = true
+kiss-coding.workspace = true
+kiss-mcp.workspace = true
+kiss-tui.workspace = true
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+futures.workspace = true
+clap.workspace = true
+dirs.workspace = true
+chrono.workspace = true
+crossterm.workspace = true
+base64.workspace = true
+rpassword.workspace = true
+reqwest.workspace = true
+url.workspace = true
+ignore.workspace = true
+libc.workspace = true
+
+[dev-dependencies]
+kiss-bench.workspace = true
+tempfile.workspace = true

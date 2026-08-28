@@ -1,0 +1,11 @@
+[package]
+name = "kiss-bench"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Shared benchmark timing support for KISS tests"
+
+[lib]
+path = "src/lib.rs"

@@ -1,0 +1,19 @@
+name: Pi upstream
+
+on:
+  schedule:
+    - cron: "17 9 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check tracked Pi release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/check-pi-upstream.sh
