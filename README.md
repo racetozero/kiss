@@ -1,5 +1,9 @@
 # KISS
 
+KISS is based on the
+[Keep it simple, stupid](https://en.wikipedia.org/wiki/KISS_principle)
+principle. Why? Because I am stupid :)
+
 A fast terminal coding agent built in Rust and based on
 [Pi](https://github.com/earendil-works/pi).
 
