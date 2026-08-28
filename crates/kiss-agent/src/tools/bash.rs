@@ -96,6 +96,8 @@ impl AgentTool for BashTool {
             .map_err(|e| anyhow::anyhow!("failed to spawn {shell}: {e}"))?;
         #[cfg(unix)]
         let pgid = child.id().map(|pid| pid as i32);
+        #[cfg(not(unix))]
+        let pgid = None;
 
         let mut stdout = child.stdout.take().expect("piped stdout");
         let mut stderr = child.stderr.take().expect("piped stderr");
@@ -116,6 +118,8 @@ impl AgentTool for BashTool {
                     libc::killpg(pgid, libc::SIGKILL);
                 }
             }
+            #[cfg(not(unix))]
+            let _ = pgid_opt;
             let _ = child.start_kill();
         };
 

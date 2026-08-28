@@ -31,6 +31,17 @@ jobs:
       - name: Test
         run: cargo nextest run --workspace
 
+  windows-check:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Clippy on Windows
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
   installer:
     strategy:
       fail-fast: false
