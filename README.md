@@ -22,27 +22,42 @@ plugin runtime.
 
 ## Performance
 
-Release builds use profile-guided optimization (PGO). KISS trains each target
-on common CLI, model, MCP, and local mock-provider tasks before it builds the
-release binary.
+KISS release binaries use target-specific profile-guided optimization (PGO).
+macOS releases also use safe identical code folding (ICF). The Cargo `dist`
+profile inherits the release settings: optimization level 3, fat link-time
+optimization, one code generation unit, stripped symbols, and abort-on-panic.
 
-This held-out benchmark used an Apple M4, macOS 26.5.1, Rust 1.98.0, and the
-`aarch64-apple-darwin` target on 2026-08-31. Both binaries used the `dist`
-profile and safe identical code folding. Each result is the median of three
-trials. Short tasks used 80 samples per trial. The local mock-provider task
-used 30 samples per trial.
+The following `just bench` results used an Apple M4, macOS 26.5.1, and Rust
+1.98.0 on 2026-08-31. This command measures internal code with the Cargo
+`release` profile. Shipped binaries add PGO and macOS ICF. Lower values are
+better.
 
-| Task | Ordinary release | PGO release | Change |
-| --- | ---: | ---: | ---: |
-| `kiss --help` startup | 3.696 ms | 3.676 ms | 0.52% faster |
-| Model catalog search | 5.870 ms | 5.652 ms | 3.73% faster |
-| MCP server lookup | 3.989 ms | 3.902 ms | 2.19% faster |
-| Local mock-provider turn | 102.360 ms | 102.808 ms | 0.44% slower |
-| Executable size | 17.16 MiB | 14.87 MiB | 13.37% smaller |
-| gzip size | 8.17 MiB | 7.36 MiB | 9.94% smaller |
-
-The geometric mean latency gain is 1.51%. These values apply to this machine
-and target. Other release targets can have different results.
+| Benchmark | Work | Median | p95 |
+| --- | --- | ---: | ---: |
+| File search | 10,000 files, three warm queries | 486.875 us | 493.542 us |
+| File search prefix | 10,000 files, five extended queries | 515.583 us | 549.459 us |
+| File search | 100,000 files, three warm queries | 5.122 ms | 5.277 ms |
+| File search prefix | 100,000 files, five extended queries | 5.570 ms | 5.655 ms |
+| File search | 500,000 files, three warm queries | 10.639 ms | 11.836 ms |
+| File search prefix | 500,000 files, five extended queries | 14.261 ms | 14.831 ms |
+| Transcript render | 2,885 logical rows | 89.020 us | 93.708 us |
+| Spinner render | 2,885 logical rows | 83.208 us | 84.604 us |
+| Context usage | 225 messages, about 900 KiB | 262 ns | 270 ns |
+| Bounded read | 13 MiB file, offset 190,000 | 12.121 ms | 12.564 ms |
+| Head read | First 50 lines of a 13 MiB file | 46.000 us | 65.542 us |
+| Stream snapshots | 2,000 deltas, 40 KiB result | 106.084 us | 115.417 us |
+| Auth file read | 30 OAuth entries | 36.531 us | 37.981 us |
+| Cached auth read | 30 OAuth entries | 3.907 us | 4.464 us |
+| SSE parsing | 10,000 events | 1.144 ms | 1.486 ms |
+| Session append | 500 saved user messages | 1.912 ms | 2.283 ms |
+| Grep | 1,000 files and 200 matches | 14.611 ms | 16.121 ms |
+| Markdown render | One 40 KiB document | 895.500 us | 907.479 us |
+| Growing Markdown | 200 full prefix renders | 78.109 ms | 79.828 ms |
+| Incremental Markdown | 200 streaming prefix renders | 15.672 ms | 16.299 ms |
+| Full frame render | 1,800 logical rows | 327.611 us | 383.777 us |
+| Unchanged frame | 10,000 logical rows | 133.220 us | 134.583 us |
+| Last-row frame change | 10,000 logical rows | 130.862 us | 132.683 us |
+| ANSI width | 2,000 styled lines | 136.595 us | 146.345 us |
 
 ## Install
 
