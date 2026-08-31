@@ -378,6 +378,7 @@ mod vertex_tests {
             context_window: 100,
             max_tokens: 10,
             compat: None,
+            thinking_level_map: BTreeMap::new(),
             headers: BTreeMap::new(),
         };
         assert_eq!(

@@ -186,6 +186,67 @@ async fn tool_call_roundtrip() {
 }
 
 #[tokio::test]
+async fn prepare_next_turn_replaces_context_before_the_next_request() {
+    let seen_contexts: Arc<Mutex<Vec<Vec<String>>>> = Default::default();
+    let seen_by_stream = seen_contexts.clone();
+    let responses = Arc::new(Mutex::new(vec![
+        assistant_tool_call("echo", json!({"value": "large"}), StopReason::ToolUse),
+        assistant_text("done", StopReason::Stop),
+    ]));
+    let responses_by_stream = responses.clone();
+    let mut config = AgentLoopConfig::new(fake_model());
+    config.stream_fn = Arc::new(move |_, context, _| {
+        seen_by_stream.lock().unwrap().push(
+            context
+                .messages
+                .iter()
+                .map(|message| match message {
+                    kiss_ai::Message::User(user) => user.content.as_text(),
+                    kiss_ai::Message::Assistant(assistant) => assistant.text(),
+                    kiss_ai::Message::ToolResult(result) => result.tool_name.clone(),
+                })
+                .collect(),
+        );
+        let (sink, stream) = EventStream::channel();
+        sink.done(responses_by_stream.lock().unwrap().remove(0));
+        stream
+    });
+    config.prepare_next_turn = Some(Arc::new(|turn| {
+        let after_tool = !turn.tool_results.is_empty();
+        Box::pin(async move {
+            after_tool.then(|| kiss_agent::TurnUpdate {
+                context: Some(AgentContext {
+                    system_prompt: String::new(),
+                    openai_responses_input: None,
+                    messages: vec![AgentMessage::user("compacted context")],
+                    tools: Vec::new(),
+                }),
+                ..Default::default()
+            })
+        })
+    }));
+    let (sink, _) = collect_events();
+    run_agent_loop(
+        vec![AgentMessage::user("original context")],
+        AgentContext {
+            tools: vec![Arc::new(EchoTool {
+                calls: Default::default(),
+            })],
+            ..Default::default()
+        },
+        config,
+        CancellationToken::new(),
+        sink,
+    )
+    .await;
+
+    let seen = seen_contexts.lock().unwrap();
+    assert_eq!(seen.len(), 2);
+    assert_eq!(seen[0], ["original context"]);
+    assert_eq!(seen[1], ["compacted context"]);
+}
+
+#[tokio::test]
 async fn unknown_tool_yields_error_result() {
     let config = scripted_config(vec![
         assistant_tool_call("missing", json!({}), StopReason::ToolUse),

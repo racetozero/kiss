@@ -400,6 +400,7 @@ mod tests {
             context_window: 100_000,
             max_tokens: 1_000,
             compat: None,
+            thinking_level_map: BTreeMap::new(),
             headers: BTreeMap::new(),
         }
     }

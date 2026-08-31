@@ -1,6 +1,8 @@
 //! Model descriptors.
 
+use crate::ThinkingLevel;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -22,6 +24,8 @@ pub struct OpenAICompat {
     pub supports_reasoning_effort: Option<bool>,
     pub supports_usage_in_streaming: Option<bool>,
     pub supports_finish_reason: Option<bool>,
+    pub requires_reasoning_content_on_assistant_messages: Option<bool>,
+    pub thinking_format: Option<String>,
     pub max_tokens_field: Option<String>,
 }
 
@@ -40,6 +44,10 @@ impl OpenAICompat {
             supports_finish_reason: override_values
                 .supports_finish_reason
                 .or(self.supports_finish_reason),
+            requires_reasoning_content_on_assistant_messages: override_values
+                .requires_reasoning_content_on_assistant_messages
+                .or(self.requires_reasoning_content_on_assistant_messages),
+            thinking_format: override_values.thinking_format.or(self.thinking_format),
             max_tokens_field: override_values.max_tokens_field.or(self.max_tokens_field),
         }
     }
@@ -70,9 +78,13 @@ pub struct Model {
     pub max_tokens: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compat: Option<OpenAICompat>,
+    /// Per-model translation from harness thinking levels to provider levels.
+    /// A null value marks that input level as unsupported.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub thinking_level_map: BTreeMap<String, Option<String>>,
     /// Extra headers sent with every request for this model.
-    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
-    pub headers: std::collections::BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub headers: BTreeMap<String, String>,
 }
 
 fn default_input() -> Vec<String> {
@@ -96,5 +108,113 @@ impl Model {
         } else {
             &self.name
         }
+    }
+
+    pub fn supported_thinking_levels(&self) -> Vec<ThinkingLevel> {
+        const LEVELS: [ThinkingLevel; 7] = [
+            ThinkingLevel::Off,
+            ThinkingLevel::Minimal,
+            ThinkingLevel::Low,
+            ThinkingLevel::Medium,
+            ThinkingLevel::High,
+            ThinkingLevel::Xhigh,
+            ThinkingLevel::Max,
+        ];
+        if !self.reasoning {
+            return vec![ThinkingLevel::Off];
+        }
+        LEVELS
+            .into_iter()
+            .filter(|level| match self.thinking_level_map.get(level.as_str()) {
+                Some(None) => false,
+                None if matches!(level, ThinkingLevel::Xhigh | ThinkingLevel::Max) => false,
+                _ => true,
+            })
+            .collect()
+    }
+
+    pub fn clamp_thinking_level(&self, level: ThinkingLevel) -> ThinkingLevel {
+        let supported = self.supported_thinking_levels();
+        if supported.contains(&level) {
+            return level;
+        }
+        supported
+            .iter()
+            .copied()
+            .find(|candidate| *candidate > level)
+            .or_else(|| {
+                supported
+                    .iter()
+                    .rev()
+                    .copied()
+                    .find(|candidate| *candidate < level)
+            })
+            .unwrap_or(ThinkingLevel::Off)
+    }
+
+    pub fn map_thinking_level(&self, level: ThinkingLevel) -> ThinkingLevel {
+        if level == ThinkingLevel::Off {
+            return level;
+        }
+        let level = self.clamp_thinking_level(level);
+        match self.thinking_level_map.get(level.as_str()) {
+            Some(None) => ThinkingLevel::Off,
+            Some(Some(mapped)) if mapped.eq_ignore_ascii_case("none") => ThinkingLevel::Off,
+            Some(Some(mapped)) => {
+                ThinkingLevel::parse(&mapped.to_ascii_lowercase()).unwrap_or(level)
+            }
+            None => level,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn model() -> Model {
+        Model {
+            id: "test".into(),
+            name: "Test".into(),
+            api: "openai-completions".into(),
+            provider: "test".into(),
+            base_url: "https://example.invalid".into(),
+            reasoning: true,
+            input: vec!["text".into()],
+            cost: ModelCost::default(),
+            context_window: 1_000,
+            max_tokens: 100,
+            compat: None,
+            thinking_level_map: BTreeMap::new(),
+            headers: BTreeMap::new(),
+        }
+    }
+
+    #[test]
+    fn thinking_level_map_preserves_maps_and_disables_levels() {
+        let mut model = model();
+        assert_eq!(
+            model.map_thinking_level(ThinkingLevel::High),
+            ThinkingLevel::High
+        );
+        model
+            .thinking_level_map
+            .insert("high".into(), Some("medium".into()));
+        model.thinking_level_map.insert("minimal".into(), None);
+        model
+            .thinking_level_map
+            .insert("max".into(), Some("unknown".into()));
+        assert_eq!(
+            model.map_thinking_level(ThinkingLevel::High),
+            ThinkingLevel::Medium
+        );
+        assert_eq!(
+            model.map_thinking_level(ThinkingLevel::Minimal),
+            ThinkingLevel::Low
+        );
+        assert_eq!(
+            model.map_thinking_level(ThinkingLevel::Max),
+            ThinkingLevel::Max
+        );
     }
 }

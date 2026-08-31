@@ -261,6 +261,22 @@ pub struct SummaryOutcome {
     pub usage: Option<kiss_ai::Usage>,
 }
 
+fn summary_failure(message: &kiss_ai::AssistantMessage) -> Option<String> {
+    match message.stop_reason {
+        kiss_ai::StopReason::Error => Some(format!(
+            "summary generation failed: {}",
+            message.error_message.as_deref().unwrap_or("unknown error")
+        )),
+        kiss_ai::StopReason::Length => {
+            Some("summary generation failed: response reached the token limit".into())
+        }
+        _ if message.tool_calls().next().is_some() => {
+            Some("summary generation failed: response contained a tool call".into())
+        }
+        _ => None,
+    }
+}
+
 /// Generate a structured summary with the LLM. One-off prompt: fresh session
 /// id and no cache writes wanted, so it's a plain request.
 pub async fn generate_summary(
@@ -305,11 +321,8 @@ pub async fn generate_summary(
     let message = kiss_ai::stream_simple(model, &context, &options)
         .result()
         .await;
-    if message.stop_reason == kiss_ai::StopReason::Error {
-        anyhow::bail!(
-            "summary generation failed: {}",
-            message.error_message.unwrap_or_default()
-        );
+    if let Some(error) = summary_failure(&message) {
+        anyhow::bail!(error);
     }
     Ok(SummaryOutcome {
         summary: message.text(),
@@ -422,5 +435,31 @@ mod tests {
     fn threshold() {
         assert!(should_compact(190_000, 200_000, 16_384));
         assert!(!should_compact(100_000, 200_000, 16_384));
+    }
+
+    #[test]
+    fn incomplete_summary_is_rejected() {
+        let mut message = AssistantMessage::empty("fake", "fake", "fake");
+        message.stop_reason = StopReason::Length;
+        assert_eq!(
+            summary_failure(&message).as_deref(),
+            Some("summary generation failed: response reached the token limit")
+        );
+    }
+
+    #[test]
+    fn summary_with_tool_call_is_rejected() {
+        let mut message = AssistantMessage::empty("fake", "fake", "fake");
+        message.stop_reason = StopReason::ToolUse;
+        message.content.push(ContentBlock::ToolCall(ToolCall {
+            id: "call-1".into(),
+            name: "read".into(),
+            arguments: json!({"path": "src/lib.rs"}),
+            thought_signature: None,
+        }));
+        assert_eq!(
+            summary_failure(&message).as_deref(),
+            Some("summary generation failed: response contained a tool call")
+        );
     }
 }

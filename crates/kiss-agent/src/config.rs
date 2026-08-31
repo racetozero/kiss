@@ -2,7 +2,9 @@
 
 use crate::message::AgentMessage;
 use crate::tool::{DynTool, ExecutionMode, ToolResult};
-use kiss_ai::{ContentBlock, Message, Model, StreamOptions, ThinkingLevel, Transport, Usage};
+use kiss_ai::{
+    ContentBlock, Message, Model, StreamOptions, ThinkingLevel, ToolChoice, Transport, Usage,
+};
 use serde_json::Value;
 use std::future::Future;
 use std::pin::Pin;
@@ -80,6 +82,7 @@ pub struct AgentLoopConfig {
     pub thinking_level: ThinkingLevel,
     pub temperature: Option<f64>,
     pub max_tokens: Option<u64>,
+    pub tool_choice: Option<ToolChoice>,
     pub session_id: Option<String>,
     pub transport: Transport,
     pub tool_execution: ExecutionMode,
@@ -104,6 +107,7 @@ impl AgentLoopConfig {
             thinking_level: ThinkingLevel::Off,
             temperature: None,
             max_tokens: None,
+            tool_choice: None,
             session_id: None,
             transport: Transport::Auto,
             tool_execution: ExecutionMode::Parallel,

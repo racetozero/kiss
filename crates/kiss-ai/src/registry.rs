@@ -8,7 +8,7 @@ use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::path::Path;
 
-/// Generated model data verified against `@earendil-works/pi-ai` 0.84.3.
+/// Generated model data verified against `@earendil-works/pi-ai` 0.84.4.
 const BUILTIN_PROVIDER_CATALOGS: &[&str] = &[
     include_str!("../data/providers/amazon-bedrock.json"),
     include_str!("../data/providers/ant-ling.json"),
@@ -137,6 +137,8 @@ struct CatalogModel {
     #[serde(default)]
     compat: Option<OpenAICompat>,
     #[serde(default)]
+    thinking_level_map: BTreeMap<String, Option<String>>,
+    #[serde(default)]
     base_url: Option<String>,
     #[serde(default)]
     headers: BTreeMap<String, String>,
@@ -254,6 +256,7 @@ impl Registry {
                 context_window: model.context_window,
                 max_tokens: model.max_tokens,
                 compat: None,
+                thinking_level_map: BTreeMap::new(),
                 headers: BTreeMap::new(),
             });
         }
@@ -327,6 +330,7 @@ impl Registry {
                         (Some(base), Some(overrides)) => Some(base.overlay(overrides)),
                         (base, overrides) => overrides.or(base),
                     },
+                    thinking_level_map: m.thinking_level_map,
                     headers: if m.headers.is_empty() {
                         provider.headers.clone()
                     } else {
@@ -490,6 +494,23 @@ mod tests {
             })
             .collect();
         assert!(unsupported.is_empty(), "unsupported APIs: {unsupported:?}");
+    }
+
+    #[test]
+    fn deepseek_v4_flash_vision_is_in_the_catalog() {
+        let registry = Registry::from_builtin();
+        let (model, _) = registry
+            .resolve("deepseek/deepseek-v4-flash-vision-exp", None)
+            .expect("DeepSeek vision model");
+        assert!(model.supports_images());
+        assert_eq!(
+            model.map_thinking_level(ThinkingLevel::Medium),
+            ThinkingLevel::High
+        );
+        assert_eq!(
+            model.map_thinking_level(ThinkingLevel::High),
+            ThinkingLevel::High
+        );
     }
 
     #[test]

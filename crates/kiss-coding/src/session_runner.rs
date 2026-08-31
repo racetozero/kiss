@@ -7,7 +7,9 @@ use crate::compaction::{
 };
 use crate::session::manager::SessionManager;
 use crate::settings::{QueueMode, Settings};
-use kiss_agent::{AgentContext, AgentEvent, AgentLoopConfig, AgentMessage, DynTool, EventSink};
+use kiss_agent::{
+    AgentContext, AgentEvent, AgentLoopConfig, AgentMessage, DynTool, EventSink, TurnUpdate,
+};
 use kiss_ai::{Model, Registry, StopReason, ThinkingLevel, Usage};
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
@@ -380,6 +382,39 @@ impl AgentSession {
             session_for_queues.emit_queues();
             Box::pin(async move { drained })
         }));
+        let session_for_compaction = session_arc.clone();
+        config.prepare_next_turn = Some(Arc::new(move |turn| {
+            let has_tool_results = !turn.tool_results.is_empty();
+            let session = session_for_compaction.clone();
+            Box::pin(async move {
+                if !has_tool_results {
+                    return None;
+                }
+                let settings = session.settings();
+                let cancel = session.cancel.lock().unwrap().clone();
+                let context_window = session.model().context_window;
+                let revision_before = {
+                    let manager = session.manager.lock().unwrap();
+                    let context = manager.build_session_context();
+                    if !auto_compaction_needed(
+                        &settings,
+                        &context.messages,
+                        context_window,
+                        cancel.is_cancelled(),
+                    ) {
+                        return None;
+                    }
+                    manager.context_revision()
+                };
+
+                session.compact(None, true).await;
+                let revision_after = session.manager.lock().unwrap().context_revision();
+                (revision_after != revision_before).then(|| TurnUpdate {
+                    context: Some(session.build_context()),
+                    ..Default::default()
+                })
+            })
+        }));
         config
     }
 
@@ -417,6 +452,7 @@ impl AgentSession {
         config.session_id = Some(format!("ephemeral-{}", uuid::Uuid::new_v4()));
         config.get_steering_messages = None;
         config.get_follow_up_messages = None;
+        config.prepare_next_turn = None;
 
         let context = AgentContext {
             system_prompt,
@@ -620,13 +656,14 @@ impl AgentSession {
             }
 
             // Auto-compaction check after a completed run.
-            if settings.compaction.enabled && !cancel.is_cancelled() {
-                let ctx = self.manager.lock().unwrap().build_session_context();
-                let tokens = estimate_context_tokens(&ctx.messages);
-                let window = self.model().context_window;
-                if should_compact(tokens, window, settings.compaction.reserve_tokens) {
-                    self.compact(None, true).await;
-                }
+            let ctx = self.manager.lock().unwrap().build_session_context();
+            if auto_compaction_needed(
+                &settings,
+                &ctx.messages,
+                self.model().context_window,
+                cancel.is_cancelled(),
+            ) {
+                self.compact(None, true).await;
             }
             break;
         }
@@ -899,6 +936,22 @@ fn drain_queue(queue: &Arc<Mutex<VecDeque<AgentMessage>>>, mode: QueueMode) -> V
     }
 }
 
+fn auto_compaction_needed(
+    settings: &Settings,
+    messages: &[AgentMessage],
+    context_window: u64,
+    cancelled: bool,
+) -> bool {
+    settings.compaction.enabled
+        && !cancelled
+        && context_window > 0
+        && should_compact(
+            estimate_context_tokens(messages),
+            context_window,
+            settings.compaction.reserve_tokens,
+        )
+}
+
 fn is_transient(error: &str) -> bool {
     let e = error.to_lowercase();
     [
@@ -938,6 +991,7 @@ mod ephemeral_tests {
             context_window: 100_000,
             max_tokens: 1_000,
             compat: None,
+            thinking_level_map: BTreeMap::new(),
             headers: BTreeMap::new(),
         }
     }
@@ -1042,5 +1096,16 @@ mod ephemeral_tests {
         );
         assert_eq!(merged["readFiles"][0], "a.rs");
         assert_eq!(merged["remoteCompaction"]["version"], 2);
+    }
+
+    #[test]
+    fn auto_compaction_guard_checks_settings_threshold_and_cancel() {
+        let mut settings = Settings::default();
+        settings.compaction.reserve_tokens = 20;
+        let messages = vec![AgentMessage::user("x".repeat(360))];
+        assert!(auto_compaction_needed(&settings, &messages, 100, false));
+        assert!(!auto_compaction_needed(&settings, &messages, 100, true));
+        settings.compaction.enabled = false;
+        assert!(!auto_compaction_needed(&settings, &messages, 100, false));
     }
 }

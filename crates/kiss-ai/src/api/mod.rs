@@ -342,6 +342,7 @@ mod provider_header_tests {
             context_window: 1,
             max_tokens: 1,
             compat: None,
+            thinking_level_map: Default::default(),
             headers: Default::default(),
         };
         assert_eq!(
@@ -370,6 +371,7 @@ mod provider_header_tests {
             context_window: 100_000,
             max_tokens: 10_000,
             compat: None,
+            thinking_level_map: Default::default(),
             headers: Default::default(),
         };
         kiss_bench::measure(

@@ -17,7 +17,7 @@ pub mod types;
 pub use event::{AssistantEvent, EventSink, EventStream};
 pub use model::{Model, ModelCost, OpenAICompat};
 pub use registry::Registry;
-pub use stream::{StreamOptions, Transport, stream_simple};
+pub use stream::{StreamOptions, ToolChoice, Transport, stream_simple};
 pub use types::{
     AssistantMessage, ContentBlock, Context, Cost, Message, StopReason, ThinkingLevel, TimestampMs,
     ToolCall, ToolDef, ToolResultMessage, Usage, UserContent, UserMessage, now_ms,

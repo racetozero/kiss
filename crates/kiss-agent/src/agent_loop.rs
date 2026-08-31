@@ -232,6 +232,7 @@ async fn stream_assistant(
         temperature: config.temperature,
         max_tokens: config.max_tokens,
         reasoning: config.thinking_level,
+        tool_choice: config.tool_choice.clone(),
         session_id: config.session_id.clone(),
         transport: config.transport,
         cancel,

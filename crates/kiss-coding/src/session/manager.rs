@@ -84,6 +84,7 @@ impl SessionManager {
     pub fn open(path: &Path) -> Result<Self> {
         let text = std::fs::read_to_string(path)
             .with_context(|| format!("open session {}", path.display()))?;
+        let needs_trailing_newline = !text.is_empty() && !text.ends_with('\n');
         let mut lines = text.lines().filter(|l| !l.trim().is_empty());
         let header_line = lines.next().context("empty session file")?;
         let header: SessionHeader =
@@ -104,13 +105,21 @@ impl SessionManager {
                 .unwrap_or_else(default_session_dir),
             cwd,
         };
+        let mut all_entries_valid = true;
         for line in lines {
             match serde_json::from_str::<SessionEntry>(line) {
                 Ok(entry) => manager.insert_entry(entry),
-                Err(err) => eprintln!("warning: skipping malformed session line: {err}"),
+                Err(err) => {
+                    all_entries_valid = false;
+                    eprintln!("warning: skipping malformed session line: {err}");
+                }
             }
         }
         manager.leaf_id = manager.entries.last().map(|e| e.id().to_string());
+        if needs_trailing_newline && all_entries_valid {
+            let mut file = std::fs::OpenOptions::new().append(true).open(path)?;
+            file.write_all(b"\n")?;
+        }
         manager.reopen_append_file()?;
         Ok(manager)
     }
@@ -891,6 +900,7 @@ mod tests {
             context_window: 100_000,
             max_tokens: 1_000,
             compat: None,
+            thinking_level_map: BTreeMap::new(),
             headers: BTreeMap::new(),
         }
     }
@@ -1133,6 +1143,37 @@ mod tests {
         std::fs::write(&target, source.to_jsonl().unwrap()).unwrap();
         let reopened = SessionManager::open(&target).unwrap();
         assert_eq!(reopened.entries().len(), 1);
+    }
+
+    #[test]
+    fn open_repairs_missing_final_newline_before_append() {
+        let dir = tempfile::tempdir().unwrap();
+        let cwd = dir.path().join("project");
+        std::fs::create_dir_all(&cwd).unwrap();
+        let mut source = SessionManager::create(&cwd, Some(dir.path().join("sessions"))).unwrap();
+        source
+            .append_message(AgentMessage::user("before repair"))
+            .unwrap();
+        let path = source.session_file().unwrap().to_path_buf();
+        drop(source);
+
+        let mut text = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(text.pop(), Some('\n'));
+        std::fs::write(&path, text).unwrap();
+
+        let mut reopened = SessionManager::open(&path).unwrap();
+        reopened
+            .append_message(AgentMessage::user("after repair"))
+            .unwrap();
+        drop(reopened);
+
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.ends_with('\n'));
+        assert_eq!(text.lines().count(), 3);
+        for line in text.lines() {
+            let _: Value = serde_json::from_str(line).unwrap();
+        }
+        assert_eq!(SessionManager::open(&path).unwrap().entries().len(), 2);
     }
 
     #[test]

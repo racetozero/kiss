@@ -18,12 +18,12 @@ repository = "https://github.com/racetozero/kiss"
 
 [workspace.metadata.pi]
 repository = "earendil-works/pi"
-release = "v0.84.3"
-release_commit = "4e58f324fae8ebfa98a3d45181fb248072a2afac"
-release_published_at = "2026-08-24T10:50:48Z"
-parity_commit = "4e58f324fae8ebfa98a3d45181fb248072a2afac"
-parity_checked_at = "2026-08-26T03:44:00Z"
-catalog_package = "@earendil-works/pi-ai@0.84.3"
+release = "v0.84.4"
+release_commit = "b79e4cc834970cca69daebffab7df1da7d1e52c4"
+release_published_at = "2026-08-28T22:08:23Z"
+parity_commit = "b79e4cc834970cca69daebffab7df1da7d1e52c4"
+parity_checked_at = "2026-08-29T22:44:00Z"
+catalog_package = "@earendil-works/pi-ai@0.84.4"
 
 [workspace.dependencies]
 anyhow = "1"

@@ -1051,7 +1051,14 @@ pub(crate) fn build_request(model: &Model, context: &Context, options: &StreamOp
         body["include"] = json!(["reasoning.encrypted_content"]);
     }
     if model.reasoning {
-        if let Some(effort) = reasoning_effort(options.reasoning) {
+        let effort = model
+            .thinking_level_map
+            .get(options.reasoning.as_str())
+            .map_or_else(
+                || reasoning_effort(options.reasoning).map(str::to_string),
+                Clone::clone,
+            );
+        if let Some(effort) = effort {
             body["reasoning"] = json!({"effort": effort, "summary": "auto"});
             body["include"] = json!(["reasoning.encrypted_content"]);
         }
@@ -1073,6 +1080,9 @@ pub(crate) fn build_request(model: &Model, context: &Context, options: &StreamOp
                 })
                 .collect(),
         );
+    }
+    if let Some(choice) = &options.tool_choice {
+        body["tool_choice"] = choice.openai_responses_value();
     }
     if let Some(session) = &options.session_id {
         body["prompt_cache_key"] = json!(session);
@@ -1103,6 +1113,7 @@ mod request_tests {
             context_window: 1000,
             max_tokens: 100,
             compat: None,
+            thinking_level_map: BTreeMap::new(),
             headers: BTreeMap::new(),
         }
     }
@@ -1129,6 +1140,20 @@ mod request_tests {
         assert_eq!(body["parallel_tool_calls"], true);
         assert_eq!(body["store"], false);
         assert_eq!(body["max_output_tokens"], 100);
+    }
+
+    #[test]
+    fn request_uses_mapped_off_reasoning_effort() {
+        let mut model = model("openai-responses", "https://api.openai.com/v1");
+        model
+            .thinking_level_map
+            .insert("off".into(), Some("none".into()));
+        let body = build_request(&model, &Context::default(), &StreamOptions::default());
+        assert_eq!(body["reasoning"]["effort"], "none");
+
+        model.thinking_level_map.insert("off".into(), None);
+        let body = build_request(&model, &Context::default(), &StreamOptions::default());
+        assert!(body.get("reasoning").is_none());
     }
 
     #[test]

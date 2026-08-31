@@ -21,7 +21,7 @@ impl SlashCommand {
     }
 }
 
-/// Pi core commands at the v0.84.3 release commit.
+/// Pi core commands at the v0.84.4 release commit.
 pub(crate) const PI_CORE_SLASH_COMMANDS: &[SlashCommand] = &[
     SlashCommand::new("settings", "Open settings menu", None),
     SlashCommand::new(
@@ -39,16 +39,16 @@ pub(crate) const PI_CORE_SLASH_COMMANDS: &[SlashCommand] = &[
     SlashCommand::new(
         "export",
         "Export session (HTML default, or specify path: .html/.jsonl)",
-        Some("[file]"),
+        None,
     ),
     SlashCommand::new(
         "import",
         "Import and resume a session from a JSONL file",
-        Some("<file>"),
+        None,
     ),
     SlashCommand::new("share", "Share session as a secret GitHub gist", None),
     SlashCommand::new("copy", "Copy last agent message to clipboard", None),
-    SlashCommand::new("name", "Set session display name", Some("<name>")),
+    SlashCommand::new("name", "Set session display name", None),
     SlashCommand::new("session", "Show session info and stats", None),
     SlashCommand::new("changelog", "Show changelog entries", None),
     SlashCommand::new("hotkeys", "Show all keyboard shortcuts", None),
@@ -74,11 +74,7 @@ pub(crate) const PI_CORE_SLASH_COMMANDS: &[SlashCommand] = &[
     ),
     SlashCommand::new("logout", "Remove provider authentication", None),
     SlashCommand::new("new", "Start a new session", None),
-    SlashCommand::new(
-        "compact",
-        "Manually compact the session context",
-        Some("[prompt]"),
-    ),
+    SlashCommand::new("compact", "Manually compact the session context", None),
     SlashCommand::new("resume", "Resume a different session", None),
     SlashCommand::new(
         "reload",
@@ -150,6 +146,78 @@ mod tests {
                 "resume",
                 "reload",
                 "quit",
+            ]
+        );
+    }
+
+    #[test]
+    fn core_catalog_matches_pi_v0_84_4() {
+        let actual = PI_CORE_SLASH_COMMANDS
+            .iter()
+            .map(|command| (command.name, command.description, command.argument_hint))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            actual,
+            vec![
+                ("settings", "Open settings menu", None),
+                (
+                    "model",
+                    "Select model (opens selector UI)",
+                    Some("<provider/model>")
+                ),
+                ("tree", "Navigate session tree (switch branches)", None),
+                ("thinking", "Set thinking level", Some("<level>")),
+                (
+                    "scoped-models",
+                    "Enable/disable models for Ctrl+P cycling",
+                    None
+                ),
+                (
+                    "export",
+                    "Export session (HTML default, or specify path: .html/.jsonl)",
+                    None
+                ),
+                (
+                    "import",
+                    "Import and resume a session from a JSONL file",
+                    None
+                ),
+                ("share", "Share session as a secret GitHub gist", None),
+                ("copy", "Copy last agent message to clipboard", None),
+                ("name", "Set session display name", None),
+                ("session", "Show session info and stats", None),
+                ("changelog", "Show changelog entries", None),
+                ("hotkeys", "Show all keyboard shortcuts", None),
+                (
+                    "fork",
+                    "Create a new fork from a previous user message",
+                    None
+                ),
+                (
+                    "clone",
+                    "Duplicate the current session at the current position",
+                    None
+                ),
+                (
+                    "trust",
+                    "Save project trust decision for future sessions",
+                    None
+                ),
+                (
+                    "login",
+                    "Configure provider authentication",
+                    Some("<provider>")
+                ),
+                ("logout", "Remove provider authentication", None),
+                ("new", "Start a new session", None),
+                ("compact", "Manually compact the session context", None),
+                ("resume", "Resume a different session", None),
+                (
+                    "reload",
+                    "Reload keybindings, extensions, skills, prompts, themes, and context files",
+                    None
+                ),
+                ("quit", "Quit Kiss", None),
             ]
         );
     }

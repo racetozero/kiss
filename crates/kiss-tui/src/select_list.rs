@@ -68,6 +68,22 @@ impl SelectList {
         self.filtered_cache = None;
     }
 
+    /// Select the visible item with the given opaque value.
+    ///
+    /// This is useful after a caller rebuilds the item labels while it keeps
+    /// the same logical choices. It also works when a filter is active.
+    pub fn select_value(&mut self, value: usize) -> bool {
+        let indices = self.filtered_indices();
+        let Some(position) = indices
+            .iter()
+            .position(|index| self.items[*index].value == value)
+        else {
+            return false;
+        };
+        self.selected = position;
+        true
+    }
+
     pub fn current(&mut self) -> Option<&SelectItem> {
         let indices = self.filtered_indices();
         let idx = *indices.get(self.selected)?;
@@ -226,6 +242,38 @@ mod tests {
         l.set_filter("item-2".into());
         assert_eq!(l.filtered_indices(), vec![2]);
         assert_eq!(l.current().unwrap().value, 2);
+    }
+
+    #[test]
+    fn selection_can_be_restored_by_value_with_a_filter() {
+        let mut list = SelectList::new(
+            "Settings",
+            vec![
+                SelectItem {
+                    label: "Auto compaction".into(),
+                    detail: Some("on".into()),
+                    value: 6,
+                },
+                SelectItem {
+                    label: "Automatic retry".into(),
+                    detail: Some("off".into()),
+                    value: 7,
+                },
+                SelectItem {
+                    label: "Automatic recap".into(),
+                    detail: Some("on".into()),
+                    value: 12,
+                },
+            ],
+            Theme::dark(),
+        );
+        list.set_filter("automatic".into());
+
+        assert!(list.select_value(12));
+        assert_eq!(list.selected, 1);
+        assert_eq!(list.current().map(|item| item.value), Some(12));
+        assert!(!list.select_value(6));
+        assert_eq!(list.current().map(|item| item.value), Some(12));
     }
 
     #[test]

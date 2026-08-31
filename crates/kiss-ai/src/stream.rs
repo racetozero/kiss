@@ -24,12 +24,43 @@ pub enum Transport {
     WebSocketCached,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ToolChoice {
+    Auto,
+    None,
+    Required,
+    Function(String),
+}
+
+impl ToolChoice {
+    pub(crate) fn openai_chat_value(&self) -> serde_json::Value {
+        match self {
+            Self::Auto => serde_json::json!("auto"),
+            Self::None => serde_json::json!("none"),
+            Self::Required => serde_json::json!("required"),
+            Self::Function(name) => serde_json::json!({
+                "type": "function",
+                "function": {"name": name},
+            }),
+        }
+    }
+
+    pub(crate) fn openai_responses_value(&self) -> serde_json::Value {
+        match self {
+            Self::Function(name) => serde_json::json!({"type": "function", "name": name}),
+            _ => self.openai_chat_value(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct StreamOptions {
     pub api_key: Option<String>,
     pub temperature: Option<f64>,
     pub max_tokens: Option<u64>,
     pub reasoning: ThinkingLevel,
+    pub tool_choice: Option<ToolChoice>,
     /// Session identifier for providers that support session routing/caching.
     pub session_id: Option<String>,
     /// Streaming transport. OpenAI Codex uses `Auto` by default.
@@ -49,7 +80,8 @@ pub fn stream_simple(model: &Model, context: &Context, options: &StreamOptions) 
     stream
 }
 
-async fn dispatch(model: Model, context: Context, options: StreamOptions, sink: EventSink) {
+async fn dispatch(model: Model, context: Context, mut options: StreamOptions, sink: EventSink) {
+    options.reasoning = model.map_thinking_level(options.reasoning);
     match model.api.as_str() {
         "anthropic-messages" => api::anthropic::stream(&model, &context, &options, sink).await,
         "bedrock-converse-stream" => api::bedrock::stream(&model, &context, &options, sink).await,

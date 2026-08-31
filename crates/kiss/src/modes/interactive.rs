@@ -63,7 +63,7 @@ struct App {
     working: bool,
     spinner_frame: usize,
     picker: Option<Picker>,
-    command_menu: Option<SelectList>,
+    command_menu: Option<CommandCompletion>,
     file_menu: Option<FileCompletion>,
     file_search_request: Option<u64>,
     file_search_pending: bool,
@@ -151,6 +151,23 @@ enum McpPanelAction {
 struct Picker {
     kind: PickerKind,
     list: SelectList,
+}
+
+struct PickerSelection {
+    kind: PickerKind,
+    value: usize,
+    filter: String,
+}
+
+struct CommandCompletion {
+    kind: CommandCompletionKind,
+    list: SelectList,
+    replacements: Vec<String>,
+}
+
+enum CommandCompletionKind {
+    Name,
+    Argument(String),
 }
 
 struct FileCompletion {
@@ -521,7 +538,7 @@ impl App {
         } else {
             lines.extend(self.editor.render(width));
             if let Some(menu) = &mut self.command_menu {
-                lines.extend(menu.render_compact(width, ""));
+                lines.extend(menu.list.render_compact(width, ""));
             } else if let Some(menu) = &mut self.file_menu {
                 lines.extend(menu.list.render_compact(width, ""));
                 if self.file_search_pending {
@@ -1592,24 +1609,117 @@ fn command_query(text: &str) -> Option<&str> {
     Some(query)
 }
 
+fn command_argument_items(
+    session: &Arc<kiss_coding::AgentSession>,
+    command: &str,
+    query: &str,
+) -> Option<(Vec<SelectItem>, Vec<String>)> {
+    let mut candidates: Vec<(String, Option<String>, String, String)> = match command {
+        "model" => {
+            let copilot_models = kiss_ai::auth::stored_oauth_model_ids("github-copilot");
+            session
+                .registry
+                .all()
+                .iter()
+                .filter(|model| account_allows_model(model, copilot_models.as_deref()))
+                .map(|model| {
+                    let replacement = format!("{}/{}", model.provider, model.id);
+                    (
+                        model.id.clone(),
+                        Some(model.provider.clone()),
+                        replacement.clone(),
+                        format!("{replacement} {}", model.display_name()),
+                    )
+                })
+                .collect()
+        }
+        "thinking" if session.model().reasoning => session
+            .model()
+            .supported_thinking_levels()
+            .iter()
+            .map(|level| {
+                let value = level.as_str().to_string();
+                (value.clone(), None, value.clone(), value)
+            })
+            .collect(),
+        "thinking" => Vec::new(),
+        "login" => kiss_ai::registry::BUILTIN_PROVIDER_IDS
+            .iter()
+            .copied()
+            .chain(std::iter::once("llama.cpp"))
+            .map(|provider| {
+                (
+                    provider.to_string(),
+                    Some("provider authentication".into()),
+                    provider.to_string(),
+                    provider.to_string(),
+                )
+            })
+            .collect(),
+        _ => return None,
+    };
+
+    let prepared = kiss_tui::fuzzy::PreparedFuzzyQuery::new(query);
+    let mut ranked = candidates
+        .drain(..)
+        .filter_map(|candidate| prepared.score(&candidate.3).map(|score| (candidate, score)))
+        .collect::<Vec<_>>();
+    ranked.sort_by(|(left, left_score), (right, right_score)| {
+        right_score
+            .cmp(left_score)
+            .then_with(|| left.0.cmp(&right.0))
+    });
+
+    let mut replacements = Vec::with_capacity(ranked.len());
+    let items = ranked
+        .into_iter()
+        .enumerate()
+        .map(|(value, ((label, detail, replacement, _), _))| {
+            replacements.push(replacement);
+            SelectItem {
+                label,
+                detail,
+                value,
+            }
+        })
+        .collect();
+    Some((items, replacements))
+}
+
 fn sync_command_menu(
     app: &mut App,
+    session: &Arc<kiss_coding::AgentSession>,
     prompt_templates: &[kiss_coding::prompts::PromptTemplate],
     skills: &[kiss_coding::skills::Skill],
 ) {
     let text = app.editor.text();
-    let Some(query) = command_query(&text) else {
+    if let Some(query) = command_query(&text) {
+        let items = command_items(prompt_templates, skills);
+        let replacements = items.iter().map(|item| item.label.clone()).collect();
+        let mut list = SelectList::new("Commands", items, app.theme.clone());
+        list.max_visible = 8;
+        list.set_filter(query.to_string());
+        app.command_menu = Some(CommandCompletion {
+            kind: CommandCompletionKind::Name,
+            list,
+            replacements,
+        });
+    } else if let Some(text) = text.strip_prefix('/')
+        && !text.contains('\n')
+        && let Some((command, query)) = text.split_once(' ')
+        && let Some((items, replacements)) = command_argument_items(session, command, query)
+        && !items.is_empty()
+    {
+        let mut list = SelectList::new(format!("/{command}"), items, app.theme.clone());
+        list.max_visible = 8;
+        app.command_menu = Some(CommandCompletion {
+            kind: CommandCompletionKind::Argument(command.to_string()),
+            list,
+            replacements,
+        });
+    } else {
         app.command_menu = None;
-        return;
-    };
-    let mut menu = SelectList::new(
-        "Commands",
-        command_items(prompt_templates, skills),
-        app.theme.clone(),
-    );
-    menu.max_visible = 8;
-    menu.set_filter(query.to_string());
-    app.command_menu = Some(menu);
+    }
     app.file_menu = None;
 }
 
@@ -1777,25 +1887,45 @@ fn handle_command_menu_key(app: &mut App, key: &KeyEvent) -> Option<CommandMenuA
             Some(CommandMenuAction::Handled)
         }
         Key::Up => {
-            menu.move_selection(-1);
+            menu.list.move_selection(-1);
             Some(CommandMenuAction::Handled)
         }
         Key::Down => {
-            menu.move_selection(1);
+            menu.list.move_selection(1);
             Some(CommandMenuAction::Handled)
         }
         Key::Tab if !key.ctrl && !key.alt && !key.shift => {
-            let selected = menu.current().map(|item| item.label.clone());
-            if let Some(name) = selected {
-                app.editor.set_text(&format!("/{name} "));
+            let selected = menu
+                .list
+                .current()
+                .and_then(|item| menu.replacements.get(item.value))
+                .cloned();
+            if let Some(selected) = selected {
+                let text = match &menu.kind {
+                    CommandCompletionKind::Name => format!("/{selected} "),
+                    CommandCompletionKind::Argument(command) => {
+                        format!("/{command} {selected}")
+                    }
+                };
+                app.editor.set_text(&text);
                 app.command_menu = None;
             }
             Some(CommandMenuAction::Handled)
         }
         Key::Enter if !key.ctrl && !key.alt && !key.shift => {
-            let selected = menu.current().map(|item| item.label.clone());
-            if let Some(name) = selected {
-                app.editor.set_text(&format!("/{name} "));
+            let selected = menu
+                .list
+                .current()
+                .and_then(|item| menu.replacements.get(item.value))
+                .cloned();
+            if let Some(selected) = selected {
+                let text = match &menu.kind {
+                    CommandCompletionKind::Name => format!("/{selected} "),
+                    CommandCompletionKind::Argument(command) => {
+                        format!("/{command} {selected}")
+                    }
+                };
+                app.editor.set_text(&text);
             }
             app.command_menu = None;
             Some(CommandMenuAction::Submit(app.editor.take()))
@@ -1912,7 +2042,7 @@ fn handle_input(
                 return Flow::Quit;
             }
             app.editor.delete_forward();
-            sync_command_menu(app, &resources.prompt_templates, &resources.skills);
+            sync_command_menu(app, session, &resources.prompt_templates, &resources.skills);
             sync_file_menu(app, session, file_search);
             return Flow::Continue;
         }
@@ -1957,15 +2087,7 @@ fn handle_input(
                         .push(Cell::Notice("this model has no thinking levels".into()));
                     return Flow::Continue;
                 }
-                let levels = [
-                    ThinkingLevel::Off,
-                    ThinkingLevel::Minimal,
-                    ThinkingLevel::Low,
-                    ThinkingLevel::Medium,
-                    ThinkingLevel::High,
-                    ThinkingLevel::Xhigh,
-                    ThinkingLevel::Max,
-                ];
+                let levels = session.model().supported_thinking_levels();
                 let current = session.thinking_level();
                 let pos = levels.iter().position(|l| *l == current).unwrap_or(0);
                 session.set_thinking_level(levels[(pos + 1) % levels.len()]);
@@ -2042,7 +2164,7 @@ fn handle_input(
             submit(app, session, text, running_task);
         }
     } else {
-        sync_command_menu(app, &resources.prompt_templates, &resources.skills);
+        sync_command_menu(app, session, &resources.prompt_templates, &resources.skills);
         sync_file_menu(app, session, file_search);
     }
     Flow::Continue
@@ -2679,6 +2801,14 @@ fn start_tree_navigation(
 }
 
 fn open_model_picker(app: &mut App, session: &Arc<kiss_coding::AgentSession>) {
+    open_model_picker_with_filter(app, session, None);
+}
+
+fn open_model_picker_with_filter(
+    app: &mut App,
+    session: &Arc<kiss_coding::AgentSession>,
+    filter: Option<&str>,
+) {
     let copilot_models = kiss_ai::auth::stored_oauth_model_ids("github-copilot");
     let items: Vec<SelectItem> = session
         .registry
@@ -2698,6 +2828,9 @@ fn open_model_picker(app: &mut App, session: &Arc<kiss_coding::AgentSession>) {
         app.theme.clone(),
     );
     list.max_visible = 12;
+    if let Some(filter) = filter {
+        list.set_filter(filter.to_string());
+    }
     app.picker = Some(Picker {
         kind: PickerKind::Model,
         list,
@@ -2721,9 +2854,11 @@ fn open_thinking_picker(app: &mut App, session: &Arc<kiss_coding::AgentSession>)
         return;
     }
     let current = session.thinking_level();
+    let supported = session.model().supported_thinking_levels();
     let items = THINKING_LEVELS
         .iter()
         .enumerate()
+        .filter(|(_, level)| supported.contains(level))
         .map(|(value, level)| SelectItem {
             label: level.as_str().to_string(),
             detail: (*level == current).then(|| "current".into()),
@@ -2735,7 +2870,7 @@ fn open_thinking_picker(app: &mut App, session: &Arc<kiss_coding::AgentSession>)
         items,
         app.theme.clone(),
     );
-    list.selected = THINKING_LEVELS
+    list.selected = supported
         .iter()
         .position(|level| *level == current)
         .unwrap_or(0);
@@ -2750,6 +2885,14 @@ fn open_scoped_models_picker(
     session: &Arc<kiss_coding::AgentSession>,
     resources: &InteractiveResources,
 ) {
+    app.picker = Some(scoped_models_picker(app, session, resources));
+}
+
+fn scoped_models_picker(
+    app: &App,
+    session: &Arc<kiss_coding::AgentSession>,
+    resources: &InteractiveResources,
+) -> Picker {
     let copilot_models = kiss_ai::auth::stored_oauth_model_ids("github-copilot");
     let items = session
         .registry
@@ -2780,10 +2923,23 @@ fn open_scoped_models_picker(
         app.theme.clone(),
     );
     list.max_visible = 14;
-    app.picker = Some(Picker {
+    Picker {
         kind: PickerKind::ScopedModels,
         list,
-    });
+    }
+}
+
+fn reopen_scoped_models_picker(
+    app: &mut App,
+    session: &Arc<kiss_coding::AgentSession>,
+    resources: &InteractiveResources,
+    filter: String,
+    selected_value: usize,
+) {
+    let mut picker = scoped_models_picker(app, session, resources);
+    picker.list.set_filter(filter);
+    picker.list.select_value(selected_value);
+    app.picker = Some(picker);
 }
 
 fn account_allows_model(model: &kiss_ai::Model, copilot_models: Option<&[String]>) -> bool {
@@ -2880,6 +3036,10 @@ fn open_fork_picker(app: &mut App, session: &Arc<kiss_coding::AgentSession>) {
 }
 
 fn open_login_picker(app: &mut App) {
+    open_login_picker_with_filter(app, None);
+}
+
+fn open_login_picker_with_filter(app: &mut App, filter: Option<&str>) {
     let mut providers: Vec<String> = kiss_ai::registry::BUILTIN_PROVIDER_IDS
         .iter()
         .map(|provider| (*provider).to_string())
@@ -2917,6 +3077,9 @@ fn open_login_picker(app: &mut App) {
         app.theme.clone(),
     );
     list.max_visible = 14;
+    if let Some(filter) = filter {
+        list.set_filter(filter.to_string());
+    }
     app.picker = Some(Picker {
         kind: PickerKind::LoginProviders(providers),
         list,
@@ -3015,6 +3178,14 @@ fn open_settings_picker(
     session: &Arc<kiss_coding::AgentSession>,
     resources: &InteractiveResources,
 ) {
+    app.picker = Some(settings_picker(app, session, resources));
+}
+
+fn settings_picker(
+    app: &App,
+    session: &Arc<kiss_coding::AgentSession>,
+    resources: &InteractiveResources,
+) -> Picker {
     let settings = &resources.settings;
     let theme = settings.theme.as_deref().unwrap_or("dark");
     let items = vec![
@@ -3123,10 +3294,27 @@ fn open_settings_picker(
             value: 12,
         },
     ];
-    app.picker = Some(Picker {
+    Picker {
         kind: PickerKind::Settings,
-        list: SelectList::new("Settings (enter changes a value)", items, app.theme.clone()),
-    });
+        list: SelectList::new(
+            "Settings (enter/space changes a value)",
+            items,
+            app.theme.clone(),
+        ),
+    }
+}
+
+fn reopen_settings_picker(
+    app: &mut App,
+    session: &Arc<kiss_coding::AgentSession>,
+    resources: &InteractiveResources,
+    filter: String,
+    selected_value: usize,
+) {
+    let mut picker = settings_picker(app, session, resources);
+    picker.list.set_filter(filter);
+    picker.list.select_value(selected_value);
+    app.picker = Some(picker);
 }
 
 fn open_trust_picker(app: &mut App, session: &Arc<kiss_coding::AgentSession>) {
@@ -3818,6 +4006,31 @@ fn handle_picker_key(
         }
         return Flow::Continue;
     }
+    let activates_settings = matches!(&picker.kind, PickerKind::Settings)
+        && picker.list.filter.is_empty()
+        && key.key == Key::Char(' ')
+        && !key.ctrl
+        && !key.alt;
+    if key.key == Key::Enter || activates_settings {
+        let mut picker = app.picker.take().expect("picker is present");
+        let value = picker.list.current().map(|item| item.value);
+        let filter = std::mem::take(&mut picker.list.filter);
+        if let Some(value) = value {
+            apply_picker_selection(
+                app,
+                session,
+                PickerSelection {
+                    kind: picker.kind,
+                    value,
+                    filter,
+                },
+                key.shift,
+                resources,
+                command_tx,
+            );
+        }
+        return Flow::Continue;
+    }
     match key.key {
         Key::Escape => {
             app.picker = None;
@@ -3834,21 +4047,6 @@ fn handle_picker_key(
             f.push(c);
             picker.list.set_filter(f);
         }
-        Key::Enter => {
-            let mut picker = app.picker.take().expect("picker is present");
-            let value = picker.list.current().map(|item| item.value);
-            if let Some(value) = value {
-                apply_picker_selection(
-                    app,
-                    session,
-                    picker.kind,
-                    value,
-                    key.shift,
-                    resources,
-                    command_tx,
-                );
-            }
-        }
         _ => {}
     }
     Flow::Continue
@@ -3857,12 +4055,16 @@ fn handle_picker_key(
 fn apply_picker_selection(
     app: &mut App,
     session: &Arc<kiss_coding::AgentSession>,
-    kind: PickerKind,
-    value: usize,
+    selection: PickerSelection,
     save_default: bool,
     resources: &mut InteractiveResources,
     command_tx: &mpsc::UnboundedSender<CommandEvent>,
 ) {
+    let PickerSelection {
+        kind,
+        value,
+        filter,
+    } = selection;
     match kind {
         PickerKind::Model => {
             if let Some(model) = session.registry.all().get(value) {
@@ -3870,6 +4072,7 @@ fn apply_picker_selection(
                 if save_default {
                     resources.settings.default_provider = Some(model.provider.clone());
                     resources.settings.default_model = Some(model.id.clone());
+                    keep_default_model_in_scope(resources, model);
                     save_interactive_settings(app, session, resources);
                     app.cells.push(Cell::Notice(format!(
                         "saved default model {}/{}",
@@ -3910,7 +4113,7 @@ fn apply_picker_selection(
                         .collect(),
                 );
                 save_interactive_settings(app, session, resources);
-                open_scoped_models_picker(app, session, resources);
+                reopen_scoped_models_picker(app, session, resources, filter, value);
             }
         }
         PickerKind::Tree => {
@@ -4022,7 +4225,7 @@ fn apply_picker_selection(
         }
         PickerKind::Settings => {
             apply_settings_selection(app, session, resources, value);
-            open_settings_picker(app, session, resources);
+            reopen_settings_picker(app, session, resources, filter, value);
         }
         PickerKind::Trust => {
             let cwd = session.manager.lock().unwrap().cwd().to_path_buf();
@@ -4062,6 +4265,29 @@ fn apply_picker_selection(
         }
         PickerKind::McpTools(name) => open_mcp_tools(app, &name),
     }
+}
+
+fn keep_default_model_in_scope(
+    resources: &mut InteractiveResources,
+    model: &kiss_ai::Model,
+) -> bool {
+    if resources.enabled_models.is_empty()
+        || resources
+            .enabled_models
+            .iter()
+            .any(|candidate| candidate.provider == model.provider && candidate.id == model.id)
+    {
+        return false;
+    }
+    resources.enabled_models.push(model.clone());
+    resources.settings.enabled_models = Some(
+        resources
+            .enabled_models
+            .iter()
+            .map(|model| format!("{}/{}", model.provider, model.id))
+            .collect(),
+    );
+    true
 }
 
 fn format_transport(transport: Transport) -> &'static str {
@@ -4617,8 +4843,7 @@ fn run_slash_command(
                     )));
                 }
             } else {
-                app.cells
-                    .push(Cell::Error(format!("no model matches {rest}")));
+                open_model_picker_with_filter(app, session, Some(&rest));
             }
         }
         "thinking" => {
@@ -4682,6 +4907,10 @@ fn run_slash_command(
         "tree" => open_tree_picker(app, session),
         "fork" => open_fork_picker(app, session),
         "clone" => {
+            if session.manager.lock().unwrap().leaf_id().is_none() {
+                app.cells.push(Cell::Notice("nothing to clone yet".into()));
+                return Flow::Continue;
+            }
             let fork = {
                 let manager = session.manager.lock().unwrap();
                 manager.fork_active_branch(manager.leaf_id(), true)
@@ -4703,13 +4932,17 @@ fn run_slash_command(
         "login" => {
             if rest.is_empty() {
                 open_login_picker(app);
-            } else if kiss_ai::registry::BUILTIN_PROVIDER_IDS.contains(&rest.as_str())
-                || rest == "llama.cpp"
-            {
-                open_login_methods_picker(app, &rest);
             } else {
-                app.cells
-                    .push(Cell::Error(format!("unknown provider: {rest}")));
+                let provider = kiss_ai::registry::BUILTIN_PROVIDER_IDS
+                    .iter()
+                    .copied()
+                    .chain(std::iter::once("llama.cpp"))
+                    .find(|provider| provider.eq_ignore_ascii_case(&rest));
+                if let Some(provider) = provider {
+                    open_login_methods_picker(app, provider);
+                } else {
+                    open_login_picker_with_filter(app, Some(&rest));
+                }
             }
         }
         "logout" => {
@@ -4731,8 +4964,11 @@ fn run_slash_command(
         }
         "name" => {
             if rest.is_empty() {
-                app.cells
-                    .push(Cell::Notice("usage: /name <session name>".into()));
+                let current = session.manager.lock().unwrap().session_name();
+                app.cells.push(Cell::Notice(current.map_or_else(
+                    || "usage: /name <session name>".into(),
+                    |name| format!("session name: {name}"),
+                )));
             } else {
                 let _ = session.manager.lock().unwrap().append_session_info(&rest);
                 app.cells
@@ -5270,7 +5506,10 @@ mod tests {
 
     fn open_menu(app: &mut App, text: &str) {
         app.editor.set_text(text);
-        sync_command_menu(app, &[], &[]);
+        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
+            "/synthetic",
+        )));
+        sync_command_menu(app, &session, &[], &[]);
     }
 
     fn test_session(manager: kiss_coding::SessionManager) -> Arc<kiss_coding::AgentSession> {
@@ -5419,7 +5658,7 @@ mod tests {
 
         let menu = app.command_menu.as_mut().expect("command menu");
         assert_eq!(
-            menu.current().map(|item| item.label.as_str()),
+            menu.list.current().map(|item| item.label.as_str()),
             Some("settings")
         );
     }
@@ -5431,7 +5670,7 @@ mod tests {
 
         let menu = app.command_menu.as_mut().expect("command menu");
         assert_eq!(
-            menu.current().map(|item| item.label.as_str()),
+            menu.list.current().map(|item| item.label.as_str()),
             Some("model")
         );
     }
@@ -5443,9 +5682,10 @@ mod tests {
 
         let menu = app.command_menu.as_mut().expect("command menu");
         let labels: Vec<&str> = menu
+            .list
             .filtered_indices()
             .into_iter()
-            .map(|index| menu.items[index].label.as_str())
+            .map(|index| menu.list.items[index].label.as_str())
             .collect();
         assert_eq!(&labels[..2], ["login", "logout"]);
     }
@@ -5456,7 +5696,10 @@ mod tests {
         open_menu(&mut app, "/mcp");
 
         let menu = app.command_menu.as_mut().expect("command menu");
-        assert_eq!(menu.current().map(|item| item.label.as_str()), Some("mcp"));
+        assert_eq!(
+            menu.list.current().map(|item| item.label.as_str()),
+            Some("mcp")
+        );
     }
 
     #[test]
@@ -5511,7 +5754,7 @@ mod tests {
         assert_eq!(
             app.command_menu
                 .as_mut()
-                .and_then(SelectList::current)
+                .and_then(|menu| menu.list.current())
                 .map(|item| item.label.as_str()),
             Some("model")
         );
@@ -5522,7 +5765,7 @@ mod tests {
         assert_eq!(
             app.command_menu
                 .as_mut()
-                .and_then(SelectList::current)
+                .and_then(|menu| menu.list.current())
                 .map(|item| item.label.as_str()),
             Some("settings")
         );
@@ -5571,11 +5814,162 @@ mod tests {
     }
 
     #[test]
-    fn command_arguments_close_menu() {
+    fn command_arguments_complete_for_pi_core_commands() {
         let mut app = test_app();
-        open_menu(&mut app, "/model ");
+        open_menu(&mut app, "/thinking hi");
+
+        let menu = app.command_menu.as_mut().expect("thinking arguments");
+        assert_eq!(
+            menu.list.current().map(|item| item.label.as_str()),
+            Some("high")
+        );
+        assert_eq!(
+            handle_command_menu_key(&mut app, &key(Key::Tab)),
+            Some(CommandMenuAction::Handled)
+        );
+        assert_eq!(app.editor.text(), "/thinking high");
+
+        open_menu(&mut app, "/login anth");
+        assert_eq!(
+            handle_command_menu_key(&mut app, &key(Key::Enter)),
+            Some(CommandMenuAction::Submit("/login anthropic".into()))
+        );
+    }
+
+    #[test]
+    fn commands_without_argument_completion_close_the_menu() {
+        let mut app = test_app();
+        open_menu(&mut app, "/compact preserve details");
 
         assert!(app.command_menu.is_none());
+    }
+
+    #[test]
+    fn unmatched_model_and_login_arguments_open_filtered_selectors() {
+        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
+            "/synthetic",
+        )));
+        let mut app = test_app();
+        let mut resources = test_resources();
+
+        run_command_for_test(&mut app, &session, &mut resources, "model missing-model");
+        let picker = app.picker.as_ref().expect("filtered model picker");
+        assert!(matches!(picker.kind, PickerKind::Model));
+        assert_eq!(picker.list.filter, "missing-model");
+
+        run_command_for_test(&mut app, &session, &mut resources, "login missing-provider");
+        let picker = app.picker.as_ref().expect("filtered login picker");
+        assert!(matches!(picker.kind, PickerKind::LoginProviders(_)));
+        assert_eq!(picker.list.filter, "missing-provider");
+    }
+
+    #[test]
+    fn name_without_an_argument_shows_the_current_session_name() {
+        let mut manager = kiss_coding::SessionManager::in_memory(Path::new("/synthetic"));
+        manager.append_session_info("parity audit").unwrap();
+        let session = test_session(manager);
+        let mut app = test_app();
+        let mut resources = test_resources();
+
+        run_command_for_test(&mut app, &session, &mut resources, "name");
+
+        assert!(matches!(
+            app.cells.last(),
+            Some(Cell::Notice(message)) if message == "session name: parity audit"
+        ));
+    }
+
+    #[test]
+    fn rebuilt_settings_picker_keeps_filter_selection_and_new_value() {
+        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
+            "/synthetic",
+        )));
+        let mut app = test_app();
+        let mut resources = test_resources();
+        open_settings_picker(&mut app, &session, &resources);
+
+        let picker = app.picker.as_mut().expect("settings picker");
+        picker.list.set_filter("automatic".into());
+        assert!(picker.list.select_value(12));
+
+        resources.settings.auto_recap = Some(false);
+        reopen_settings_picker(&mut app, &session, &resources, "automatic".into(), 12);
+
+        let picker = app.picker.as_mut().expect("rebuilt settings picker");
+        assert_eq!(picker.list.filter, "automatic");
+        assert_eq!(picker.list.current().map(|item| item.value), Some(12));
+        assert_eq!(
+            picker
+                .list
+                .current()
+                .and_then(|item| item.detail.as_deref()),
+            Some("off")
+        );
+    }
+
+    #[test]
+    fn rebuilt_scoped_models_picker_keeps_filter_and_selection() {
+        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
+            "/synthetic",
+        )));
+        let mut app = test_app();
+        let mut resources = test_resources();
+        let selected = session.registry.all().first().expect("model").clone();
+        let selected_value = 0;
+
+        resources.enabled_models.push(selected);
+        reopen_scoped_models_picker(
+            &mut app,
+            &session,
+            &resources,
+            String::new(),
+            selected_value,
+        );
+
+        let picker = app.picker.as_mut().expect("scoped model picker");
+        assert_eq!(picker.list.current().map(|item| item.value), Some(0));
+        assert!(
+            picker
+                .list
+                .current()
+                .is_some_and(|item| item.label.starts_with("[x] "))
+        );
+    }
+
+    #[test]
+    fn saved_default_model_stays_in_an_active_scope() {
+        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
+            "/synthetic",
+        )));
+        let mut resources = test_resources();
+        let first = session.registry.all()[0].clone();
+        let selected = session
+            .registry
+            .all()
+            .iter()
+            .find(|model| model.provider != first.provider || model.id != first.id)
+            .unwrap()
+            .clone();
+        resources.enabled_models.push(first);
+
+        assert!(keep_default_model_in_scope(&mut resources, &selected));
+        assert!(!keep_default_model_in_scope(&mut resources, &selected));
+        assert_eq!(
+            resources
+                .enabled_models
+                .iter()
+                .filter(|model| model.provider == selected.provider && model.id == selected.id)
+                .count(),
+            1
+        );
+        assert!(
+            resources
+                .settings
+                .enabled_models
+                .as_ref()
+                .unwrap()
+                .contains(&format!("{}/{}", selected.provider, selected.id))
+        );
     }
 
     #[test]
@@ -6009,8 +6403,11 @@ mod tests {
         apply_picker_selection(
             &mut app,
             &session,
-            picker.kind,
-            value,
+            PickerSelection {
+                kind: picker.kind,
+                value,
+                filter: String::new(),
+            },
             false,
             &mut resources,
             &tx,
