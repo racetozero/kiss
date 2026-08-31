@@ -143,6 +143,19 @@ impl SessionManager {
         }
     }
 
+    /// Create a child session in the same working directory and session store.
+    pub fn create_child(&self) -> Result<Self> {
+        let mut manager = self.create_sibling()?;
+        manager.header.parent_session = Some(
+            self.file
+                .as_ref()
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|| format!("session:{}", self.header.id)),
+        );
+        manager.rewrite_file()?;
+        Ok(manager)
+    }
+
     /// Fork: copy the source session's entries into a new file for `cwd`.
     pub fn fork_from(source: &Path, cwd: &Path, session_dir: Option<PathBuf>) -> Result<Self> {
         let origin = Self::open(source)?;
@@ -1088,6 +1101,28 @@ mod tests {
         let listings = SessionManager::list(&cwd, &dir.path().join("sessions")).unwrap();
         assert_eq!(listings.len(), 1);
         assert_eq!(listings[0].name.as_deref(), Some("my task"));
+    }
+
+    #[test]
+    fn child_session_records_its_parent() {
+        let parent = manager();
+        let child = parent.create_child().unwrap();
+        assert_eq!(
+            child.header().parent_session.as_deref(),
+            Some(format!("session:{}", parent.session_id()).as_str())
+        );
+
+        let dir = tempfile::tempdir().unwrap();
+        let cwd = dir.path().join("project");
+        std::fs::create_dir_all(&cwd).unwrap();
+        let parent = SessionManager::create(&cwd, Some(dir.path().join("sessions"))).unwrap();
+        let parent_file = parent.session_file().unwrap().display().to_string();
+        let child = parent.create_child().unwrap();
+        let reopened = SessionManager::open(child.session_file().unwrap()).unwrap();
+        assert_eq!(
+            reopened.header().parent_session.as_deref(),
+            Some(parent_file.as_str())
+        );
     }
 
     #[test]

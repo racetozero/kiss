@@ -423,7 +423,7 @@ pub async fn build_startup(
         .api_key
         .clone()
         .map(|key| (model.provider.clone(), key));
-    let session = AgentSession::new(
+    let session = AgentSession::new_with_subagents_allowed(
         manager,
         tools,
         registry,
@@ -433,6 +433,7 @@ pub async fn build_startup(
         thinking,
         api_key_override,
         sink,
+        !args.no_tools,
     );
 
     // Initial message: positional args + @files + piped stdin (print mode).

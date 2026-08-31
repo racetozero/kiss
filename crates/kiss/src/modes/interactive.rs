@@ -3293,6 +3293,18 @@ fn settings_picker(
             ),
             value: 12,
         },
+        SelectItem {
+            label: "Subagents".into(),
+            detail: Some(
+                if settings.subagents.enabled {
+                    "on"
+                } else {
+                    "off"
+                }
+                .into(),
+            ),
+            value: 13,
+        },
     ];
     Picker {
         kind: PickerKind::Settings,
@@ -4409,6 +4421,9 @@ fn apply_settings_selection(
             resources.settings.auto_recap = Some(!resources.settings.auto_recap_enabled());
             app.idle_recap_armed = resources.settings.auto_recap_enabled();
             app.last_user_activity = Instant::now();
+        }
+        13 => {
+            resources.settings.subagents.enabled = !resources.settings.subagents.enabled;
         }
         _ => return,
     }
@@ -5905,6 +5920,30 @@ mod tests {
                 .and_then(|item| item.detail.as_deref()),
             Some("off")
         );
+    }
+
+    #[test]
+    fn settings_picker_shows_the_opt_in_subagent_toggle() {
+        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
+            "/synthetic",
+        )));
+        let mut app = test_app();
+        let mut resources = test_resources();
+
+        open_settings_picker(&mut app, &session, &resources);
+        let picker = app.picker.as_mut().expect("settings picker");
+        assert!(picker.list.select_value(13));
+        assert_eq!(picker.list.current().unwrap().label, "Subagents");
+        assert_eq!(
+            picker.list.current().unwrap().detail.as_deref(),
+            Some("off")
+        );
+
+        resources.settings.subagents.enabled = true;
+        reopen_settings_picker(&mut app, &session, &resources, String::new(), 13);
+        let picker = app.picker.as_mut().unwrap();
+        assert_eq!(picker.list.current().map(|item| item.value), Some(13));
+        assert_eq!(picker.list.current().unwrap().detail.as_deref(), Some("on"));
     }
 
     #[test]

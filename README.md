@@ -114,6 +114,19 @@ Useful commands include `/login`, `/model`, `/mcp`, `/compact`, `/resume`,
 KISS can accept a new instruction while the agent works. Press `Enter` to
 steer the current task, or `Alt+Enter` to queue a follow-up task.
 
+## Subagents
+
+Subagents are off by default. Open `/settings` and change `Subagents` to `on`
+to give the main agent these control tools: `spawn_agent`, `send_message`,
+`followup_task`, `wait_agent`, `list_agents`, and `interrupt_agent`.
+
+Each child is a separate KISS session, but it uses the same working directory.
+KISS allows four active child turns and one child level. A child starts with
+fresh context unless the main agent explicitly copies parent turns. Project
+settings cannot enable this feature. `--no-tools` also keeps it off.
+
+See [subagents.md](subagents.md) for the design analysis and tradeoffs.
+
 ## Models and login
 
 KISS supports browser and headless OAuth for OpenAI Codex and Anthropic. It

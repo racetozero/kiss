@@ -42,6 +42,13 @@ impl Default for RetrySettings {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct SubagentSettings {
+    /// Subagent tools are hidden until the user enables them.
+    pub enabled: bool,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum QueueMode {
@@ -98,6 +105,7 @@ pub struct Settings {
     pub default_project_trust: ProjectTrustDefault,
     pub compaction: CompactionSettings,
     pub retry: RetrySettings,
+    pub subagents: SubagentSettings,
     pub steering_mode: QueueMode,
     pub follow_up_mode: QueueMode,
     pub shell_path: Option<String>,
@@ -147,6 +155,21 @@ fn deep_merge(base: &mut Value, overlay: Value) {
     }
 }
 
+fn merged_settings(mut global: Value, project: Option<Value>) -> Settings {
+    let subagents_enabled = global
+        .pointer("/subagents/enabled")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    if let Some(project) = project {
+        deep_merge(&mut global, project);
+    }
+    let mut settings: Settings = serde_json::from_value(global).unwrap_or_default();
+    // Subagents are a user-level authority choice. A repository must not turn
+    // them on through a trusted project settings file.
+    settings.subagents.enabled = subagents_enabled;
+    settings
+}
+
 impl Settings {
     pub fn auto_recap_enabled(&self) -> bool {
         self.auto_recap.unwrap_or(true)
@@ -154,13 +177,13 @@ impl Settings {
 
     /// Load global settings, overlaying project settings when trusted.
     pub fn load(cwd: &Path, project_trusted: bool) -> Settings {
-        let mut merged = global_settings_path()
+        let global = global_settings_path()
             .and_then(|p| read_json(&p))
             .unwrap_or_else(|| Value::Object(Default::default()));
-        if project_trusted && let Some(project) = read_json(&project_settings_path(cwd)) {
-            deep_merge(&mut merged, project);
-        }
-        serde_json::from_value(merged).unwrap_or_default()
+        let project = project_trusted
+            .then(|| read_json(&project_settings_path(cwd)))
+            .flatten();
+        merged_settings(global, project)
     }
 
     pub fn save_global(&self) -> anyhow::Result<()> {
@@ -194,6 +217,7 @@ mod tests {
         assert_eq!(s.compaction.reserve_tokens, 16_384);
         assert_eq!(s.compaction.keep_recent_tokens, 20_000);
         assert_eq!(s.retry.max_retries, 3);
+        assert!(!s.subagents.enabled);
         assert_eq!(s.steering_mode, QueueMode::OneAtATime);
         assert!(s.auto_recap_enabled());
         assert_eq!(s.markdown.mermaid, MermaidRendering::Streaming);
@@ -212,5 +236,26 @@ mod tests {
         let value = serde_json::to_value(Settings::default()).unwrap();
         assert_eq!(value["markdown"]["mermaid"], "streaming");
         assert!(value.get("mermaidRendering").is_none());
+    }
+
+    #[test]
+    fn subagents_are_opt_in_on_the_wire() {
+        let value = serde_json::to_value(Settings::default()).unwrap();
+        assert_eq!(value["subagents"]["enabled"], false);
+
+        let loaded: Settings = serde_json::from_value(json!({})).unwrap();
+        assert!(!loaded.subagents.enabled);
+    }
+
+    #[test]
+    fn project_settings_cannot_change_subagent_authority() {
+        let enabled = merged_settings(
+            json!({"subagents": {"enabled": true}}),
+            Some(json!({"subagents": {"enabled": false}})),
+        );
+        assert!(enabled.subagents.enabled);
+
+        let disabled = merged_settings(json!({}), Some(json!({"subagents": {"enabled": true}})));
+        assert!(!disabled.subagents.enabled);
     }
 }

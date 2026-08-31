@@ -9,6 +9,7 @@ pub mod session;
 pub mod session_runner;
 pub mod settings;
 pub mod skills;
+pub mod subagents;
 pub mod system_prompt;
 pub mod tools;
 pub mod trust;

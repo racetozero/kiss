@@ -7,12 +7,14 @@ use crate::compaction::{
 };
 use crate::session::manager::SessionManager;
 use crate::settings::{QueueMode, Settings};
+use crate::subagents::{ForkTurns, SUBAGENT_SYSTEM_PROMPT, SubagentRuntime, fork_messages};
+use anyhow::Context as _;
 use kiss_agent::{
     AgentContext, AgentEvent, AgentLoopConfig, AgentMessage, DynTool, EventSink, TurnUpdate,
 };
 use kiss_ai::{Model, Registry, StopReason, ThinkingLevel, Usage};
 use std::collections::VecDeque;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use tokio_util::sync::CancellationToken;
 
 /// Harness-level events layered over the loop's AgentEvents.
@@ -60,6 +62,7 @@ pub struct EphemeralResponse {
 pub struct AgentSession {
     pub manager: Mutex<SessionManager>,
     pub registry: Registry,
+    base_tools: Mutex<Vec<DynTool>>,
     tools: Mutex<Vec<DynTool>>,
     settings: Mutex<Settings>,
     system_prompt: Mutex<String>,
@@ -73,6 +76,8 @@ pub struct AgentSession {
     context_usage_cache: Mutex<Option<(u64, u64)>>,
     api_key_override: Option<(String, String)>,
     sink: SessionEventSink,
+    subagents_allowed: bool,
+    subagents: OnceLock<Arc<SubagentRuntime>>,
 }
 
 impl AgentSession {
@@ -88,9 +93,37 @@ impl AgentSession {
         api_key_override: Option<(String, String)>,
         sink: SessionEventSink,
     ) -> Arc<Self> {
-        Arc::new(AgentSession {
+        Self::new_with_subagents_allowed(
+            manager,
+            tools,
+            registry,
+            settings,
+            system_prompt,
+            model,
+            thinking,
+            api_key_override,
+            sink,
+            true,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_with_subagents_allowed(
+        manager: SessionManager,
+        tools: Vec<DynTool>,
+        registry: Registry,
+        settings: Settings,
+        system_prompt: String,
+        model: Model,
+        thinking: ThinkingLevel,
+        api_key_override: Option<(String, String)>,
+        sink: SessionEventSink,
+        subagents_allowed: bool,
+    ) -> Arc<Self> {
+        let session = Arc::new(AgentSession {
             manager: Mutex::new(manager),
             registry,
+            base_tools: Mutex::new(tools.clone()),
             tools: Mutex::new(tools),
             settings: Mutex::new(settings),
             system_prompt: Mutex::new(system_prompt),
@@ -104,7 +137,15 @@ impl AgentSession {
             context_usage_cache: Default::default(),
             api_key_override,
             sink,
-        })
+            subagents_allowed,
+            subagents: OnceLock::new(),
+        });
+        if subagents_allowed {
+            let runtime = SubagentRuntime::new(Arc::downgrade(&session));
+            assert!(session.subagents.set(runtime).is_ok());
+        }
+        session.rebuild_tools();
+        session
     }
 
     pub fn model(&self) -> Model {
@@ -119,6 +160,10 @@ impl AgentSession {
         *self.totals.lock().unwrap()
     }
 
+    pub(crate) fn record_subagent_usage(&self, usage: Usage) {
+        self.totals.lock().unwrap().add(&usage);
+    }
+
     pub fn is_running(&self) -> bool {
         *self.running.lock().unwrap()
     }
@@ -128,18 +173,62 @@ impl AgentSession {
     }
 
     pub fn update_settings(&self, settings: Settings) {
+        let was_enabled = self.subagents_enabled();
         *self.settings.lock().unwrap() = settings;
+        let is_enabled = self.subagents_enabled();
+        if was_enabled
+            && !is_enabled
+            && let Some(runtime) = self.subagents.get()
+        {
+            runtime.interrupt_all();
+        }
+        self.rebuild_tools();
     }
 
     /// Replace resources used by the next model request.
     pub fn reload_runtime(&self, settings: Settings, system_prompt: String, tools: Vec<DynTool>) {
+        let was_enabled = self.subagents_enabled();
         *self.settings.lock().unwrap() = settings;
         *self.system_prompt.lock().unwrap() = system_prompt;
+        *self.base_tools.lock().unwrap() = tools;
+        let is_enabled = self.subagents_enabled();
+        if was_enabled
+            && !is_enabled
+            && let Some(runtime) = self.subagents.get()
+        {
+            runtime.interrupt_all();
+        }
+        self.rebuild_tools();
+    }
+
+    fn subagents_enabled(&self) -> bool {
+        self.subagents_allowed && self.settings.lock().unwrap().subagents.enabled
+    }
+
+    fn rebuild_tools(&self) {
+        let mut tools = self.base_tools.lock().unwrap().clone();
+        if self.subagents_enabled()
+            && let Some(runtime) = self.subagents.get()
+        {
+            tools.extend(runtime.control_tools());
+        }
         *self.tools.lock().unwrap() = tools;
+    }
+
+    pub fn available_tool_names(&self) -> Vec<String> {
+        self.tools
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|tool| tool.name().to_string())
+            .collect()
     }
 
     /// Switch the active session without appending synthetic history.
     pub fn replace_manager(&self, manager: SessionManager) {
+        if let Some(runtime) = self.subagents.get() {
+            runtime.reset();
+        }
         let context = manager.build_session_context();
         if let Some((provider, model_id)) = context.model
             && let Some((model, _)) = self.registry.resolve(&model_id, Some(&provider))
@@ -430,12 +519,78 @@ impl AgentSession {
                 (None, manager.build_session_context().messages)
             };
         drop(manager);
+        let mut system_prompt = self.system_prompt.lock().unwrap().clone();
+        if self.subagents_enabled() {
+            system_prompt.push_str("\n\n");
+            system_prompt.push_str(SUBAGENT_SYSTEM_PROMPT);
+        }
         AgentContext {
-            system_prompt: self.system_prompt.lock().unwrap().clone(),
+            system_prompt,
             openai_responses_input,
             messages,
             tools: self.tools.lock().unwrap().clone(),
         }
+    }
+
+    pub(crate) fn create_subagent_session(
+        self: &Arc<Self>,
+        task_name: &str,
+        canonical_path: &str,
+        fork_turns: ForkTurns,
+        model_pattern: Option<&str>,
+        reasoning_effort: Option<&str>,
+    ) -> anyhow::Result<Arc<Self>> {
+        let (model, suggested_thinking) = match model_pattern {
+            Some(pattern) => self
+                .registry
+                .resolve(pattern, None)
+                .with_context(|| format!("no model matches subagent model '{pattern}'"))?,
+            None => (self.model(), None),
+        };
+        let thinking = match reasoning_effort {
+            Some(level) => ThinkingLevel::parse(level)
+                .with_context(|| format!("unknown subagent reasoning_effort '{level}'"))?,
+            None => suggested_thinking.unwrap_or_else(|| self.thinking_level()),
+        };
+        let (mut manager, parent_messages, parent_id) = {
+            let parent = self.manager.lock().unwrap();
+            (
+                parent.create_child()?,
+                parent.build_session_context().messages,
+                parent.session_id().to_string(),
+            )
+        };
+        for message in fork_messages(&parent_messages, fork_turns) {
+            manager.append_message(message)?;
+        }
+        manager.append_custom(
+            "subagent",
+            Some(serde_json::json!({
+                "taskName": task_name,
+                "canonicalPath": canonical_path,
+                "parentSessionId": parent_id,
+            })),
+        )?;
+
+        let mut settings = self.settings();
+        settings.subagents.enabled = false;
+        let mut system_prompt = self.system_prompt.lock().unwrap().clone();
+        system_prompt.push_str(&format!(
+            "\n\nYou are child agent {canonical_path}. Complete only the assigned task. Return a concise result to the parent agent."
+        ));
+
+        Ok(Self::new_with_subagents_allowed(
+            manager,
+            self.base_tools.lock().unwrap().clone(),
+            self.registry.clone(),
+            settings,
+            system_prompt,
+            model,
+            thinking,
+            self.api_key_override.clone(),
+            Arc::new(|_| {}),
+            false,
+        ))
     }
 
     async fn run_ephemeral(
@@ -1009,6 +1164,94 @@ mod ephemeral_tests {
                 ..Default::default()
             }),
         }
+    }
+
+    fn settings_test_session(settings: Settings, subagents_allowed: bool) -> Arc<AgentSession> {
+        let registry = Registry::from_builtin();
+        let model = registry.all().first().expect("built-in model").clone();
+        AgentSession::new_with_subagents_allowed(
+            SessionManager::in_memory(std::path::Path::new("/test")),
+            Vec::new(),
+            registry,
+            settings,
+            "root prompt".into(),
+            model,
+            ThinkingLevel::Off,
+            None,
+            Arc::new(|_| {}),
+            subagents_allowed,
+        )
+    }
+
+    #[test]
+    fn subagent_tools_follow_settings_and_command_line_authority() {
+        let session = settings_test_session(Settings::default(), true);
+        assert!(session.available_tool_names().is_empty());
+        assert!(
+            !session
+                .build_context()
+                .system_prompt
+                .contains("Subagent coordination")
+        );
+
+        let mut enabled = session.settings();
+        enabled.subagents.enabled = true;
+        session.update_settings(enabled.clone());
+        assert_eq!(
+            session.available_tool_names(),
+            [
+                "spawn_agent",
+                "send_message",
+                "followup_task",
+                "wait_agent",
+                "list_agents",
+                "interrupt_agent"
+            ]
+        );
+        assert!(
+            session
+                .build_context()
+                .system_prompt
+                .contains("Subagent coordination")
+        );
+
+        enabled.subagents.enabled = false;
+        session.update_settings(enabled);
+        assert!(session.available_tool_names().is_empty());
+
+        let mut blocked_settings = Settings::default();
+        blocked_settings.subagents.enabled = true;
+        let blocked = settings_test_session(blocked_settings, false);
+        assert!(blocked.available_tool_names().is_empty());
+        assert!(
+            !blocked
+                .build_context()
+                .system_prompt
+                .contains("Subagent coordination")
+        );
+    }
+
+    #[test]
+    fn child_session_has_safe_forked_context_without_control_tools() {
+        let mut settings = Settings::default();
+        settings.subagents.enabled = true;
+        let parent = settings_test_session(settings, true);
+        parent
+            .manager
+            .lock()
+            .unwrap()
+            .append_message(AgentMessage::user("parent context"))
+            .unwrap();
+
+        let child = parent
+            .create_subagent_session("inspect", "/root/inspect", ForkTurns::All, None, None)
+            .unwrap();
+        assert!(child.available_tool_names().is_empty());
+        let context = child.manager.lock().unwrap().build_session_context();
+        assert!(matches!(
+            context.messages.as_slice(),
+            [AgentMessage::User(user)] if user.content.as_text() == "parent context"
+        ));
     }
 
     #[test]
