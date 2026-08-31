@@ -283,3 +283,7 @@ $RECYCLE.BIN/
 /performance.md
 /PERFORMANCE.md
 /ARCHITECTURE.md
+
+# Python helper caches
+__pycache__/
+*.py[cod]

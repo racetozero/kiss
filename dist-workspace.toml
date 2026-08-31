@@ -6,9 +6,10 @@ packages = ["kiss"]
 [dist]
 # The preferred dist version to use in CI (Cargo.toml SemVer syntax)
 cargo-dist-version = "0.32.0"
-# The generated workflow has two reviewed KISS overrides: macOS release builds
-# use safe ICF, and the default token permission is read-only. `dist generate`
-# removes these overrides, so review and reapply them after updating dist.
+# The generated workflow has reviewed KISS overrides: every release target uses
+# PGO, macOS release builds use safe ICF, and the default token permission is
+# read-only. `dist generate` removes these overrides, so review and reapply them
+# after updating dist.
 allow-dirty = ["ci"]
 # CI backends to support
 ci = "github"

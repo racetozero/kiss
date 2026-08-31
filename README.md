@@ -20,6 +20,30 @@ plugin runtime.
 - **Persistent:** resume, branch, compact, import, and export sessions.
 - **Connected:** use local or remote MCP servers, including OAuth servers.
 
+## Performance
+
+Release builds use profile-guided optimization (PGO). KISS trains each target
+on common CLI, model, MCP, and local mock-provider tasks before it builds the
+release binary.
+
+This held-out benchmark used an Apple M4, macOS 26.5.1, Rust 1.98.0, and the
+`aarch64-apple-darwin` target on 2026-08-31. Both binaries used the `dist`
+profile and safe identical code folding. Each result is the median of three
+trials. Short tasks used 80 samples per trial. The local mock-provider task
+used 30 samples per trial.
+
+| Task | Ordinary release | PGO release | Change |
+| --- | ---: | ---: | ---: |
+| `kiss --help` startup | 3.696 ms | 3.676 ms | 0.52% faster |
+| Model catalog search | 5.870 ms | 5.652 ms | 3.73% faster |
+| MCP server lookup | 3.989 ms | 3.902 ms | 2.19% faster |
+| Local mock-provider turn | 102.360 ms | 102.808 ms | 0.44% slower |
+| Executable size | 17.16 MiB | 14.87 MiB | 13.37% smaller |
+| gzip size | 8.17 MiB | 7.36 MiB | 9.94% smaller |
+
+The geometric mean latency gain is 1.51%. These values apply to this machine
+and target. Other release targets can have different results.
+
 ## Install
 
 macOS and Linux:
@@ -150,6 +174,8 @@ Use Rust stable and cargo-nextest:
 cargo nextest run --workspace --all-targets
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
+just pgo-test
+just pgo-bench
 ```
 
 ## Release
