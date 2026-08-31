@@ -42,11 +42,12 @@ class BuildPgoTests(unittest.TestCase):
             )
 
     def test_optimized_flags_keep_existing_linker_flags(self) -> None:
+        profile = Path("profiles") / "kiss.profdata"
         flags = build_kiss_pgo.optimized_rustflags(
-            "-C linker=rust-lld", Path("/tmp/kiss.profdata"), 27
+            "-C linker=rust-lld", profile, 27
         )
         self.assertIn("-C linker=rust-lld", flags)
-        self.assertIn("-Cprofile-use=/tmp/kiss.profdata", flags)
+        self.assertIn(f"-Cprofile-use={profile}", flags)
         self.assertIn("--profile-summary-hot-count=27", flags)
 
     def test_github_environment_is_appended(self) -> None:
@@ -93,8 +94,16 @@ class BenchmarkTests(unittest.TestCase):
             pgo=None,
         )
         baseline, pgo = benchmark_kiss_pgo.resolve_binaries(arguments)
-        self.assertTrue(str(baseline).endswith("baseline/x86_64-pc-windows-msvc/dist/kiss.exe"))
-        self.assertTrue(str(pgo).endswith("optimized/x86_64-pc-windows-msvc/dist/kiss.exe"))
+        root = arguments.target_dir.resolve()
+        target = arguments.target
+        self.assertEqual(
+            baseline,
+            root / "baseline" / target / "dist" / "kiss.exe",
+        )
+        self.assertEqual(
+            pgo,
+            root / "optimized" / target / "dist" / "kiss.exe",
+        )
 
     def test_geometric_mean(self) -> None:
         self.assertAlmostEqual(geometric_mean([1.0, 4.0]), 2.0)
