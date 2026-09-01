@@ -10,6 +10,7 @@ mod modes {
 mod mcp_cli;
 mod setup;
 mod slash_commands;
+mod update;
 
 use args::{Args, Command};
 use clap::Parser;
@@ -73,6 +74,7 @@ async fn run(args: Args) -> anyhow::Result<i32> {
 
 async fn run_command(command: &Command) -> anyhow::Result<i32> {
     match command {
+        Command::Update => update::run().await,
         Command::Mcp { command } => mcp_cli::run(command).await,
         Command::Login {
             provider,

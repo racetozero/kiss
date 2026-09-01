@@ -138,6 +138,9 @@ pub enum McpCommand {
 
 #[derive(Debug, Clone, Subcommand)]
 pub enum Command {
+    /// Update KISS to the latest GitHub release.
+    Update,
+
     /// Configure and use Model Context Protocol servers.
     Mcp {
         #[command(subcommand)]
@@ -363,6 +366,12 @@ mod tests {
                 ..
             }) if provider == "openai-codex"
         ));
+    }
+
+    #[test]
+    fn parses_update_command() {
+        let args = Args::try_parse_from(["kiss", "update"]).unwrap();
+        assert!(matches!(args.command, Some(Command::Update)));
     }
 
     #[test]

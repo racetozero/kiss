@@ -37,6 +37,12 @@ powershell -ExecutionPolicy ByPass -c "irm https://raw.githubusercontent.com/rac
 The installer selects the correct release, verifies its SHA-256 checksum, and
 installs `kiss` in your user binary directory.
 
+Update an existing installation with:
+
+```bash
+kiss update
+```
+
 ## Performance
 
 KISS is built to stay responsive during everyday work, from file discovery in

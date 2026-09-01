@@ -62,9 +62,11 @@ reqwest-mcp = { package = "reqwest", version = "0.13.2", default-features = fals
 rmcp = { version = "3.1.4", default-features = false, features = ["client", "auth", "transport-child-process", "transport-streamable-http-client-reqwest", "reqwest-tls-no-provider"] }
 rpassword = "7"
 rustls = { version = "0.23", default-features = false, features = ["aws_lc_rs"] }
+semver = { version = "1", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 serde_yaml = "0.9"
+self-replace = "1"
 sha2 = "0.10"
 similar = "2"
 tempfile = "3"

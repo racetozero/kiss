@@ -942,6 +942,7 @@ pub async fn run(args: &Args) -> Result<i32> {
     let mut keybindings = Keybindings::default();
     keybindings.load_overrides();
 
+    let latest_update = crate::update::check_on_launch();
     let mut startup_lines: Vec<String> = Vec::new();
     if !settings.quiet_startup {
         startup_lines.push(theme.fg(
@@ -952,6 +953,11 @@ pub async fn run(args: &Args) -> Result<i32> {
             "dim",
             "enter send · shift+tab effort · esc cancel · ctrl+d exit · / commands",
         ));
+        if let Some(latest) = latest_update
+            && let Ok(current) = semver::Version::parse(env!("CARGO_PKG_VERSION"))
+        {
+            startup_lines.push(theme.fg("warning", &crate::update::notice(&current, &latest)));
+        }
         if !resources.context_file_paths.is_empty() {
             let names: Vec<String> = resources
                 .context_file_paths
