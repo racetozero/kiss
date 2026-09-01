@@ -40,6 +40,30 @@ These selected `just bench` results used an Apple M4, macOS 26.5.1, and Rust
 | Incremental Markdown | 200 streaming prefix renders | 15.672 ms | 16.299 ms |
 | Unchanged frame | 10,000 logical rows | 133.220 us | 134.583 us |
 
+The subagent overhead benchmark used the same machine and release profile. It
+compared the same empty root session with four normal tools. The off case had
+no control tools. The on case had all six subagent control tools. It did not
+call a model or start a child. Each release run used 21 matched samples. The
+sample order changed between off and on to reduce process drift. Each sample
+used 500 session constructions or 10,000 context preparations.
+
+- Three root session construction trials measured off/on medians of
+  262.996/261.164 us, 266.224/266.563 us, and 254.168/261.607 us. The matched
+  changes were -0.70%, +0.13%, and +2.93%. The p95 ranges overlapped: 278.852
+  to 573.608 us off and 272.210 to 365.396 us on. The result does not show a
+  stable construction regression above process noise.
+- Three model-request context trials measured off medians of 207, 217, and
+  200 ns. The on medians were 293, 298, and 293 ns. The median matched increase
+  was 86 ns, or 41.55%. The median matched p95 increase was 95 ns, or 45.24%.
+  The percentage is large because the complete operation takes less than
+  0.4 us.
+
+Run only this comparison with:
+
+```bash
+cargo nextest run -p kiss-coding --release --run-ignored only --no-capture -E 'test(~benchmark_performance_subagent_overhead)'
+```
+
 The matched PGO benchmark used the same machine and three held-out trials.
 Both executables used the `dist` profile and macOS ICF.
 

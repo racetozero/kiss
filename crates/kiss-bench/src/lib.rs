@@ -29,6 +29,54 @@ pub fn measure<T>(
     report(name, &mut elapsed, iterations, work);
 }
 
+fn measure_iterations<T>(iterations: usize, workload: &mut impl FnMut() -> T) -> u128 {
+    let started = Instant::now();
+    for _ in 0..iterations {
+        black_box(workload());
+    }
+    started.elapsed().as_nanos() / iterations as u128
+}
+
+/// Measure two matched workloads in alternating sample order.
+///
+/// This reduces process drift when the expected difference is much smaller
+/// than the total operation time.
+pub fn measure_pair<A, B>(
+    names: (&str, &str),
+    samples: usize,
+    iterations: usize,
+    work: (&str, &str),
+    mut first: impl FnMut() -> A,
+    mut second: impl FnMut() -> B,
+) {
+    assert!(samples > 0, "a benchmark needs at least one sample");
+    assert!(iterations > 0, "a benchmark needs at least one iteration");
+
+    for _ in 0..iterations.min(3) {
+        black_box(first());
+        black_box(second());
+    }
+
+    let mut first_elapsed = Vec::with_capacity(samples);
+    let mut second_elapsed = Vec::with_capacity(samples);
+    for sample in 0..samples {
+        let (first_ns, second_ns) = if sample % 2 == 0 {
+            (
+                measure_iterations(iterations, &mut first),
+                measure_iterations(iterations, &mut second),
+            )
+        } else {
+            let second_ns = measure_iterations(iterations, &mut second);
+            let first_ns = measure_iterations(iterations, &mut first);
+            (first_ns, second_ns)
+        };
+        first_elapsed.push(first_ns);
+        second_elapsed.push(second_ns);
+    }
+    report(names.0, &mut first_elapsed, iterations, work.0);
+    report(names.1, &mut second_elapsed, iterations, work.1);
+}
+
 /// Print pre-measured per-iteration samples in the suite output format.
 pub fn report(name: &str, elapsed_ns: &mut [u128], iterations: usize, work: &str) {
     assert!(
@@ -43,4 +91,27 @@ pub fn report(name: &str, elapsed_ns: &mut [u128], iterations: usize, work: &str
         "KISS_BENCH\t{name}\tmedian_ns={median}\tp95_ns={p95}\tsamples={}\titerations={iterations}\twork={work}",
         elapsed_ns.len()
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::cell::RefCell;
+
+    #[test]
+    fn paired_measurement_alternates_sample_order() {
+        let calls = RefCell::new(Vec::new());
+        measure_pair(
+            ("first", "second"),
+            2,
+            1,
+            ("one", "one"),
+            || calls.borrow_mut().push("first"),
+            || calls.borrow_mut().push("second"),
+        );
+        assert_eq!(
+            calls.into_inner(),
+            ["first", "second", "first", "second", "second", "first"]
+        );
+    }
 }

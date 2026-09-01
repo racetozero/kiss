@@ -1183,6 +1183,16 @@ mod ephemeral_tests {
         )
     }
 
+    fn benchmark_tools() -> Vec<DynTool> {
+        let cwd = std::path::PathBuf::from("/synthetic");
+        vec![
+            Arc::new(kiss_agent::tools::read::ReadTool { cwd: cwd.clone() }),
+            Arc::new(kiss_agent::tools::write::WriteTool { cwd: cwd.clone() }),
+            Arc::new(kiss_agent::tools::edit::EditTool { cwd: cwd.clone() }),
+            Arc::new(kiss_agent::tools::bash::BashTool::new(cwd)),
+        ]
+    }
+
     #[test]
     fn subagent_tools_follow_settings_and_command_line_authority() {
         let session = settings_test_session(Settings::default(), true);
@@ -1252,6 +1262,62 @@ mod ephemeral_tests {
             context.messages.as_slice(),
             [AgentMessage::User(user)] if user.content.as_text() == "parent context"
         ));
+    }
+
+    #[test]
+    #[ignore = "release-mode performance benchmark"]
+    fn benchmark_performance_subagent_overhead() {
+        let registry = Registry::from_builtin();
+        let model = registry.all().first().expect("built-in model").clone();
+        let tools = benchmark_tools();
+        let make_session = |enabled: bool| {
+            let mut settings = Settings::default();
+            settings.subagents.enabled = enabled;
+            AgentSession::new_with_subagents_allowed(
+                SessionManager::in_memory(std::path::Path::new("/synthetic")),
+                tools.clone(),
+                registry.clone(),
+                settings,
+                "benchmark root prompt".into(),
+                model.clone(),
+                ThinkingLevel::Off,
+                None,
+                Arc::new(|_| {}),
+                true,
+            )
+        };
+
+        kiss_bench::measure_pair(
+            (
+                "agent_session_create_subagents_off",
+                "agent_session_create_subagents_on",
+            ),
+            21,
+            500,
+            (
+                "new_root_session_4_base_tools_0_control_tools",
+                "new_root_session_4_base_tools_6_control_tools",
+            ),
+            || make_session(false),
+            || make_session(true),
+        );
+
+        let off = make_session(false);
+        let on = make_session(true);
+        kiss_bench::measure_pair(
+            (
+                "agent_context_build_subagents_off",
+                "agent_context_build_subagents_on",
+            ),
+            21,
+            10_000,
+            (
+                "empty_session_4_base_tools_0_control_tools",
+                "empty_session_4_base_tools_6_control_tools",
+            ),
+            || off.build_context(),
+            || on.build_context(),
+        );
     }
 
     #[test]
