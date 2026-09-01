@@ -22,16 +22,24 @@ plugin runtime.
 
 ## Performance
 
-KISS release binaries use target-specific profile-guided optimization (PGO).
-macOS releases also use safe identical code folding (ICF). The Cargo `dist`
-profile inherits the release settings: optimization level 3, fat link-time
-optimization, one code generation unit, stripped symbols, and abort-on-panic.
+Fast feedback is a product requirement for KISS. The performance goals are
+simple: keep local actions responsive in large repositories, avoid extra work
+for features that users do not enable, and keep release downloads small.
 
-These selected `just bench` results used an Apple M4, macOS 26.5.1, and Rust
-1.98.0 on 2026-08-31. The command measures internal code with the Cargo
-`release` profile. Lower values are better.
+| Product outcome | User value | Measured result |
+| --- | --- | ---: |
+| Fast search at repository scale | Less wait during file navigation | 5.122 ms for 100,000 files; 10.639 ms for 500,000 files |
+| Responsive streaming | Fast screen updates during model output | 15.672 ms for Markdown; 133.220 us for an unchanged frame |
+| No default subagent cost | Standard sessions stay simple | 0 subagent control tools when off |
+| Low cost when subagents are on | Parallel work without material local delay | 86 ns median increase; less than 0.4 us total |
+| Smaller releases | Faster downloads and less disk use | 13.37% smaller binary; 9.94% smaller gzip file |
 
-| Benchmark | Work | Median | p95 |
+These are internal component benchmarks. They show local KISS overhead, not
+end-to-end model response time.
+
+### Measured local performance
+
+| User action | Test size | Typical time | p95 |
 | --- | --- | ---: | ---: |
 | File search | 100,000 files, three warm queries | 5.122 ms | 5.277 ms |
 | File search | 500,000 files, three warm queries | 10.639 ms | 11.836 ms |
@@ -40,39 +48,45 @@ These selected `just bench` results used an Apple M4, macOS 26.5.1, and Rust
 | Incremental Markdown | 200 streaming prefix renders | 15.672 ms | 16.299 ms |
 | Unchanged frame | 10,000 logical rows | 133.220 us | 134.583 us |
 
-The subagent overhead benchmark used the same machine and release profile. It
-compared the same empty root session with four normal tools. The off case had
-no control tools. The on case had all six subagent control tools. It did not
-call a model or start a child. Each release run used 21 matched samples. The
-sample order changed between off and on to reduce process drift. Each sample
-used 500 session constructions or 10,000 context preparations.
+### Product decision: subagents stay opt-in
 
-- Three root session construction trials measured off/on medians of
-  262.996/261.164 us, 266.224/266.563 us, and 254.168/261.607 us. The matched
-  changes were -0.70%, +0.13%, and +2.93%. The p95 ranges overlapped: 278.852
-  to 573.608 us off and 272.210 to 365.396 us on. The result does not show a
-  stable construction regression above process noise.
-- Three model-request context trials measured off medians of 207, 217, and
-  200 ns. The on medians were 293, 298, and 293 ns. The median matched increase
-  was 86 ns, or 41.55%. The median matched p95 increase was 95 ns, or 45.24%.
-  The percentage is large because the complete operation takes less than
-  0.4 us.
+The default experience stays simple and has no subagent control tools. When a
+user enables subagents, KISS adds six control tools. The measured local cost is
+negligible compared with a model request.
 
-Run only this comparison with:
+| Measure | Subagents off | Subagents on | Product result |
+| --- | ---: | ---: | --- |
+| Control tools | 0 | 6 | The feature changes only sessions that opt in. |
+| Session setup median | 254.168-266.224 us | 261.164-266.563 us | No stable increase beyond process variation. |
+| Request preparation median | 200-217 ns | 293-298 ns | Median matched increase was 86 ns; total time stayed below 0.4 us. |
 
-```bash
-cargo nextest run -p kiss-coding --release --run-ignored only --no-capture -E 'test(~benchmark_performance_subagent_overhead)'
-```
+### Product decision: optimize every release
 
-The matched PGO benchmark used the same machine and three held-out trials.
-Both executables used the `dist` profile and macOS ICF.
+KISS uses profile-guided optimization for each release target. This gives users
+a smaller download and a modest speed improvement without a configuration
+step. The measured macOS result was:
 
-| PGO result | Ordinary | PGO | Change |
+| Release result | Standard build | Optimized build | Outcome |
 | --- | ---: | ---: | ---: |
 | `kiss --help` startup | 3.696 ms | 3.676 ms | 0.52% faster |
 | Geometric mean latency | 1.000x | 0.985x | 1.51% faster |
 | Executable size | 17.16 MiB | 14.87 MiB | 13.37% smaller |
 | gzip size | 8.17 MiB | 7.36 MiB | 9.94% smaller |
+
+### Benchmark details
+
+These results used an Apple M4, macOS 26.5.1, and Rust 1.98.0 on 2026-08-31.
+Core benchmarks used the Cargo `release` profile. The subagent comparison used
+three trials with 21 matched samples per run. It did not call a model or start
+a child. The optimized release comparison used three held-out trials. Lower
+latency values are better.
+
+Run the full benchmark suite with `just bench`. Run only the subagent
+comparison with:
+
+```bash
+cargo nextest run -p kiss-coding --release --run-ignored only --no-capture -E 'test(~benchmark_performance_subagent_overhead)'
+```
 
 ## Install
 
