@@ -138,8 +138,18 @@ def merge_profiles(
     destination: Path,
     environment: dict[str, str],
 ) -> None:
-    if not profiles or any(profile.stat().st_size == 0 for profile in profiles):
-        raise RuntimeError("PGO training did not produce complete raw profiles")
+    empty = [profile for profile in profiles if profile.stat().st_size == 0]
+    if not profiles or empty:
+        detail = (
+            f"{len(empty)} empty profiles, such as {empty[0].name}"
+            if empty
+            else "no profiles at all"
+        )
+        raise RuntimeError(
+            f"PGO training did not produce complete raw profiles ({detail}); "
+            "the trained binary must return from main, because an exit that "
+            "skips the atexit handlers does not write the counters"
+        )
     destination.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(
         dir=destination.parent, prefix="kiss-", suffix=".profdata", delete=False

@@ -15,9 +15,22 @@ mod update;
 use args::{Args, Command};
 use clap::Parser;
 use std::io::{IsTerminal as _, Write as _};
+use std::process::ExitCode;
 
-fn main() {
-    let args = Args::parse();
+// KISS returns from `main` instead of calling `std::process::exit`. On
+// windows-msvc `std::process::exit` calls `ExitProcess`, which skips the C
+// runtime `atexit` handlers. The LLVM PGO instrumentation writes its counters
+// from such a handler, so an early exit leaves empty `.profraw` files and the
+// release PGO training step fails. See rust-lang/rust#77553.
+fn main() -> ExitCode {
+    let args = match Args::try_parse() {
+        Ok(args) => args,
+        Err(err) => {
+            // clap prints `--help` and `--version` on stdout, errors on stderr.
+            let _ = err.print();
+            return exit_code(err.exit_code());
+        }
+    };
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
@@ -26,7 +39,13 @@ fn main() {
         eprintln!("error: {err:#}");
         1
     });
-    std::process::exit(code);
+    // Do not wait for detached background work, the same as the earlier exit.
+    runtime.shutdown_background();
+    exit_code(code)
+}
+
+fn exit_code(code: i32) -> ExitCode {
+    ExitCode::from(u8::try_from(code).unwrap_or(1))
 }
 
 async fn run(args: Args) -> anyhow::Result<i32> {
