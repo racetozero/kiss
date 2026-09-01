@@ -253,7 +253,7 @@ impl DiffRenderer {
             Some(position) => {
                 let mut buffer = String::new();
                 push_vertical_move(&mut buffer, self.hardware_cursor_row, position.row);
-                buffer.push_str(&format!("\x1b[{}G\x1b[?25h", position.col + 1));
+                buffer.push_str(&format!("\x1b[{}G\x1b[1 q\x1b[?25h", position.col + 1));
                 out.write_all(buffer.as_bytes())?;
                 self.hardware_cursor_row = position.row;
             }
@@ -613,7 +613,7 @@ mod tests {
         let mut renderer = DiffRenderer::new();
         let output = render(&mut renderer, &[&format!("ab{CURSOR_MARKER}cd")], 20, 5);
         assert!(!output.contains(CURSOR_MARKER));
-        assert!(output.contains("\x1b[3G\x1b[?25h"));
+        assert!(output.contains("\x1b[3G\x1b[1 q\x1b[?25h"));
     }
 
     #[test]

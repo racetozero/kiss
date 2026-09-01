@@ -4,8 +4,8 @@
 use crossterm::terminal;
 use std::io::Write;
 
-const ENTER_SEQUENCE: &[u8] = b"\x1b[?2004h\x1b[?25l";
-const RESTORE_SEQUENCE: &[u8] = b"\x1b[?2004l\x1b[?25h\x1b[0m\r\n";
+const ENTER_SEQUENCE: &[u8] = b"\x1b[?2004h\x1b[>1u\x1b[1 q\x1b[?25l";
+const RESTORE_SEQUENCE: &[u8] = b"\x1b[?2004l\x1b[<1u\x1b[0 q\x1b[?25h\x1b[0m\r\n";
 
 fn write_control_sequence(out: &mut impl Write, sequence: &[u8]) -> std::io::Result<()> {
     out.write_all(sequence)?;
@@ -20,7 +20,9 @@ impl Terminal {
     pub fn new() -> anyhow::Result<Self> {
         terminal::enable_raw_mode()?;
         let mut out = std::io::stdout();
-        // Bracketed paste on; cursor hidden (components draw a fake cursor).
+        // Bracketed paste and modified-key reporting on. The latter lets
+        // supporting terminals report Shift+Enter separately from Enter.
+        // Use a blinking block and hide it until the renderer places it.
         write_control_sequence(&mut out, ENTER_SEQUENCE)?;
         Ok(Terminal { raw: true })
     }
@@ -66,10 +68,10 @@ mod tests {
     fn terminal_control_sequences_are_symmetric() {
         let mut entered = Vec::new();
         write_control_sequence(&mut entered, ENTER_SEQUENCE).unwrap();
-        assert_eq!(entered, b"\x1b[?2004h\x1b[?25l");
+        assert_eq!(entered, b"\x1b[?2004h\x1b[>1u\x1b[1 q\x1b[?25l");
 
         let mut restored = Vec::new();
         write_control_sequence(&mut restored, RESTORE_SEQUENCE).unwrap();
-        assert_eq!(restored, b"\x1b[?2004l\x1b[?25h\x1b[0m\r\n");
+        assert_eq!(restored, b"\x1b[?2004l\x1b[<1u\x1b[0 q\x1b[?25h\x1b[0m\r\n");
     }
 }

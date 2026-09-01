@@ -489,15 +489,10 @@ impl Component for Editor {
         let show_placeholder = self.is_empty() && !self.placeholder.is_empty();
         for (row, line) in self.state.lines.iter().enumerate() {
             if show_placeholder && row == 0 {
-                let placeholder_width = inner.saturating_sub(1);
-                let placeholder = self.theme.dim(&crate::text::truncate_to_width(
-                    &self.placeholder,
-                    placeholder_width,
-                ));
-                let shown = format!(
-                    "{}\x1b[7m \x1b[27m{placeholder}",
-                    crate::renderer::CURSOR_MARKER
-                );
+                let placeholder = self
+                    .theme
+                    .dim(&crate::text::truncate_to_width(&self.placeholder, inner));
+                let shown = format!("{}{placeholder}", crate::renderer::CURSOR_MARKER);
                 push_editor_row(&mut lines, &border, shown, inner);
                 continue;
             }
@@ -511,7 +506,7 @@ impl Component for Editor {
                     && cursor_col >= start
                     && (cursor_col < end || (cursor_col == end && range_index + 1 == range_count))
                 {
-                    render_cursor_line(&segment, cursor_col - start, inner)
+                    render_cursor_line(&segment, cursor_col - start)
                 } else {
                     segment
                 };
@@ -527,7 +522,7 @@ fn push_editor_row(lines: &mut Vec<String>, border: &str, shown: String, inner: 
     let shown = if display_width(&shown) > inner {
         let fitted = crate::text::truncate_to_width(&crate::text::strip_ansi(&shown), inner);
         if shown.contains(crate::renderer::CURSOR_MARKER) {
-            format!("{}\x1b[7m{fitted}\x1b[27m", crate::renderer::CURSOR_MARKER)
+            format!("{}{fitted}", crate::renderer::CURSOR_MARKER)
         } else {
             fitted
         }
@@ -564,7 +559,7 @@ fn visual_ranges(line: &str, width: usize, cursor_col: Option<usize>) -> Vec<(us
     ranges
 }
 
-fn render_cursor_line(line: &str, cursor_col: usize, width: usize) -> String {
+fn render_cursor_line(line: &str, cursor_col: usize) -> String {
     let graphemes: Vec<&str> = line.graphemes(true).collect();
     let before: String = graphemes[..cursor_col.min(graphemes.len())].concat();
     let at: &str = graphemes.get(cursor_col).copied().unwrap_or(" ");
@@ -573,16 +568,7 @@ fn render_cursor_line(line: &str, cursor_col: usize, width: usize) -> String {
     } else {
         String::new()
     };
-    let raw = format!(
-        "{before}{}\x1b[7m{at}\x1b[27m{after}",
-        crate::renderer::CURSOR_MARKER
-    );
-    // Best effort width control: truncate only when clearly over.
-    if display_width(&raw) > width {
-        crate::text::truncate_to_width(&crate::text::strip_ansi(&raw), width)
-    } else {
-        raw
-    }
+    format!("{before}{}{at}{after}", crate::renderer::CURSOR_MARKER)
 }
 
 fn grapheme_count(s: &str) -> usize {
@@ -882,6 +868,7 @@ mod tests {
                 .sum::<usize>(),
             1
         );
+        assert!(rendered.iter().all(|line| !line.contains("\x1b[7m")));
     }
 
     #[test]
