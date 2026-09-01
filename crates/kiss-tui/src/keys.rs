@@ -187,8 +187,16 @@ impl InputDecoder {
         let buf = &self.buffer[start..];
         let byte = *buf.first()?;
         let event = match byte {
-            b'\r' | b'\n' => Some(InputEvent::Key(KeyEvent {
+            b'\r' => Some(InputEvent::Key(KeyEvent {
                 key: Key::Enter,
+                ..Default::default()
+            })),
+            // Some terminals send Shift+Enter as line feed instead of a
+            // modified Enter escape sequence. Keep carriage return as submit
+            // and treat line feed as the newline shortcut.
+            b'\n' => Some(InputEvent::Key(KeyEvent {
+                key: Key::Enter,
+                shift: true,
                 ..Default::default()
             })),
             b'\t' => Some(InputEvent::Key(KeyEvent {
@@ -272,6 +280,18 @@ impl InputDecoder {
             b'H' => Key::Home,
             b'F' => Key::End,
             b'Z' => Key::BackTab,
+            b'~' if parts.first() == Some(&"27") => {
+                // xterm modifyOtherKeys: CSI 27;<mods>;<codepoint>~
+                match parts
+                    .get(2)
+                    .and_then(|p| p.parse::<u32>().ok())
+                    .and_then(char::from_u32)
+                {
+                    Some('\r') | Some('\n') => Key::Enter,
+                    Some(c) => Key::Char(c),
+                    None => return Some((None, consumed)),
+                }
+            }
             b'~' => match parts.first().and_then(|p| p.parse::<u8>().ok()) {
                 Some(1) | Some(7) => Key::Home,
                 Some(3) => Key::Delete,
@@ -332,6 +352,14 @@ mod tests {
                 ..Default::default()
             })]
         );
+        assert_eq!(
+            decode(b"\n"),
+            vec![InputEvent::Key(KeyEvent {
+                key: Key::Enter,
+                shift: true,
+                ..Default::default()
+            })]
+        );
     }
 
     #[test]
@@ -375,6 +403,15 @@ mod tests {
             vec![InputEvent::Key(KeyEvent {
                 key: Key::Enter,
                 alt: true,
+                ..Default::default()
+            })]
+        );
+        // xterm modifyOtherKeys encoding.
+        assert_eq!(
+            decode(b"\x1b[27;2;13~"),
+            vec![InputEvent::Key(KeyEvent {
+                key: Key::Enter,
+                shift: true,
                 ..Default::default()
             })]
         );
