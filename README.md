@@ -20,6 +20,24 @@ plugin runtime.
 - **Persistent:** resume, branch, compact, import, and export sessions.
 - **Connected:** use local or remote MCP servers, including OAuth servers.
 
+## Install
+
+macOS and Linux:
+
+```bash
+curl --proto '=https' --tlsv1.2 -LsSf https://raw.githubusercontent.com/racetozero/kiss/main/install.sh | sh
+```
+
+Windows PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/racetozero/kiss/main/install.ps1 | iex
+```
+
+The installer selects the correct release, verifies its SHA-256 checksum, and
+installs `kiss` in your user binary directory. The repository and its releases
+must be public for these commands to work without GitHub authentication.
+
 ## Performance
 
 KISS is built to stay responsive during everyday work, from file discovery in
@@ -74,24 +92,6 @@ a child. The optimized release comparison used three held-out trials. Lower
 latency values are better.
 
 Run the full benchmark suite with `just bench`.
-
-## Install
-
-macOS and Linux:
-
-```bash
-curl --proto '=https' --tlsv1.2 -LsSf https://raw.githubusercontent.com/racetozero/kiss/main/install.sh | sh
-```
-
-Windows PowerShell:
-
-```powershell
-irm https://raw.githubusercontent.com/racetozero/kiss/main/install.ps1 | iex
-```
-
-The installer selects the correct release, verifies its SHA-256 checksum, and
-installs `kiss` in your user binary directory. The repository and its releases
-must be public for these commands to work without GitHub authentication.
 
 ## Quick start
 
