@@ -28,15 +28,14 @@ macOS and Linux:
 curl -LsSf https://raw.githubusercontent.com/racetozero/kiss/main/install.sh | sh
 ```
 
-Windows PowerShell:
+Windows:
 
 ```powershell
 powershell -ExecutionPolicy ByPass -c "irm https://raw.githubusercontent.com/racetozero/kiss/main/install.ps1 | iex"
 ```
 
 The installer selects the correct release, verifies its SHA-256 checksum, and
-installs `kiss` in your user binary directory. The repository and its releases
-must be public for these commands to work without GitHub authentication.
+installs `kiss` in your user binary directory.
 
 ## Performance
 
