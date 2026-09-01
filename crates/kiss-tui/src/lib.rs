@@ -17,7 +17,7 @@ pub mod text;
 pub mod theme;
 
 pub use component::{Component, Spacer, TextBlock};
-pub use editor::Editor;
+pub use editor::{Editor, EditorSubmission};
 pub use keybindings::{Action, Keybindings};
 pub use keys::{InputDecoder, InputEvent, Key, KeyEvent};
 pub use markdown::{MarkdownRenderer, MermaidMode, StreamingMarkdownCache};

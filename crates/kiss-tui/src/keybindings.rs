@@ -77,7 +77,7 @@ impl Action {
         match self {
             Action::Submit => "enter",
             Action::Newline => "shift+enter",
-            Action::QueueFollowUp => "alt+enter",
+            Action::QueueFollowUp => "ctrl+enter",
             Action::Dequeue => "alt+up",
             Action::Abort => "escape",
             Action::Quit => "ctrl+d",
@@ -174,5 +174,14 @@ mod tests {
             kb.action_for(&KeyEvent::parse("ctrl+d").unwrap()),
             Some(Action::Quit)
         );
+        assert_eq!(
+            kb.action_for(&KeyEvent::parse("shift+enter").unwrap()),
+            Some(Action::Newline)
+        );
+        assert_eq!(
+            kb.action_for(&KeyEvent::parse("ctrl+enter").unwrap()),
+            Some(Action::QueueFollowUp)
+        );
+        assert_eq!(kb.action_for(&KeyEvent::parse("alt+enter").unwrap()), None);
     }
 }

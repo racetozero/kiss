@@ -6,12 +6,29 @@ use crate::keys::{InputEvent, Key, KeyEvent};
 use crate::text::display_width;
 use crate::theme::Theme;
 use unicode_segmentation::UnicodeSegmentation;
+use unicode_width::UnicodeWidthStr;
+
+const LARGE_PASTE_CHAR_THRESHOLD: usize = 1000;
+
+#[derive(Debug, Clone, PartialEq)]
+struct PendingPaste {
+    placeholder: String,
+    text: String,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct EditorState {
     pub lines: Vec<String>,
     /// (row, grapheme column)
     pub cursor: (usize, usize),
+    pending_pastes: Vec<PendingPaste>,
+    next_paste_id: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EditorSubmission {
+    pub display_text: String,
+    pub text: String,
 }
 
 pub struct Editor {
@@ -19,6 +36,7 @@ pub struct Editor {
     undo_stack: Vec<EditorState>,
     kill_ring: Vec<String>,
     pub history: Vec<String>,
+    history_states: Vec<EditorState>,
     history_pos: Option<usize>,
     history_draft: Option<EditorState>,
     pub border_color_token: String,
@@ -32,10 +50,13 @@ impl Editor {
             state: EditorState {
                 lines: vec![String::new()],
                 cursor: (0, 0),
+                pending_pastes: Vec::new(),
+                next_paste_id: 1,
             },
             undo_stack: Vec::new(),
             kill_ring: Vec::new(),
             history: Vec::new(),
+            history_states: Vec::new(),
             history_pos: None,
             history_draft: None,
             border_color_token: "border".into(),
@@ -54,11 +75,13 @@ impl Editor {
 
     pub fn set_text(&mut self, text: &str) {
         self.leave_history_navigation();
+        self.push_undo();
+        self.state.pending_pastes.clear();
+        self.state.next_paste_id = 1;
         self.set_text_state(text);
     }
 
     fn set_text_state(&mut self, text: &str) {
-        self.push_undo();
         self.state.lines = text.split('\n').map(String::from).collect();
         if self.state.lines.is_empty() {
             self.state.lines.push(String::new());
@@ -75,33 +98,41 @@ impl Editor {
 
     fn clear_state(&mut self) {
         self.push_undo();
-        self.state = EditorState {
-            lines: vec![String::new()],
-            cursor: (0, 0),
-        };
+        self.state = empty_state();
     }
 
     pub fn set_theme(&mut self, theme: Theme) {
         self.theme = theme;
     }
 
-    /// Take the current text and reset (submit).
-    pub fn take(&mut self) -> String {
-        let text = self.text();
-        if !text.trim().is_empty() && self.history.last() != Some(&text) {
-            self.history.push(text.clone());
+    /// Take the visible and expanded text and reset the editor.
+    pub fn take_submission(&mut self) -> EditorSubmission {
+        let display_text = self.text();
+        let text = expand_pending_pastes(&display_text, &self.state.pending_pastes);
+        if !display_text.trim().is_empty()
+            && (self.history.last() != Some(&display_text)
+                || self
+                    .history_states
+                    .last()
+                    .is_some_and(|state| state.pending_pastes != self.state.pending_pastes))
+        {
+            self.history.push(display_text.clone());
+            self.history_states.push(self.state.clone());
             if self.history.len() > 100 {
                 self.history.remove(0);
+                self.history_states.remove(0);
             }
         }
         self.history_pos = None;
         self.history_draft = None;
-        self.state = EditorState {
-            lines: vec![String::new()],
-            cursor: (0, 0),
-        };
+        self.state = empty_state();
         self.undo_stack.clear();
-        text
+        EditorSubmission { display_text, text }
+    }
+
+    /// Take only the expanded text and reset the editor.
+    pub fn take(&mut self) -> String {
+        self.take_submission().text
     }
 
     fn push_undo(&mut self) {
@@ -135,6 +166,25 @@ impl Editor {
                 line.insert(byte, c);
                 self.state.cursor.1 += 1;
             }
+        }
+    }
+
+    pub fn paste(&mut self, text: &str) {
+        let normalized = text.replace("\r\n", "\n").replace('\r', "\n");
+        let char_count = normalized.chars().count();
+        if char_count > LARGE_PASTE_CHAR_THRESHOLD || normalized.contains('\n') {
+            let placeholder = format!(
+                "[Pasted text #{} {char_count} chars]",
+                self.state.next_paste_id
+            );
+            self.insert(&placeholder);
+            self.state.next_paste_id += 1;
+            self.state.pending_pastes.push(PendingPaste {
+                placeholder,
+                text: normalized,
+            });
+        } else {
+            self.insert(&normalized);
         }
     }
 
@@ -296,16 +346,16 @@ impl Editor {
             Some(p) => p - 1,
         };
         self.history_pos = Some(pos);
-        let text = self.history[pos].clone();
-        self.set_text_state(&text);
+        self.push_undo();
+        self.state = self.history_states[pos].clone();
     }
 
     pub fn history_next(&mut self) {
         let Some(pos) = self.history_pos else { return };
         if pos + 1 < self.history.len() {
             self.history_pos = Some(pos + 1);
-            let text = self.history[pos + 1].clone();
-            self.set_text_state(&text);
+            self.push_undo();
+            self.state = self.history_states[pos + 1].clone();
         } else {
             self.history_pos = None;
             if let Some(draft) = self.history_draft.take() {
@@ -347,21 +397,23 @@ impl Editor {
         }
     }
 
-    /// Handle a decoded input event. Returns Some(text) when submitted.
-    pub fn handle_event(&mut self, event: &InputEvent) -> Option<String> {
+    /// Handle a decoded input event. Returns text when submitted.
+    pub fn handle_event(&mut self, event: &InputEvent) -> Option<EditorSubmission> {
         match event {
             InputEvent::Paste(text) => {
-                self.insert(text);
+                self.paste(text);
                 None
             }
             InputEvent::Key(key) => self.handle_key(key),
         }
     }
 
-    fn handle_key(&mut self, key: &KeyEvent) -> Option<String> {
+    fn handle_key(&mut self, key: &KeyEvent) -> Option<EditorSubmission> {
         match (&key.key, key.ctrl, key.alt, key.shift) {
-            (Key::Enter, false, false, false) => return Some(self.take()),
-            (Key::Enter, _, _, true) | (Key::Enter, true, _, _) => self.newline(),
+            (Key::Enter, false, false, false) => return Some(self.take_submission()),
+            (Key::Enter, _, true, _) | (Key::Enter, _, _, true) | (Key::Enter, true, _, _) => {
+                self.newline()
+            }
             (Key::Backspace, false, false, _) => self.backspace(),
             (Key::Backspace, _, true, _) | (Key::Char('w'), true, _, _) => self.delete_word_back(),
             (Key::Delete, ..) => self.delete_forward(),
@@ -436,23 +488,80 @@ impl Component for Editor {
         let (cursor_row, cursor_col) = self.state.cursor;
         let show_placeholder = self.is_empty() && !self.placeholder.is_empty();
         for (row, line) in self.state.lines.iter().enumerate() {
-            let mut shown = if show_placeholder && row == 0 {
-                self.theme
-                    .dim(&crate::text::truncate_to_width(&self.placeholder, inner))
-            } else {
-                crate::text::truncate_to_width(line, inner.max(display_width(line).min(inner)))
-            };
-            if row == cursor_row && !show_placeholder {
-                shown = render_cursor_line(line, cursor_col, inner);
-            } else if row == cursor_row {
-                shown = format!("{}\x1b[7m \x1b[27m{shown}", crate::renderer::CURSOR_MARKER);
+            if show_placeholder && row == 0 {
+                let placeholder_width = inner.saturating_sub(1);
+                let placeholder = self.theme.dim(&crate::text::truncate_to_width(
+                    &self.placeholder,
+                    placeholder_width,
+                ));
+                let shown = format!(
+                    "{}\x1b[7m \x1b[27m{placeholder}",
+                    crate::renderer::CURSOR_MARKER
+                );
+                push_editor_row(&mut lines, &border, shown, inner);
+                continue;
             }
-            let pad = inner.saturating_sub(display_width(&shown));
-            lines.push(format!("{border} {}{} {border}", shown, " ".repeat(pad)));
+
+            let ranges = visual_ranges(line, inner, (row == cursor_row).then_some(cursor_col));
+            let graphemes = line.graphemes(true).collect::<Vec<_>>();
+            let range_count = ranges.len();
+            for (range_index, (start, end)) in ranges.into_iter().enumerate() {
+                let segment = graphemes[start..end].concat();
+                let shown = if row == cursor_row
+                    && cursor_col >= start
+                    && (cursor_col < end || (cursor_col == end && range_index + 1 == range_count))
+                {
+                    render_cursor_line(&segment, cursor_col - start, inner)
+                } else {
+                    segment
+                };
+                push_editor_row(&mut lines, &border, shown, inner);
+            }
         }
         lines.push(bottom);
         lines
     }
+}
+
+fn push_editor_row(lines: &mut Vec<String>, border: &str, shown: String, inner: usize) {
+    let shown = if display_width(&shown) > inner {
+        let fitted = crate::text::truncate_to_width(&crate::text::strip_ansi(&shown), inner);
+        if shown.contains(crate::renderer::CURSOR_MARKER) {
+            format!("{}\x1b[7m{fitted}\x1b[27m", crate::renderer::CURSOR_MARKER)
+        } else {
+            fitted
+        }
+    } else {
+        shown
+    };
+    let pad = inner.saturating_sub(display_width(&shown));
+    lines.push(format!("{border} {shown}{} {border}", " ".repeat(pad)));
+}
+
+fn visual_ranges(line: &str, width: usize, cursor_col: Option<usize>) -> Vec<(usize, usize)> {
+    let graphemes = line.graphemes(true).collect::<Vec<_>>();
+    if graphemes.is_empty() {
+        return vec![(0, 0)];
+    }
+
+    let mut ranges = Vec::new();
+    let mut start = 0;
+    let mut row_width = 0;
+    for (index, grapheme) in graphemes.iter().enumerate() {
+        let grapheme_width = UnicodeWidthStr::width(*grapheme);
+        if index > start && row_width + grapheme_width > width {
+            ranges.push((start, index));
+            start = index;
+            row_width = 0;
+        }
+        row_width += grapheme_width;
+    }
+    ranges.push((start, graphemes.len()));
+
+    if cursor_col == Some(graphemes.len()) && row_width >= width {
+        ranges.push((graphemes.len(), graphemes.len()));
+    }
+    ranges
 }
 
 fn render_cursor_line(line: &str, cursor_col: usize, width: usize) -> String {
@@ -478,6 +587,23 @@ fn render_cursor_line(line: &str, cursor_col: usize, width: usize) -> String {
 
 fn grapheme_count(s: &str) -> usize {
     s.graphemes(true).count()
+}
+
+fn empty_state() -> EditorState {
+    EditorState {
+        lines: vec![String::new()],
+        cursor: (0, 0),
+        pending_pastes: Vec::new(),
+        next_paste_id: 1,
+    }
+}
+
+fn expand_pending_pastes(display_text: &str, pending_pastes: &[PendingPaste]) -> String {
+    pending_pastes
+        .iter()
+        .fold(display_text.to_string(), |text, paste| {
+            text.replacen(&paste.placeholder, &paste.text, 1)
+        })
 }
 
 fn grapheme_byte_offset(s: &str, col: usize) -> usize {
@@ -538,7 +664,13 @@ mod tests {
             key: Key::Enter,
             ..Default::default()
         }));
-        assert_eq!(out, Some("hello".into()));
+        assert_eq!(
+            out,
+            Some(EditorSubmission {
+                display_text: "hello".into(),
+                text: "hello".into(),
+            })
+        );
         assert!(e.is_empty());
         assert_eq!(e.history, vec!["hello"]);
     }
@@ -672,10 +804,106 @@ mod tests {
     }
 
     #[test]
-    fn paste_inserts_newlines() {
+    fn multiline_paste_uses_a_reference_and_expands_on_submit() {
         let mut e = editor();
-        e.handle_event(&InputEvent::Paste("a\nb".into()));
-        assert_eq!(e.text(), "a\nb");
+        e.handle_event(&InputEvent::Paste("a\r\nb\rc".into()));
+        assert_eq!(e.text(), "[Pasted text #1 5 chars]");
+        assert_eq!(
+            e.take_submission(),
+            EditorSubmission {
+                display_text: "[Pasted text #1 5 chars]".into(),
+                text: "a\nb\nc".into(),
+            }
+        );
+    }
+
+    #[test]
+    fn paste_references_use_draft_order_and_reset_after_submit() {
+        let mut e = editor();
+        e.paste("one\ntwo");
+        e.insert(" ");
+        e.paste(&"x".repeat(LARGE_PASTE_CHAR_THRESHOLD + 1));
+        assert_eq!(
+            e.text(),
+            "[Pasted text #1 7 chars] [Pasted text #2 1001 chars]"
+        );
+        let submission = e.take_submission();
+        assert_eq!(submission.text, format!("one\ntwo {}", "x".repeat(1001)));
+
+        e.paste("new\ndraft");
+        assert_eq!(e.text(), "[Pasted text #1 9 chars]");
+    }
+
+    #[test]
+    fn short_single_line_paste_stays_editable() {
+        let mut e = editor();
+        e.paste("small paste");
+        assert_eq!(e.text(), "small paste");
+        assert!(e.state.pending_pastes.is_empty());
+    }
+
+    #[test]
+    fn undo_and_history_restore_paste_payloads() {
+        let mut e = editor();
+        e.paste("first\nsecond");
+        e.undo();
+        assert!(e.is_empty());
+        e.paste("first\nsecond");
+        let expected = e.take_submission();
+        e.history_prev();
+        assert_eq!(e.take_submission(), expected);
+    }
+
+    #[test]
+    fn shift_and_alt_enter_insert_newlines() {
+        for spec in ["shift+enter", "alt+enter"] {
+            let mut e = editor();
+            e.insert("first");
+            assert_eq!(
+                e.handle_event(&InputEvent::Key(KeyEvent::parse(spec).unwrap())),
+                None
+            );
+            e.insert("second");
+            assert_eq!(e.text(), "first\nsecond");
+        }
+    }
+
+    #[test]
+    fn render_wraps_long_lines_and_keeps_one_cursor_marker() {
+        let mut e = editor();
+        e.insert("abcdefghij");
+        let rendered = e.render(10);
+        assert_eq!(rendered.len(), 4);
+        assert!(rendered.iter().all(|line| display_width(line) == 10));
+        assert_eq!(
+            rendered
+                .iter()
+                .map(|line| line.matches(crate::renderer::CURSOR_MARKER).count())
+                .sum::<usize>(),
+            1
+        );
+    }
+
+    #[test]
+    fn exact_width_line_puts_end_cursor_on_a_new_visual_row() {
+        let mut e = editor();
+        e.insert("abcdef");
+        let rendered = e.render(10);
+        assert_eq!(rendered.len(), 4);
+        assert!(rendered[2].contains(crate::renderer::CURSOR_MARKER));
+    }
+
+    #[test]
+    fn narrow_render_keeps_wide_text_within_the_border() {
+        let mut e = editor();
+        e.insert("日");
+        let rendered = e.render(5);
+        assert!(rendered.iter().all(|line| display_width(line) == 5));
+        assert!(
+            rendered
+                .iter()
+                .any(|line| line.contains(crate::renderer::CURSOR_MARKER))
+        );
     }
 
     #[test]

@@ -11,9 +11,11 @@ use kiss_ai::{AssistantEvent, ContentBlock, StopReason, ThinkingLevel, Transport
 use kiss_coding::session_runner::SessionEvent;
 use kiss_coding::settings::{MermaidRendering, QueueMode};
 use kiss_tui::{
-    Action, Component, DiffRenderer, Editor, InputDecoder, InputEvent, Key, KeyEvent, Keybindings,
-    MarkdownRenderer, MermaidMode, SelectItem, SelectList, StreamingMarkdownCache, Terminal, Theme,
+    Action, Component, DiffRenderer, Editor, EditorSubmission, InputDecoder, InputEvent, Key,
+    KeyEvent, Keybindings, MarkdownRenderer, MermaidMode, SelectItem, SelectList,
+    StreamingMarkdownCache, Terminal, Theme,
 };
+use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -160,14 +162,22 @@ struct PickerSelection {
 }
 
 struct CommandCompletion {
-    kind: CommandCompletionKind,
     list: SelectList,
-    replacements: Vec<String>,
+    replacements: Vec<CompletionReplacement>,
 }
 
-enum CommandCompletionKind {
-    Name,
-    Argument(String),
+#[derive(Clone)]
+enum CompletionReplacement {
+    CommandName(String),
+    CommandArgument {
+        command: String,
+        value: String,
+    },
+    Skill {
+        prefix: String,
+        sigil: char,
+        name: String,
+    },
 }
 
 struct FileCompletion {
@@ -280,7 +290,7 @@ const MAX_READY_EVENTS_PER_TICK: usize = 256;
 #[derive(Debug, PartialEq, Eq)]
 enum CommandMenuAction {
     Handled,
-    Submit(String),
+    Submit(EditorSubmission),
 }
 
 impl App {
@@ -1021,7 +1031,7 @@ pub async fn run(args: &Args) -> Result<i32> {
     if let Some(indent) = &settings.markdown.code_block_indent {
         app.md.code_indent = indent.clone();
     }
-    app.editor.placeholder = "Ask anything. / for commands, @ for files, ! for shell.".into();
+    app.editor.placeholder = "Ask anything. / commands, $ skills, @ files, ! shell.".into();
     update_thinking_border(&mut app, session.thinking_level());
     refresh_git_branch(&mut app, &session);
 
@@ -1169,9 +1179,10 @@ fn handle_session_event(
                     // Steering/follow-up injections appear mid-run; the
                     // initial prompt cell is pushed by the submitter.
                     let text = u.content.as_text();
-                    let already = matches!(app.cells.last(), Some(Cell::User(t)) if *t == text);
+                    let display = visible_user_text(&text);
+                    let already = matches!(app.cells.last(), Some(Cell::User(t)) if *t == display);
                     if !already {
-                        app.cells.push(Cell::User(text));
+                        app.cells.push(Cell::User(display));
                     }
                 }
                 AgentMessage::Assistant(_) => {
@@ -1565,16 +1576,20 @@ fn handle_command_event(
 fn command_items(
     prompt_templates: &[kiss_coding::prompts::PromptTemplate],
     skills: &[kiss_coding::skills::Skill],
-) -> Vec<SelectItem> {
+) -> (Vec<SelectItem>, Vec<CompletionReplacement>) {
+    let mut replacements = Vec::new();
     let mut items: Vec<SelectItem> = slash_commands::commands()
         .enumerate()
-        .map(|(value, command)| SelectItem {
-            label: command.name.to_string(),
-            detail: Some(match command.argument_hint {
-                Some(hint) => format!("{hint}  {}", command.description),
-                None => command.description.to_string(),
-            }),
-            value,
+        .map(|(value, command)| {
+            replacements.push(CompletionReplacement::CommandName(command.name.to_string()));
+            SelectItem {
+                label: command.name.to_string(),
+                detail: Some(match command.argument_hint {
+                    Some(hint) => format!("{hint}  {}", command.description),
+                    None => command.description.to_string(),
+                }),
+                value,
+            }
         })
         .collect();
     for template in prompt_templates {
@@ -1589,16 +1604,29 @@ fn command_items(
             detail: Some(detail),
             value,
         });
+        replacements.push(CompletionReplacement::CommandName(template.name.clone()));
     }
+    let mut used_names = items
+        .iter()
+        .map(|item| item.label.clone())
+        .collect::<HashSet<_>>();
     for skill in skills {
+        if !used_names.insert(skill.name.clone()) {
+            continue;
+        }
         let value = items.len();
         items.push(SelectItem {
-            label: format!("skill:{}", skill.name),
+            label: skill.name.clone(),
             detail: Some(format!("Skill: {}", skill.description)),
             value,
         });
+        replacements.push(CompletionReplacement::Skill {
+            prefix: format!("/{}", skill.name),
+            sigil: '/',
+            name: skill.name.clone(),
+        });
     }
-    items
+    (items, replacements)
 }
 
 fn command_query(text: &str) -> Option<&str> {
@@ -1613,7 +1641,7 @@ fn command_argument_items(
     session: &Arc<kiss_coding::AgentSession>,
     command: &str,
     query: &str,
-) -> Option<(Vec<SelectItem>, Vec<String>)> {
+) -> Option<(Vec<SelectItem>, Vec<CompletionReplacement>)> {
     let mut candidates: Vec<(String, Option<String>, String, String)> = match command {
         "model" => {
             let copilot_models = kiss_ai::auth::stored_oauth_model_ids("github-copilot");
@@ -1675,7 +1703,10 @@ fn command_argument_items(
         .into_iter()
         .enumerate()
         .map(|(value, ((label, detail, replacement, _), _))| {
-            replacements.push(replacement);
+            replacements.push(CompletionReplacement::CommandArgument {
+                command: command.to_string(),
+                value: replacement,
+            });
             SelectItem {
                 label,
                 detail,
@@ -1686,6 +1717,64 @@ fn command_argument_items(
     Some((items, replacements))
 }
 
+fn skill_token_query(
+    editor: &Editor,
+    skills: &[kiss_coding::skills::Skill],
+) -> Option<(String, char, String)> {
+    if editor.cursor().0 != 0 {
+        return None;
+    }
+    let before = editor.current_line_before_cursor();
+    let token_start = before
+        .char_indices()
+        .rev()
+        .find_map(|(index, character)| character.is_whitespace().then_some(index + 1))
+        .unwrap_or(0);
+    let token = &before[token_start..];
+    let sigil = match token.chars().next()? {
+        '$' => '$',
+        '/' if token_start > 0 => '/',
+        _ => return None,
+    };
+    let preceding = before[..token_start].trim();
+    if !preceding.is_empty()
+        && !kiss_coding::skills::parse_invocation(preceding, skills)
+            .is_some_and(|invocation| invocation.request.is_empty())
+    {
+        return None;
+    }
+    Some((
+        token.to_string(),
+        sigil,
+        token[sigil.len_utf8()..].to_string(),
+    ))
+}
+
+fn skill_completion(
+    prefix: String,
+    sigil: char,
+    skills: &[kiss_coding::skills::Skill],
+) -> (Vec<SelectItem>, Vec<CompletionReplacement>) {
+    let mut replacements = Vec::with_capacity(skills.len());
+    let items = skills
+        .iter()
+        .enumerate()
+        .map(|(value, skill)| {
+            replacements.push(CompletionReplacement::Skill {
+                prefix: prefix.clone(),
+                sigil,
+                name: skill.name.clone(),
+            });
+            SelectItem {
+                label: skill.name.clone(),
+                detail: Some(skill.description.clone()),
+                value,
+            }
+        })
+        .collect();
+    (items, replacements)
+}
+
 fn sync_command_menu(
     app: &mut App,
     session: &Arc<kiss_coding::AgentSession>,
@@ -1694,16 +1783,22 @@ fn sync_command_menu(
 ) {
     let text = app.editor.text();
     if let Some(query) = command_query(&text) {
-        let items = command_items(prompt_templates, skills);
-        let replacements = items.iter().map(|item| item.label.clone()).collect();
+        let (items, mut replacements) = command_items(prompt_templates, skills);
+        for replacement in &mut replacements {
+            if let CompletionReplacement::Skill { prefix, .. } = replacement {
+                *prefix = format!("/{query}");
+            }
+        }
         let mut list = SelectList::new("Commands", items, app.theme.clone());
         list.max_visible = 8;
         list.set_filter(query.to_string());
-        app.command_menu = Some(CommandCompletion {
-            kind: CommandCompletionKind::Name,
-            list,
-            replacements,
-        });
+        app.command_menu = Some(CommandCompletion { list, replacements });
+    } else if let Some((prefix, sigil, query)) = skill_token_query(&app.editor, skills) {
+        let (items, replacements) = skill_completion(prefix, sigil, skills);
+        let mut list = SelectList::new("Skills", items, app.theme.clone());
+        list.max_visible = 8;
+        list.set_filter(query);
+        app.command_menu = Some(CommandCompletion { list, replacements });
     } else if let Some(text) = text.strip_prefix('/')
         && !text.contains('\n')
         && let Some((command, query)) = text.split_once(' ')
@@ -1712,11 +1807,7 @@ fn sync_command_menu(
     {
         let mut list = SelectList::new(format!("/{command}"), items, app.theme.clone());
         list.max_visible = 8;
-        app.command_menu = Some(CommandCompletion {
-            kind: CommandCompletionKind::Argument(command.to_string()),
-            list,
-            replacements,
-        });
+        app.command_menu = Some(CommandCompletion { list, replacements });
     } else {
         app.command_menu = None;
     }
@@ -1901,13 +1992,7 @@ fn handle_command_menu_key(app: &mut App, key: &KeyEvent) -> Option<CommandMenuA
                 .and_then(|item| menu.replacements.get(item.value))
                 .cloned();
             if let Some(selected) = selected {
-                let text = match &menu.kind {
-                    CommandCompletionKind::Name => format!("/{selected} "),
-                    CommandCompletionKind::Argument(command) => {
-                        format!("/{command} {selected}")
-                    }
-                };
-                app.editor.set_text(&text);
+                apply_completion(&mut app.editor, &selected);
                 app.command_menu = None;
             }
             Some(CommandMenuAction::Handled)
@@ -1918,19 +2003,119 @@ fn handle_command_menu_key(app: &mut App, key: &KeyEvent) -> Option<CommandMenuA
                 .current()
                 .and_then(|item| menu.replacements.get(item.value))
                 .cloned();
+            let is_skill = selected
+                .as_ref()
+                .is_some_and(|selected| matches!(selected, CompletionReplacement::Skill { .. }));
             if let Some(selected) = selected {
-                let text = match &menu.kind {
-                    CommandCompletionKind::Name => format!("/{selected} "),
-                    CommandCompletionKind::Argument(command) => {
-                        format!("/{command} {selected}")
-                    }
-                };
-                app.editor.set_text(&text);
+                apply_completion(&mut app.editor, &selected);
             }
             app.command_menu = None;
-            Some(CommandMenuAction::Submit(app.editor.take()))
+            if is_skill {
+                Some(CommandMenuAction::Handled)
+            } else {
+                Some(CommandMenuAction::Submit(app.editor.take_submission()))
+            }
         }
         _ => None,
+    }
+}
+
+fn apply_completion(editor: &mut Editor, replacement: &CompletionReplacement) {
+    match replacement {
+        CompletionReplacement::CommandName(name) => editor.set_text(&format!("/{name} ")),
+        CompletionReplacement::CommandArgument { command, value } => {
+            editor.set_text(&format!("/{command} {value}"));
+        }
+        CompletionReplacement::Skill {
+            prefix,
+            sigil,
+            name,
+        } => {
+            editor.replace_prefix_before_cursor(prefix, &format!("{sigil}{name} "));
+        }
+    }
+}
+
+fn slash_invocable_skills(resources: &InteractiveResources) -> Vec<kiss_coding::skills::Skill> {
+    let reserved = slash_commands::commands()
+        .map(|command| command.name)
+        .chain(
+            resources
+                .prompt_templates
+                .iter()
+                .map(|template| template.name.as_str()),
+        )
+        .collect::<HashSet<_>>();
+    resources
+        .skills
+        .iter()
+        .filter(|skill| !reserved.contains(skill.name.as_str()))
+        .cloned()
+        .collect()
+}
+
+fn prepare_skill_input(
+    submission: &EditorSubmission,
+    resources: &InteractiveResources,
+) -> Result<Option<String>> {
+    let display = submission.display_text.trim();
+    let skills = if display.starts_with('$') || display.starts_with("/skill:") {
+        resources.skills.clone()
+    } else {
+        slash_invocable_skills(resources)
+    };
+    let Some(display_invocation) = kiss_coding::skills::parse_invocation(display, &skills) else {
+        return Ok(None);
+    };
+    let mut model_invocation =
+        kiss_coding::skills::parse_invocation(submission.text.trim(), &skills)
+            .context("could not match the visible skill invocation to the submitted input")?;
+    model_invocation.skill_names = display_invocation.skill_names;
+    kiss_coding::skills::expand_invocation(&model_invocation, &skills).map(Some)
+}
+
+const USER_DISPLAY_PREFIX: &str = "<!-- kiss-user-display:";
+const USER_DISPLAY_SUFFIX: &str = " -->";
+
+fn stored_user_text(display_text: &str, model_text: &str) -> String {
+    if display_text == model_text {
+        return model_text.to_string();
+    }
+    use base64::Engine as _;
+    let display = base64::engine::general_purpose::STANDARD_NO_PAD.encode(display_text);
+    format!("{USER_DISPLAY_PREFIX}{display}{USER_DISPLAY_SUFFIX}\n{model_text}")
+}
+
+fn visible_user_text(stored_text: &str) -> String {
+    use base64::Engine as _;
+    let Some((header, _)) = stored_text.split_once('\n') else {
+        return stored_text.to_string();
+    };
+    let Some(encoded) = header
+        .strip_prefix(USER_DISPLAY_PREFIX)
+        .and_then(|value| value.strip_suffix(USER_DISPLAY_SUFFIX))
+    else {
+        return stored_text.to_string();
+    };
+    base64::engine::general_purpose::STANDARD_NO_PAD
+        .decode(encoded)
+        .ok()
+        .and_then(|bytes| String::from_utf8(bytes).ok())
+        .unwrap_or_else(|| stored_text.to_string())
+}
+
+fn queue_user_message(
+    session: &Arc<kiss_coding::AgentSession>,
+    display_text: String,
+    model_text: String,
+    follow_up: bool,
+) {
+    let stored_text = stored_user_text(&display_text, &model_text);
+    let message = AgentMessage::user(stored_text);
+    if follow_up {
+        session.queue_follow_up(message);
+    } else {
+        session.queue_steering(message);
     }
 }
 
@@ -1984,8 +2169,8 @@ fn handle_input(
     {
         return match action {
             CommandMenuAction::Handled => Flow::Continue,
-            CommandMenuAction::Submit(text) => {
-                let command = text.trim().strip_prefix('/').unwrap_or("");
+            CommandMenuAction::Submit(submission) => {
+                let command = submission.text.trim().strip_prefix('/').unwrap_or("");
                 if command.is_empty() {
                     Flow::Continue
                 } else {
@@ -2069,6 +2254,12 @@ fn handle_input(
         app.escape_armed = false;
 
         match app.keybindings.action_for(key) {
+            Some(Action::Newline) => {
+                app.editor.newline();
+                app.command_menu = None;
+                reset_file_search(app, file_search);
+                return Flow::Continue;
+            }
             Some(Action::CycleModel) => {
                 cycle_model(session, &resources.enabled_models, 1);
                 return Flow::Continue;
@@ -2103,14 +2294,24 @@ fn handle_input(
                 return Flow::Continue;
             }
             Some(Action::QueueFollowUp) => {
-                let text = app.editor.take();
+                let submission = app.editor.take_submission();
                 app.command_menu = None;
                 reset_file_search(app, file_search);
-                if !text.trim().is_empty() {
+                if !submission.text.trim().is_empty() {
+                    let model_text = match prepare_skill_input(&submission, resources) {
+                        Ok(Some(text)) => text,
+                        Ok(None) => submission.text.trim().to_string(),
+                        Err(error) => {
+                            app.cells
+                                .push(Cell::Error(format!("could not invoke skill: {error:#}")));
+                            return Flow::Continue;
+                        }
+                    };
+                    let display_text = submission.display_text.trim().to_string();
                     if app.working {
-                        session.queue_follow_up(AgentMessage::user(text));
+                        queue_user_message(session, display_text, model_text, true);
                     } else {
-                        submit(app, session, text, running_task);
+                        submit_with_display(app, session, display_text, model_text, running_task);
                     }
                 }
                 return Flow::Continue;
@@ -2128,12 +2329,29 @@ fn handle_input(
     }
 
     // Enter -> submit or queue steering.
-    if let Some(submitted) = app.editor.handle_event(event) {
+    if let Some(submission) = app.editor.handle_event(event) {
         app.command_menu = None;
         reset_file_search(app, file_search);
-        let text = submitted.trim().to_string();
+        let text = submission.text.trim().to_string();
+        let display_text = submission.display_text.trim().to_string();
         if text.is_empty() {
             return Flow::Continue;
+        }
+        match prepare_skill_input(&submission, resources) {
+            Ok(Some(model_text)) => {
+                if app.working {
+                    queue_user_message(session, display_text, model_text, false);
+                } else {
+                    submit_with_display(app, session, display_text, model_text, running_task);
+                }
+                return Flow::Continue;
+            }
+            Ok(None) => {}
+            Err(error) => {
+                app.cells
+                    .push(Cell::Error(format!("could not invoke skill: {error:#}")));
+                return Flow::Continue;
+            }
         }
         if let Some(command) = text.strip_prefix('/') {
             return run_slash_command(
@@ -2149,9 +2367,9 @@ fn handle_input(
         if let Some(shell) = text.strip_prefix('!') {
             if shell.trim_start_matches('!').trim().is_empty() {
                 if app.working {
-                    session.queue_steering(AgentMessage::user(text));
+                    queue_user_message(session, display_text, text, false);
                 } else {
-                    submit(app, session, text, running_task);
+                    submit_with_display(app, session, display_text, text, running_task);
                 }
             } else {
                 start_shell_passthrough(app, session, shell.to_string(), command_tx);
@@ -2159,9 +2377,9 @@ fn handle_input(
             return Flow::Continue;
         }
         if app.working {
-            session.queue_steering(AgentMessage::user(text));
+            queue_user_message(session, display_text, text, false);
         } else {
-            submit(app, session, text, running_task);
+            submit_with_display(app, session, display_text, text, running_task);
         }
     } else {
         sync_command_menu(app, session, &resources.prompt_templates, &resources.skills);
@@ -2476,7 +2694,7 @@ fn restore_queued_to_editor(app: &mut App, session: &Arc<kiss_coding::AgentSessi
         .reclaim_queued()
         .into_iter()
         .filter_map(|message| match message {
-            AgentMessage::User(user) => Some(user.content.as_text()),
+            AgentMessage::User(user) => Some(visible_user_text(&user.content.as_text())),
             _ => None,
         })
         .collect::<Vec<_>>()
@@ -2559,11 +2777,22 @@ fn submit(
     text: String,
     running_task: &mut Option<tokio::task::JoinHandle<()>>,
 ) {
-    app.cells.push(Cell::User(text.clone()));
+    submit_with_display(app, session, text.clone(), text, running_task);
+}
+
+fn submit_with_display(
+    app: &mut App,
+    session: &Arc<kiss_coding::AgentSession>,
+    display_text: String,
+    model_text: String,
+    running_task: &mut Option<tokio::task::JoinHandle<()>>,
+) {
+    let stored_text = stored_user_text(&display_text, &model_text);
+    app.cells.push(Cell::User(display_text));
     app.working = true;
     let session = session.clone();
     *running_task = Some(tokio::spawn(async move {
-        session.prompt(vec![AgentMessage::user(text)]).await;
+        session.prompt(vec![AgentMessage::user(stored_text)]).await;
     }));
 }
 
@@ -2711,7 +2940,12 @@ fn open_tree_picker(app: &mut App, session: &Arc<kiss_coding::AgentSession>) {
         use kiss_coding::SessionEntry;
         let label = match entry {
             SessionEntry::Message { message, .. } => match message {
-                AgentMessage::User(u) => format!("user: {}", preview(&u.content.as_text())),
+                AgentMessage::User(u) => {
+                    format!(
+                        "user: {}",
+                        preview(&visible_user_text(&u.content.as_text()))
+                    )
+                }
                 AgentMessage::Assistant(a) => format!("assistant: {}", preview(&a.text())),
                 AgentMessage::ToolResult(t) => format!("tool: {}", t.tool_name),
                 other => other.role().to_string(),
@@ -3013,7 +3247,7 @@ fn open_fork_picker(app: &mut App, session: &Arc<kiss_coding::AgentSession>) {
                 message: AgentMessage::User(user),
                 ..
             } => Some(SelectItem {
-                label: preview(&user.content.as_text()),
+                label: preview(&visible_user_text(&user.content.as_text())),
                 detail: None,
                 value,
             }),
@@ -3957,7 +4191,7 @@ fn handle_picker_key(
             if *key == KeyEvent::ctrl('y') {
                 let text = match &entry {
                     kiss_coding::SessionEntry::Message { message, .. } => match message {
-                        AgentMessage::User(user) => user.content.as_text(),
+                        AgentMessage::User(user) => visible_user_text(&user.content.as_text()),
                         AgentMessage::Assistant(assistant) => assistant.text(),
                         AgentMessage::ToolResult(tool) => tool
                             .content
@@ -4175,7 +4409,7 @@ fn apply_picker_selection(
                 ..
             }) = selected
             {
-                let text = user.content.as_text();
+                let text = visible_user_text(&user.content.as_text());
                 let fork = session
                     .manager
                     .lock()
@@ -4454,7 +4688,9 @@ fn session_cells(session: &Arc<kiss_coding::AgentSession>) -> Vec<Cell> {
     for entry in manager.branch_entries(None) {
         if let kiss_coding::SessionEntry::Message { message, .. } = entry {
             match message {
-                AgentMessage::User(user) => cells.push(Cell::User(user.content.as_text())),
+                AgentMessage::User(user) => {
+                    cells.push(Cell::User(visible_user_text(&user.content.as_text())))
+                }
                 AgentMessage::Assistant(assistant) => {
                     let thinking: String = assistant
                         .content
@@ -4838,7 +5074,7 @@ fn run_slash_command(
         "quit" | "exit" => return Flow::Quit,
         "help" | "hotkeys" => {
             app.cells.push(Cell::Notice(
-                "Input\n  Enter send · Shift+Enter newline · / commands · @ files · ! shell · !! shell outside context\nModels and effort\n  Shift+Tab effort · Ctrl+L select model · Ctrl+P next model · Ctrl+Shift+P previous model\nSession\n  Ctrl+D exit · Esc cancel · Ctrl+C interrupt or clear · double Esc tree\nDisplay and queues\n  Ctrl+O tools · Ctrl+T thinking · Ctrl+X copy · Alt+Enter follow-up · Alt+Up dequeue".into(),
+                "Input\n  Enter send · Shift+Enter or Alt+Enter newline · / commands and skills · $ skills · @ files · ! shell · !! shell outside context\nModels and effort\n  Shift+Tab effort · Ctrl+L select model · Ctrl+P next model · Ctrl+Shift+P previous model\nSession\n  Ctrl+D exit · Esc cancel · Ctrl+C interrupt or clear · double Esc tree\nDisplay and queues\n  Ctrl+O tools · Ctrl+T thinking · Ctrl+X copy · Ctrl+Enter follow-up · Alt+Up dequeue".into(),
             ));
         }
         "model" => {
@@ -5120,22 +5356,36 @@ fn run_slash_command(
                 return Flow::Continue;
             }
             if let Some(skill_name) = other.strip_prefix("skill:")
-                && let Some(skill) = resources
+                && resources
                     .skills
                     .iter()
-                    .find(|skill| skill.name == skill_name)
+                    .any(|skill| skill.name == skill_name)
             {
-                match std::fs::read_to_string(&skill.file_path) {
-                    Ok(content) => {
-                        let mut text = content;
-                        if !rest.is_empty() {
-                            text.push_str(&format!("\n\nUser: {rest}"));
-                        }
-                        submit(app, session, text, running_task);
+                let display_text = format!(
+                    "/skill:{skill_name}{}",
+                    if rest.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" {rest}")
                     }
-                    Err(e) => app
+                );
+                let submission = EditorSubmission {
+                    display_text: display_text.clone(),
+                    text: display_text.clone(),
+                };
+                match prepare_skill_input(&submission, resources) {
+                    Ok(Some(model_text)) if app.working => {
+                        queue_user_message(session, display_text, model_text, false)
+                    }
+                    Ok(Some(model_text)) => {
+                        submit_with_display(app, session, display_text, model_text, running_task)
+                    }
+                    Ok(None) => app.cells.push(Cell::Error(format!(
+                        "could not invoke skill `{skill_name}`"
+                    ))),
+                    Err(error) => app
                         .cells
-                        .push(Cell::Error(format!("could not read skill: {e}"))),
+                        .push(Cell::Error(format!("could not invoke skill: {error:#}"))),
                 }
                 return Flow::Continue;
             }
@@ -5806,7 +6056,10 @@ mod tests {
 
         assert_eq!(
             handle_command_menu_key(&mut app, &key(Key::Enter)),
-            Some(CommandMenuAction::Submit("/model ".to_string()))
+            Some(CommandMenuAction::Submit(EditorSubmission {
+                display_text: "/model ".to_string(),
+                text: "/model ".to_string(),
+            }))
         );
         assert!(app.editor.is_empty());
         assert!(app.command_menu.is_none());
@@ -5847,7 +6100,10 @@ mod tests {
         open_menu(&mut app, "/login anth");
         assert_eq!(
             handle_command_menu_key(&mut app, &key(Key::Enter)),
-            Some(CommandMenuAction::Submit("/login anthropic".into()))
+            Some(CommandMenuAction::Submit(EditorSubmission {
+                display_text: "/login anthropic".into(),
+                text: "/login anthropic".into(),
+            }))
         );
     }
 
@@ -6340,11 +6596,158 @@ mod tests {
         }];
 
         let labels: Vec<String> = command_items(&templates, &skills)
+            .0
             .into_iter()
             .map(|item| item.label)
             .collect();
         assert!(labels.contains(&"review".to_string()));
-        assert!(labels.contains(&"skill:release".to_string()));
+        assert!(labels.contains(&"release".to_string()));
+    }
+
+    #[test]
+    fn dollar_completion_inserts_skills_without_submitting() {
+        let mut app = test_app();
+        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
+            "/synthetic",
+        )));
+        let skills = vec![kiss_coding::skills::Skill {
+            name: "release".into(),
+            description: "Prepare a release".into(),
+            file_path: "release/SKILL.md".into(),
+            disable_model_invocation: false,
+        }];
+        app.editor.set_text("$rel");
+        sync_command_menu(&mut app, &session, &[], &skills);
+
+        assert_eq!(
+            app.command_menu
+                .as_mut()
+                .and_then(|menu| menu.list.current())
+                .map(|item| item.label.as_str()),
+            Some("release")
+        );
+        assert_eq!(
+            handle_command_menu_key(&mut app, &key(Key::Enter)),
+            Some(CommandMenuAction::Handled)
+        );
+        assert_eq!(app.editor.text(), "$release ");
+    }
+
+    #[test]
+    fn slash_skill_completion_uses_direct_name_and_allows_a_chain() {
+        let mut app = test_app();
+        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
+            "/synthetic",
+        )));
+        let skills = vec![
+            kiss_coding::skills::Skill {
+                name: "review".into(),
+                description: "Review code".into(),
+                file_path: "review/SKILL.md".into(),
+                disable_model_invocation: false,
+            },
+            kiss_coding::skills::Skill {
+                name: "tests".into(),
+                description: "Test code".into(),
+                file_path: "tests/SKILL.md".into(),
+                disable_model_invocation: false,
+            },
+        ];
+        app.editor.set_text("/rev");
+        sync_command_menu(&mut app, &session, &[], &skills);
+        assert_eq!(
+            handle_command_menu_key(&mut app, &key(Key::Enter)),
+            Some(CommandMenuAction::Handled)
+        );
+        assert_eq!(app.editor.text(), "/review ");
+
+        app.editor.insert("/te");
+        sync_command_menu(&mut app, &session, &[], &skills);
+        assert_eq!(
+            handle_command_menu_key(&mut app, &key(Key::Tab)),
+            Some(CommandMenuAction::Handled)
+        );
+        assert_eq!(app.editor.text(), "/review /tests ");
+    }
+
+    #[test]
+    fn skill_preparation_hides_bodies_from_display_and_expands_pastes() {
+        let dir = tempfile::tempdir().unwrap();
+        let review_path = dir.path().join("review.md");
+        let tests_path = dir.path().join("tests.md");
+        std::fs::write(&review_path, "PRIVATE REVIEW BODY").unwrap();
+        std::fs::write(&tests_path, "PRIVATE TEST BODY").unwrap();
+        let mut resources = test_resources();
+        resources.skills = vec![
+            kiss_coding::skills::Skill {
+                name: "review".into(),
+                description: "Review code".into(),
+                file_path: review_path,
+                disable_model_invocation: false,
+            },
+            kiss_coding::skills::Skill {
+                name: "tests".into(),
+                description: "Test code".into(),
+                file_path: tests_path,
+                disable_model_invocation: false,
+            },
+        ];
+        let mut editor = Editor::new(Theme::dark());
+        editor.insert("$review /tests ");
+        editor.paste("line one\nline two");
+        let submission = editor.take_submission();
+
+        let model_text = prepare_skill_input(&submission, &resources)
+            .unwrap()
+            .expect("skill invocation");
+
+        assert_eq!(
+            submission.display_text,
+            "$review /tests [Pasted text #1 17 chars]"
+        );
+        assert!(!submission.display_text.contains("PRIVATE"));
+        assert!(model_text.contains("PRIVATE REVIEW BODY"));
+        assert!(model_text.contains("PRIVATE TEST BODY"));
+        assert!(model_text.ends_with("<user_request>\nline one\nline two\n</user_request>"));
+
+        let stored = stored_user_text(&submission.display_text, &model_text);
+        assert_eq!(visible_user_text(&stored), submission.display_text);
+        assert!(stored.contains("PRIVATE REVIEW BODY"));
+    }
+
+    #[test]
+    fn slash_command_and_template_names_take_priority_over_skills() {
+        let mut resources = test_resources();
+        resources.skills = vec![
+            kiss_coding::skills::Skill {
+                name: "model".into(),
+                description: "Conflicting skill".into(),
+                file_path: "model/SKILL.md".into(),
+                disable_model_invocation: false,
+            },
+            kiss_coding::skills::Skill {
+                name: "review".into(),
+                description: "Conflicting template skill".into(),
+                file_path: "review/SKILL.md".into(),
+                disable_model_invocation: false,
+            },
+        ];
+        resources
+            .prompt_templates
+            .push(kiss_coding::prompts::PromptTemplate {
+                name: "review".into(),
+                description: String::new(),
+                argument_hint: None,
+                body: "template".into(),
+                path: "review.md".into(),
+            });
+
+        let names = slash_invocable_skills(&resources)
+            .into_iter()
+            .map(|skill| skill.name)
+            .collect::<Vec<_>>();
+        assert!(!names.contains(&"model".to_string()));
+        assert!(!names.contains(&"review".to_string()));
     }
 
     #[test]

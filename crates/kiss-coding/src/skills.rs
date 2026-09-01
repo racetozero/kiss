@@ -1,8 +1,11 @@
 //! Agent Skills (agentskills.io style): Markdown files with YAML frontmatter,
 //! discovered from user/project locations, surfaced in the system prompt and
-//! as `/skill:name` commands.
+//! through `$name` or `/name` input tokens. The older `/skill:name` form is
+//! also accepted.
 
 use std::path::{Path, PathBuf};
+
+use anyhow::{Context, Result};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Skill {
@@ -10,6 +13,71 @@ pub struct Skill {
     pub description: String,
     pub file_path: PathBuf,
     pub disable_model_invocation: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SkillInvocation {
+    pub skill_names: Vec<String>,
+    pub request: String,
+}
+
+/// Parse consecutive skill tokens at the start of user input.
+pub fn parse_invocation(input: &str, skills: &[Skill]) -> Option<SkillInvocation> {
+    let mut rest = input.trim_start();
+    let mut skill_names = Vec::new();
+
+    loop {
+        let token_end = rest.find(char::is_whitespace).unwrap_or(rest.len());
+        let token = &rest[..token_end];
+        let candidate = token
+            .strip_prefix('$')
+            .or_else(|| token.strip_prefix("/skill:"))
+            .or_else(|| token.strip_prefix('/'));
+        let Some(skill) = candidate
+            .filter(|name| !name.is_empty())
+            .and_then(|name| skills.iter().find(|skill| skill.name == name))
+        else {
+            break;
+        };
+        if !skill_names.contains(&skill.name) {
+            skill_names.push(skill.name.clone());
+        }
+        rest = rest[token_end..].trim_start();
+    }
+
+    (!skill_names.is_empty()).then(|| SkillInvocation {
+        skill_names,
+        request: rest.trim().to_string(),
+    })
+}
+
+/// Read invoked skill files and build text that is sent only to the model.
+pub fn expand_invocation(invocation: &SkillInvocation, skills: &[Skill]) -> Result<String> {
+    let mut output = String::from(
+        "The user explicitly invoked the following skills. Follow each skill for this turn.\n\n",
+    );
+    for name in &invocation.skill_names {
+        let skill = skills
+            .iter()
+            .find(|skill| &skill.name == name)
+            .with_context(|| format!("invoked skill `{name}` is not available"))?;
+        let content = std::fs::read_to_string(&skill.file_path).with_context(|| {
+            format!(
+                "could not read invoked skill `{name}` at {}",
+                skill.file_path.display()
+            )
+        })?;
+        output.push_str(&format!(
+            "<invoked_skill name=\"{}\" path=\"{}\">\n{}\n</invoked_skill>\n\n",
+            escape_xml(&skill.name),
+            escape_xml(&skill.file_path.display().to_string()),
+            content
+        ));
+    }
+    output.push_str("<user_request>\n");
+    output.push_str(&invocation.request);
+    output.push_str("\n</user_request>");
+    Ok(output)
 }
 
 /// Split a Markdown document into (frontmatter, body).
@@ -204,5 +272,57 @@ mod tests {
         let xml = format_skills_for_prompt(&skills);
         assert!(xml.contains("<name>a&lt;b</name>"));
         assert!(xml.contains("uses &amp; things"));
+    }
+
+    fn skill(name: &str, path: PathBuf) -> Skill {
+        Skill {
+            name: name.into(),
+            description: format!("Use {name}"),
+            file_path: path,
+            disable_model_invocation: false,
+        }
+    }
+
+    #[test]
+    fn parses_chained_dollar_slash_and_compatible_skill_tokens() {
+        let skills = vec![
+            skill("review", "review/SKILL.md".into()),
+            skill("tests", "tests/SKILL.md".into()),
+            skill("docs", "docs/SKILL.md".into()),
+        ];
+        assert_eq!(
+            parse_invocation("  $review /tests /skill:docs check this", &skills),
+            Some(SkillInvocation {
+                skill_names: vec!["review".into(), "tests".into(), "docs".into()],
+                request: "check this".into(),
+            })
+        );
+        assert_eq!(parse_invocation("cost is $review", &skills), None);
+        assert_eq!(parse_invocation("$unknown request", &skills), None);
+    }
+
+    #[test]
+    fn expansion_reads_each_skill_once_and_keeps_the_request_last() {
+        let dir = tempfile::tempdir().unwrap();
+        let review = dir.path().join("review.md");
+        let tests = dir.path().join("tests.md");
+        std::fs::write(&review, "Review instructions").unwrap();
+        std::fs::write(&tests, "Test instructions").unwrap();
+        let skills = vec![skill("review", review), skill("tests", tests)];
+        let invocation = parse_invocation("$review /tests inspect it", &skills).unwrap();
+
+        let expanded = expand_invocation(&invocation, &skills).unwrap();
+
+        assert_eq!(expanded.matches("Review instructions").count(), 1);
+        assert_eq!(expanded.matches("Test instructions").count(), 1);
+        assert!(expanded.ends_with("<user_request>\ninspect it\n</user_request>"));
+    }
+
+    #[test]
+    fn expansion_error_names_an_unreadable_skill() {
+        let skills = vec![skill("missing", "/no/such/skill/SKILL.md".into())];
+        let invocation = parse_invocation("$missing run", &skills).unwrap();
+        let error = expand_invocation(&invocation, &skills).unwrap_err();
+        assert!(format!("{error:#}").contains("invoked skill `missing`"));
     }
 }

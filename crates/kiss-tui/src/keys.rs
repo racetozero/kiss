@@ -361,6 +361,23 @@ mod tests {
                 ..Default::default()
             })]
         );
+        // Enhanced keyboard protocol: Shift+Enter and Alt+Enter.
+        assert_eq!(
+            decode(b"\x1b[13;2u"),
+            vec![InputEvent::Key(KeyEvent {
+                key: Key::Enter,
+                shift: true,
+                ..Default::default()
+            })]
+        );
+        assert_eq!(
+            decode(b"\x1b[13;3u"),
+            vec![InputEvent::Key(KeyEvent {
+                key: Key::Enter,
+                alt: true,
+                ..Default::default()
+            })]
+        );
     }
 
     #[test]
