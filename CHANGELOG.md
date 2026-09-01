@@ -21,6 +21,8 @@
 - Fixed multiline paste and Shift+Enter newline input.
 - Restored the blinking block cursor in the terminal interface.
 - Made profile-guided release tests portable across workspace locations.
+- Fixed the Windows profile-guided release build, which collected empty
+  profiles because the program did not return from main.
 
 ## 0.0.1 - 2026-08-28
 
