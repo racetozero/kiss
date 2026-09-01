@@ -22,22 +22,11 @@ plugin runtime.
 
 ## Performance
 
-Fast feedback is a product requirement for KISS. The performance goals are
-simple: keep local actions responsive in large repositories, avoid extra work
-for features that users do not enable, and keep release downloads small.
+KISS is built to stay responsive during everyday work, from file discovery in
+large repositories to streaming model output. These benchmarks measure local
+KISS operations, not model or network latency.
 
-| Product outcome | User value | Measured result |
-| --- | --- | ---: |
-| Fast search at repository scale | Less wait during file navigation | 5.122 ms for 100,000 files; 10.639 ms for 500,000 files |
-| Responsive streaming | Fast screen updates during model output | 15.672 ms for Markdown; 133.220 us for an unchanged frame |
-| No default subagent cost | Standard sessions stay simple | 0 subagent control tools when off |
-| Low cost when subagents are on | Parallel work without material local delay | 86 ns median increase; less than 0.4 us total |
-| Smaller releases | Faster downloads and less disk use | 13.37% smaller binary; 9.94% smaller gzip file |
-
-These are internal component benchmarks. They show local KISS overhead, not
-end-to-end model response time.
-
-### Measured local performance
+### Benchmarks
 
 | User action | Test size | Typical time | p95 |
 | --- | --- | ---: | ---: |
@@ -48,32 +37,35 @@ end-to-end model response time.
 | Incremental Markdown | 200 streaming prefix renders | 15.672 ms | 16.299 ms |
 | Unchanged frame | 10,000 logical rows | 133.220 us | 134.583 us |
 
-### Product decision: subagents stay opt-in
+### Subagent overhead
 
-The default experience stays simple and has no subagent control tools. When a
-user enables subagents, KISS adds six control tools. The measured local cost is
-negligible compared with a model request.
+Subagents are off by default, so standard sessions do not load their six
+control tools. When subagents are enabled, the added local work remains small:
 
-| Measure | Subagents off | Subagents on | Product result |
+| Measure | Off | On | Difference |
 | --- | ---: | ---: | --- |
-| Control tools | 0 | 6 | The feature changes only sessions that opt in. |
-| Session setup median | 254.168-266.224 us | 261.164-266.563 us | No stable increase beyond process variation. |
-| Request preparation median | 200-217 ns | 293-298 ns | Median matched increase was 86 ns; total time stayed below 0.4 us. |
+| Control tools | 0 | 6 | Loaded only when enabled |
+| Session setup median | 254.168-266.224 us | 261.164-266.563 us | No consistent regression |
+| Request preparation median | 200-217 ns | 293-298 ns | 86 ns median increase |
 
-### Product decision: optimize every release
+Session setup results stayed within normal process variation. Request
+preparation remained below 0.4 us in total, which is negligible compared with
+a model request. This supports keeping subagents available as an opt-in feature
+without changing the default experience.
 
-KISS uses profile-guided optimization for each release target. This gives users
-a smaller download and a modest speed improvement without a configuration
-step. The measured macOS result was:
+### Release builds
 
-| Release result | Standard build | Optimized build | Outcome |
+KISS release binaries use profile-guided optimization. On macOS, this made the
+binary smaller and produced a modest latency improvement:
+
+| Measure | Standard build | Optimized build | Change |
 | --- | ---: | ---: | ---: |
 | `kiss --help` startup | 3.696 ms | 3.676 ms | 0.52% faster |
 | Geometric mean latency | 1.000x | 0.985x | 1.51% faster |
 | Executable size | 17.16 MiB | 14.87 MiB | 13.37% smaller |
 | gzip size | 8.17 MiB | 7.36 MiB | 9.94% smaller |
 
-### Benchmark details
+### Method
 
 These results used an Apple M4, macOS 26.5.1, and Rust 1.98.0 on 2026-08-31.
 Core benchmarks used the Cargo `release` profile. The subagent comparison used
@@ -81,12 +73,7 @@ three trials with 21 matched samples per run. It did not call a model or start
 a child. The optimized release comparison used three held-out trials. Lower
 latency values are better.
 
-Run the full benchmark suite with `just bench`. Run only the subagent
-comparison with:
-
-```bash
-cargo nextest run -p kiss-coding --release --run-ignored only --no-capture -E 'test(~benchmark_performance_subagent_overhead)'
-```
+Run the full benchmark suite with `just bench`.
 
 ## Install
 
