@@ -134,6 +134,16 @@ impl Journal {
         self.entries.len()
     }
 
+    /// Remember one completed answer for a later deterministic replay.
+    ///
+    /// Hosts normally obtain a journal from [`crate::Workflow::journal`]. This
+    /// constructor is also useful for imported runs and for tests that need a
+    /// large completed run without starting real child sessions.
+    pub fn record_completed(&mut self, index: AgentId, prompt: &str, value: Json) {
+        self.entries
+            .insert(index, (prompt.to_string(), AgentOutcome::Done(value)));
+    }
+
     pub(crate) fn record(&mut self, index: AgentId, prompt: &str, outcome: &AgentOutcome) {
         if outcome.is_journalable() {
             self.entries
@@ -168,6 +178,16 @@ mod tests {
         journal.record(2, "c", &AgentOutcome::Stopped);
         assert_eq!(journal.len(), 1);
         assert!(journal.take_matching(1, "b").is_none());
+    }
+
+    #[test]
+    fn a_host_can_seed_a_completed_result() {
+        let mut journal = Journal::default();
+        journal.record_completed(4, "audit a.rs", Json::String("ok".into()));
+        assert_eq!(
+            journal.take_matching(4, "audit a.rs"),
+            Some(AgentOutcome::Done(Json::String("ok".into())))
+        );
     }
 
     #[test]

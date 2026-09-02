@@ -157,6 +157,106 @@ settings cannot enable this feature. `--no-tools` also keeps it off.
 
 See [subagents.md](subagents.md) for the design analysis and tradeoffs.
 
+## Dynamic workflows
+
+A dynamic workflow is a short script that starts many child agents, collects
+their answers, and returns one result. The model writes the script; KISS runs
+it. The plan lives in the script instead of the model's context window, so one
+run can coordinate far more agents than a conversation can, and only the final
+answer comes back.
+
+Workflows are built on subagents, so turn `Subagents` on first. The
+`Dynamic workflows` row in `/settings` then shows `on`.
+
+Start one in any of three ways:
+
+```bash
+/workflow audit every tool file for missing path checks
+```
+
+- `/workflow <prompt>` runs one task as a workflow.
+- Typing `ultracode`, or asking for a workflow in your own words ("use a
+  workflow"), does the same. Only whole words count, so `src/workflows/run.rs`
+  does not trigger it.
+- A workflow you saved runs as `/<name>`.
+
+Before a run starts, KISS shows its phases and how many agents it will start,
+and asks you to approve. When the script's agent count depends on data it has
+not fetched yet, the prompt says so rather than guessing.
+
+While a run is going, a progress line appears under the transcript. Press
+`Ctrl+W`, or run `/workflows`, to open the full view:
+
+| Key | Action |
+| --- | --- |
+| `↑` `↓` | Select a phase, then an agent |
+| `Enter` or `→` | Open the selection |
+| `Esc` or `←` | Back out one level, or close |
+| `j` `k` | Scroll an agent's output |
+| `f` | Filter the agent list by status |
+| `p` | Pause or resume the run |
+| `x` | Stop the selected agent, or the whole run |
+| `r` | Restart a queued or running agent |
+| `s` | Save the run's script as a command |
+
+Saving writes to `.kiss/workflows/` in the project, or
+`~/.kiss/agent/workflows/` for every project. Run `/reload` and the workflow
+appears as `/<name>`.
+
+One run starts at most 1,000 agents, with up to 16 at once and up to 4,096
+items in a single fan-out. A script that exceeds a limit fails rather than
+quietly doing less. Scripts cannot read the clock or a random number, which is
+what lets a stopped run resume: replaying it asks for the same agents, so
+finished work is reused instead of repeated.
+
+### Workflow overhead
+
+Workflow orchestration is local work around model calls. These numbers measure
+that local work only:
+
+| Measure | Test size | Median |
+| --- | --- | ---: |
+| Script parsing | 200-line script | 79.130 us |
+| Interpreter | 1,000 orchestrated agents | 3.139 ms |
+| Progress view | 500 agents, 5 phases | 14.043 us |
+| Progress view, unchanged frame | 500 agents, cached | 419 ns |
+
+At 3.1 us per orchestrated agent, the runtime is negligible beside the model
+call it starts. Request preparation is unchanged when no workflow is armed
+(348 ns), and carries the tool and its instructions only when one is
+(1.094 us), so an ordinary coding turn pays nothing for the feature.
+
+## Dynamic workflows
+
+Dynamic workflows let one task use many child agents without putting every
+intermediate answer in the main conversation. Turn `Subagents` on in
+`/settings`; the `Dynamic workflows` row is then available and is on by
+default.
+
+Start a workflow in one of three ways:
+
+```text
+/workflow audit every route, then have another agent verify each finding
+use a workflow to compare the provider adapters
+/audit-routes crates/kiss-coding/src/tools
+```
+
+The first form asks the model to write a workflow script. The second form uses
+a whole-word trigger such as `use a workflow`, `dynamic workflow`, or
+`ultracode`. The third form runs a saved workflow named `audit-routes`. KISS
+shows the phases and the known agent count before it starts, unless workflow
+confirmation is off.
+
+Press `Ctrl+W` to open the progress view. Use the arrow keys and `Enter` to
+open a phase or agent, `Esc` to go back, `j` and `k` to scroll, `f` to filter,
+`p` to pause, `x` to stop, `r` to restart an active agent, and `s` to save the
+script. Project workflows live in `.kiss/workflows/`; personal workflows live
+in `~/.kiss/agent/workflows/`. Run `/reload` after you add or save one.
+
+One run can use at most 16 agents at the same time, 1,000 agents in total, and
+4,096 items in one fan-out. Workflow scripts have no file, network, module, or
+process access. Only their child agents can use KISS tools.
+
 ## Models and login
 
 KISS supports browser and headless OAuth for OpenAI Codex and Anthropic. It
@@ -204,6 +304,8 @@ loaded only after you trust the project.
 | `.mcp.json` | Project MCP servers |
 | `~/.kiss/agent/skills/` | User skills |
 | `.kiss/skills/` | Project skills |
+| `~/.kiss/agent/workflows/` | Personal workflow scripts |
+| `.kiss/workflows/` | Trusted project workflow scripts |
 
 Run `kiss --help` for command-line options and `/settings` for common TUI
 settings.

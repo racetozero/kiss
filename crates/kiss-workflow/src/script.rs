@@ -705,3 +705,54 @@ return [a, b]
         assert!(error.message.contains("nests too deeply"));
     }
 }
+
+#[cfg(test)]
+mod benchmarks {
+    use super::*;
+
+    /// A script of about 200 lines, the shape a model writes for a large task.
+    fn representative_script() -> String {
+        let mut source = String::from(
+            "export const meta = {\n\
+             \x20 name: 'benchmark',\n\
+             \x20 description: 'A representative workflow',\n\
+             \x20 phases: [{ title: 'Discover' }, { title: 'Audit' }, { title: 'Report' }],\n\
+             }\n\n",
+        );
+        for round in 0..18 {
+            source.push_str(&format!(
+                "phase('Audit {round}')\n\
+                 const found{round} = await agent(`list the files in group {round}`, {{\n\
+                 \x20 schema: {{ type: 'object', required: ['files'] }},\n\
+                 }})\n\
+                 const audits{round} = await pipeline(\n\
+                 \x20 found{round}.files,\n\
+                 \x20 file => agent(`audit ${{file}} in round {round}`, {{ label: file }}),\n\
+                 )\n\
+                 if (audits{round}.length > 0) {{\n\
+                 \x20 log(`round {round} produced ${{audits{round}.length}} findings`)\n\
+                 }}\n\n"
+            ));
+        }
+        source.push_str("return 'done'\n");
+        source
+    }
+
+    #[test]
+    #[ignore = "release-mode performance benchmark"]
+    fn benchmark_performance_workflow_parse() {
+        let source = representative_script();
+        let lines = source.lines().count();
+        assert!(
+            (190..=230).contains(&lines),
+            "expected about 200 lines: {lines}"
+        );
+        kiss_bench::measure(
+            "workflow_script_parse",
+            21,
+            200,
+            "parse_200_line_script",
+            || Script::parse(&source).expect("the benchmark script parses"),
+        );
+    }
+}

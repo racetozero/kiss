@@ -302,6 +302,10 @@ enum CommandEvent {
         name: String,
         result: std::result::Result<String, String>,
     },
+    /// A saved workflow passed its cost prompt and is ready to show.
+    WorkflowStarted(Arc<kiss_coding::workflows::RunRecord>),
+    /// A saved workflow was cancelled before it made a run record.
+    WorkflowCancelled,
 }
 
 #[derive(Debug)]
@@ -1109,6 +1113,16 @@ pub async fn run(args: &Args) -> Result<i32> {
 
     // Kick off initial message if provided.
     if let Some(message) = initial_message {
+        if submit_after_startup
+            && session.workflows_enabled()
+            && session.settings().workflows.keyword_trigger
+            && let Some(trigger) = workflow_trigger(&message)
+        {
+            session.arm_workflow();
+            app.cells.push(Cell::Notice(format!(
+                "running this as a dynamic workflow ({trigger}) · ctrl+w opens the progress view"
+            )));
+        }
         let session = session.clone();
         app.working = true;
         app.cells.push(Cell::User(message.clone()));
@@ -1678,12 +1692,21 @@ fn handle_command_event(
                     .push(Cell::Error(format!("workflow {name} failed: {error}"))),
             }
         }
+        CommandEvent::WorkflowStarted(record) => {
+            app.command_status = Some(format!("running workflow {}", record.name));
+            app.workflow_view = Some(WorkflowView::new(record));
+        }
+        CommandEvent::WorkflowCancelled => {
+            app.command_status = None;
+            app.command_cancel = None;
+        }
     }
 }
 
 fn command_items(
     prompt_templates: &[kiss_coding::prompts::PromptTemplate],
     skills: &[kiss_coding::skills::Skill],
+    workflows: &[kiss_coding::workflows::SavedWorkflow],
 ) -> (Vec<SelectItem>, Vec<CompletionReplacement>) {
     let mut replacements = Vec::new();
     let mut items: Vec<SelectItem> = slash_commands::commands()
@@ -1718,6 +1741,22 @@ fn command_items(
         .iter()
         .map(|item| item.label.clone())
         .collect::<HashSet<_>>();
+    for workflow in workflows {
+        if !used_names.insert(workflow.name.clone()) {
+            continue;
+        }
+        let value = items.len();
+        items.push(SelectItem {
+            label: workflow.name.clone(),
+            detail: Some(if workflow.description.is_empty() {
+                "Saved workflow".into()
+            } else {
+                format!("Workflow: {}", workflow.description)
+            }),
+            value,
+        });
+        replacements.push(CompletionReplacement::CommandName(workflow.name.clone()));
+    }
     for skill in skills {
         if !used_names.insert(skill.name.clone()) {
             continue;
@@ -1888,10 +1927,11 @@ fn sync_command_menu(
     session: &Arc<kiss_coding::AgentSession>,
     prompt_templates: &[kiss_coding::prompts::PromptTemplate],
     skills: &[kiss_coding::skills::Skill],
+    workflows: &[kiss_coding::workflows::SavedWorkflow],
 ) {
     let text = app.editor.text();
     if let Some(query) = command_query(&text) {
-        let (items, mut replacements) = command_items(prompt_templates, skills);
+        let (items, mut replacements) = command_items(prompt_templates, skills, workflows);
         for replacement in &mut replacements {
             if let CompletionReplacement::Skill { prefix, .. } = replacement {
                 *prefix = format!("/{query}");
@@ -2357,7 +2397,13 @@ fn handle_input(
                 return Flow::Quit;
             }
             app.editor.delete_forward();
-            sync_command_menu(app, session, &resources.prompt_templates, &resources.skills);
+            sync_command_menu(
+                app,
+                session,
+                &resources.prompt_templates,
+                &resources.skills,
+                &resources.saved_workflows,
+            );
             sync_file_menu(app, session, file_search);
             return Flow::Continue;
         }
@@ -2525,7 +2571,13 @@ fn handle_input(
             submit_with_display(app, session, display_text, text, running_task);
         }
     } else {
-        sync_command_menu(app, session, &resources.prompt_templates, &resources.skills);
+        sync_command_menu(
+            app,
+            session,
+            &resources.prompt_templates,
+            &resources.skills,
+            &resources.saved_workflows,
+        );
         sync_file_menu(app, session, file_search);
     }
     Flow::Continue
@@ -2537,21 +2589,24 @@ fn handle_input(
 /// such as `src/workflows/run.rs` do not start one by accident.
 fn workflow_trigger(text: &str) -> Option<&'static str> {
     let lowered = text.to_lowercase();
-    for phrase in [
-        "use a workflow",
-        "run a workflow",
-        "as a workflow",
-        "dynamic workflow",
+    let words = lowered
+        .split(|character: char| !(character.is_alphanumeric() || character == '_'))
+        .filter(|word| !word.is_empty())
+        .collect::<Vec<_>>();
+    for (phrase, phrase_words) in [
+        ("use a workflow", &["use", "a", "workflow"][..]),
+        ("run a workflow", &["run", "a", "workflow"][..]),
+        ("as a workflow", &["as", "a", "workflow"][..]),
+        ("dynamic workflow", &["dynamic", "workflow"][..]),
     ] {
-        if lowered.contains(phrase) {
+        if words
+            .windows(phrase_words.len())
+            .any(|window| window == phrase_words)
+        {
             return Some(phrase);
         }
     }
-    // A bounded word, so only `ultracode` on its own counts.
-    lowered
-        .split(|character: char| !character.is_alphanumeric())
-        .any(|word| word == "ultracode")
-        .then_some("ultracode")
+    words.contains(&"ultracode").then_some("ultracode")
 }
 
 fn handle_secret_prompt(
@@ -3711,20 +3766,6 @@ fn settings_picker(
         },
         SelectItem {
             label: "Dynamic workflows".into(),
-            detail: Some(
-                if !settings.subagents.enabled {
-                    "off (needs subagents)"
-                } else if settings.workflows.enabled {
-                    "on"
-                } else {
-                    "off"
-                }
-                .into(),
-            ),
-            value: 14,
-        },
-        SelectItem {
-            label: "Dynamic workflows".into(),
             detail: Some(if !settings.subagents.enabled {
                 "off (needs subagents)".into()
             } else if settings.workflows.enabled {
@@ -3803,26 +3844,40 @@ fn start_saved_workflow(
             .unwrap_or_else(|_| serde_json::Value::String(arguments.trim().to_string()))
     };
 
-    let name = script.meta().name.clone();
-    let record = match runtime.prepare(script, args, Default::default()) {
-        Ok(record) => record,
-        Err(error) => {
-            app.cells
-                .push(Cell::Error(format!("could not start workflow: {error:#}")));
-            return;
-        }
-    };
-
-    app.workflow_view = Some(WorkflowView::new(record.clone()));
-    app.command_status = Some(format!("running workflow {name}"));
+    let plan = kiss_coding::workflows::WorkflowPlan::from_script(&script);
+    let name = plan.name.clone();
+    let cancel = CancellationToken::new();
+    app.command_cancel = Some(cancel.clone());
+    app.command_status = Some(format!("waiting to run workflow {name}"));
     let command_tx = command_tx.clone();
     let runtime = runtime.clone();
     tokio::spawn(async move {
+        if runtime.approve(plan).await == kiss_coding::workflows::ApprovalDecision::Cancel {
+            let _ = command_tx.send(CommandEvent::WorkflowCancelled);
+            return;
+        }
+        let record = match runtime.prepare(script, args, Default::default()) {
+            Ok(record) => record,
+            Err(error) => {
+                let _ = command_tx.send(CommandEvent::WorkflowFinished {
+                    name,
+                    result: Err(format!("could not start: {error:#}")),
+                });
+                return;
+            }
+        };
+        let _ = command_tx.send(CommandEvent::WorkflowStarted(record.clone()));
+        let stopping = record.clone();
+        let stop_guard = tokio::spawn(async move {
+            cancel.cancelled().await;
+            stopping.stop();
+        });
         let result = runtime.run(&record).await.map(|value| match value {
             serde_json::Value::String(text) => text,
             serde_json::Value::Null => "The workflow returned nothing.".to_string(),
             other => serde_json::to_string_pretty(&other).unwrap_or_else(|_| other.to_string()),
         });
+        stop_guard.abort();
         let _ = command_tx.send(CommandEvent::WorkflowFinished { name, result });
     });
 }
@@ -6214,8 +6269,8 @@ fn reload_interactive(
     resources.prompt_templates = reloaded.prompt_templates;
     resources.context_file_paths = reloaded.context_file_paths;
     resources.settings = reloaded.settings.clone();
-    resources.saved_workflows = discover_saved_workflows(session);
     session.reload_runtime(reloaded.settings, reloaded.system_prompt, reloaded.tools);
+    resources.saved_workflows = discover_saved_workflows(session);
 
     let theme = if resources.settings.theme.as_deref() == Some("light") {
         Theme::light()
@@ -6238,9 +6293,10 @@ fn reload_interactive(
     update_thinking_border(app, session.thinking_level());
     refresh_git_branch(app, session);
     app.cells.push(Cell::Notice(format!(
-        "reloaded {} skills, {} prompts, and {} context files",
+        "reloaded {} skills, {} prompts, {} workflows, and {} context files",
         resources.skills.len(),
         resources.prompt_templates.len(),
+        resources.saved_workflows.len(),
         resources.context_file_paths.len()
     )));
 }
@@ -6307,7 +6363,7 @@ mod tests {
         let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
             "/synthetic",
         )));
-        sync_command_menu(app, &session, &[], &[]);
+        sync_command_menu(app, &session, &[], &[], &[]);
     }
 
     fn test_session(manager: kiss_coding::SessionManager) -> Arc<kiss_coding::AgentSession> {
@@ -7129,13 +7185,67 @@ mod tests {
             disable_model_invocation: false,
         }];
 
-        let labels: Vec<String> = command_items(&templates, &skills)
+        let labels: Vec<String> = command_items(&templates, &skills, &[])
             .0
             .into_iter()
             .map(|item| item.label)
             .collect();
         assert!(labels.contains(&"review".to_string()));
         assert!(labels.contains(&"release".to_string()));
+    }
+
+    #[test]
+    fn command_menu_includes_saved_workflows_without_shadowing_core_commands() {
+        let workflows = vec![
+            kiss_coding::workflows::SavedWorkflow {
+                name: "audit-routes".into(),
+                description: "Audit every route".into(),
+                path: PathBuf::from("audit-routes.js"),
+                from_project: true,
+            },
+            kiss_coding::workflows::SavedWorkflow {
+                name: "workflow".into(),
+                description: "Must not shadow /workflow".into(),
+                path: PathBuf::from("workflow.js"),
+                from_project: true,
+            },
+        ];
+        let labels = command_items(&[], &[], &workflows)
+            .0
+            .into_iter()
+            .map(|item| item.label)
+            .collect::<Vec<_>>();
+
+        assert!(labels.contains(&"audit-routes".to_string()));
+        assert_eq!(
+            labels
+                .iter()
+                .filter(|name| name.as_str() == "workflow")
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn workflow_keywords_match_only_complete_words_and_phrases() {
+        for text in [
+            "ultracode this audit",
+            "Please USE A WORKFLOW for this",
+            "run a workflow now",
+            "do this as a workflow",
+            "start a dynamic workflow",
+        ] {
+            assert!(workflow_trigger(text).is_some(), "{text}");
+        }
+        for text in [
+            "myworkflow is a variable",
+            "workflow_name is a setting",
+            "src/workflows/run.rs",
+            "mydynamic workflow label",
+            "prefix_ultracode_suffix",
+        ] {
+            assert!(workflow_trigger(text).is_none(), "{text}");
+        }
     }
 
     #[test]
@@ -7151,7 +7261,7 @@ mod tests {
             disable_model_invocation: false,
         }];
         app.editor.set_text("$rel");
-        sync_command_menu(&mut app, &session, &[], &skills);
+        sync_command_menu(&mut app, &session, &[], &skills, &[]);
 
         assert_eq!(
             app.command_menu
@@ -7188,7 +7298,7 @@ mod tests {
             },
         ];
         app.editor.set_text("/rev");
-        sync_command_menu(&mut app, &session, &[], &skills);
+        sync_command_menu(&mut app, &session, &[], &skills, &[]);
         assert_eq!(
             handle_command_menu_key(&mut app, &key(Key::Enter)),
             Some(CommandMenuAction::Handled)
@@ -7196,7 +7306,7 @@ mod tests {
         assert_eq!(app.editor.text(), "/review ");
 
         app.editor.insert("/te");
-        sync_command_menu(&mut app, &session, &[], &skills);
+        sync_command_menu(&mut app, &session, &[], &skills, &[]);
         assert_eq!(
             handle_command_menu_key(&mut app, &key(Key::Tab)),
             Some(CommandMenuAction::Handled)

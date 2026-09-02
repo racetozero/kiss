@@ -66,32 +66,192 @@ pub(crate) enum ViewAction {
     Save,
 }
 
-/// The state of one open progress view.
-pub(crate) struct WorkflowView {
-    pub run: Arc<RunRecord>,
+/// Everything the view draws from, with no handle to the run itself.
+///
+/// Keeping presentation state separate from the run means rendering is a pure
+/// function of data, so it can be measured and tested without a live session.
+pub(crate) struct ViewState {
     focus: Focus,
     phase: usize,
     agent: usize,
     scroll: usize,
     filter: Filter,
-    /// Rendered lines for one (width, run version, view state), so an unchanged
-    /// frame is not rebuilt.
-    cache: Option<(usize, u64, u64, Vec<String>)>,
+    name: String,
+    description: String,
+    paused: bool,
+}
+
+/// The state of one open progress view.
+pub(crate) struct WorkflowView {
+    pub run: Arc<RunRecord>,
+    state: ViewState,
+    cache: RenderCache,
+}
+
+/// Rendered lines for one width, run version, and selection state.
+#[derive(Default)]
+struct RenderCache(Option<(usize, u64, u64, Vec<String>)>);
+
+impl RenderCache {
+    fn render(
+        &mut self,
+        state: &ViewState,
+        snapshot: &RunSnapshot,
+        version: u64,
+        width: usize,
+        theme: &Theme,
+    ) -> Vec<String> {
+        let state_key = state.state_key();
+        if let Some((cached_width, cached_version, cached_state, lines)) = &self.0
+            && *cached_width == width
+            && *cached_version == version
+            && *cached_state == state_key
+        {
+            return lines.clone();
+        }
+        let lines = state.render(snapshot, width, theme);
+        self.0 = Some((width, version, state_key, lines.clone()));
+        lines
+    }
 }
 
 impl WorkflowView {
     pub(crate) fn new(run: Arc<RunRecord>) -> WorkflowView {
-        WorkflowView {
-            run,
+        let state = ViewState {
             focus: Focus::Run,
             phase: 0,
             agent: 0,
             scroll: 0,
             filter: Filter::All,
-            cache: None,
+            name: run.name.clone(),
+            description: run.description.clone(),
+            paused: run.is_paused(),
+        };
+        WorkflowView {
+            run,
+            state,
+            cache: RenderCache::default(),
         }
     }
 
+    pub(crate) fn handle_key(&mut self, key: &KeyEvent) -> ViewAction {
+        let snapshot = self.run.snapshot();
+        match key.key {
+            Key::Escape | Key::Left => match self.state.focus {
+                Focus::Run => return ViewAction::Close,
+                Focus::Phase => {
+                    self.state.focus = Focus::Run;
+                    self.state.agent = 0;
+                }
+                Focus::Agent => {
+                    self.state.focus = Focus::Phase;
+                    self.state.scroll = 0;
+                }
+            },
+            Key::Enter | Key::Right => match self.state.focus {
+                Focus::Run => {
+                    if !snapshot.phases.is_empty() {
+                        self.state.focus = Focus::Phase;
+                        self.state.agent = 0;
+                    }
+                }
+                Focus::Phase => {
+                    if !ViewState::visible_agents(&snapshot, self.state.phase, self.state.filter)
+                        .is_empty()
+                    {
+                        self.state.focus = Focus::Agent;
+                        self.state.scroll = 0;
+                    }
+                }
+                Focus::Agent => {}
+            },
+            Key::Up => self.move_selection(&snapshot, -1),
+            Key::Down => self.move_selection(&snapshot, 1),
+            Key::Char('k') if self.state.focus == Focus::Agent => {
+                self.state.scroll = self.state.scroll.saturating_sub(1);
+            }
+            Key::Char('j') if self.state.focus == Focus::Agent => {
+                self.state.scroll = self.state.scroll.saturating_add(1);
+            }
+            Key::Char('f') => {
+                self.state.filter = self.state.filter.next();
+                self.state.agent = 0;
+                if self.state.focus == Focus::Agent {
+                    self.state.focus = Focus::Phase;
+                }
+            }
+            Key::Char('p') => {
+                if self.run.is_paused() {
+                    self.run.resume();
+                } else {
+                    self.run.pause();
+                }
+            }
+            Key::Char('x') => match self.state.focus {
+                // On the run, `x` stops everything. Inside a phase it stops the
+                // one selected agent, whose `agent()` call then returns null
+                // and lets the rest of the script carry on.
+                Focus::Run => self.run.stop(),
+                Focus::Phase | Focus::Agent => {
+                    if let Some(agent) =
+                        ViewState::visible_agents(&snapshot, self.state.phase, self.state.filter)
+                            .get(self.state.agent)
+                    {
+                        self.run.stop_agent(agent.id);
+                    }
+                }
+            },
+            Key::Char('r') if self.state.focus != Focus::Run => {
+                if let Some(agent) =
+                    ViewState::visible_agents(&snapshot, self.state.phase, self.state.filter)
+                        .get(self.state.agent)
+                {
+                    self.run.restart_agent(agent.id);
+                }
+            }
+            Key::Char('s') => return ViewAction::Save,
+            _ => {}
+        }
+        ViewAction::None
+    }
+
+    fn move_selection(&mut self, snapshot: &RunSnapshot, delta: isize) {
+        let step = |current: usize, len: usize| -> usize {
+            if len == 0 {
+                return 0;
+            }
+            let next = current as isize + delta;
+            next.clamp(0, len as isize - 1) as usize
+        };
+        match self.state.focus {
+            Focus::Run => {
+                self.state.phase = step(self.state.phase, snapshot.phases.len());
+                self.state.agent = 0;
+            }
+            Focus::Phase => {
+                let agents =
+                    ViewState::visible_agents(snapshot, self.state.phase, self.state.filter).len();
+                self.state.agent = step(self.state.agent, agents);
+            }
+            Focus::Agent => {
+                self.state.scroll = if delta < 0 {
+                    self.state.scroll.saturating_sub(1)
+                } else {
+                    self.state.scroll.saturating_add(1)
+                };
+            }
+        }
+    }
+
+    pub(crate) fn render(&mut self, width: usize, theme: &Theme) -> Vec<String> {
+        let snapshot = self.run.snapshot();
+        let version = *self.run.subscribe().borrow();
+        self.cache
+            .render(&self.state, &snapshot, version, width, theme)
+    }
+}
+
+impl ViewState {
     /// A key that identifies the current selection, so the cache knows when the
     /// view changed even though the run did not.
     fn state_key(&self) -> u64 {
@@ -119,135 +279,24 @@ impl WorkflowView {
             .unwrap_or_default()
     }
 
-    pub(crate) fn handle_key(&mut self, key: &KeyEvent) -> ViewAction {
-        let snapshot = self.run.snapshot();
-        match key.key {
-            Key::Escape | Key::Left => match self.focus {
-                Focus::Run => return ViewAction::Close,
-                Focus::Phase => {
-                    self.focus = Focus::Run;
-                    self.agent = 0;
-                }
-                Focus::Agent => {
-                    self.focus = Focus::Phase;
-                    self.scroll = 0;
-                }
-            },
-            Key::Enter | Key::Right => match self.focus {
-                Focus::Run => {
-                    if !snapshot.phases.is_empty() {
-                        self.focus = Focus::Phase;
-                        self.agent = 0;
-                    }
-                }
-                Focus::Phase => {
-                    if !Self::visible_agents(&snapshot, self.phase, self.filter).is_empty() {
-                        self.focus = Focus::Agent;
-                        self.scroll = 0;
-                    }
-                }
-                Focus::Agent => {}
-            },
-            Key::Up => self.move_selection(&snapshot, -1),
-            Key::Down => self.move_selection(&snapshot, 1),
-            Key::Char('k') if self.focus == Focus::Agent => {
-                self.scroll = self.scroll.saturating_sub(1);
-            }
-            Key::Char('j') if self.focus == Focus::Agent => {
-                self.scroll = self.scroll.saturating_add(1);
-            }
-            Key::Char('f') => {
-                self.filter = self.filter.next();
-                self.agent = 0;
-                if self.focus == Focus::Agent {
-                    self.focus = Focus::Phase;
-                }
-            }
-            Key::Char('p') => {
-                if self.run.is_paused() {
-                    self.run.resume();
-                } else {
-                    self.run.pause();
-                }
-            }
-            Key::Char('x') => match self.focus {
-                // On the run, `x` stops everything. Inside a phase it stops the
-                // one selected agent, whose `agent()` call then returns null
-                // and lets the rest of the script carry on.
-                Focus::Run => self.run.stop(),
-                Focus::Phase | Focus::Agent => {
-                    if let Some(agent) =
-                        Self::visible_agents(&snapshot, self.phase, self.filter).get(self.agent)
-                    {
-                        self.run.stop_agent(agent.id);
-                    }
-                }
-            },
-            Key::Char('r') if self.focus != Focus::Run => {
-                if let Some(agent) =
-                    Self::visible_agents(&snapshot, self.phase, self.filter).get(self.agent)
-                {
-                    self.run.restart_agent(agent.id);
-                }
-            }
-            Key::Char('s') => return ViewAction::Save,
-            _ => {}
-        }
-        ViewAction::None
-    }
-
-    fn move_selection(&mut self, snapshot: &RunSnapshot, delta: isize) {
-        let step = |current: usize, len: usize| -> usize {
-            if len == 0 {
-                return 0;
-            }
-            let next = current as isize + delta;
-            next.clamp(0, len as isize - 1) as usize
-        };
+    /// Draw one frame. This is the whole rendering path the terminal uses.
+    pub(crate) fn render(
+        &self,
+        snapshot: &RunSnapshot,
+        width: usize,
+        theme: &Theme,
+    ) -> Vec<String> {
         match self.focus {
-            Focus::Run => {
-                self.phase = step(self.phase, snapshot.phases.len());
-                self.agent = 0;
-            }
-            Focus::Phase => {
-                let agents = Self::visible_agents(snapshot, self.phase, self.filter).len();
-                self.agent = step(self.agent, agents);
-            }
-            Focus::Agent => {
-                self.scroll = if delta < 0 {
-                    self.scroll.saturating_sub(1)
-                } else {
-                    self.scroll.saturating_add(1)
-                };
-            }
+            Focus::Agent => self.render_agent(snapshot, width, theme),
+            _ => self.render_phases(snapshot, width, theme),
         }
-    }
-
-    pub(crate) fn render(&mut self, width: usize, theme: &Theme) -> Vec<String> {
-        let snapshot = self.run.snapshot();
-        let version = *self.run.subscribe().borrow();
-        let state = self.state_key();
-        if let Some((cached_width, cached_version, cached_state, lines)) = &self.cache
-            && *cached_width == width
-            && *cached_version == version
-            && *cached_state == state
-        {
-            return lines.clone();
-        }
-
-        let lines = match self.focus {
-            Focus::Agent => self.render_agent(&snapshot, width, theme),
-            _ => self.render_phases(&snapshot, width, theme),
-        };
-        self.cache = Some((width, version, state, lines.clone()));
-        lines
     }
 
     fn render_header(&self, snapshot: &RunSnapshot, width: usize, theme: &Theme) -> Vec<String> {
         let mut lines = Vec::new();
         lines.push(format!(
             "{} {}",
-            theme.fg("accent", &theme.bold(&self.run.name)),
+            theme.fg("accent", &theme.bold(&self.name)),
             theme.fg(
                 status_color(snapshot.status),
                 &format!(
@@ -260,11 +309,8 @@ impl WorkflowView {
                 )
             ),
         ));
-        if !self.run.description.is_empty() {
-            lines.push(theme.fg(
-                "muted",
-                &text::truncate_to_width(&self.run.description, width),
-            ));
+        if !self.description.is_empty() {
+            lines.push(theme.fg("muted", &text::truncate_to_width(&self.description, width)));
         }
         if let Some(error) = &snapshot.error {
             for line in text::wrap_text(error, width.saturating_sub(2)) {
@@ -315,7 +361,7 @@ impl WorkflowView {
             if !selected {
                 continue;
             }
-            let agents = Self::visible_agents(snapshot, index, self.filter);
+            let agents = ViewState::visible_agents(snapshot, index, self.filter);
             if agents.is_empty() {
                 let note = match self.filter {
                     Filter::All => "    no agents yet",
@@ -362,7 +408,7 @@ impl WorkflowView {
     }
 
     fn render_agent(&self, snapshot: &RunSnapshot, width: usize, theme: &Theme) -> Vec<String> {
-        let agents = Self::visible_agents(snapshot, self.phase, self.filter);
+        let agents = ViewState::visible_agents(snapshot, self.phase, self.filter);
         let Some(agent) = agents.get(self.agent) else {
             return self.render_phases(snapshot, width, theme);
         };
@@ -437,11 +483,7 @@ impl WorkflowView {
         } else {
             format!(" · showing {}", self.filter.label())
         };
-        let paused = if self.run.is_paused() {
-            " · PAUSED"
-        } else {
-            ""
-        };
+        let paused = if self.paused { " · PAUSED" } else { "" };
         text::truncate_to_width(&format!("{keys}{filter}{paused}"), width)
     }
 }
@@ -618,5 +660,95 @@ mod tests {
             ..plan
         };
         assert!(plan_summary(&unbounded).contains("an unbounded number of agents"));
+    }
+}
+
+#[cfg(test)]
+mod benchmarks {
+    use super::*;
+    use kiss_coding::workflows::{PhaseSnapshot, RunSnapshot};
+
+    fn large_snapshot() -> RunSnapshot {
+        let phases = ["Discover", "Audit", "Verify", "Rank", "Report"]
+            .iter()
+            .enumerate()
+            .map(|(phase, title)| {
+                let agents = (0..100u32)
+                    .map(|index| AgentSnapshot {
+                        id: phase as u32 * 100 + index,
+                        label: format!("{title} agent {index}"),
+                        status: AgentStatus::Completed,
+                        tokens: 1234,
+                        elapsed: Duration::from_secs(12),
+                        prompt: "audit this file for missing checks ".repeat(4),
+                        result: Some("a finding worth reporting ".repeat(8)),
+                        error: None,
+                    })
+                    .collect();
+                PhaseSnapshot {
+                    title: (*title).into(),
+                    agents,
+                    tokens: 123_400,
+                }
+            })
+            .collect();
+        RunSnapshot {
+            status: RunStatus::Running,
+            elapsed: Duration::from_secs(90),
+            log: vec!["auditing 500 files".into()],
+            phases,
+            tokens: 617_000,
+            error: None,
+        }
+    }
+
+    fn state(focus: Focus) -> ViewState {
+        ViewState {
+            focus,
+            phase: 1,
+            agent: 40,
+            scroll: 0,
+            filter: Filter::All,
+            name: "audit-tools".into(),
+            description: "Audit every tool file for missing path checks".into(),
+            paused: false,
+        }
+    }
+
+    #[test]
+    #[ignore = "release-mode performance benchmark"]
+    fn benchmark_performance_workflow_progress_view() {
+        // This measures the rendering the terminal actually runs, so a
+        // regression in the shipped path shows up here. Both frames a user sees
+        // are covered: the phase list, and one agent's output.
+        let snapshot = large_snapshot();
+        assert_eq!(snapshot.total_agents(), 500);
+        let theme = Theme::dark();
+        let phases = state(Focus::Phase);
+        let agent = state(Focus::Agent);
+
+        kiss_bench::measure(
+            "workflow_view_render_phases",
+            21,
+            200,
+            "500_agents_5_phases_width_100",
+            || phases.render(&snapshot, 100, &theme),
+        );
+        kiss_bench::measure(
+            "workflow_view_render_agent_detail",
+            21,
+            200,
+            "one_agent_prompt_and_result_width_100",
+            || agent.render(&snapshot, 100, &theme),
+        );
+        let mut cache = RenderCache::default();
+        cache.render(&phases, &snapshot, 7, 100, &theme);
+        kiss_bench::measure(
+            "workflow_view_render_warm",
+            21,
+            5_000,
+            "500_agents_5_phases_width_100_cached",
+            || cache.render(&phases, &snapshot, 7, 100, &theme),
+        );
     }
 }

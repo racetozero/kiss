@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Added
+
+- Added dynamic workflows with deterministic orchestration scripts, parallel
+  child agents, approval and progress views, saved slash commands, and run
+  controls.
+
 ## 0.0.2 - 2026-09-01
 
 ### Added

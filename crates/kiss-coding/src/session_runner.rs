@@ -195,10 +195,13 @@ impl AgentSession {
 
     pub fn update_settings(&self, settings: Settings) {
         let was_enabled = self.subagents_enabled();
+        let workflows_were_enabled = self.workflows_enabled();
         *self.settings.lock().unwrap() = settings;
         let is_enabled = self.subagents_enabled();
         if was_enabled && !is_enabled {
             self.stop_child_work();
+        } else if workflows_were_enabled && !self.workflows_enabled() {
+            self.stop_workflows();
         }
         self.rebuild_tools();
     }
@@ -206,12 +209,15 @@ impl AgentSession {
     /// Replace resources used by the next model request.
     pub fn reload_runtime(&self, settings: Settings, system_prompt: String, tools: Vec<DynTool>) {
         let was_enabled = self.subagents_enabled();
+        let workflows_were_enabled = self.workflows_enabled();
         *self.settings.lock().unwrap() = settings;
         *self.system_prompt.lock().unwrap() = system_prompt;
         *self.base_tools.lock().unwrap() = tools;
         let is_enabled = self.subagents_enabled();
         if was_enabled && !is_enabled {
             self.stop_child_work();
+        } else if workflows_were_enabled && !self.workflows_enabled() {
+            self.stop_workflows();
         }
         self.rebuild_tools();
     }
@@ -221,6 +227,12 @@ impl AgentSession {
         if let Some(runtime) = self.subagents.get() {
             runtime.interrupt_all();
         }
+        if let Some(runtime) = self.workflows.get() {
+            runtime.stop_all();
+        }
+    }
+
+    fn stop_workflows(&self) {
         if let Some(runtime) = self.workflows.get() {
             runtime.stop_all();
         }
@@ -1493,6 +1505,51 @@ mod ephemeral_tests {
             ),
             || off.build_context(),
             || on.build_context(),
+        );
+    }
+
+    #[test]
+    #[ignore = "release-mode performance benchmark"]
+    fn benchmark_performance_workflow_tool_exposure() {
+        // An ordinary coding turn must pay nothing for dynamic workflows. The
+        // disarmed session is the baseline; the armed one carries the extra
+        // tool and the authoring instructions.
+        let registry = Registry::from_builtin();
+        let model = registry.all().first().expect("built-in model").clone();
+        let tools = benchmark_tools();
+        let make_session = || {
+            let mut settings = Settings::default();
+            settings.subagents.enabled = true;
+            AgentSession::new_with_subagents_allowed(
+                SessionManager::in_memory(std::path::Path::new("/synthetic")),
+                tools.clone(),
+                registry.clone(),
+                settings,
+                "benchmark root prompt".into(),
+                model.clone(),
+                ThinkingLevel::Off,
+                None,
+                Arc::new(|_| {}),
+                true,
+            )
+        };
+
+        let disarmed = make_session();
+        let armed = make_session();
+        armed.arm_workflow();
+        kiss_bench::measure_pair(
+            (
+                "agent_context_build_workflow_disarmed",
+                "agent_context_build_workflow_armed",
+            ),
+            21,
+            10_000,
+            (
+                "empty_session_subagents_on_workflow_disarmed",
+                "empty_session_subagents_on_workflow_armed",
+            ),
+            || disarmed.build_context(),
+            || armed.build_context(),
         );
     }
 

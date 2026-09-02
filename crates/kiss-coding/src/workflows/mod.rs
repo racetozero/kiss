@@ -18,12 +18,13 @@ pub use store::{SaveLocation, SavedWorkflow, discover, save};
 // Re-exported so the terminal renders workflow state without depending on
 // `kiss-workflow` directly.
 pub use kiss_workflow::{
-    AgentId, AgentSnapshot, AgentStatus, PhaseSnapshot, RunSnapshot, RunStatus, Script,
+    AgentId, AgentOutcome, AgentSnapshot, AgentStatus, Journal, PhaseSnapshot, RunSnapshot,
+    RunStatus, Script,
 };
 
 use crate::session_runner::AgentSession;
 use kiss_agent::DynTool;
-use kiss_workflow::{Journal, Limits, Workflow};
+use kiss_workflow::{Limits, Workflow};
 use serde_json::Value;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, Weak};
@@ -117,6 +118,16 @@ pub struct WorkflowPlan {
 }
 
 impl WorkflowPlan {
+    pub fn from_script(script: &Script) -> WorkflowPlan {
+        WorkflowPlan {
+            name: script.meta().name.clone(),
+            description: script.meta().description.clone(),
+            phases: script.declared_phases().to_vec(),
+            estimated_agents: script.estimated_agents(),
+            source: Arc::from(script.source()),
+        }
+    }
+
     /// The agent count as shown to the user.
     ///
     /// A count is only stated when the script fixes it. Otherwise this says so,
@@ -167,7 +178,7 @@ impl WorkflowRuntime {
     /// This is a cost gate rather than a permission gate: one run can start
     /// hundreds of child agents, and the user should see that before it is
     /// spent. Modes with no way to answer, such as `-p`, start the run.
-    pub(crate) async fn approve(&self, plan: WorkflowPlan) -> ApprovalDecision {
+    pub async fn approve(&self, plan: WorkflowPlan) -> ApprovalDecision {
         let Some(parent) = self.parent.upgrade() else {
             return ApprovalDecision::Cancel;
         };

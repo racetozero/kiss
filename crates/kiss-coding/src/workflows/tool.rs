@@ -86,19 +86,15 @@ impl AgentTool for RunWorkflowTool {
         let script = Script::parse(&args.script)
             .map_err(|diagnostic| anyhow::anyhow!("{}", diagnostic.render(&args.script)))?;
 
-        let plan = WorkflowPlan {
-            name: args
-                .name
-                .filter(|name| !name.trim().is_empty())
-                .unwrap_or_else(|| script.meta().name.clone()),
-            description: args
-                .description
-                .filter(|text| !text.trim().is_empty())
-                .unwrap_or_else(|| script.meta().description.clone()),
-            phases: script.declared_phases().to_vec(),
-            estimated_agents: script.estimated_agents(),
-            source: Arc::from(script.source()),
-        };
+        let mut plan = WorkflowPlan::from_script(&script);
+        plan.name = args
+            .name
+            .filter(|name| !name.trim().is_empty())
+            .unwrap_or(plan.name);
+        plan.description = args
+            .description
+            .filter(|text| !text.trim().is_empty())
+            .unwrap_or(plan.description);
 
         if self.0.approve(plan).await == ApprovalDecision::Cancel {
             return Ok(ToolResult::text(

@@ -647,3 +647,100 @@ mod tests {
         assert!(error.message.contains("an agent that failed returns null"));
     }
 }
+
+#[cfg(test)]
+mod benchmarks {
+    use super::*;
+    use crate::runner::{AgentOutcome, AgentRequest};
+    use tokio_util::sync::CancellationToken;
+
+    /// Answers instantly, so a measurement is interpreter time and nothing else.
+    struct InstantRunner;
+
+    #[async_trait::async_trait]
+    impl AgentRunner for InstantRunner {
+        async fn run_agent(&self, _r: AgentRequest, _c: CancellationToken) -> AgentOutcome {
+            AgentOutcome::Done(Json::String("ok".into()))
+        }
+    }
+
+    #[test]
+    #[ignore = "release-mode performance benchmark"]
+    fn benchmark_performance_workflow_interpreter() {
+        // One thousand orchestrated agents against a runner that returns at
+        // once. Everything measured here is local work: the real cost of a run
+        // is the model calls this deliberately leaves out.
+        let source = format!(
+            "{}\nconst out = await pipeline(args, item => agent(`check ${{item}}`))\n\
+             return out.filter(Boolean).length",
+            "export const meta = { name: 'bench', description: 'Interpreter benchmark' }",
+        );
+        let args = Json::Array((0..1000).map(Json::from).collect());
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_all()
+            .build()
+            .expect("benchmark runtime");
+
+        kiss_bench::measure(
+            "workflow_interpreter_1000_agents",
+            9,
+            1,
+            "pipeline_over_1000_items_instant_runner",
+            || {
+                runtime.block_on(async {
+                    let workflow = Workflow::new(
+                        Script::parse(&source).expect("benchmark script parses"),
+                        args.clone(),
+                        "/repo".into(),
+                        Arc::new(InstantRunner),
+                        Limits::default(),
+                    );
+                    workflow.run().await.expect("the benchmark run succeeds")
+                })
+            },
+        );
+    }
+
+    #[test]
+    #[ignore = "release-mode performance benchmark"]
+    fn benchmark_performance_workflow_snapshot() {
+        // The terminal rebuilds a snapshot once per change, so this is the
+        // per-frame cost of watching a large run.
+        let state = crate::progress::RunState::new(&[
+            "Discover".into(),
+            "Audit".into(),
+            "Verify".into(),
+            "Rank".into(),
+            "Report".into(),
+        ]);
+        for phase in ["Discover", "Audit", "Verify", "Rank", "Report"] {
+            state.set_phase(phase);
+            for index in 0..100u32 {
+                state.register_agent(index, format!("{phase} agent {index}"), "prompt".into());
+                state.agent_started(index);
+                state.agent_finished(
+                    index,
+                    crate::progress::AgentStatus::Completed,
+                    Some("a result".into()),
+                    None,
+                    1234,
+                );
+            }
+        }
+        assert_eq!(state.snapshot().total_agents(), 500);
+
+        kiss_bench::measure(
+            "workflow_snapshot_500_agents",
+            21,
+            200,
+            "rebuild_snapshot_5_phases_500_agents",
+            || {
+                // A change first, so each sample builds a snapshot rather than
+                // returning the cached one.
+                state.log("tick".into());
+                state.snapshot()
+            },
+        );
+    }
+}
