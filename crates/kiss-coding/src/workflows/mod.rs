@@ -12,7 +12,7 @@ mod runner;
 mod store;
 mod tool;
 
-pub use prompt::authoring_prompt;
+pub use prompt::{authoring_prompt, workflow_trigger};
 pub use store::{SaveLocation, SavedWorkflow, discover, save};
 
 // Re-exported so the terminal renders workflow state without depending on
@@ -22,7 +22,7 @@ pub use kiss_workflow::{
     RunStatus, Script,
 };
 
-use crate::session_runner::AgentSession;
+use crate::session_runner::{AgentSession, WorkflowTurnStatus};
 use kiss_agent::DynTool;
 use kiss_workflow::{Limits, Workflow};
 use serde_json::Value;
@@ -167,6 +167,17 @@ impl WorkflowRuntime {
     /// The tool the model calls to run a workflow it has written.
     pub(crate) fn tool(self: &Arc<Self>) -> DynTool {
         Arc::new(tool::RunWorkflowTool::new(self.clone()))
+    }
+
+    pub(crate) fn emit_outcome(
+        &self,
+        run: Option<RunId>,
+        name: String,
+        status: WorkflowTurnStatus,
+    ) {
+        if let Some(parent) = self.parent.upgrade() {
+            parent.emit_workflow_outcome(run, name, status);
+        }
     }
 
     pub(crate) fn limits(&self) -> Limits {

@@ -1,9 +1,10 @@
 //! Opt-in, in-process subagent sessions and Codex-style control tools.
 
+use crate::child_turn;
 use crate::session_runner::AgentSession;
 use anyhow::{Context as _, Result};
 use kiss_agent::{AgentMessage, AgentTool, DynTool, ToolResult, ToolUpdateSink};
-use kiss_ai::{StopReason, Usage};
+use kiss_ai::StopReason;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::HashMap;
@@ -241,24 +242,17 @@ impl SubagentRuntime {
             }
             runtime.signal_activity();
 
-            let usage_before = record.session.totals();
-            record
-                .session
-                .prompt(vec![AgentMessage::user(prompt)])
-                .await;
-            let usage_after = record.session.totals();
-            if let Some(parent) = runtime.parent.upgrade() {
-                parent.record_subagent_usage(usage_delta(usage_after, usage_before));
-            }
+            let outcome =
+                child_turn::run_child_turn(&runtime.parent, &record.session, prompt, None, None)
+                    .await;
             drop(permit);
 
             let interrupted = record.state.lock().unwrap().status == AgentStatus::Interrupted;
             if !interrupted {
-                let (status, result, error) = turn_outcome(&record.session);
                 let mut state = record.state.lock().unwrap();
-                state.status = status;
-                state.result = result;
-                state.error = error;
+                state.status = outcome.status;
+                state.result = outcome.result;
+                state.error = outcome.error;
             }
             runtime.signal_activity();
         });
@@ -369,26 +363,6 @@ impl SubagentRuntime {
         self.records.lock().unwrap().clear();
         self.targets.lock().unwrap().clear();
         self.signal_activity();
-    }
-}
-
-fn usage_delta(after: Usage, before: Usage) -> Usage {
-    Usage {
-        input: after.input.saturating_sub(before.input),
-        output: after.output.saturating_sub(before.output),
-        cache_read: after.cache_read.saturating_sub(before.cache_read),
-        cache_write: after.cache_write.saturating_sub(before.cache_write),
-        reasoning: after
-            .reasoning
-            .map(|after| after.saturating_sub(before.reasoning.unwrap_or_default())),
-        total_tokens: after.total_tokens.saturating_sub(before.total_tokens),
-        cost: kiss_ai::Cost {
-            input: (after.cost.input - before.cost.input).max(0.0),
-            output: (after.cost.output - before.cost.output).max(0.0),
-            cache_read: (after.cost.cache_read - before.cost.cache_read).max(0.0),
-            cache_write: (after.cost.cache_write - before.cost.cache_write).max(0.0),
-            total: (after.cost.total - before.cost.total).max(0.0),
-        },
     }
 }
 

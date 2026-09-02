@@ -6,7 +6,7 @@ use crate::setup::build_startup;
 use anyhow::Result;
 use kiss_agent::AgentEvent;
 use kiss_ai::AssistantEvent;
-use kiss_coding::session_runner::SessionEvent;
+use kiss_coding::session_runner::{SessionEvent, WorkflowTurnStatus};
 use serde_json::{Value, json};
 use std::io::Read;
 use std::sync::Arc;
@@ -152,6 +152,15 @@ pub fn event_json(event: &SessionEvent) -> Option<Value> {
         SessionEvent::Workflow { run, version } => {
             json!({"type": "workflow_progress", "run": run, "version": version})
         }
+        SessionEvent::WorkflowOutcome { run, name, status } => {
+            let status = match status {
+                WorkflowTurnStatus::Cancelled => "cancelled",
+                WorkflowTurnStatus::Completed => "completed",
+                WorkflowTurnStatus::Failed => "failed",
+                WorkflowTurnStatus::Stopped => "stopped",
+            };
+            json!({"type": "workflow_outcome", "run": run, "name": name, "status": status})
+        }
     })
 }
 
@@ -178,9 +187,35 @@ pub async fn run(args: &Args) -> Result<i32> {
     if prompt.trim().is_empty() {
         anyhow::bail!("no prompt provided");
     }
+    let prompt_mode = startup.session.prompt_mode_for(&prompt);
     startup
         .session
-        .prompt(vec![kiss_agent::AgentMessage::user(prompt)])
+        .prompt_with_mode(vec![kiss_agent::AgentMessage::user(prompt)], prompt_mode)
         .await;
     Ok(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn workflow_outcomes_have_a_controller_owned_json_event() {
+        let event = event_json(&SessionEvent::WorkflowOutcome {
+            run: None,
+            name: "audit".into(),
+            status: WorkflowTurnStatus::Cancelled,
+        })
+        .expect("workflow outcome event");
+
+        assert_eq!(
+            event,
+            json!({
+                "type": "workflow_outcome",
+                "run": null,
+                "name": "audit",
+                "status": "cancelled"
+            })
+        );
+    }
 }

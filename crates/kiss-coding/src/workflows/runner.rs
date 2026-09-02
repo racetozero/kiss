@@ -1,14 +1,12 @@
 //! Running one workflow agent as a real KISS child session.
 
+use crate::child_turn;
 use crate::session_runner::AgentSession;
-use crate::subagents::{ForkTurns, turn_outcome};
-use kiss_agent::AgentMessage;
-use kiss_ai::Usage;
+use crate::subagents::ForkTurns;
 use kiss_workflow::{AgentId, AgentOutcome, AgentRequest, AgentRunner};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, Weak};
-use std::time::Duration;
 use tokio::sync::Semaphore;
 use tokio_util::sync::CancellationToken;
 
@@ -68,24 +66,24 @@ impl AgentRunner for SessionAgentRunner {
             None => request.prompt.clone(),
         };
 
-        let usage_before = child.totals();
-        run_child_turn(&child, prompt, &cancel, request.timeout_ms).await;
-        let usage_after = child.totals();
-        let used = usage_delta(usage_after, usage_before);
+        let outcome = child_turn::run_child_turn(
+            &self.parent,
+            &child,
+            prompt,
+            Some(cancel.clone()),
+            request.timeout_ms,
+        )
+        .await;
         if let Ok(mut tokens) = self.tokens.lock() {
-            *tokens.entry(request.index).or_default() += used.total_tokens;
+            *tokens.entry(request.index).or_default() += outcome.usage.total_tokens;
         }
-        // A workflow agent's cost belongs to the session that started it, so the
-        // footer's running total stays honest.
-        parent.record_subagent_usage(used);
 
-        let (status, result, error) = turn_outcome(&child);
         if cancel.is_cancelled() {
             return AgentOutcome::Stopped;
         }
-        match status {
+        match outcome.status {
             crate::subagents::AgentStatus::Completed => {
-                let text = result.unwrap_or_default();
+                let text = outcome.result.unwrap_or_default();
                 match &request.schema {
                     Some(schema) => match parse_structured(&text, schema) {
                         Ok(value) => AgentOutcome::Done(value),
@@ -97,7 +95,7 @@ impl AgentRunner for SessionAgentRunner {
                 }
             }
             crate::subagents::AgentStatus::Interrupted => AgentOutcome::Stopped,
-            _ => AgentOutcome::Failed(error.unwrap_or_else(|| "the agent failed".into())),
+            _ => AgentOutcome::Failed(outcome.error.unwrap_or_else(|| "the agent failed".into())),
         }
     }
 
@@ -108,36 +106,6 @@ impl AgentRunner for SessionAgentRunner {
             .and_then(|tokens| tokens.get(&index).copied())
             .unwrap_or(0)
     }
-}
-
-/// Run one child turn, stopping it when the run is cancelled or time runs out.
-///
-/// The turn is always awaited to completion. Cancelling means asking the child
-/// to abort and letting it finish, rather than dropping its future, so the
-/// child's session is left in a consistent state.
-async fn run_child_turn(
-    child: &Arc<AgentSession>,
-    prompt: String,
-    cancel: &CancellationToken,
-    timeout_ms: Option<u64>,
-) {
-    let guard_child = child.clone();
-    let guard_cancel = cancel.clone();
-    let guard = tokio::spawn(async move {
-        match timeout_ms {
-            Some(ms) => {
-                tokio::select! {
-                    _ = guard_cancel.cancelled() => {}
-                    _ = tokio::time::sleep(Duration::from_millis(ms)) => {}
-                }
-            }
-            None => guard_cancel.cancelled().await,
-        }
-        guard_child.abort();
-    });
-
-    child.prompt(vec![AgentMessage::user(prompt)]).await;
-    guard.abort();
 }
 
 /// A task name for the child session, within the name rules `spawn_agent` uses.
@@ -198,26 +166,6 @@ fn strip_code_fence(text: &str) -> &str {
         .strip_suffix("```")
         .map(str::trim)
         .unwrap_or(text)
-}
-
-fn usage_delta(after: Usage, before: Usage) -> Usage {
-    Usage {
-        input: after.input.saturating_sub(before.input),
-        output: after.output.saturating_sub(before.output),
-        cache_read: after.cache_read.saturating_sub(before.cache_read),
-        cache_write: after.cache_write.saturating_sub(before.cache_write),
-        reasoning: after
-            .reasoning
-            .map(|after| after.saturating_sub(before.reasoning.unwrap_or_default())),
-        total_tokens: after.total_tokens.saturating_sub(before.total_tokens),
-        cost: kiss_ai::Cost {
-            input: (after.cost.input - before.cost.input).max(0.0),
-            output: (after.cost.output - before.cost.output).max(0.0),
-            cache_read: (after.cost.cache_read - before.cost.cache_read).max(0.0),
-            cache_write: (after.cost.cache_write - before.cost.cache_write).max(0.0),
-            total: (after.cost.total - before.cost.total).max(0.0),
-        },
-    }
 }
 
 #[cfg(test)]

@@ -2,6 +2,7 @@
 //! project context, skills, prompt templates, search tools, and the
 //! AgentSession facade.
 
+mod child_turn;
 pub mod compaction;
 pub mod context_files;
 pub mod prompts;
@@ -18,6 +19,7 @@ pub mod workflows;
 pub use session::entry::{SessionEntry, SessionHeader};
 pub use session::manager::{SessionListing, SessionManager, default_session_dir};
 pub use session_runner::{
-    AgentSession, EphemeralResponse, SessionEvent, SessionEventSink, TreeNavigationOutcome,
+    AgentSession, EphemeralResponse, PromptMode, SessionEvent, SessionEventSink,
+    TreeNavigationOutcome, WorkflowTurnStatus,
 };
 pub use settings::Settings;

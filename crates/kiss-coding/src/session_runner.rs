@@ -50,9 +50,42 @@ pub enum SessionEvent {
         run: crate::workflows::RunId,
         version: u64,
     },
+    /// The verified result of a workflow tool call. Frontends show this after
+    /// the assistant answer so model text cannot replace the real run state.
+    WorkflowOutcome {
+        run: Option<crate::workflows::RunId>,
+        name: String,
+        status: WorkflowTurnStatus,
+    },
 }
 
 pub type SessionEventSink = Arc<dyn Fn(SessionEvent) + Send + Sync>;
+
+/// Tools and instructions that belong to one submitted user turn.
+///
+/// Workflow mode is explicit and local to the prompt invocation. This keeps
+/// one prompt from enabling or disabling workflow tools for another prompt.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum PromptMode {
+    #[default]
+    Ordinary,
+    Workflow,
+}
+
+/// The result that the workflow runtime, rather than the model, observed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkflowTurnStatus {
+    Cancelled,
+    Completed,
+    Failed,
+    Stopped,
+}
+
+#[derive(Clone)]
+struct QueuedPrompt {
+    message: AgentMessage,
+    mode: PromptMode,
+}
 
 pub struct TreeNavigationOutcome {
     pub editor_text: Option<String>,
@@ -75,8 +108,8 @@ pub struct AgentSession {
     system_prompt: Mutex<String>,
     model: Mutex<Model>,
     thinking: Mutex<ThinkingLevel>,
-    steering: Arc<Mutex<VecDeque<AgentMessage>>>,
-    follow_up: Arc<Mutex<VecDeque<AgentMessage>>>,
+    steering: Arc<Mutex<VecDeque<QueuedPrompt>>>,
+    follow_up: Arc<Mutex<VecDeque<QueuedPrompt>>>,
     cancel: Mutex<CancellationToken>,
     running: Mutex<bool>,
     totals: Mutex<Usage>,
@@ -86,15 +119,21 @@ pub struct AgentSession {
     subagents_allowed: bool,
     subagents: OnceLock<Arc<SubagentRuntime>>,
     workflows: OnceLock<Arc<WorkflowRuntime>>,
-    /// Workflow mode is armed for one turn at a time, by the `/workflow`
-    /// command, by a keyword the user typed, or by running a saved workflow.
-    workflow_armed: Mutex<bool>,
     workflow_approver: Mutex<Option<WorkflowApprover>>,
 }
 
 impl AgentSession {
     pub(crate) fn emit_workflow(&self, run: crate::workflows::RunId, version: u64) {
         (self.sink)(SessionEvent::Workflow { run, version });
+    }
+
+    pub(crate) fn emit_workflow_outcome(
+        &self,
+        run: Option<crate::workflows::RunId>,
+        name: String,
+        status: WorkflowTurnStatus,
+    ) {
+        (self.sink)(SessionEvent::WorkflowOutcome { run, name, status });
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -156,7 +195,6 @@ impl AgentSession {
             subagents_allowed,
             subagents: OnceLock::new(),
             workflows: OnceLock::new(),
-            workflow_armed: Mutex::new(false),
             workflow_approver: Mutex::new(None),
         });
         if subagents_allowed {
@@ -248,29 +286,20 @@ impl AgentSession {
         self.subagents_enabled() && self.settings.lock().unwrap().workflows.enabled
     }
 
-    pub fn workflows(&self) -> Option<Arc<WorkflowRuntime>> {
-        self.workflows.get().cloned()
-    }
-
-    /// Offer the workflow tool and its instructions on the next request.
-    ///
-    /// Arming is per turn because the instructions are long: they define a
-    /// whole scripting language, and an ordinary coding turn should not pay for
-    /// a feature it does not use.
-    pub fn arm_workflow(&self) {
-        *self.workflow_armed.lock().unwrap() = true;
-        self.rebuild_tools();
-    }
-
-    pub fn disarm_workflow(&self) {
-        let was_armed = std::mem::replace(&mut *self.workflow_armed.lock().unwrap(), false);
-        if was_armed {
-            self.rebuild_tools();
+    /// Select workflow mode from one submitted user prompt.
+    pub fn prompt_mode_for(&self, text: &str) -> PromptMode {
+        if self.workflows_enabled()
+            && self.settings.lock().unwrap().workflows.keyword_trigger
+            && crate::workflows::workflow_trigger(text).is_some()
+        {
+            PromptMode::Workflow
+        } else {
+            PromptMode::Ordinary
         }
     }
 
-    pub fn workflow_armed(&self) -> bool {
-        *self.workflow_armed.lock().unwrap()
+    pub fn workflows(&self) -> Option<Arc<WorkflowRuntime>> {
+        self.workflows.get().cloned()
     }
 
     /// Install the callback that asks the user to approve a run.
@@ -282,10 +311,6 @@ impl AgentSession {
         self.workflow_approver.lock().unwrap().clone()
     }
 
-    fn workflow_tool_active(&self) -> bool {
-        self.workflows_enabled() && self.workflow_armed()
-    }
-
     fn rebuild_tools(&self) {
         let mut tools = self.base_tools.lock().unwrap().clone();
         if self.subagents_enabled()
@@ -293,18 +318,32 @@ impl AgentSession {
         {
             tools.extend(runtime.control_tools());
         }
-        if self.workflow_tool_active()
+        *self.tools.lock().unwrap() = tools;
+    }
+
+    fn tools_for(&self, mode: PromptMode) -> Vec<DynTool> {
+        let mut tools = self.tools.lock().unwrap().clone();
+        if mode == PromptMode::Workflow
+            && self.workflows_enabled()
             && let Some(runtime) = self.workflows.get()
         {
             tools.push(runtime.tool());
         }
-        *self.tools.lock().unwrap() = tools;
+        tools
     }
 
     pub fn available_tool_names(&self) -> Vec<String> {
         self.tools
             .lock()
             .unwrap()
+            .iter()
+            .map(|tool| tool.name().to_string())
+            .collect()
+    }
+
+    #[cfg(test)]
+    fn available_tool_names_for(&self, mode: PromptMode) -> Vec<String> {
+        self.tools_for(mode)
             .iter()
             .map(|tool| tool.name().to_string())
             .collect()
@@ -472,19 +511,45 @@ impl AgentSession {
     }
 
     pub fn queue_steering(&self, message: AgentMessage) {
-        self.steering.lock().unwrap().push_back(message);
+        self.queue_steering_with_mode(message, PromptMode::Ordinary);
+    }
+
+    pub fn queue_steering_with_mode(&self, message: AgentMessage, mode: PromptMode) {
+        self.steering
+            .lock()
+            .unwrap()
+            .push_back(QueuedPrompt { message, mode });
         self.emit_queues();
     }
 
     pub fn queue_follow_up(&self, message: AgentMessage) {
-        self.follow_up.lock().unwrap().push_back(message);
+        self.queue_follow_up_with_mode(message, PromptMode::Ordinary);
+    }
+
+    pub fn queue_follow_up_with_mode(&self, message: AgentMessage, mode: PromptMode) {
+        self.follow_up
+            .lock()
+            .unwrap()
+            .push_back(QueuedPrompt { message, mode });
         self.emit_queues();
     }
 
     /// Drain both queues back to the caller (Escape restores to editor).
     pub fn reclaim_queued(&self) -> Vec<AgentMessage> {
-        let mut out: Vec<AgentMessage> = self.steering.lock().unwrap().drain(..).collect();
-        out.extend(self.follow_up.lock().unwrap().drain(..));
+        let mut out: Vec<AgentMessage> = self
+            .steering
+            .lock()
+            .unwrap()
+            .drain(..)
+            .map(|prompt| prompt.message)
+            .collect();
+        out.extend(
+            self.follow_up
+                .lock()
+                .unwrap()
+                .drain(..)
+                .map(|prompt| prompt.message),
+        );
         self.emit_queues();
         out
     }
@@ -494,9 +559,9 @@ impl AgentSession {
     }
 
     fn emit_queues(&self) {
-        let preview = |q: &VecDeque<AgentMessage>| {
+        let preview = |q: &VecDeque<QueuedPrompt>| {
             q.iter()
-                .map(|m| match m {
+                .map(|prompt| match &prompt.message {
                     AgentMessage::User(u) => u.content.as_text().chars().take(80).collect(),
                     other => other.role().to_string(),
                 })
@@ -520,7 +585,11 @@ impl AgentSession {
             .flatten()
     }
 
-    fn loop_config(&self, session_arc: &Arc<Self>) -> AgentLoopConfig {
+    fn loop_config(
+        &self,
+        session_arc: &Arc<Self>,
+        active_prompt_mode: Arc<Mutex<PromptMode>>,
+    ) -> AgentLoopConfig {
         let mut config = AgentLoopConfig::new(self.model());
         config.thinking_level = self.thinking_level();
         config.session_id = Some(self.manager.lock().unwrap().session_id().to_string());
@@ -545,6 +614,7 @@ impl AgentSession {
         }));
 
         let steering = self.steering.clone();
+        let steering_for_mode = self.steering.clone();
         let steering_mode = settings.steering_mode;
         let session_for_queues = session_arc.clone();
         config.get_steering_messages = Some(Arc::new(move || {
@@ -553,6 +623,7 @@ impl AgentSession {
             Box::pin(async move { drained })
         }));
         let follow_up = self.follow_up.clone();
+        let follow_up_for_mode = self.follow_up.clone();
         let follow_up_mode = settings.follow_up_mode;
         let session_for_queues = session_arc.clone();
         config.get_follow_up_messages = Some(Arc::new(move || {
@@ -564,31 +635,55 @@ impl AgentSession {
         config.prepare_next_turn = Some(Arc::new(move |turn| {
             let has_tool_results = !turn.tool_results.is_empty();
             let session = session_for_compaction.clone();
+            let active_prompt_mode = active_prompt_mode.clone();
+            let steering_for_mode = steering_for_mode.clone();
+            let follow_up_for_mode = follow_up_for_mode.clone();
             Box::pin(async move {
-                if !has_tool_results {
-                    return None;
-                }
-                let settings = session.settings();
-                let cancel = session.cancel.lock().unwrap().clone();
-                let context_window = session.model().context_window;
-                let revision_before = {
-                    let manager = session.manager.lock().unwrap();
-                    let context = manager.build_session_context();
-                    if !auto_compaction_needed(
-                        &settings,
-                        &context.messages,
-                        context_window,
-                        cancel.is_cancelled(),
-                    ) {
-                        return None;
+                let queued_mode = queued_mode(&steering_for_mode, steering_mode)
+                    .or_else(|| queued_mode(&follow_up_for_mode, follow_up_mode));
+                let mode_changed = {
+                    let mut active = active_prompt_mode.lock().unwrap();
+                    let before = *active;
+                    if let Some(queued_mode) = queued_mode {
+                        *active = queued_mode;
+                    } else if *active == PromptMode::Workflow && !has_tool_results {
+                        // A workflow turn remains active across its tool call.
+                        // Its final assistant response has no tool results, so
+                        // the next queued or follow-up turn is ordinary again.
+                        *active = PromptMode::Ordinary;
                     }
-                    manager.context_revision()
+                    before != *active
                 };
 
-                session.compact(None, true).await;
-                let revision_after = session.manager.lock().unwrap().context_revision();
-                (revision_after != revision_before).then(|| TurnUpdate {
-                    context: Some(session.build_context()),
+                let mut context_changed = mode_changed;
+                if has_tool_results {
+                    let settings = session.settings();
+                    let cancel = session.cancel.lock().unwrap().clone();
+                    let context_window = session.model().context_window;
+                    let revision_before = {
+                        let manager = session.manager.lock().unwrap();
+                        let context = manager.build_session_context();
+                        if !auto_compaction_needed(
+                            &settings,
+                            &context.messages,
+                            context_window,
+                            cancel.is_cancelled(),
+                        ) {
+                            None
+                        } else {
+                            Some(manager.context_revision())
+                        }
+                    };
+
+                    if let Some(revision_before) = revision_before {
+                        session.compact(None, true).await;
+                        let revision_after = session.manager.lock().unwrap().context_revision();
+                        context_changed |= revision_after != revision_before;
+                    }
+                }
+
+                context_changed.then(|| TurnUpdate {
+                    context: Some(session.build_context_for(*active_prompt_mode.lock().unwrap())),
                     ..Default::default()
                 })
             })
@@ -597,6 +692,10 @@ impl AgentSession {
     }
 
     fn build_context(&self) -> AgentContext {
+        self.build_context_for(PromptMode::Ordinary)
+    }
+
+    fn build_context_for(&self, prompt_mode: PromptMode) -> AgentContext {
         let model = self.model();
         let manager = self.manager.lock().unwrap();
         let (openai_responses_input, messages) =
@@ -613,7 +712,8 @@ impl AgentSession {
             system_prompt.push_str("\n\n");
             system_prompt.push_str(SUBAGENT_SYSTEM_PROMPT);
         }
-        if self.workflow_tool_active()
+        if prompt_mode == PromptMode::Workflow
+            && self.workflows_enabled()
             && let Some(runtime) = self.workflows.get()
         {
             let limits = runtime.limits();
@@ -629,7 +729,7 @@ impl AgentSession {
             system_prompt,
             openai_responses_input,
             messages,
-            tools: self.tools.lock().unwrap().clone(),
+            tools: self.tools_for(prompt_mode),
         }
     }
 
@@ -702,7 +802,7 @@ impl AgentSession {
         max_tokens: u64,
         cancel: CancellationToken,
     ) -> anyhow::Result<EphemeralResponse> {
-        let mut config = self.loop_config(self);
+        let mut config = self.loop_config(self, Arc::new(Mutex::new(PromptMode::Ordinary)));
         config.thinking_level = ThinkingLevel::Off;
         config.max_tokens = Some(max_tokens);
         config.session_id = Some(format!("ephemeral-{}", uuid::Uuid::new_v4()));
@@ -827,13 +927,22 @@ impl AgentSession {
 
     /// Run one prompt to completion, including retry and auto-compaction.
     pub async fn prompt(self: &Arc<Self>, prompts: Vec<AgentMessage>) {
+        self.prompt_with_mode(prompts, PromptMode::Ordinary).await;
+    }
+
+    /// Run one prompt with tools and instructions selected for this turn.
+    pub async fn prompt_with_mode(
+        self: &Arc<Self>,
+        prompts: Vec<AgentMessage>,
+        prompt_mode: PromptMode,
+    ) {
         {
             let mut running = self.running.lock().unwrap();
             if *running {
                 // Already running: enqueue as steering instead.
                 drop(running);
                 for p in prompts {
-                    self.queue_steering(p);
+                    self.queue_steering_with_mode(p, prompt_mode);
                 }
                 return;
             }
@@ -859,8 +968,9 @@ impl AgentSession {
             (session.sink)(SessionEvent::Agent(Box::new(event)));
         });
 
-        let mut config = self.loop_config(self);
-        let mut context = self.build_context();
+        let active_prompt_mode = Arc::new(Mutex::new(prompt_mode));
+        let mut config = self.loop_config(self, active_prompt_mode.clone());
+        let mut context = self.build_context_for(prompt_mode);
         // The prompts were already persisted. Context includes them, so run
         // as a continuation without a second prompt list.
 
@@ -898,7 +1008,7 @@ impl AgentSession {
                     error,
                 });
                 tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
-                context = self.build_context();
+                context = self.build_context_for(*active_prompt_mode.lock().unwrap());
                 // Drop the trailing error assistant message from context.
                 while matches!(
                     context.messages.last(),
@@ -924,9 +1034,6 @@ impl AgentSession {
             break;
         }
 
-        // Workflow mode covers the turn the user armed it for, and no more, so
-        // the next ordinary turn carries neither the tool nor its instructions.
-        self.disarm_workflow();
         *self.running.lock().unwrap() = false;
     }
 
@@ -1187,11 +1294,27 @@ fn transcript_excerpt(messages: &[AgentMessage], max_messages: usize, max_chars:
     format!("[earlier text omitted]\n{tail}")
 }
 
-fn drain_queue(queue: &Arc<Mutex<VecDeque<AgentMessage>>>, mode: QueueMode) -> Vec<AgentMessage> {
+fn drain_queue(queue: &Arc<Mutex<VecDeque<QueuedPrompt>>>, mode: QueueMode) -> Vec<AgentMessage> {
     let mut q = queue.lock().unwrap();
     match mode {
-        QueueMode::All => q.drain(..).collect(),
-        QueueMode::OneAtATime => q.pop_front().into_iter().collect(),
+        QueueMode::All => q.drain(..).map(|prompt| prompt.message).collect(),
+        QueueMode::OneAtATime => q
+            .pop_front()
+            .map(|prompt| prompt.message)
+            .into_iter()
+            .collect(),
+    }
+}
+
+fn queued_mode(queue: &Arc<Mutex<VecDeque<QueuedPrompt>>>, mode: QueueMode) -> Option<PromptMode> {
+    let queue = queue.lock().unwrap();
+    match mode {
+        QueueMode::All => queue
+            .iter()
+            .any(|prompt| prompt.mode == PromptMode::Workflow)
+            .then_some(PromptMode::Workflow)
+            .or_else(|| (!queue.is_empty()).then_some(PromptMode::Ordinary)),
+        QueueMode::OneAtATime => queue.front().map(|prompt| prompt.mode),
     }
 }
 
@@ -1346,7 +1469,7 @@ mod ephemeral_tests {
     }
 
     #[test]
-    fn the_workflow_tool_appears_only_while_a_turn_is_armed() {
+    fn the_workflow_tool_appears_only_in_workflow_prompt_mode() {
         let mut settings = Settings::default();
         settings.subagents.enabled = true;
         let session = settings_test_session(settings, true);
@@ -1358,6 +1481,14 @@ mod ephemeral_tests {
                 .available_tool_names()
                 .contains(&"run_workflow".into())
         );
+        assert_eq!(
+            session.prompt_mode_for("run a dynamic workflow for this task"),
+            PromptMode::Workflow
+        );
+        assert_eq!(
+            session.prompt_mode_for("fix this small function"),
+            PromptMode::Ordinary
+        );
         assert!(
             !session
                 .build_context()
@@ -1365,20 +1496,17 @@ mod ephemeral_tests {
                 .contains("Writing a dynamic workflow")
         );
 
-        session.arm_workflow();
         assert!(
             session
-                .available_tool_names()
+                .available_tool_names_for(PromptMode::Workflow)
                 .contains(&"run_workflow".into())
         );
         assert!(
             session
-                .build_context()
+                .build_context_for(PromptMode::Workflow)
                 .system_prompt
                 .contains("Writing a dynamic workflow")
         );
-
-        session.disarm_workflow();
         assert!(
             !session
                 .available_tool_names()
@@ -1387,15 +1515,14 @@ mod ephemeral_tests {
     }
 
     #[test]
-    fn arming_a_workflow_does_nothing_while_subagents_are_off() {
+    fn workflow_prompt_mode_does_nothing_while_subagents_are_off() {
         // Workflows are built on child agents, so the subagent setting is the
         // authority for both.
         let session = settings_test_session(Settings::default(), true);
         assert!(!session.workflows_enabled());
-        session.arm_workflow();
         assert!(
             !session
-                .available_tool_names()
+                .available_tool_names_for(PromptMode::Workflow)
                 .contains(&"run_workflow".into())
         );
 
@@ -1406,7 +1533,7 @@ mod ephemeral_tests {
         assert!(!session.workflows_enabled());
         assert!(
             !session
-                .available_tool_names()
+                .available_tool_names_for(PromptMode::Workflow)
                 .contains(&"run_workflow".into())
         );
 
@@ -1415,8 +1542,32 @@ mod ephemeral_tests {
         assert!(session.workflows_enabled());
         assert!(
             session
-                .available_tool_names()
+                .available_tool_names_for(PromptMode::Workflow)
                 .contains(&"run_workflow".into())
+        );
+    }
+
+    #[test]
+    fn one_at_a_time_queues_keep_each_prompts_mode() {
+        let queue = Arc::new(Mutex::new(VecDeque::from([
+            QueuedPrompt {
+                message: AgentMessage::user("ordinary"),
+                mode: PromptMode::Ordinary,
+            },
+            QueuedPrompt {
+                message: AgentMessage::user("workflow"),
+                mode: PromptMode::Workflow,
+            },
+        ])));
+
+        assert_eq!(
+            queued_mode(&queue, QueueMode::OneAtATime),
+            Some(PromptMode::Ordinary)
+        );
+        assert_eq!(drain_queue(&queue, QueueMode::OneAtATime).len(), 1);
+        assert_eq!(
+            queued_mode(&queue, QueueMode::OneAtATime),
+            Some(PromptMode::Workflow)
         );
     }
 
@@ -1534,9 +1685,8 @@ mod ephemeral_tests {
             )
         };
 
-        let disarmed = make_session();
-        let armed = make_session();
-        armed.arm_workflow();
+        let ordinary = make_session();
+        let workflow = make_session();
         kiss_bench::measure_pair(
             (
                 "agent_context_build_workflow_disarmed",
@@ -1548,8 +1698,8 @@ mod ephemeral_tests {
                 "empty_session_subagents_on_workflow_disarmed",
                 "empty_session_subagents_on_workflow_armed",
             ),
-            || disarmed.build_context(),
-            || armed.build_context(),
+            || ordinary.build_context_for(PromptMode::Ordinary),
+            || workflow.build_context_for(PromptMode::Workflow),
         );
     }
 

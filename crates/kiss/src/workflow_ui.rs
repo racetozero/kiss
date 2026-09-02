@@ -78,7 +78,6 @@ pub(crate) struct ViewState {
     filter: Filter,
     name: String,
     description: String,
-    paused: bool,
 }
 
 /// The state of one open progress view.
@@ -125,7 +124,6 @@ impl WorkflowView {
             filter: Filter::All,
             name: run.name.clone(),
             description: run.description.clone(),
-            paused: run.is_paused(),
         };
         WorkflowView {
             run,
@@ -403,7 +401,10 @@ impl ViewState {
         }
 
         lines.push(String::new());
-        lines.push(theme.fg("dim", &self.footer(width)));
+        lines.push(theme.fg(
+            "dim",
+            &self.footer(width, snapshot.status == RunStatus::Paused),
+        ));
         lines
     }
 
@@ -466,11 +467,14 @@ impl ViewState {
         }
 
         lines.push(String::new());
-        lines.push(theme.fg("dim", &self.footer(width)));
+        lines.push(theme.fg(
+            "dim",
+            &self.footer(width, snapshot.status == RunStatus::Paused),
+        ));
         lines
     }
 
-    fn footer(&self, width: usize) -> String {
+    fn footer(&self, width: usize, paused: bool) -> String {
         let keys = match self.focus {
             Focus::Agent => "j/k scroll · esc back · x stop · r restart · p pause · s save",
             Focus::Phase => {
@@ -483,7 +487,7 @@ impl ViewState {
         } else {
             format!(" · showing {}", self.filter.label())
         };
-        let paused = if self.paused { " · PAUSED" } else { "" };
+        let paused = if paused { " · PAUSED" } else { "" };
         text::truncate_to_width(&format!("{keys}{filter}{paused}"), width)
     }
 }
@@ -711,8 +715,25 @@ mod benchmarks {
             filter: Filter::All,
             name: "audit-tools".into(),
             description: "Audit every tool file for missing path checks".into(),
-            paused: false,
         }
+    }
+
+    #[test]
+    fn rendering_uses_the_current_snapshot_pause_state() {
+        let view = state(Focus::Run);
+        let mut snapshot = large_snapshot();
+        assert!(
+            view.render(&snapshot, 100, &Theme::dark())
+                .iter()
+                .all(|line| !line.contains("PAUSED"))
+        );
+
+        snapshot.status = RunStatus::Paused;
+        assert!(
+            view.render(&snapshot, 100, &Theme::dark())
+                .iter()
+                .any(|line| line.contains("PAUSED"))
+        );
     }
 
     #[test]

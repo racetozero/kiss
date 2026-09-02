@@ -6,6 +6,7 @@
 //! awaits it while the terminal keeps drawing and keeps handling keys.
 
 use super::{ApprovalDecision, WorkflowPlan, WorkflowRuntime};
+use crate::session_runner::WorkflowTurnStatus;
 use kiss_agent::{AgentTool, ExecutionMode, ToolResult, ToolUpdateSink};
 use kiss_workflow::Script;
 use serde::Deserialize;
@@ -96,7 +97,11 @@ impl AgentTool for RunWorkflowTool {
             .filter(|text| !text.trim().is_empty())
             .unwrap_or(plan.description);
 
+        let workflow_name = plan.name.clone();
+
         if self.0.approve(plan).await == ApprovalDecision::Cancel {
+            self.0
+                .emit_outcome(None, workflow_name, WorkflowTurnStatus::Cancelled);
             return Ok(ToolResult::text(
                 "The user did not approve this workflow, so nothing ran. Ask what they would \
                  like to change, or carry out the task directly instead.",
@@ -130,12 +135,22 @@ impl AgentTool for RunWorkflowTool {
 
         match outcome {
             Ok(Value::Null) if snapshot.status == kiss_workflow::RunStatus::Stopped => {
+                self.0.emit_outcome(
+                    Some(record.id),
+                    record.name.clone(),
+                    WorkflowTurnStatus::Stopped,
+                );
                 Ok(ToolResult::text(format!(
                     "The user stopped this workflow after {summary}. Completed results are kept, \
                      so relaunching the same script reuses them."
                 )))
             }
             Ok(value) => {
+                self.0.emit_outcome(
+                    Some(record.id),
+                    record.name.clone(),
+                    WorkflowTurnStatus::Completed,
+                );
                 let report = match value {
                     Value::String(text) => text,
                     Value::Null => "The workflow returned nothing.".to_string(),
@@ -145,9 +160,16 @@ impl AgentTool for RunWorkflowTool {
                     "{report}\n\n[workflow: {summary}]"
                 )))
             }
-            Err(error) => Err(anyhow::anyhow!(
-                "The workflow failed after {summary}.\n{error}"
-            )),
+            Err(error) => {
+                self.0.emit_outcome(
+                    Some(record.id),
+                    record.name.clone(),
+                    WorkflowTurnStatus::Failed,
+                );
+                Err(anyhow::anyhow!(
+                    "The workflow failed after {summary}.\n{error}"
+                ))
+            }
         }
     }
 }

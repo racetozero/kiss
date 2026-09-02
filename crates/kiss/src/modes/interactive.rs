@@ -9,8 +9,9 @@ use crate::workflow_ui::{self, ViewAction, WorkflowView};
 use anyhow::{Context as _, Result};
 use kiss_agent::{AgentEvent, AgentMessage};
 use kiss_ai::{AssistantEvent, ContentBlock, StopReason, ThinkingLevel, Transport};
-use kiss_coding::session_runner::SessionEvent;
+use kiss_coding::session_runner::{PromptMode, SessionEvent};
 use kiss_coding::settings::{MermaidRendering, QueueMode};
+use kiss_coding::workflows::workflow_trigger;
 use kiss_tui::{
     Action, Component, DiffRenderer, Editor, EditorSubmission, InputDecoder, InputEvent, Key,
     KeyEvent, Keybindings, MarkdownRenderer, MermaidMode, SelectItem, SelectList,
@@ -95,6 +96,8 @@ struct App {
     workflow_view: Option<WorkflowView>,
     /// Bumped whenever a workflow run changes, so the frame is marked dirty.
     workflow_version: u64,
+    /// Runtime-verified workflow results waiting for the end of this turn.
+    workflow_outcomes: Vec<String>,
 }
 
 struct BtwPanel {
@@ -1103,6 +1106,7 @@ pub async fn run(args: &Args) -> Result<i32> {
         mcp_config_paths: None,
         workflow_view: None,
         workflow_version: 0,
+        workflow_outcomes: Vec::new(),
     };
     if let Some(indent) = &settings.markdown.code_block_indent {
         app.md.code_indent = indent.clone();
@@ -1111,14 +1115,17 @@ pub async fn run(args: &Args) -> Result<i32> {
     update_thinking_border(&mut app, session.thinking_level());
     refresh_git_branch(&mut app, &session);
 
+    let (command_tx, mut command_rx) = mpsc::unbounded_channel::<CommandEvent>();
+
+    // Install the cost approval gate before any prompt can call a workflow.
+    session.set_workflow_approver(workflow_approver(&command_tx));
+
     // Kick off initial message if provided.
     if let Some(message) = initial_message {
-        if submit_after_startup
-            && session.workflows_enabled()
-            && session.settings().workflows.keyword_trigger
+        let prompt_mode = session.prompt_mode_for(&message);
+        if prompt_mode == PromptMode::Workflow
             && let Some(trigger) = workflow_trigger(&message)
         {
-            session.arm_workflow();
             app.cells.push(Cell::Notice(format!(
                 "running this as a dynamic workflow ({trigger}) · ctrl+w opens the progress view"
             )));
@@ -1127,7 +1134,9 @@ pub async fn run(args: &Args) -> Result<i32> {
         app.working = true;
         app.cells.push(Cell::User(message.clone()));
         tokio::spawn(async move {
-            session.prompt(vec![AgentMessage::user(message)]).await;
+            session
+                .prompt_with_mode(vec![AgentMessage::user(message)], prompt_mode)
+                .await;
         });
     }
 
@@ -1135,14 +1144,9 @@ pub async fn run(args: &Args) -> Result<i32> {
     let mut dirty = true;
     let mut next_render_at = Instant::now();
     let mut running_task: Option<tokio::task::JoinHandle<()>> = None;
-    let (command_tx, mut command_rx) = mpsc::unbounded_channel::<CommandEvent>();
     let (file_search_tx, mut file_search_rx) = mpsc::unbounded_channel::<FileSearchResult>();
     let mut file_search = FileSearchService::new(file_search_tx);
     file_search.warm(session.manager.lock().unwrap().cwd().to_path_buf());
-
-    // A workflow asks the user before it spends tokens on many child agents.
-    // Only this mode can answer, so only this mode installs the callback.
-    session.set_workflow_approver(workflow_approver(&command_tx));
 
     'main: loop {
         let render_is_active = app.working
@@ -1266,6 +1270,9 @@ fn handle_session_event(
                 if let Some(Cell::AssistantStreaming(text)) = app.cells.last() {
                     let text = text.clone();
                     *app.cells.last_mut().unwrap() = Cell::AssistantFinal(text);
+                }
+                for outcome in app.workflow_outcomes.drain(..) {
+                    app.cells.push(Cell::Notice(outcome));
                 }
             }
             AgentEvent::MessageStart { message } => match &message {
@@ -1454,6 +1461,17 @@ fn handle_session_event(
         }
         SessionEvent::Workflow { run: _, version } => {
             app.workflow_version = version;
+        }
+        SessionEvent::WorkflowOutcome { run, name, status } => {
+            let run = run.map(|id| format!(" run {id}")).unwrap_or_default();
+            let result = match status {
+                kiss_coding::WorkflowTurnStatus::Cancelled => "was cancelled; no agents ran",
+                kiss_coding::WorkflowTurnStatus::Completed => "completed",
+                kiss_coding::WorkflowTurnStatus::Failed => "failed",
+                kiss_coding::WorkflowTurnStatus::Stopped => "was stopped",
+            };
+            app.workflow_outcomes
+                .push(format!("verified workflow{run} `{name}` {result}"));
         }
     }
 }
@@ -2257,13 +2275,14 @@ fn queue_user_message(
     display_text: String,
     model_text: String,
     follow_up: bool,
+    prompt_mode: PromptMode,
 ) {
     let stored_text = stored_user_text(&display_text, &model_text);
     let message = AgentMessage::user(stored_text);
     if follow_up {
-        session.queue_follow_up(message);
+        session.queue_follow_up_with_mode(message, prompt_mode);
     } else {
-        session.queue_steering(message);
+        session.queue_steering_with_mode(message, prompt_mode);
     }
 }
 
@@ -2485,7 +2504,13 @@ fn handle_input(
                     };
                     let display_text = submission.display_text.trim().to_string();
                     if app.working {
-                        queue_user_message(session, display_text, model_text, true);
+                        queue_user_message(
+                            session,
+                            display_text,
+                            model_text,
+                            true,
+                            PromptMode::Ordinary,
+                        );
                     } else {
                         submit_with_display(app, session, display_text, model_text, running_task);
                     }
@@ -2516,7 +2541,13 @@ fn handle_input(
         match prepare_skill_input(&submission, resources) {
             Ok(Some(model_text)) => {
                 if app.working {
-                    queue_user_message(session, display_text, model_text, false);
+                    queue_user_message(
+                        session,
+                        display_text,
+                        model_text,
+                        false,
+                        PromptMode::Ordinary,
+                    );
                 } else {
                     submit_with_display(app, session, display_text, model_text, running_task);
                 }
@@ -2543,7 +2574,7 @@ fn handle_input(
         if let Some(shell) = text.strip_prefix('!') {
             if shell.trim_start_matches('!').trim().is_empty() {
                 if app.working {
-                    queue_user_message(session, display_text, text, false);
+                    queue_user_message(session, display_text, text, false, PromptMode::Ordinary);
                 } else {
                     submit_with_display(app, session, display_text, text, running_task);
                 }
@@ -2552,23 +2583,25 @@ fn handle_input(
             }
             return Flow::Continue;
         }
-        // A keyword is an opt-in only in text the user typed here. It is not
-        // applied to a prompt template body, a skill, or `-p` input, because
-        // those are not a person choosing to spend a workflow's tokens.
-        if session.workflows_enabled()
-            && session.settings().workflows.keyword_trigger
-            && !session.workflow_armed()
+        let prompt_mode = session.prompt_mode_for(&text);
+        if prompt_mode == PromptMode::Workflow
             && let Some(trigger) = workflow_trigger(&text)
         {
-            session.arm_workflow();
             app.cells.push(Cell::Notice(format!(
                 "running this as a dynamic workflow ({trigger}) · ctrl+w opens the progress view"
             )));
         }
         if app.working {
-            queue_user_message(session, display_text, text, false);
+            queue_user_message(session, display_text, text, false, prompt_mode);
         } else {
-            submit_with_display(app, session, display_text, text, running_task);
+            submit_with_display_in_mode(
+                app,
+                session,
+                display_text,
+                text,
+                prompt_mode,
+                running_task,
+            );
         }
     } else {
         sync_command_menu(
@@ -2587,28 +2620,6 @@ fn handle_input(
 ///
 /// Matching is on whole words, so `myworkflow`, `workflow_name`, and a path
 /// such as `src/workflows/run.rs` do not start one by accident.
-fn workflow_trigger(text: &str) -> Option<&'static str> {
-    let lowered = text.to_lowercase();
-    let words = lowered
-        .split(|character: char| !(character.is_alphanumeric() || character == '_'))
-        .filter(|word| !word.is_empty())
-        .collect::<Vec<_>>();
-    for (phrase, phrase_words) in [
-        ("use a workflow", &["use", "a", "workflow"][..]),
-        ("run a workflow", &["run", "a", "workflow"][..]),
-        ("as a workflow", &["as", "a", "workflow"][..]),
-        ("dynamic workflow", &["dynamic", "workflow"][..]),
-    ] {
-        if words
-            .windows(phrase_words.len())
-            .any(|window| window == phrase_words)
-        {
-            return Some(phrase);
-        }
-    }
-    words.contains(&"ultracode").then_some("ultracode")
-}
-
 fn handle_secret_prompt(
     app: &mut App,
     session: &Arc<kiss_coding::AgentSession>,
@@ -3005,6 +3016,16 @@ fn submit(
     submit_with_display(app, session, text.clone(), text, running_task);
 }
 
+fn submit_in_mode(
+    app: &mut App,
+    session: &Arc<kiss_coding::AgentSession>,
+    text: String,
+    prompt_mode: PromptMode,
+    running_task: &mut Option<tokio::task::JoinHandle<()>>,
+) {
+    submit_with_display_in_mode(app, session, text.clone(), text, prompt_mode, running_task);
+}
+
 fn submit_with_display(
     app: &mut App,
     session: &Arc<kiss_coding::AgentSession>,
@@ -3012,12 +3033,32 @@ fn submit_with_display(
     model_text: String,
     running_task: &mut Option<tokio::task::JoinHandle<()>>,
 ) {
+    submit_with_display_in_mode(
+        app,
+        session,
+        display_text,
+        model_text,
+        PromptMode::Ordinary,
+        running_task,
+    );
+}
+
+fn submit_with_display_in_mode(
+    app: &mut App,
+    session: &Arc<kiss_coding::AgentSession>,
+    display_text: String,
+    model_text: String,
+    prompt_mode: PromptMode,
+    running_task: &mut Option<tokio::task::JoinHandle<()>>,
+) {
     let stored_text = stored_user_text(&display_text, &model_text);
     app.cells.push(Cell::User(display_text));
     app.working = true;
     let session = session.clone();
     *running_task = Some(tokio::spawn(async move {
-        session.prompt(vec![AgentMessage::user(stored_text)]).await;
+        session
+            .prompt_with_mode(vec![AgentMessage::user(stored_text)], prompt_mode)
+            .await;
     }));
 }
 
@@ -5709,8 +5750,10 @@ fn run_slash_command(
                 app.cells
                     .push(Cell::Notice("usage: /workflow <prompt>".into()));
             } else {
-                session.arm_workflow();
-                submit(app, session, rest, running_task);
+                app.cells.push(Cell::Notice(
+                    "dynamic workflow is active for this turn".into(),
+                ));
+                submit_in_mode(app, session, rest, PromptMode::Workflow, running_task);
             }
         }
         "workflows" => open_workflow_runs_picker(app, session),
@@ -5944,9 +5987,13 @@ fn run_slash_command(
                     text: display_text.clone(),
                 };
                 match prepare_skill_input(&submission, resources) {
-                    Ok(Some(model_text)) if app.working => {
-                        queue_user_message(session, display_text, model_text, false)
-                    }
+                    Ok(Some(model_text)) if app.working => queue_user_message(
+                        session,
+                        display_text,
+                        model_text,
+                        false,
+                        PromptMode::Ordinary,
+                    ),
                     Ok(Some(model_text)) => {
                         submit_with_display(app, session, display_text, model_text, running_task)
                     }
@@ -6348,6 +6395,7 @@ mod tests {
             mcp_config_paths: None,
             workflow_view: None,
             workflow_version: 0,
+            workflow_outcomes: Vec::new(),
         }
     }
 
@@ -7167,6 +7215,43 @@ mod tests {
 
         assert!(matches!(app.cells.first(), Some(Cell::Thinking(text)) if text == "think"));
         assert!(matches!(app.cells.get(1), Some(Cell::AssistantFinal(text)) if text == "hello!"));
+    }
+
+    #[test]
+    fn verified_workflow_cancellation_is_shown_after_assistant_text() {
+        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
+            "/synthetic",
+        )));
+        let (tx, _rx) = mpsc::unbounded_channel();
+        let mut file_search = FileSearchService::new(tx);
+        let mut app = test_app();
+        app.cells
+            .push(Cell::AssistantFinal("the workflow completed".into()));
+
+        handle_session_event(
+            &mut app,
+            SessionEvent::WorkflowOutcome {
+                run: None,
+                name: "audit".into(),
+                status: kiss_coding::WorkflowTurnStatus::Cancelled,
+            },
+            &mut file_search,
+            &session,
+        );
+        handle_session_event(
+            &mut app,
+            SessionEvent::Agent(Box::new(AgentEvent::AgentEnd {
+                messages: Vec::new(),
+            })),
+            &mut file_search,
+            &session,
+        );
+
+        assert!(matches!(
+            app.cells.last(),
+            Some(Cell::Notice(text))
+                if text == "verified workflow `audit` was cancelled; no agents ran"
+        ));
     }
 
     #[test]

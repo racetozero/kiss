@@ -9,6 +9,32 @@
 
 use crate::settings::WorkflowSize;
 
+/// Find the complete word or phrase that asks for a dynamic workflow.
+///
+/// This function is shared by interactive, print, and JSON prompt entry
+/// points, so the same user text has the same meaning in every mode.
+pub fn workflow_trigger(text: &str) -> Option<&'static str> {
+    let lowered = text.to_lowercase();
+    let words = lowered
+        .split(|character: char| !(character.is_alphanumeric() || character == '_'))
+        .filter(|word| !word.is_empty())
+        .collect::<Vec<_>>();
+    for (phrase, phrase_words) in [
+        ("use a workflow", &["use", "a", "workflow"][..]),
+        ("run a workflow", &["run", "a", "workflow"][..]),
+        ("as a workflow", &["as", "a", "workflow"][..]),
+        ("dynamic workflow", &["dynamic", "workflow"][..]),
+    ] {
+        if words
+            .windows(phrase_words.len())
+            .any(|window| window == phrase_words)
+        {
+            return Some(phrase);
+        }
+    }
+    words.contains(&"ultracode").then_some("ultracode")
+}
+
 /// Two complete scripts, kept separate so the test can parse each one.
 pub(crate) const FAN_OUT_EXAMPLE: &str = r#"export const meta = {
   name: 'audit-tools',
