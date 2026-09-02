@@ -49,6 +49,67 @@ pub struct SubagentSettings {
     pub enabled: bool,
 }
 
+/// How many agents to advise the model to aim for when it writes a workflow.
+///
+/// This is advice sent to the model, not a cap: a prompt that clearly calls for
+/// a different scale still wins. The runtime limits are the real bound.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum WorkflowSize {
+    Small,
+    #[default]
+    Medium,
+    Large,
+    Unrestricted,
+}
+
+impl WorkflowSize {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Small => "small",
+            Self::Medium => "medium",
+            Self::Large => "large",
+            Self::Unrestricted => "unrestricted",
+        }
+    }
+
+    /// The agent count the model is asked to stay under, if any.
+    pub fn target_agents(self) -> Option<u32> {
+        match self {
+            Self::Small => Some(5),
+            Self::Medium => Some(15),
+            Self::Large => Some(50),
+            Self::Unrestricted => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct WorkflowSettings {
+    /// Dynamic workflows are built on subagents, so they are available only
+    /// when `subagents.enabled` is also on.
+    pub enabled: bool,
+    /// Ask before a run starts. This is a cost gate, not a permission gate: one
+    /// run can start hundreds of child agents.
+    pub confirm: bool,
+    /// Let a typed prompt containing `ultracode`, or asking for a workflow in
+    /// plain words, start one.
+    pub keyword_trigger: bool,
+    pub size: WorkflowSize,
+}
+
+impl Default for WorkflowSettings {
+    fn default() -> Self {
+        WorkflowSettings {
+            enabled: true,
+            confirm: true,
+            keyword_trigger: true,
+            size: WorkflowSize::default(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum QueueMode {
@@ -106,6 +167,7 @@ pub struct Settings {
     pub compaction: CompactionSettings,
     pub retry: RetrySettings,
     pub subagents: SubagentSettings,
+    pub workflows: WorkflowSettings,
     pub steering_mode: QueueMode,
     pub follow_up_mode: QueueMode,
     pub shell_path: Option<String>,
@@ -160,6 +222,10 @@ fn merged_settings(mut global: Value, project: Option<Value>) -> Settings {
         .pointer("/subagents/enabled")
         .and_then(Value::as_bool)
         .unwrap_or(false);
+    let workflows_enabled = global
+        .pointer("/workflows/enabled")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
     if let Some(project) = project {
         deep_merge(&mut global, project);
     }
@@ -167,6 +233,9 @@ fn merged_settings(mut global: Value, project: Option<Value>) -> Settings {
     // Subagents are a user-level authority choice. A repository must not turn
     // them on through a trusted project settings file.
     settings.subagents.enabled = subagents_enabled;
+    // Workflows spend the user's tokens many agents at a time, so the same rule
+    // applies: only the user's own settings file decides whether they are on.
+    settings.workflows.enabled = workflows_enabled;
     settings
 }
 
@@ -245,6 +314,38 @@ mod tests {
 
         let loaded: Settings = serde_json::from_value(json!({})).unwrap();
         assert!(!loaded.subagents.enabled);
+    }
+
+    #[test]
+    fn workflows_default_on_but_only_matter_with_subagents() {
+        let settings = Settings::default();
+        assert!(settings.workflows.enabled);
+        assert!(settings.workflows.confirm);
+        assert!(settings.workflows.keyword_trigger);
+        assert_eq!(settings.workflows.size, WorkflowSize::Medium);
+        // Subagents stay off, so workflows are unavailable until the user opts
+        // in to child agents.
+        assert!(!settings.subagents.enabled);
+    }
+
+    #[test]
+    fn project_settings_cannot_turn_workflows_on_or_off() {
+        let off = merged_settings(
+            json!({"workflows": {"enabled": false}}),
+            Some(json!({"workflows": {"enabled": true}})),
+        );
+        assert!(!off.workflows.enabled);
+
+        let on = merged_settings(json!({}), Some(json!({"workflows": {"enabled": false}})));
+        assert!(on.workflows.enabled);
+    }
+
+    #[test]
+    fn the_size_guideline_maps_to_an_agent_count() {
+        assert_eq!(WorkflowSize::Small.target_agents(), Some(5));
+        assert_eq!(WorkflowSize::Medium.target_agents(), Some(15));
+        assert_eq!(WorkflowSize::Large.target_agents(), Some(50));
+        assert_eq!(WorkflowSize::Unrestricted.target_agents(), None);
     }
 
     #[test]

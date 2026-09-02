@@ -402,7 +402,9 @@ fn interrupt_record(record: &AgentRecord) {
     }
 }
 
-fn turn_outcome(session: &AgentSession) -> (AgentStatus, Option<String>, Option<String>) {
+pub(crate) fn turn_outcome(
+    session: &AgentSession,
+) -> (AgentStatus, Option<String>, Option<String>) {
     let manager = session.manager.lock().unwrap();
     let assistant = manager
         .build_session_context()

@@ -8,6 +8,7 @@ use crate::compaction::{
 use crate::session::manager::SessionManager;
 use crate::settings::{QueueMode, Settings};
 use crate::subagents::{ForkTurns, SUBAGENT_SYSTEM_PROMPT, SubagentRuntime, fork_messages};
+use crate::workflows::{WorkflowApprover, WorkflowRuntime};
 use anyhow::Context as _;
 use kiss_agent::{
     AgentContext, AgentEvent, AgentLoopConfig, AgentMessage, DynTool, EventSink, TurnUpdate,
@@ -78,6 +79,11 @@ pub struct AgentSession {
     sink: SessionEventSink,
     subagents_allowed: bool,
     subagents: OnceLock<Arc<SubagentRuntime>>,
+    workflows: OnceLock<Arc<WorkflowRuntime>>,
+    /// Workflow mode is armed for one turn at a time, by the `/workflow`
+    /// command, by a keyword the user typed, or by running a saved workflow.
+    workflow_armed: Mutex<bool>,
+    workflow_approver: Mutex<Option<WorkflowApprover>>,
 }
 
 impl AgentSession {
@@ -139,10 +145,15 @@ impl AgentSession {
             sink,
             subagents_allowed,
             subagents: OnceLock::new(),
+            workflows: OnceLock::new(),
+            workflow_armed: Mutex::new(false),
+            workflow_approver: Mutex::new(None),
         });
         if subagents_allowed {
             let runtime = SubagentRuntime::new(Arc::downgrade(&session));
             assert!(session.subagents.set(runtime).is_ok());
+            let workflows = WorkflowRuntime::new(Arc::downgrade(&session));
+            assert!(session.workflows.set(workflows).is_ok());
         }
         session.rebuild_tools();
         session
@@ -176,11 +187,8 @@ impl AgentSession {
         let was_enabled = self.subagents_enabled();
         *self.settings.lock().unwrap() = settings;
         let is_enabled = self.subagents_enabled();
-        if was_enabled
-            && !is_enabled
-            && let Some(runtime) = self.subagents.get()
-        {
-            runtime.interrupt_all();
+        if was_enabled && !is_enabled {
+            self.stop_child_work();
         }
         self.rebuild_tools();
     }
@@ -192,17 +200,68 @@ impl AgentSession {
         *self.system_prompt.lock().unwrap() = system_prompt;
         *self.base_tools.lock().unwrap() = tools;
         let is_enabled = self.subagents_enabled();
-        if was_enabled
-            && !is_enabled
-            && let Some(runtime) = self.subagents.get()
-        {
-            runtime.interrupt_all();
+        if was_enabled && !is_enabled {
+            self.stop_child_work();
         }
         self.rebuild_tools();
     }
 
+    /// Stop every child agent and workflow run this session started.
+    fn stop_child_work(&self) {
+        if let Some(runtime) = self.subagents.get() {
+            runtime.interrupt_all();
+        }
+        if let Some(runtime) = self.workflows.get() {
+            runtime.stop_all();
+        }
+    }
+
     fn subagents_enabled(&self) -> bool {
         self.subagents_allowed && self.settings.lock().unwrap().subagents.enabled
+    }
+
+    /// Dynamic workflows are built on child agents, so they need subagents on
+    /// as well as their own setting.
+    pub fn workflows_enabled(&self) -> bool {
+        self.subagents_enabled() && self.settings.lock().unwrap().workflows.enabled
+    }
+
+    pub fn workflows(&self) -> Option<Arc<WorkflowRuntime>> {
+        self.workflows.get().cloned()
+    }
+
+    /// Offer the workflow tool and its instructions on the next request.
+    ///
+    /// Arming is per turn because the instructions are long: they define a
+    /// whole scripting language, and an ordinary coding turn should not pay for
+    /// a feature it does not use.
+    pub fn arm_workflow(&self) {
+        *self.workflow_armed.lock().unwrap() = true;
+        self.rebuild_tools();
+    }
+
+    pub fn disarm_workflow(&self) {
+        let was_armed = std::mem::replace(&mut *self.workflow_armed.lock().unwrap(), false);
+        if was_armed {
+            self.rebuild_tools();
+        }
+    }
+
+    pub fn workflow_armed(&self) -> bool {
+        *self.workflow_armed.lock().unwrap()
+    }
+
+    /// Install the callback that asks the user to approve a run.
+    pub fn set_workflow_approver(&self, approver: WorkflowApprover) {
+        *self.workflow_approver.lock().unwrap() = Some(approver);
+    }
+
+    pub(crate) fn workflow_approver(&self) -> Option<WorkflowApprover> {
+        self.workflow_approver.lock().unwrap().clone()
+    }
+
+    fn workflow_tool_active(&self) -> bool {
+        self.workflows_enabled() && self.workflow_armed()
     }
 
     fn rebuild_tools(&self) {
@@ -211,6 +270,11 @@ impl AgentSession {
             && let Some(runtime) = self.subagents.get()
         {
             tools.extend(runtime.control_tools());
+        }
+        if self.workflow_tool_active()
+            && let Some(runtime) = self.workflows.get()
+        {
+            tools.push(runtime.tool());
         }
         *self.tools.lock().unwrap() = tools;
     }
@@ -228,6 +292,9 @@ impl AgentSession {
     pub fn replace_manager(&self, manager: SessionManager) {
         if let Some(runtime) = self.subagents.get() {
             runtime.reset();
+        }
+        if let Some(runtime) = self.workflows.get() {
+            runtime.stop_all();
         }
         let context = manager.build_session_context();
         if let Some((provider, model_id)) = context.model
@@ -523,6 +590,18 @@ impl AgentSession {
         if self.subagents_enabled() {
             system_prompt.push_str("\n\n");
             system_prompt.push_str(SUBAGENT_SYSTEM_PROMPT);
+        }
+        if self.workflow_tool_active()
+            && let Some(runtime) = self.workflows.get()
+        {
+            let limits = runtime.limits();
+            let size = self.settings.lock().unwrap().workflows.size;
+            system_prompt.push_str("\n\n");
+            system_prompt.push_str(&crate::workflows::authoring_prompt(
+                size,
+                limits.max_agents,
+                limits.max_fanout,
+            ));
         }
         AgentContext {
             system_prompt,
@@ -823,6 +902,9 @@ impl AgentSession {
             break;
         }
 
+        // Workflow mode covers the turn the user armed it for, and no more, so
+        // the next ordinary turn carries neither the tool nor its instructions.
+        self.disarm_workflow();
         *self.running.lock().unwrap() = false;
     }
 
@@ -1239,6 +1321,90 @@ mod ephemeral_tests {
                 .system_prompt
                 .contains("Subagent coordination")
         );
+    }
+
+    #[test]
+    fn the_workflow_tool_appears_only_while_a_turn_is_armed() {
+        let mut settings = Settings::default();
+        settings.subagents.enabled = true;
+        let session = settings_test_session(settings, true);
+
+        // Subagents on, workflow not armed: an ordinary coding turn pays
+        // nothing for the feature.
+        assert!(
+            !session
+                .available_tool_names()
+                .contains(&"run_workflow".into())
+        );
+        assert!(
+            !session
+                .build_context()
+                .system_prompt
+                .contains("Writing a dynamic workflow")
+        );
+
+        session.arm_workflow();
+        assert!(
+            session
+                .available_tool_names()
+                .contains(&"run_workflow".into())
+        );
+        assert!(
+            session
+                .build_context()
+                .system_prompt
+                .contains("Writing a dynamic workflow")
+        );
+
+        session.disarm_workflow();
+        assert!(
+            !session
+                .available_tool_names()
+                .contains(&"run_workflow".into())
+        );
+    }
+
+    #[test]
+    fn arming_a_workflow_does_nothing_while_subagents_are_off() {
+        // Workflows are built on child agents, so the subagent setting is the
+        // authority for both.
+        let session = settings_test_session(Settings::default(), true);
+        assert!(!session.workflows_enabled());
+        session.arm_workflow();
+        assert!(
+            !session
+                .available_tool_names()
+                .contains(&"run_workflow".into())
+        );
+
+        let mut settings = session.settings();
+        settings.subagents.enabled = true;
+        settings.workflows.enabled = false;
+        session.update_settings(settings.clone());
+        assert!(!session.workflows_enabled());
+        assert!(
+            !session
+                .available_tool_names()
+                .contains(&"run_workflow".into())
+        );
+
+        settings.workflows.enabled = true;
+        session.update_settings(settings);
+        assert!(session.workflows_enabled());
+        assert!(
+            session
+                .available_tool_names()
+                .contains(&"run_workflow".into())
+        );
+    }
+
+    #[test]
+    fn a_session_without_subagent_authority_has_no_workflow_runtime() {
+        let mut settings = Settings::default();
+        settings.subagents.enabled = true;
+        let child = settings_test_session(settings, false);
+        assert!(child.workflows().is_none());
+        assert!(!child.workflows_enabled());
     }
 
     #[test]
