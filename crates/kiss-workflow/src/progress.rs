@@ -142,6 +142,10 @@ struct AgentRecord {
     result: Option<String>,
     error: Option<String>,
     cancel: CancellationToken,
+    /// Set when the user asks the active call to start again. Cancelling alone
+    /// means that the call returns null; this flag tells the interpreter to
+    /// replace the cancellation token and issue the same request again.
+    restart: bool,
 }
 
 struct PhaseRecord {
@@ -282,6 +286,7 @@ impl RunState {
                     result: None,
                     error: None,
                     cancel: cancel.clone(),
+                    restart: false,
                 });
             }
         }
@@ -407,6 +412,50 @@ impl RunState {
             agent.cancel.cancel();
         }
         self.changed();
+    }
+
+    /// Ask an active agent to stop its current child session and start again.
+    ///
+    /// Finished agents cannot be changed because their value can already have
+    /// moved through later script stages. Relaunching a finished result is a
+    /// new workflow run, not an in-place control action.
+    pub fn restart_agent(&self, id: AgentId) {
+        if let Ok(mut inner) = self.inner.lock()
+            && let Some(agent) = inner
+                .phases
+                .iter_mut()
+                .flat_map(|phase| phase.agents.iter_mut())
+                .find(|agent| agent.id == id)
+            && matches!(agent.status, AgentStatus::Queued | AgentStatus::Running)
+        {
+            agent.restart = true;
+            agent.cancel.cancel();
+        }
+        self.changed();
+    }
+
+    /// Replace the cancelled token after a restart request.
+    pub(crate) fn take_restart(&self, id: AgentId) -> Option<CancellationToken> {
+        if self.stop.is_cancelled() {
+            return None;
+        }
+        let mut inner = self.inner.lock().ok()?;
+        let agent = inner
+            .phases
+            .iter_mut()
+            .flat_map(|phase| phase.agents.iter_mut())
+            .find(|agent| agent.id == id && agent.restart)?;
+        agent.restart = false;
+        agent.status = AgentStatus::Queued;
+        agent.started = None;
+        agent.elapsed = Duration::ZERO;
+        agent.result = None;
+        agent.error = None;
+        agent.cancel = self.stop.child_token();
+        let cancel = agent.cancel.clone();
+        drop(inner);
+        self.changed();
+        Some(cancel)
     }
 
     // ----- snapshots --------------------------------------------------------

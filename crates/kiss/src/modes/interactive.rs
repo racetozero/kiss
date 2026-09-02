@@ -5,6 +5,7 @@ use crate::args::Args;
 use crate::file_search::{FileSearchMatch, FileSearchQuery, FileSearchResult, FileSearchService};
 use crate::setup::{Startup, build_startup, reload_runtime};
 use crate::slash_commands;
+use crate::workflow_ui::{self, ViewAction, WorkflowView};
 use anyhow::{Context as _, Result};
 use kiss_agent::{AgentEvent, AgentMessage};
 use kiss_ai::{AssistantEvent, ContentBlock, StopReason, ThinkingLevel, Transport};
@@ -90,6 +91,10 @@ struct App {
     mcp_manager: Option<kiss_mcp::McpManager>,
     mcp_servers: Vec<McpPanelServer>,
     mcp_config_paths: Option<kiss_mcp::config::ConfigPaths>,
+    /// The open `/workflows` progress view, if any.
+    workflow_view: Option<WorkflowView>,
+    /// Bumped whenever a workflow run changes, so the frame is marked dirty.
+    workflow_version: u64,
 }
 
 struct BtwPanel {
@@ -118,6 +123,16 @@ enum PickerKind {
     McpServers,
     McpActions(String, Vec<McpPanelAction>),
     McpTools(String),
+    /// Approve a workflow before it starts. The sender carries the answer back
+    /// to the tool call that is waiting on it.
+    WorkflowApproval(
+        Box<kiss_coding::workflows::WorkflowPlan>,
+        Option<tokio::sync::oneshot::Sender<kiss_coding::workflows::ApprovalDecision>>,
+    ),
+    /// Pick which run to open in the progress view.
+    WorkflowRuns(Vec<kiss_coding::workflows::RunId>),
+    /// Pick where to save a run's script.
+    WorkflowSaveLocation(kiss_coding::workflows::RunId),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -203,6 +218,11 @@ enum SecretPromptKind {
     TreeLabel(String),
     BranchSummary(String),
     SessionRename(PathBuf),
+    /// Name to save a workflow run's script under.
+    WorkflowName(
+        kiss_coding::workflows::RunId,
+        kiss_coding::workflows::SaveLocation,
+    ),
 }
 
 enum LoginChoice {
@@ -216,6 +236,8 @@ struct InteractiveResources {
     prompt_templates: Vec<kiss_coding::prompts::PromptTemplate>,
     context_file_paths: Vec<PathBuf>,
     enabled_models: Vec<kiss_ai::Model>,
+    /// Workflows saved on disk, each of which is a slash command.
+    saved_workflows: Vec<kiss_coding::workflows::SavedWorkflow>,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -270,6 +292,16 @@ enum CommandEvent {
         action: String,
         result: std::result::Result<String, String>,
     },
+    /// A workflow is waiting for the user to approve it before it starts.
+    WorkflowApproval {
+        plan: Box<kiss_coding::workflows::WorkflowPlan>,
+        reply: tokio::sync::oneshot::Sender<kiss_coding::workflows::ApprovalDecision>,
+    },
+    /// A saved workflow, started from its slash command, has finished.
+    WorkflowFinished {
+        name: String,
+        result: std::result::Result<String, String>,
+    },
 }
 
 #[derive(Debug)]
@@ -297,6 +329,18 @@ impl App {
     fn render(&mut self, width: usize, session: &Arc<kiss_coding::AgentSession>) -> Vec<String> {
         let mut lines: Vec<String> = Vec::new();
         lines.extend(self.startup_lines.iter().cloned());
+
+        // The progress view takes the place of the transcript while it is open.
+        // It needs the height, and `esc` brings the transcript straight back.
+        if let Some(view) = &mut self.workflow_view {
+            let theme = self.theme.clone();
+            lines.push(String::new());
+            lines.extend(view.render(width, &theme));
+            lines.push(String::new());
+            lines.extend(self.editor.render(width));
+            lines.extend(self.footer(width, session));
+            return lines;
+        }
 
         if self.cell_render_cache.len() < self.cells.len() {
             self.cell_render_cache
@@ -459,6 +503,17 @@ impl App {
         if let Some(note) = &self.queue_note {
             lines.push(self.theme.fg("muted", note));
         }
+        if let Some(run) = session.workflows().and_then(|runtime| runtime.active()) {
+            let spin = SPINNER[self.spinner_frame % SPINNER.len()];
+            let warn_over = session.settings().workflows.size.target_agents();
+            lines.push(workflow_ui::progress_line(
+                &run.snapshot(),
+                &run.name,
+                spin,
+                warn_over,
+                &self.theme,
+            ));
+        }
         if let Some(recap) = &self.recap {
             lines.push(self.theme.fg("muted", &format!("※ recap: {recap}")));
         } else if self.recap_loading {
@@ -509,6 +564,14 @@ impl App {
                 SecretPromptKind::TreeLabel(_) => "Label for the selected tree entry".into(),
                 SecretPromptKind::BranchSummary(_) => "Custom branch summary instructions".into(),
                 SecretPromptKind::SessionRename(_) => "New session name".into(),
+                SecretPromptKind::WorkflowName(_, location) => format!(
+                    "Save the workflow as (lower-case, dashes) — {}",
+                    match location {
+                        kiss_coding::workflows::SaveLocation::Project => ".kiss/workflows/",
+                        kiss_coding::workflows::SaveLocation::Personal =>
+                            "~/.kiss/agent/workflows/",
+                    }
+                ),
             };
             lines.push(self.theme.fg("accent", &self.theme.bold(&title)));
             if matches!(
@@ -923,6 +986,7 @@ pub async fn run(args: &Args) -> Result<i32> {
         prompt_templates,
         context_file_paths,
         enabled_models,
+        saved_workflows: discover_saved_workflows(&session),
     };
 
     let theme = match settings.theme.as_deref() {
@@ -1033,6 +1097,8 @@ pub async fn run(args: &Args) -> Result<i32> {
         mcp_manager: None,
         mcp_servers: Vec::new(),
         mcp_config_paths: None,
+        workflow_view: None,
+        workflow_version: 0,
     };
     if let Some(indent) = &settings.markdown.code_block_indent {
         app.md.code_indent = indent.clone();
@@ -1060,6 +1126,10 @@ pub async fn run(args: &Args) -> Result<i32> {
     let mut file_search = FileSearchService::new(file_search_tx);
     file_search.warm(session.manager.lock().unwrap().cwd().to_path_buf());
 
+    // A workflow asks the user before it spends tokens on many child agents.
+    // Only this mode can answer, so only this mode installs the callback.
+    session.set_workflow_approver(workflow_approver(&command_tx));
+
     'main: loop {
         let render_is_active = app.working
             || app.command_status.is_some()
@@ -1079,7 +1149,11 @@ pub async fn run(args: &Args) -> Result<i32> {
             _ = tokio::time::sleep_until(tokio::time::Instant::from_std(next_render_at)),
                 if dirty && render_is_active && Instant::now() < next_render_at => {}
             _ = ticker.tick() => {
-                if app.working || app.command_status.is_some() || app.btw_panel.is_some() || app.recap_loading {
+                if app.working
+                    || app.command_status.is_some()
+                    || app.btw_panel.is_some()
+                    || app.recap_loading
+                {
                     app.spinner_frame += 1;
                     dirty = true;
                 }
@@ -1364,6 +1438,9 @@ fn handle_session_event(
             app.cells
                 .push(Cell::Notice(format!("model: {provider}/{model_id}")));
         }
+        SessionEvent::Workflow { run: _, version } => {
+            app.workflow_version = version;
+        }
     }
 }
 
@@ -1574,6 +1651,31 @@ fn handle_command_event(
                 Err(error) => app.cells.push(Cell::Error(format!(
                     "MCP server {name} {action} failed: {error}"
                 ))),
+            }
+        }
+        CommandEvent::WorkflowApproval { plan, reply } => {
+            // The progress view would hide the question, so close it first.
+            app.workflow_view = None;
+            open_workflow_approval(app, plan, reply);
+        }
+        CommandEvent::WorkflowFinished { name, result } => {
+            app.command_status = None;
+            app.command_cancel = None;
+            app.workflow_view = None;
+            match result {
+                Ok(report) => {
+                    app.cells.push(Cell::Notice(format!(
+                        "workflow {name} finished\n\n{report}"
+                    )));
+                    // The report joins the conversation as a follow-up, so the
+                    // next turn can act on it without the user pasting it back.
+                    session.queue_follow_up(AgentMessage::user(format!(
+                        "The /{name} workflow finished and reported:\n\n{report}"
+                    )));
+                }
+                Err(error) => app
+                    .cells
+                    .push(Cell::Error(format!("workflow {name} failed: {error}"))),
             }
         }
     }
@@ -2156,6 +2258,22 @@ fn handle_input(
         return handle_secret_prompt(app, session, event, command_tx);
     }
 
+    // The progress view owns the keyboard while it is open, so that `x`, `p`,
+    // and the arrow keys steer the run rather than the editor.
+    if let Some(view) = &mut app.workflow_view {
+        if let InputEvent::Key(key) = event {
+            match view.handle_key(key) {
+                ViewAction::None => {}
+                ViewAction::Close => app.workflow_view = None,
+                ViewAction::Save => {
+                    let run = view.run.id;
+                    open_workflow_save_picker(app, run);
+                }
+            }
+        }
+        return Flow::Continue;
+    }
+
     // Picker input intercepts everything.
     if app.picker.is_some() {
         if let InputEvent::Key(key) = event {
@@ -2227,6 +2345,12 @@ fn handle_input(
             return Flow::Continue;
         }
         app.ctrl_c_armed = false;
+
+        // Ctrl+W opens the progress view for the newest run.
+        if *key == KeyEvent::ctrl('w') {
+            open_workflow_view(app, session, None);
+            return Flow::Continue;
+        }
 
         if matches!(app.keybindings.action_for(key), Some(Action::Quit)) {
             if app.editor.is_empty() {
@@ -2382,6 +2506,19 @@ fn handle_input(
             }
             return Flow::Continue;
         }
+        // A keyword is an opt-in only in text the user typed here. It is not
+        // applied to a prompt template body, a skill, or `-p` input, because
+        // those are not a person choosing to spend a workflow's tokens.
+        if session.workflows_enabled()
+            && session.settings().workflows.keyword_trigger
+            && !session.workflow_armed()
+            && let Some(trigger) = workflow_trigger(&text)
+        {
+            session.arm_workflow();
+            app.cells.push(Cell::Notice(format!(
+                "running this as a dynamic workflow ({trigger}) · ctrl+w opens the progress view"
+            )));
+        }
         if app.working {
             queue_user_message(session, display_text, text, false);
         } else {
@@ -2392,6 +2529,29 @@ fn handle_input(
         sync_file_menu(app, session, file_search);
     }
     Flow::Continue
+}
+
+/// The keyword or phrase in a typed prompt that asks for a workflow.
+///
+/// Matching is on whole words, so `myworkflow`, `workflow_name`, and a path
+/// such as `src/workflows/run.rs` do not start one by accident.
+fn workflow_trigger(text: &str) -> Option<&'static str> {
+    let lowered = text.to_lowercase();
+    for phrase in [
+        "use a workflow",
+        "run a workflow",
+        "as a workflow",
+        "dynamic workflow",
+    ] {
+        if lowered.contains(phrase) {
+            return Some(phrase);
+        }
+    }
+    // A bounded word, so only `ultracode` on its own counts.
+    lowered
+        .split(|character: char| !character.is_alphanumeric())
+        .any(|word| word == "ultracode")
+        .then_some("ultracode")
 }
 
 fn handle_secret_prompt(
@@ -2446,6 +2606,7 @@ fn handle_secret_prompt(
                             "summary instructions cannot be empty"
                         }
                         SecretPromptKind::SessionRename(_) => "session name cannot be empty",
+                        SecretPromptKind::WorkflowName(..) => "workflow name cannot be empty",
                         _ => "authentication input cannot be empty",
                     };
                     app.cells.push(Cell::Error(message.into()));
@@ -2675,6 +2836,9 @@ fn handle_secret_prompt(
                                     "could not rename session: {error:#}"
                                 ))),
                             }
+                        }
+                        SecretPromptKind::WorkflowName(run, location) => {
+                            save_workflow_run(app, session, run, location, key);
                         }
                     }
                 }
@@ -3545,6 +3709,31 @@ fn settings_picker(
             ),
             value: 13,
         },
+        SelectItem {
+            label: "Dynamic workflows".into(),
+            detail: Some(
+                if !settings.subagents.enabled {
+                    "off (needs subagents)"
+                } else if settings.workflows.enabled {
+                    "on"
+                } else {
+                    "off"
+                }
+                .into(),
+            ),
+            value: 14,
+        },
+        SelectItem {
+            label: "Dynamic workflows".into(),
+            detail: Some(if !settings.subagents.enabled {
+                "off (needs subagents)".into()
+            } else if settings.workflows.enabled {
+                format!("on · {} size", settings.workflows.size.as_str())
+            } else {
+                "off".into()
+            }),
+            value: 14,
+        },
     ];
     Picker {
         kind: PickerKind::Settings,
@@ -3567,6 +3756,243 @@ fn reopen_settings_picker(
     picker.list.set_filter(filter);
     picker.list.select_value(selected_value);
     app.picker = Some(picker);
+}
+
+/// Run a workflow that is already written and saved on disk.
+///
+/// The script says what to do, so this needs no model turn: it parses the file,
+/// asks for approval, and runs it, opening the progress view so the work is
+/// visible from the first agent.
+fn start_saved_workflow(
+    app: &mut App,
+    session: &Arc<kiss_coding::AgentSession>,
+    path: PathBuf,
+    arguments: &str,
+    command_tx: &mpsc::UnboundedSender<CommandEvent>,
+) {
+    let Some(runtime) = session.workflows().filter(|_| session.workflows_enabled()) else {
+        app.cells.push(Cell::Notice(
+            "dynamic workflows need subagents; open /settings and turn Subagents on".into(),
+        ));
+        return;
+    };
+    let source = match std::fs::read_to_string(&path) {
+        Ok(source) => source,
+        Err(error) => {
+            app.cells.push(Cell::Error(format!(
+                "could not read {}: {error}",
+                path.display()
+            )));
+            return;
+        }
+    };
+    let script = match kiss_coding::workflows::Script::parse(&source) {
+        Ok(script) => script,
+        Err(diagnostic) => {
+            app.cells.push(Cell::Error(diagnostic.render(&source)));
+            return;
+        }
+    };
+
+    // Structured input when the argument text is JSON, plain text otherwise, so
+    // a script can use `args.length` or `args` directly without parsing.
+    let args = if arguments.trim().is_empty() {
+        serde_json::Value::Null
+    } else {
+        serde_json::from_str(arguments.trim())
+            .unwrap_or_else(|_| serde_json::Value::String(arguments.trim().to_string()))
+    };
+
+    let name = script.meta().name.clone();
+    let record = match runtime.prepare(script, args, Default::default()) {
+        Ok(record) => record,
+        Err(error) => {
+            app.cells
+                .push(Cell::Error(format!("could not start workflow: {error:#}")));
+            return;
+        }
+    };
+
+    app.workflow_view = Some(WorkflowView::new(record.clone()));
+    app.command_status = Some(format!("running workflow {name}"));
+    let command_tx = command_tx.clone();
+    let runtime = runtime.clone();
+    tokio::spawn(async move {
+        let result = runtime.run(&record).await.map(|value| match value {
+            serde_json::Value::String(text) => text,
+            serde_json::Value::Null => "The workflow returned nothing.".to_string(),
+            other => serde_json::to_string_pretty(&other).unwrap_or_else(|_| other.to_string()),
+        });
+        let _ = command_tx.send(CommandEvent::WorkflowFinished { name, result });
+    });
+}
+
+/// Write a run's script to disk so it becomes a slash command later.
+fn save_workflow_run(
+    app: &mut App,
+    session: &Arc<kiss_coding::AgentSession>,
+    run: kiss_coding::workflows::RunId,
+    location: kiss_coding::workflows::SaveLocation,
+    name: &str,
+) {
+    let Some(record) = session.workflows().and_then(|runtime| runtime.get(run)) else {
+        app.cells.push(Cell::Error(
+            "that workflow run is no longer available".into(),
+        ));
+        return;
+    };
+    let cwd = session.manager.lock().unwrap().cwd().to_path_buf();
+    match kiss_coding::workflows::save(location, &cwd, name, &record.source, false) {
+        Ok(path) => app.cells.push(Cell::Notice(format!(
+            "saved {}\nrun it with /{name} after /reload",
+            shorten_path(&path.display().to_string())
+        ))),
+        Err(error) => app
+            .cells
+            .push(Cell::Error(format!("could not save workflow: {error:#}"))),
+    }
+}
+
+/// Open the progress view on one run, or on the newest one.
+fn open_workflow_view(
+    app: &mut App,
+    session: &Arc<kiss_coding::AgentSession>,
+    run: Option<kiss_coding::workflows::RunId>,
+) {
+    let Some(runtime) = session.workflows() else {
+        app.cells.push(Cell::Notice(
+            "workflows need subagents; turn them on in /settings".into(),
+        ));
+        return;
+    };
+    let record = match run {
+        Some(id) => runtime.get(id),
+        // Prefer a run still working; otherwise show the most recent one.
+        None => runtime.active().or_else(|| runtime.latest()),
+    };
+    match record {
+        Some(record) => app.workflow_view = Some(WorkflowView::new(record)),
+        None => app.cells.push(Cell::Notice(
+            "no workflow has run in this session yet".into(),
+        )),
+    }
+}
+
+/// Choose which run to open when there is more than one.
+fn open_workflow_runs_picker(app: &mut App, session: &Arc<kiss_coding::AgentSession>) {
+    let Some(runtime) = session.workflows() else {
+        app.cells.push(Cell::Notice(
+            "workflows need subagents; turn them on in /settings".into(),
+        ));
+        return;
+    };
+    let summaries = runtime.summaries();
+    if summaries.is_empty() {
+        app.cells.push(Cell::Notice(
+            "no workflow has run in this session yet".into(),
+        ));
+        return;
+    }
+    if summaries.len() == 1 {
+        open_workflow_view(app, session, Some(summaries[0].id));
+        return;
+    }
+    // Newest first: that is the one a user coming back to `/workflows` means.
+    let items = summaries
+        .iter()
+        .rev()
+        .enumerate()
+        .map(|(value, summary)| SelectItem {
+            label: summary.name.clone(),
+            detail: Some(workflow_ui::summary_detail(summary)),
+            value,
+        })
+        .collect();
+    let ids = summaries.iter().rev().map(|summary| summary.id).collect();
+    app.picker = Some(Picker {
+        kind: PickerKind::WorkflowRuns(ids),
+        list: SelectList::new("Workflow runs", items, app.theme.clone()),
+    });
+}
+
+fn open_workflow_save_picker(app: &mut App, run: kiss_coding::workflows::RunId) {
+    app.workflow_view = None;
+    let items = vec![
+        SelectItem {
+            label: "Save in this project".into(),
+            detail: Some(".kiss/workflows/ — shared with everyone who clones it".into()),
+            value: 0,
+        },
+        SelectItem {
+            label: "Save for me".into(),
+            detail: Some("~/.kiss/agent/workflows/ — available in every project".into()),
+            value: 1,
+        },
+    ];
+    app.picker = Some(Picker {
+        kind: PickerKind::WorkflowSaveLocation(run),
+        list: SelectList::new("Save this workflow", items, app.theme.clone()),
+    });
+}
+
+/// Show the plan and ask before any agent starts.
+fn open_workflow_approval(
+    app: &mut App,
+    plan: Box<kiss_coding::workflows::WorkflowPlan>,
+    reply: tokio::sync::oneshot::Sender<kiss_coding::workflows::ApprovalDecision>,
+) {
+    let items = vec![
+        SelectItem {
+            label: "Run it".into(),
+            detail: Some(plan.agent_estimate()),
+            value: 0,
+        },
+        SelectItem {
+            label: "View the script".into(),
+            detail: Some("read it before deciding".into()),
+            value: 1,
+        },
+        SelectItem {
+            label: "Cancel".into(),
+            detail: Some("nothing runs".into()),
+            value: 2,
+        },
+    ];
+    let title = workflow_ui::plan_summary(&plan);
+    app.picker = Some(Picker {
+        kind: PickerKind::WorkflowApproval(plan, Some(reply)),
+        list: SelectList::new(title, items, app.theme.clone()),
+    });
+}
+
+/// Build the callback the workflow runtime uses to ask for approval.
+///
+/// The tool call runs on another task, so it hands the plan to the terminal
+/// through the command channel and waits for the answer on a one-shot channel.
+fn workflow_approver(
+    command_tx: &mpsc::UnboundedSender<CommandEvent>,
+) -> kiss_coding::workflows::WorkflowApprover {
+    let command_tx = command_tx.clone();
+    Arc::new(move |plan| {
+        let command_tx = command_tx.clone();
+        Box::pin(async move {
+            let (reply, answer) = tokio::sync::oneshot::channel();
+            if command_tx
+                .send(CommandEvent::WorkflowApproval {
+                    plan: Box::new(plan),
+                    reply,
+                })
+                .is_err()
+            {
+                return kiss_coding::workflows::ApprovalDecision::Cancel;
+            }
+            // A closed channel means the terminal went away, which is not
+            // consent.
+            answer
+                .await
+                .unwrap_or(kiss_coding::workflows::ApprovalDecision::Cancel)
+        })
+    })
 }
 
 fn open_trust_picker(app: &mut App, session: &Arc<kiss_coding::AgentSession>) {
@@ -4516,6 +4942,53 @@ fn apply_picker_selection(
             }
         }
         PickerKind::McpTools(name) => open_mcp_tools(app, &name),
+        PickerKind::WorkflowApproval(plan, mut reply) => match value {
+            0 => {
+                if let Some(reply) = reply.take() {
+                    let _ = reply.send(kiss_coding::workflows::ApprovalDecision::Approve);
+                }
+                app.cells.push(Cell::Notice(format!(
+                    "running workflow {} · ctrl+w opens the progress view",
+                    plan.name
+                )));
+            }
+            1 => {
+                // Show the script, then ask again rather than deciding for the
+                // user.
+                app.cells
+                    .push(Cell::Notice(format!("workflow script\n\n{}", plan.source)));
+                if let Some(reply) = reply.take() {
+                    open_workflow_approval(app, plan, reply);
+                }
+            }
+            _ => {
+                if let Some(reply) = reply.take() {
+                    let _ = reply.send(kiss_coding::workflows::ApprovalDecision::Cancel);
+                }
+                app.cells.push(Cell::Notice("workflow cancelled".into()));
+            }
+        },
+        PickerKind::WorkflowRuns(ids) => {
+            if let Some(id) = ids.get(value).copied() {
+                open_workflow_view(app, session, Some(id));
+            }
+        }
+        PickerKind::WorkflowSaveLocation(run) => {
+            let location = if value == 0 {
+                kiss_coding::workflows::SaveLocation::Project
+            } else {
+                kiss_coding::workflows::SaveLocation::Personal
+            };
+            let suggested = session
+                .workflows()
+                .and_then(|runtime| runtime.get(run))
+                .map(|record| record.name.clone())
+                .unwrap_or_default();
+            app.secret_prompt = Some(SecretPrompt {
+                kind: SecretPromptKind::WorkflowName(run, location),
+                value: suggested,
+            });
+        }
     }
 }
 
@@ -4664,6 +5137,17 @@ fn apply_settings_selection(
         }
         13 => {
             resources.settings.subagents.enabled = !resources.settings.subagents.enabled;
+        }
+        14 => {
+            if !resources.settings.subagents.enabled {
+                // Workflows are built on child agents, so this row cannot be
+                // turned on by itself.
+                app.cells.push(Cell::Notice(
+                    "turn Subagents on first; dynamic workflows are built on them".into(),
+                ));
+                return;
+            }
+            resources.settings.workflows.enabled = !resources.settings.workflows.enabled;
         }
         _ => return,
     }
@@ -5080,7 +5564,7 @@ fn run_slash_command(
         "quit" | "exit" => return Flow::Quit,
         "help" | "hotkeys" => {
             app.cells.push(Cell::Notice(
-                "Input\n  Enter send · Shift+Enter or Alt+Enter newline · / commands and skills · $ skills · @ files · ! shell · !! shell outside context\nModels and effort\n  Shift+Tab effort · Ctrl+L select model · Ctrl+P next model · Ctrl+Shift+P previous model\nSession\n  Ctrl+D exit · Esc cancel · Ctrl+C interrupt or clear · double Esc tree\nDisplay and queues\n  Ctrl+O tools · Ctrl+T thinking · Ctrl+X copy · Ctrl+Enter follow-up · Alt+Up dequeue".into(),
+                "Input\n  Enter send · Shift+Enter or Alt+Enter newline · / commands and skills · $ skills · @ files · ! shell · !! shell outside context\nModels and effort\n  Shift+Tab effort · Ctrl+L select model · Ctrl+P next model · Ctrl+Shift+P previous model\nSession\n  Ctrl+D exit · Esc cancel · Ctrl+C interrupt or clear · double Esc tree\nDisplay and queues\n  Ctrl+O tools · Ctrl+T thinking · Ctrl+X copy · Ctrl+Enter follow-up · Alt+Up dequeue\nWorkflows\n  /workflow <prompt> runs one task as a workflow · /workflows browses runs · Ctrl+W opens the progress view\n  arrows select · Enter open · Esc back · j/k scroll · f filter · p pause · x stop · r restart · s save".into(),
             ));
         }
         "model" => {
@@ -5161,6 +5645,20 @@ fn run_slash_command(
                 .cells
                 .push(Cell::Notice("usage: /recap [now|on|off]".into())),
         },
+        "workflow" => {
+            if !session.workflows_enabled() {
+                app.cells.push(Cell::Notice(
+                    "dynamic workflows need subagents; open /settings and turn Subagents on".into(),
+                ));
+            } else if rest.is_empty() {
+                app.cells
+                    .push(Cell::Notice("usage: /workflow <prompt>".into()));
+            } else {
+                session.arm_workflow();
+                submit(app, session, rest, running_task);
+            }
+        }
+        "workflows" => open_workflow_runs_picker(app, session),
         "tree" => open_tree_picker(app, session),
         "fork" => open_fork_picker(app, session),
         "clone" => {
@@ -5346,6 +5844,17 @@ fn run_slash_command(
         "reload" => reload_interactive(app, session, args, resources),
         "llama" => start_llama_list(app, command_tx),
         other => {
+            // Saved workflows as commands. These run their stored script
+            // directly: the orchestration is already written, so there is
+            // nothing for the model to decide.
+            if let Some(workflow) = resources
+                .saved_workflows
+                .iter()
+                .find(|workflow| workflow.name == other)
+            {
+                start_saved_workflow(app, session, workflow.path.clone(), &rest, command_tx);
+                return Flow::Continue;
+            }
             // Prompt templates and skills as commands.
             if let Some(template) = resources
                 .prompt_templates
@@ -5657,6 +6166,21 @@ async fn share_session_async(
     Ok(url)
 }
 
+/// Saved workflows for this project and this user.
+fn discover_saved_workflows(
+    session: &Arc<kiss_coding::AgentSession>,
+) -> Vec<kiss_coding::workflows::SavedWorkflow> {
+    let cwd = session.manager.lock().unwrap().cwd().to_path_buf();
+    // A project workflow feeds child agents instructions, so it loads under the
+    // same trust rule as project skills and prompts.
+    let trusted = kiss_coding::trust::resolve_non_interactive(
+        &cwd,
+        None,
+        session.settings().default_project_trust,
+    );
+    kiss_coding::workflows::discover(&cwd, trusted)
+}
+
 fn reload_interactive(
     app: &mut App,
     session: &Arc<kiss_coding::AgentSession>,
@@ -5690,6 +6214,7 @@ fn reload_interactive(
     resources.prompt_templates = reloaded.prompt_templates;
     resources.context_file_paths = reloaded.context_file_paths;
     resources.settings = reloaded.settings.clone();
+    resources.saved_workflows = discover_saved_workflows(session);
     session.reload_runtime(reloaded.settings, reloaded.system_prompt, reloaded.tools);
 
     let theme = if resources.settings.theme.as_deref() == Some("light") {
@@ -5765,6 +6290,8 @@ mod tests {
             mcp_manager: None,
             mcp_servers: Vec::new(),
             mcp_config_paths: None,
+            workflow_view: None,
+            workflow_version: 0,
         }
     }
 
@@ -5806,6 +6333,7 @@ mod tests {
             prompt_templates: Vec::new(),
             context_file_paths: Vec::new(),
             enabled_models: Vec::new(),
+            saved_workflows: Vec::new(),
         }
     }
 

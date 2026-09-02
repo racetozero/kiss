@@ -119,6 +119,11 @@ impl Workflow {
     pub fn stop_agent(&self, id: AgentId) {
         self.state.stop_agent(id);
     }
+
+    /// Restart one queued or running agent with the same request.
+    pub fn restart_agent(&self, id: AgentId) {
+        self.state.restart_agent(id);
+    }
 }
 
 #[cfg(test)]
@@ -556,6 +561,64 @@ mod tests {
         let result = workflow.run().await.unwrap();
         assert_eq!(result, Json::Null);
         assert_eq!(workflow.snapshot().status, RunStatus::Stopped);
+    }
+
+    #[tokio::test]
+    async fn a_running_agent_can_be_restarted() {
+        struct RestartRunner {
+            calls: AtomicU32,
+            first_started: tokio::sync::Notify,
+        }
+
+        #[async_trait::async_trait]
+        impl AgentRunner for RestartRunner {
+            async fn run_agent(
+                &self,
+                _request: AgentRequest,
+                cancel: CancellationToken,
+            ) -> AgentOutcome {
+                if self.calls.fetch_add(1, Ordering::SeqCst) == 0 {
+                    self.first_started.notify_one();
+                    cancel.cancelled().await;
+                    AgentOutcome::Stopped
+                } else {
+                    AgentOutcome::Done(Json::String("answer after restart".into()))
+                }
+            }
+
+            fn tokens_used(&self, _index: AgentId) -> u64 {
+                5
+            }
+        }
+
+        let runner = Arc::new(RestartRunner {
+            calls: AtomicU32::new(0),
+            first_started: tokio::sync::Notify::new(),
+        });
+        let workflow = Arc::new(Workflow::new(
+            Script::parse(&script("return await agent('check')")).unwrap(),
+            Json::Null,
+            "/repo".into(),
+            runner.clone(),
+            Limits::default(),
+        ));
+        let run = {
+            let workflow = workflow.clone();
+            tokio::spawn(async move { workflow.run().await })
+        };
+        runner.first_started.notified().await;
+        workflow.restart_agent(0);
+
+        assert_eq!(
+            run.await.unwrap().unwrap(),
+            Json::String("answer after restart".into())
+        );
+        assert_eq!(runner.calls.load(Ordering::SeqCst), 2);
+        assert_eq!(workflow.snapshot().phases[0].agents.len(), 1);
+        assert_eq!(
+            workflow.snapshot().phases[0].agents[0].status,
+            crate::progress::AgentStatus::Completed
+        );
     }
 
     #[tokio::test]

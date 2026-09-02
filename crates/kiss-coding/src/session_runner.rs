@@ -44,6 +44,12 @@ pub enum SessionEvent {
         provider: String,
         model_id: String,
     },
+    /// A dynamic workflow changed. The terminal redraws from the shared
+    /// snapshot; the event carries only the cheap version marker.
+    Workflow {
+        run: crate::workflows::RunId,
+        version: u64,
+    },
 }
 
 pub type SessionEventSink = Arc<dyn Fn(SessionEvent) + Send + Sync>;
@@ -87,6 +93,10 @@ pub struct AgentSession {
 }
 
 impl AgentSession {
+    pub(crate) fn emit_workflow(&self, run: crate::workflows::RunId, version: u64) {
+        (self.sink)(SessionEvent::Workflow { run, version });
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         manager: SessionManager,

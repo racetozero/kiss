@@ -13,11 +13,17 @@ mod store;
 mod tool;
 
 pub use prompt::authoring_prompt;
-pub use store::{SavedWorkflow, discover, save};
+pub use store::{SaveLocation, SavedWorkflow, discover, save};
+
+// Re-exported so the terminal renders workflow state without depending on
+// `kiss-workflow` directly.
+pub use kiss_workflow::{
+    AgentId, AgentSnapshot, AgentStatus, PhaseSnapshot, RunSnapshot, RunStatus, Script,
+};
 
 use crate::session_runner::AgentSession;
 use kiss_agent::DynTool;
-use kiss_workflow::{Journal, Limits, RunSnapshot, RunStatus, Script, Workflow};
+use kiss_workflow::{Journal, Limits, Workflow};
 use serde_json::Value;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, Weak};
@@ -67,6 +73,10 @@ impl RunRecord {
 
     pub fn stop_agent(&self, agent: kiss_workflow::AgentId) {
         self.workflow.stop_agent(agent);
+    }
+
+    pub fn restart_agent(&self, agent: kiss_workflow::AgentId) {
+        self.workflow.restart_agent(agent);
     }
 
     /// Results worth reusing if this run is started again.
@@ -174,7 +184,7 @@ impl WorkflowRuntime {
     ///
     /// Registering before running is what lets the progress view find the run
     /// as soon as it is approved, rather than after its first agent answers.
-    pub(crate) fn prepare(
+    pub fn prepare(
         &self,
         script: Script,
         args: Value,
@@ -210,6 +220,25 @@ impl WorkflowRuntime {
             workflow,
         });
 
+        // Forward the workflow's watch channel into the normal session event
+        // stream. The terminal then sleeps until state changes instead of
+        // polling every frame.
+        let mut updates = record.subscribe();
+        let parent_for_updates = self.parent.clone();
+        let record_for_updates = record.clone();
+        tokio::spawn(async move {
+            while updates.changed().await.is_ok() {
+                let version = *updates.borrow_and_update();
+                let Some(parent) = parent_for_updates.upgrade() else {
+                    break;
+                };
+                parent.emit_workflow(id, version);
+                if record_for_updates.snapshot().status.is_finished() {
+                    break;
+                }
+            }
+        });
+
         let mut runs = self
             .runs
             .lock()
@@ -229,7 +258,7 @@ impl WorkflowRuntime {
     }
 
     /// Run a prepared workflow to completion.
-    pub(crate) async fn run(&self, record: &Arc<RunRecord>) -> Result<Value, String> {
+    pub async fn run(&self, record: &Arc<RunRecord>) -> Result<Value, String> {
         record
             .workflow
             .run()

@@ -11,6 +11,7 @@ mod mcp_cli;
 mod setup;
 mod slash_commands;
 mod update;
+mod workflow_ui;
 
 use args::{Args, Command};
 use clap::Parser;

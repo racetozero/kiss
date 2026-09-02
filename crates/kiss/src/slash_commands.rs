@@ -101,6 +101,12 @@ pub(crate) const KISS_SLASH_COMMANDS: &[SlashCommand] = &[
         "Generate or configure the one-line session recap",
         Some("[now|on|off]"),
     ),
+    SlashCommand::new(
+        "workflow",
+        "Run one task as a dynamic workflow",
+        Some("<prompt>"),
+    ),
+    SlashCommand::new("workflows", "Browse and manage workflow runs", None),
 ];
 
 pub(crate) fn commands() -> impl Iterator<Item = &'static SlashCommand> {
@@ -225,7 +231,10 @@ mod tests {
     #[test]
     fn user_visible_surface_includes_shipped_llama_command() {
         let names: Vec<&str> = commands().map(|command| command.name).collect();
-        assert_eq!(&names[names.len() - 4..], ["llama", "mcp", "btw", "recap"]);
+        assert_eq!(
+            &names[names.len() - 6..],
+            ["llama", "mcp", "btw", "recap", "workflow", "workflows"]
+        );
         assert_eq!(
             names.len(),
             PI_CORE_SLASH_COMMANDS.len() + 1 + KISS_SLASH_COMMANDS.len()

@@ -73,7 +73,7 @@ impl AgentRunner for SessionAgentRunner {
         let usage_after = child.totals();
         let used = usage_delta(usage_after, usage_before);
         if let Ok(mut tokens) = self.tokens.lock() {
-            tokens.insert(request.index, used.total_tokens);
+            *tokens.entry(request.index).or_default() += used.total_tokens;
         }
         // A workflow agent's cost belongs to the session that started it, so the
         // footer's running total stays honest.

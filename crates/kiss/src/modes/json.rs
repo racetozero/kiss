@@ -149,6 +149,9 @@ pub fn event_json(event: &SessionEvent) -> Option<Value> {
         SessionEvent::ModelChanged { provider, model_id } => {
             json!({"type": "model_changed", "provider": provider, "modelId": model_id})
         }
+        SessionEvent::Workflow { run, version } => {
+            json!({"type": "workflow_progress", "run": run, "version": version})
+        }
     })
 }
 

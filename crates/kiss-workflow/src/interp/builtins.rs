@@ -229,7 +229,7 @@ impl Interp {
             journal.invalidate_from(index);
         }
 
-        let cancel = self.state.register_agent(index, label, prompt.clone());
+        let mut cancel = self.state.register_agent(index, label, prompt.clone());
 
         // Wait for a free slot, then for the run to be unpaused. Taking the
         // permit first keeps the number of agents in flight bounded even while
@@ -248,7 +248,6 @@ impl Interp {
             return Ok(Value::Null);
         }
 
-        self.state.agent_started(index);
         let request = AgentRequest {
             index,
             prompt: prompt.clone(),
@@ -260,15 +259,25 @@ impl Interp {
             timeout_ms: options.timeout_ms,
         };
 
-        let mut outcome = self.runner.run_agent(request.clone(), cancel.clone()).await;
         let mut attempts = 0;
-        while attempts < options.retries
-            && matches!(outcome, AgentOutcome::Failed(_))
-            && !cancel.is_cancelled()
-        {
-            attempts += 1;
-            outcome = self.runner.run_agent(request.clone(), cancel.clone()).await;
-        }
+        let outcome = loop {
+            self.state.agent_started(index);
+            let outcome = self.runner.run_agent(request.clone(), cancel.clone()).await;
+
+            if let Some(next_cancel) = self.state.take_restart(index) {
+                cancel = next_cancel;
+                attempts = 0;
+                continue;
+            }
+            if attempts < options.retries
+                && matches!(outcome, AgentOutcome::Failed(_))
+                && !cancel.is_cancelled()
+            {
+                attempts += 1;
+                continue;
+            }
+            break outcome;
+        };
 
         let tokens = self.runner.tokens_used(index);
         match &outcome {
