@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/kiss-bench",
     "crates/kiss-ai",
+    "crates/kiss-workflow",
     "crates/kiss-agent",
     "crates/kiss-coding",
     "crates/kiss-mcp",
@@ -51,6 +52,7 @@ kiss-bench = { path = "crates/kiss-bench" }
 kiss-coding = { path = "crates/kiss-coding" }
 kiss-mcp = { path = "crates/kiss-mcp" }
 kiss-tui = { path = "crates/kiss-tui" }
+kiss-workflow = { path = "crates/kiss-workflow" }
 libc = "0.2"
 mdwright-latex = "0.1.3"
 mermaid-text = "0.57"
