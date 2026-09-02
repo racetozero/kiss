@@ -1878,7 +1878,7 @@ dependencies = [
 
 [[package]]
 name = "kiss"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -1910,7 +1910,7 @@ dependencies = [
 
 [[package]]
 name = "kiss-agent"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1933,7 +1933,7 @@ dependencies = [
 
 [[package]]
 name = "kiss-ai"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "anyhow",
  "aws-config",
@@ -1963,11 +1963,11 @@ dependencies = [
 
 [[package]]
 name = "kiss-bench"
-version = "0.0.2"
+version = "0.0.3"
 
 [[package]]
 name = "kiss-coding"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1998,7 +1998,7 @@ dependencies = [
 
 [[package]]
 name = "kiss-mcp"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2021,7 +2021,7 @@ dependencies = [
 
 [[package]]
 name = "kiss-tui"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "anyhow",
  "crossterm",
@@ -2039,7 +2039,7 @@ dependencies = [
 
 [[package]]
 name = "kiss-workflow"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "anyhow",
  "async-trait",

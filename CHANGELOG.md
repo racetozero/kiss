@@ -2,11 +2,27 @@
 
 ## Unreleased
 
+## 0.0.3 - 2026-09-02
+
 ### Added
 
 - Added dynamic workflows with deterministic orchestration scripts, parallel
   child agents, approval and progress views, saved slash commands, and run
   controls.
+
+### Changed
+
+- Added performance coverage for workflow parsing, execution, progress
+  snapshots, terminal rendering, and request preparation.
+
+### Fixed
+
+- Made workflow activation consistent for startup, interactive, print, JSON,
+  queued, and slash-command prompts.
+- Added verified workflow outcomes that cannot be replaced by model text.
+- Fixed stale pause state in the workflow progress view.
+- Unified child-turn cancellation, result handling, and usage accounting for
+  manual subagents and workflow agents.
 
 ## 0.0.2 - 2026-09-01
 
