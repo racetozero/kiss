@@ -53,28 +53,48 @@ KISS operations, not model or network latency.
 
 | User action | Test size | Typical time | p95 |
 | --- | --- | ---: | ---: |
-| File search | 100,000 files, three warm queries | 5.122 ms | 5.277 ms |
-| File search | 500,000 files, three warm queries | 10.639 ms | 11.836 ms |
-| SSE parsing | 10,000 events | 1.144 ms | 1.486 ms |
-| Grep | 1,000 files and 200 matches | 14.611 ms | 16.121 ms |
-| Incremental Markdown | 200 streaming prefix renders | 15.672 ms | 16.299 ms |
-| Unchanged frame | 10,000 logical rows | 133.220 us | 134.583 us |
+| File search | 100,000 files, three warm queries | 5.724 ms | 6.238 ms |
+| File search | 500,000 files, three warm queries | 12.515 ms | 14.315 ms |
+| SSE parsing | 10,000 events | 1.540 ms | 1.707 ms |
+| Grep | 1,000 files and 200 matches | 15.251 ms | 18.772 ms |
+| Incremental Markdown | 200 streaming prefix renders | 17.557 ms | 18.032 ms |
+| Unchanged frame | 10,000 logical rows | 156.370 us | 157.783 us |
 
 ### Subagent overhead
 
 Subagents are off by default, so standard sessions do not load their six
-control tools. When subagents are enabled, the added local work remains small:
+control tools. Three trials measured this local overhead:
 
-| Measure | Off | On | Difference |
-| --- | ---: | ---: | --- |
-| Control tools | 0 | 6 | Loaded only when enabled |
-| Session setup median | 254.168-266.224 us | 261.164-266.563 us | No consistent regression |
-| Request preparation median | 200-217 ns | 293-298 ns | 86 ns median increase |
+| Measure | State | Median range | p95 range |
+| --- | --- | ---: | ---: |
+| Session setup | Off | 305.665-328.389 us | 338.670-348.442 us |
+| Session setup | On | 306.161-327.709 us | 335.922-341.570 us |
+| Request preparation | Off | 225-239 ns | 231-248 ns |
+| Request preparation | On | 325-347 ns | 341-393 ns |
 
-Session setup results stayed within normal process variation. Request
-preparation remained below 0.4 us in total, which is negligible compared with
-a model request. This supports keeping subagents available as an opt-in feature
-without changing the default experience.
+Session setup had no repeatable slowdown. Request preparation added 100-108
+ns when the six control tools were present and stayed below 0.4 us in total.
+
+### Dynamic workflow overhead
+
+Workflow benchmarks use an instant local agent runner. They measure
+orchestration only and do not include model or network time. The table shows
+the range across three trials:
+
+| Measure | Test size | Median range | p95 range |
+| --- | --- | ---: | ---: |
+| Script parsing | 200-line script | 73.028-79.245 us | 77.136-80.637 us |
+| Interpreter | 1,000 agent calls | 2.703-2.930 ms | 3.268-3.672 ms |
+| Progress snapshot | 500 agents, 5 phases | 53.576-58.055 us | 84.903-89.773 us |
+| Phase view | 500 agents, 5 phases | 11.380-18.821 us | 12.196-20.901 us |
+| Agent detail view | One prompt and result | 5.063-8.038 us | 5.156-8.227 us |
+| Unchanged view | 500 agents, cached | 344-509 ns | 392-638 ns |
+| Request preparation | Workflow disarmed | 337-359 ns | 341-400 ns |
+| Request preparation | Workflow armed | 1.051-1.087 us | 1.064-1.185 us |
+
+The interpreter used 2.70-2.93 us per agent call. Arming a workflow added
+707-728 ns to request preparation. The workflow tool and its instructions are
+absent until a workflow turn is armed.
 
 ### Release builds
 
@@ -90,11 +110,15 @@ binary smaller and produced a modest latency improvement:
 
 ### Method
 
-These results used an Apple M4, macOS 26.5.1, and Rust 1.98.0 on 2026-08-31.
-Core benchmarks used the Cargo `release` profile. The subagent comparison used
-three trials with 21 matched samples per run. It did not call a model or start
-a child. The optimized release comparison used three held-out trials. Lower
-latency values are better.
+The core, subagent, and workflow results used an Apple M4, macOS 26.5.1, and
+Rust 1.98.0 on 2026-09-01. Core benchmarks used the Cargo `release` profile.
+The table reports the median result from three trials. Each core benchmark
+used 9-15 samples per trial. The subagent and workflow comparisons also used
+three trials, with 21 samples for matched feature comparisons and 9-21 samples
+for workflow operations. These tests did not call a model or start a real
+child session. The complete run passed all 17 performance tests. The optimized
+release comparison used three held-out trials on 2026-08-31. Lower latency
+values are better.
 
 Run the full benchmark suite with `just bench`.
 
@@ -217,22 +241,8 @@ cannot read the clock or a random number, which is what lets a stopped run
 resume: replaying it asks for the same agents, so finished work is reused
 instead of repeated.
 
-### Workflow overhead
-
-Workflow orchestration is local work around model calls. These numbers measure
-that local work only:
-
-| Measure | Test size | Median |
-| --- | --- | ---: |
-| Script parsing | 200-line script | 113.727 us |
-| Interpreter | 1,000 orchestrated agents | 2.506 ms |
-| Progress view | 500 agents, 5 phases | 11.222 us |
-| Progress view, unchanged frame | 500 agents, cached | 325 ns |
-
-At 2.5 us per orchestrated agent, the runtime is negligible beside the model
-call it starts. Request preparation is unchanged when no workflow is armed
-(301 ns), and carries the tool and its instructions only when one is
-(922 ns), so an ordinary coding turn pays nothing for the feature.
+See [Dynamic workflow overhead](#dynamic-workflow-overhead) for the current
+local performance measurements.
 
 ## Models and login
 
