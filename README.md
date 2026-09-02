@@ -224,15 +224,15 @@ that local work only:
 
 | Measure | Test size | Median |
 | --- | --- | ---: |
-| Script parsing | 200-line script | 79.130 us |
-| Interpreter | 1,000 orchestrated agents | 3.139 ms |
-| Progress view | 500 agents, 5 phases | 14.043 us |
-| Progress view, unchanged frame | 500 agents, cached | 419 ns |
+| Script parsing | 200-line script | 113.727 us |
+| Interpreter | 1,000 orchestrated agents | 2.506 ms |
+| Progress view | 500 agents, 5 phases | 11.222 us |
+| Progress view, unchanged frame | 500 agents, cached | 325 ns |
 
-At 3.1 us per orchestrated agent, the runtime is negligible beside the model
+At 2.5 us per orchestrated agent, the runtime is negligible beside the model
 call it starts. Request preparation is unchanged when no workflow is armed
-(348 ns), and carries the tool and its instructions only when one is
-(1.094 us), so an ordinary coding turn pays nothing for the feature.
+(301 ns), and carries the tool and its instructions only when one is
+(922 ns), so an ordinary coding turn pays nothing for the feature.
 
 ## Models and login
 
