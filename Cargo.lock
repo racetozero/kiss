@@ -2020,6 +2020,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "kiss-sdk"
+version = "0.0.3"
+dependencies = [
+ "anyhow",
+ "dirs",
+ "futures",
+ "kiss-agent",
+ "kiss-ai",
+ "kiss-coding",
+ "kiss-mcp",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.20",
+ "tokio",
+ "tokio-tungstenite",
+ "tokio-util",
+ "uuid",
+]
+
+[[package]]
 name = "kiss-tui"
 version = "0.0.3"
 dependencies = [

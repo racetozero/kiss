@@ -7,8 +7,19 @@ members = [
     "crates/kiss-agent",
     "crates/kiss-coding",
     "crates/kiss-mcp",
+    "crates/kiss-sdk",
     "crates/kiss-tui",
     "crates/kiss",
+]
+
+# Language-binding crates are deliberately outside the workspace. Building a
+# PyO3 test harness links libpython, napi needs a Node toolchain, and web-sys
+# is only meaningful on a wasm32 target; none of those belong in the plain
+# `cargo test --workspace` this repository's CI runs.
+exclude = [
+    "crates/kiss-py",
+    "crates/kiss-node",
+    "crates/kiss-wasm",
 ]
 
 [workspace.package]
@@ -51,6 +62,7 @@ kiss-ai = { path = "crates/kiss-ai" }
 kiss-bench = { path = "crates/kiss-bench" }
 kiss-coding = { path = "crates/kiss-coding" }
 kiss-mcp = { path = "crates/kiss-mcp" }
+kiss-sdk = { path = "crates/kiss-sdk" }
 kiss-tui = { path = "crates/kiss-tui" }
 kiss-workflow = { path = "crates/kiss-workflow" }
 libc = "0.2"

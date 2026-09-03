@@ -1,0 +1,47 @@
+[package]
+name = "kiss-sdk"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Embeddable SDK and JSON-line RPC protocol for the kiss coding agent"
+
+[features]
+default = ["native"]
+# The full in-process agent. Requires a filesystem and a process spawner.
+native = [
+    "dep:kiss-agent",
+    "dep:kiss-ai",
+    "dep:kiss-coding",
+    "dep:kiss-mcp",
+    "dep:tokio",
+    "dep:tokio-util",
+    "dep:futures",
+    "dep:dirs",
+    "dep:uuid",
+]
+# The JSONL server (stdin/stdout, TCP, WebSocket).
+rpc = ["native", "dep:tokio-tungstenite"]
+# A scripted HTTP mock provider for hermetic end-to-end tests.
+mock = ["dep:tokio"]
+
+[dependencies]
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+dirs = { workspace = true, optional = true }
+futures = { workspace = true, optional = true }
+kiss-agent = { workspace = true, optional = true }
+kiss-ai = { workspace = true, optional = true }
+kiss-coding = { workspace = true, optional = true }
+kiss-mcp = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
+tokio-tungstenite = { workspace = true, optional = true }
+tokio-util = { workspace = true, optional = true }
+uuid = { workspace = true, optional = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+tokio = { workspace = true }
