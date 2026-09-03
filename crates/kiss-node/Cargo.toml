@@ -1,0 +1,32 @@
+# Kept outside the root workspace: this package needs a Node-compatible N-API
+# runtime, which must not become a prerequisite for `cargo test --workspace`.
+[workspace]
+
+[package]
+name = "kiss-node"
+version = "0.0.3"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/racetozero/kiss"
+description = "N-API bindings for the kiss coding agent SDK"
+
+[lib]
+crate-type = ["cdylib"]
+
+[features]
+default = ["mock"]
+mock = ["kiss-sdk/mock"]
+
+[dependencies]
+kiss-sdk = { path = "../kiss-sdk", features = ["rpc"] }
+napi = { version = "3", features = ["napi9", "tokio_rt"] }
+napi-derive = "3"
+serde_json = { version = "1", features = ["preserve_order"] }
+tokio = { version = "1", features = ["rt-multi-thread"] }
+
+[build-dependencies]
+napi-build = "2"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
