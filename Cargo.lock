@@ -1893,6 +1893,7 @@ dependencies = [
  "kiss-bench",
  "kiss-coding",
  "kiss-mcp",
+ "kiss-sdk",
  "kiss-tui",
  "libc",
  "reqwest 0.12.28",

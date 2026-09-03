@@ -63,6 +63,8 @@ pub mod options;
 #[cfg(feature = "native")]
 pub mod session;
 #[cfg(feature = "native")]
+pub(crate) mod shell;
+#[cfg(feature = "native")]
 pub mod tools;
 
 #[cfg(feature = "rpc")]
@@ -71,4 +73,6 @@ pub mod rpc;
 #[cfg(feature = "native")]
 pub use options::{SessionOptions, SessionSource};
 #[cfg(feature = "native")]
-pub use session::{BashResult, EventStream, PromptArgs, SdkError, Session, SessionBuilder};
+pub use session::{
+    BashResult, EventStream, PromptArgs, SdkError, Session, SessionBuilder, SessionState,
+};

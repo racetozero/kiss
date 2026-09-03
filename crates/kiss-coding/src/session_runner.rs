@@ -11,7 +11,8 @@ use crate::subagents::{ForkTurns, SUBAGENT_SYSTEM_PROMPT, SubagentRuntime, fork_
 use crate::workflows::{WorkflowApprover, WorkflowRuntime};
 use anyhow::Context as _;
 use kiss_agent::{
-    AgentContext, AgentEvent, AgentLoopConfig, AgentMessage, DynTool, EventSink, TurnUpdate,
+    AgentContext, AgentEvent, AgentLoopConfig, AgentMessage, DynTool, EventSink, StreamFn,
+    TurnUpdate,
 };
 use kiss_ai::{Model, Registry, StopReason, ThinkingLevel, Usage};
 use std::collections::VecDeque;
@@ -120,6 +121,9 @@ pub struct AgentSession {
     subagents: OnceLock<Arc<SubagentRuntime>>,
     workflows: OnceLock<Arc<WorkflowRuntime>>,
     workflow_approver: Mutex<Option<WorkflowApprover>>,
+    /// Optional replacement for the provider streaming function. Embedders and
+    /// tests install one to run the whole loop against a scripted fake model.
+    stream_fn: Mutex<Option<StreamFn>>,
 }
 
 impl AgentSession {
@@ -196,6 +200,7 @@ impl AgentSession {
             subagents: OnceLock::new(),
             workflows: OnceLock::new(),
             workflow_approver: Mutex::new(None),
+            stream_fn: Mutex::new(None),
         });
         if subagents_allowed {
             let runtime = SubagentRuntime::new(Arc::downgrade(&session));
@@ -205,6 +210,15 @@ impl AgentSession {
         }
         session.rebuild_tools();
         session
+    }
+
+    /// Replace the provider streaming function used by every later request.
+    ///
+    /// Pass `None` to restore the real provider. Child sessions created after
+    /// this call inherit the override so a scripted fake model also serves
+    /// subagents and compaction.
+    pub fn set_stream_fn(&self, stream_fn: Option<StreamFn>) {
+        *self.stream_fn.lock().unwrap() = stream_fn;
     }
 
     pub fn model(&self) -> Model {
@@ -688,6 +702,9 @@ impl AgentSession {
                 })
             })
         }));
+        if let Some(stream_fn) = self.stream_fn.lock().unwrap().clone() {
+            config.stream_fn = stream_fn;
+        }
         config
     }
 
@@ -780,7 +797,7 @@ impl AgentSession {
             "\n\nYou are child agent {canonical_path}. Complete only the assigned task. Return a concise result to the parent agent."
         ));
 
-        Ok(Self::new_with_subagents_allowed(
+        let child = Self::new_with_subagents_allowed(
             manager,
             self.base_tools.lock().unwrap().clone(),
             self.registry.clone(),
@@ -791,7 +808,9 @@ impl AgentSession {
             self.api_key_override.clone(),
             Arc::new(|_| {}),
             false,
-        ))
+        );
+        child.set_stream_fn(self.stream_fn.lock().unwrap().clone());
+        Ok(child)
     }
 
     async fn run_ephemeral(

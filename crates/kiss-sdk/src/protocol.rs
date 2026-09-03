@@ -99,25 +99,36 @@ pub enum Command {
     GetLastAssistantText {},
     GetSessionStats {},
     #[serde(rename_all = "camelCase")]
-    SetSessionName { name: String },
+    SetSessionName {
+        name: String,
+    },
 
     // --- model ---
     #[serde(rename_all = "camelCase")]
-    SetModel { provider: String, model_id: String },
+    SetModel {
+        provider: String,
+        model_id: String,
+    },
     #[serde(rename_all = "camelCase")]
     GetAvailableModels {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         search: Option<String>,
     },
     #[serde(rename_all = "camelCase")]
-    SetThinkingLevel { level: String },
+    SetThinkingLevel {
+        level: String,
+    },
     GetAvailableThinkingLevels {},
 
     // --- queues ---
     #[serde(rename_all = "camelCase")]
-    SetSteeringMode { mode: QueueMode },
+    SetSteeringMode {
+        mode: QueueMode,
+    },
     #[serde(rename_all = "camelCase")]
-    SetFollowUpMode { mode: QueueMode },
+    SetFollowUpMode {
+        mode: QueueMode,
+    },
 
     // --- context management ---
     #[serde(rename_all = "camelCase")]
@@ -126,13 +137,19 @@ pub enum Command {
         custom_instructions: Option<String>,
     },
     #[serde(rename_all = "camelCase")]
-    SetAutoCompaction { enabled: bool },
+    SetAutoCompaction {
+        enabled: bool,
+    },
     #[serde(rename_all = "camelCase")]
-    SetAutoRetry { enabled: bool },
+    SetAutoRetry {
+        enabled: bool,
+    },
 
     // --- direct shell ---
     #[serde(rename_all = "camelCase")]
-    Bash { command: String },
+    Bash {
+        command: String,
+    },
     AbortBash {},
 
     // --- tools ---
@@ -145,9 +162,13 @@ pub enum Command {
         output_path: Option<String>,
     },
     #[serde(rename_all = "camelCase")]
-    SwitchSession { session_path: String },
+    SwitchSession {
+        session_path: String,
+    },
     #[serde(rename_all = "camelCase")]
-    Fork { entry_id: String },
+    Fork {
+        entry_id: String,
+    },
     GetForkMessages {},
 
     // --- liveness ---

@@ -31,9 +31,8 @@ impl Client {
         self.next_id += 1;
         let request = Request::with_id(id.clone(), command);
         // Serialization of a closed enum of plain data cannot fail.
-        let line = serde_json::to_string(&request).unwrap_or_else(|error| {
-            format!(r#"{{"type":"ping","__encodeError":"{error}"}}"#)
-        });
+        let line = serde_json::to_string(&request)
+            .unwrap_or_else(|error| format!(r#"{{"type":"ping","__encodeError":"{error}"}}"#));
         (id, line)
     }
 

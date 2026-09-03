@@ -72,7 +72,11 @@ type StopFn = Arc<dyn for<'a> Fn(&'a TurnInfo<'a>) -> BoxFuture<bool> + Send + S
 type PrepareTurnFn =
     Arc<dyn for<'a> Fn(&'a TurnInfo<'a>) -> BoxFuture<Option<TurnUpdate>> + Send + Sync>;
 type ApiKeyFn = Arc<dyn Fn(String) -> BoxFuture<Option<String>> + Send + Sync>;
-type StreamFn =
+/// The function the loop calls to reach a model provider.
+///
+/// It is public so embedders and tests can substitute their own transport (for
+/// example a scripted fake provider) without going through the network.
+pub type StreamFn =
     Arc<dyn Fn(&Model, &kiss_ai::Context, &StreamOptions) -> kiss_ai::EventStream + Send + Sync>;
 
 /// Everything the loop needs besides the context.

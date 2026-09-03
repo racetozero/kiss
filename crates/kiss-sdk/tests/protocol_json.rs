@@ -39,10 +39,7 @@ fn every_command_serializes_with_a_snake_case_type() {
         (Command::GetMessages {}, "get_messages"),
         (Command::GetEntries { since: None }, "get_entries"),
         (Command::GetTree {}, "get_tree"),
-        (
-            Command::GetLastAssistantText {},
-            "get_last_assistant_text",
-        ),
+        (Command::GetLastAssistantText {}, "get_last_assistant_text"),
         (Command::GetSessionStats {}, "get_session_stats"),
         (
             Command::SetSessionName { name: "n".into() },

@@ -10,7 +10,9 @@ pub mod tools;
 pub mod validate;
 
 pub use agent_loop::{EventSink, run_agent_loop, run_agent_loop_continue};
-pub use config::{AgentContext, AgentLoopConfig, BeforeToolCallResult, TurnInfo, TurnUpdate};
+pub use config::{
+    AgentContext, AgentLoopConfig, BeforeToolCallResult, StreamFn, TurnInfo, TurnUpdate,
+};
 pub use events::AgentEvent;
 pub use message::{
     AgentMessage, BashExecutionMessage, BranchSummaryMessage, CompactionSummaryMessage,

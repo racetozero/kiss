@@ -23,6 +23,7 @@ kiss-agent.workspace = true
 kiss-ai.workspace = true
 kiss-coding.workspace = true
 kiss-mcp.workspace = true
+kiss-sdk = { workspace = true, features = ["rpc"] }
 kiss-tui.workspace = true
 libc.workspace = true
 reqwest.workspace = true

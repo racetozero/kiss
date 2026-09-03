@@ -6,6 +6,7 @@ mod modes {
     pub mod interactive;
     pub mod json;
     pub mod print;
+    pub mod rpc;
 }
 mod mcp_cli;
 mod setup;
@@ -86,7 +87,8 @@ async fn run(args: Args) -> anyhow::Result<i32> {
 
     match args.mode.as_deref() {
         Some("json") => modes::json::run(&args).await,
-        Some(other) => anyhow::bail!("unknown mode: {other} (supported: json)"),
+        Some("rpc") => modes::rpc::run(&args).await,
+        Some(other) => anyhow::bail!("unknown mode: {other} (supported: json, rpc)"),
         None if args.print => modes::print::run(&args).await,
         None => modes::interactive::run(&args).await,
     }
