@@ -10,16 +10,29 @@ Rust dispatcher is immediately visible in Python without touching this file.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, Iterable, Literal, Self
+from typing import Any, AsyncIterator, Iterable, Self, cast
 
 from ._kiss import KissError
 from ._kiss import Session as _NativeSession
+from .types import (
+    BashResultData,
+    CommandData,
+    EntriesData,
+    EventData,
+    ImageInput,
+    MessageData,
+    ModelData,
+    QueueMode,
+    ResponseData,
+    SessionStateData,
+    SessionStatsData,
+    StreamingBehavior,
+    ThinkingLevel,
+    ToolName,
+    TreeData,
+)
 
-ThinkingLevel = Literal["off", "minimal", "low", "medium", "high", "xhigh", "max"]
-StreamingBehavior = Literal["steer", "followUp"]
-ToolName = Literal["read", "write", "edit", "bash", "grep", "find", "ls", "mcp"]
 SessionSource = str
-QueueModeName = Literal["all", "one-at-a-time"]
 
 
 class Event:
@@ -33,7 +46,7 @@ class Event:
 
     __slots__ = ("_data",)
 
-    def __init__(self, data: dict[str, Any]) -> None:
+    def __init__(self, data: EventData) -> None:
         self._data = data
 
     @property
@@ -41,7 +54,7 @@ class Event:
         return self._data.get("type", "")
 
     @property
-    def data(self) -> dict[str, Any]:
+    def data(self) -> EventData:
         return self._data
 
     def get(self, key: str, default: Any = None) -> Any:
@@ -86,7 +99,7 @@ class EventStream:
 class SessionState:
     """A snapshot of the session, as returned by :meth:`Session.state`."""
 
-    model: dict[str, Any] | None
+    model: ModelData | None
     thinking_level: ThinkingLevel
     is_streaming: bool
     session_file: str | None
@@ -94,24 +107,24 @@ class SessionState:
     session_name: str | None
     message_count: int
     tools: list[str]
-    steering_mode: QueueModeName
-    follow_up_mode: QueueModeName
+    steering_mode: QueueMode
+    follow_up_mode: QueueMode
     auto_compaction_enabled: bool
     auto_retry_enabled: bool
 
     @classmethod
-    def _from_json(cls, data: dict[str, Any]) -> SessionState:
+    def _from_json(cls, data: SessionStateData) -> SessionState:
         return cls(
             model=data.get("model"),
-            thinking_level=data.get("thinkingLevel", "off"),
+            thinking_level=ThinkingLevel(data.get("thinkingLevel", ThinkingLevel.OFF)),
             is_streaming=data.get("isStreaming", False),
             session_file=data.get("sessionFile"),
             session_id=data.get("sessionId", ""),
             session_name=data.get("sessionName"),
             message_count=data.get("messageCount", 0),
             tools=list(data.get("tools", [])),
-            steering_mode=data.get("steeringMode", "one-at-a-time"),
-            follow_up_mode=data.get("followUpMode", "one-at-a-time"),
+            steering_mode=QueueMode(data.get("steeringMode", QueueMode.ONE_AT_A_TIME)),
+            follow_up_mode=QueueMode(data.get("followUpMode", QueueMode.ONE_AT_A_TIME)),
             auto_compaction_enabled=data.get("autoCompactionEnabled", True),
             auto_retry_enabled=data.get("autoRetryEnabled", True),
         )
@@ -128,7 +141,7 @@ class BashResult:
     full_output_path: str | None
 
     @classmethod
-    def _from_json(cls, data: dict[str, Any]) -> BashResult:
+    def _from_json(cls, data: BashResultData) -> BashResult:
         return cls(
             output=data.get("output", ""),
             exit_code=data.get("exitCode"),
@@ -179,7 +192,7 @@ class Session:
         ``models_file`` points at an alternative ``models.json`` catalog, which
         is how the tests and the offline demo reach a local fake provider.
         """
-        options: dict[str, Any] = {
+        options: dict[str, object] = {
             "cwd": cwd,
             "model": model,
             "provider": provider,
@@ -202,14 +215,14 @@ class Session:
 
     # -- the escape hatch ---------------------------------------------
 
-    async def execute(self, command: dict[str, Any]) -> dict[str, Any]:
+    async def execute(self, command: CommandData) -> ResponseData:
         """Run one protocol command and return the raw response dictionary.
 
         Every other method is a wrapper over this one.
         """
         return await self._native.execute(command)
 
-    async def _require(self, command: dict[str, Any]) -> dict[str, Any]:
+    async def _require(self, command: CommandData) -> Any:
         """Run a command and raise :class:`KissError` unless it succeeded."""
         response = await self.execute(command)
         if not response.get("success", False):
@@ -222,7 +235,7 @@ class Session:
         self,
         message: str,
         *,
-        images: list[dict[str, str]] | None = None,
+        images: list[ImageInput] | None = None,
         streaming_behavior: StreamingBehavior | None = None,
     ) -> None:
         """Send a prompt and wait for the whole run to finish.
@@ -268,20 +281,21 @@ class Session:
     async def state(self) -> SessionState:
         return SessionState._from_json(await self._require({"type": "get_state"}))
 
-    async def messages(self) -> list[dict[str, Any]]:
-        return list((await self._require({"type": "get_messages"}))["messages"])
+    async def messages(self) -> list[MessageData]:
+        data: dict[str, list[MessageData]] = await self._require({"type": "get_messages"})
+        return list(data["messages"])
 
-    async def entries(self, since: str | None = None) -> dict[str, Any]:
-        return await self._require({"type": "get_entries", "since": since})
+    async def entries(self, since: str | None = None) -> EntriesData:
+        return cast(EntriesData, await self._require({"type": "get_entries", "since": since}))
 
-    async def tree(self) -> dict[str, Any]:
-        return await self._require({"type": "get_tree"})
+    async def tree(self) -> TreeData:
+        return cast(TreeData, await self._require({"type": "get_tree"}))
 
     async def last_assistant_text(self) -> str | None:
         return (await self._require({"type": "get_last_assistant_text"}))["text"]
 
-    async def session_stats(self) -> dict[str, Any]:
-        return await self._require({"type": "get_session_stats"})
+    async def session_stats(self) -> SessionStatsData:
+        return cast(SessionStatsData, await self._require({"type": "get_session_stats"}))
 
     async def set_session_name(self, name: str) -> None:
         await self._require({"type": "set_session_name", "name": name})
@@ -292,13 +306,15 @@ class Session:
 
     # -- model --------------------------------------------------------
 
-    async def set_model(self, provider: str, model_id: str) -> dict[str, Any]:
+    async def set_model(self, provider: str, model_id: str) -> ModelData:
         return await self._require(
             {"type": "set_model", "provider": provider, "modelId": model_id}
         )
 
-    async def available_models(self, search: str | None = None) -> list[dict[str, Any]]:
-        data = await self._require({"type": "get_available_models", "search": search})
+    async def available_models(self, search: str | None = None) -> list[ModelData]:
+        data: dict[str, list[ModelData]] = await self._require(
+            {"type": "get_available_models", "search": search}
+        )
         return list(data["models"])
 
     async def set_thinking_level(self, level: ThinkingLevel) -> None:
@@ -309,10 +325,10 @@ class Session:
 
     # -- queues -------------------------------------------------------
 
-    async def set_steering_mode(self, mode: QueueModeName) -> None:
+    async def set_steering_mode(self, mode: QueueMode) -> None:
         await self._require({"type": "set_steering_mode", "mode": mode})
 
-    async def set_follow_up_mode(self, mode: QueueModeName) -> None:
+    async def set_follow_up_mode(self, mode: QueueMode) -> None:
         await self._require({"type": "set_follow_up_mode", "mode": mode})
 
     async def clear_queue(self) -> list[str]:
@@ -320,7 +336,7 @@ class Session:
 
     # -- context management -------------------------------------------
 
-    async def compact(self, custom_instructions: str | None = None) -> dict[str, Any]:
+    async def compact(self, custom_instructions: str | None = None) -> dict[str, int]:
         return await self._require(
             {"type": "compact", "customInstructions": custom_instructions}
         )
@@ -354,7 +370,7 @@ class Session:
     async def fork(self, entry_id: str) -> dict[str, Any]:
         return await self._require({"type": "fork", "entryId": entry_id})
 
-    async def fork_messages(self) -> list[dict[str, Any]]:
+    async def fork_messages(self) -> list[MessageData]:
         return list((await self._require({"type": "get_fork_messages"}))["messages"])
 
     async def ping(self) -> bool:

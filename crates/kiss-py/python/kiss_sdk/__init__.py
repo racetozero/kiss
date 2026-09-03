@@ -30,12 +30,16 @@ call :meth:`Session.execute`; the command names and payloads are documented in
 from __future__ import annotations
 
 from ._kiss import KissError, __version__
-from ._session import (
-    BashResult,
-    Event,
-    EventStream,
-    Session,
-    SessionState,
+from ._session import BashResult, Event, EventStream, Session, SessionState
+from .types import (
+    CommandData,
+    EventData,
+    ImageInput,
+    MessageData,
+    ModelData,
+    QueueMode,
+    ResponseData,
+    SessionStatsData,
     StreamingBehavior,
     ThinkingLevel,
     ToolName,
@@ -45,9 +49,17 @@ __all__ = [
     "BashResult",
     "Event",
     "EventStream",
+    "CommandData",
+    "EventData",
+    "ImageInput",
     "KissError",
+    "MessageData",
+    "ModelData",
+    "QueueMode",
+    "ResponseData",
     "Session",
     "SessionState",
+    "SessionStatsData",
     "StreamingBehavior",
     "ThinkingLevel",
     "ToolName",
