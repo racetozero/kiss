@@ -1,0 +1,34 @@
+# This crate is deliberately NOT a member of the root Cargo workspace. Building
+# a PyO3 crate's test harness links libpython, which is not present on every
+# machine that runs `cargo test --workspace`. The empty `[workspace]` table below
+# stops Cargo from walking up to the root manifest.
+[workspace]
+
+[package]
+name = "kiss-py"
+version = "0.0.3"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/racetozero/kiss"
+description = "Python bindings for the kiss coding agent SDK"
+
+[lib]
+name = "_kiss"
+crate-type = ["cdylib"]
+
+[features]
+# The scripted offline provider. On by default so `python -m kiss_sdk.demo`
+# works with no API key; turn it off for a slimmer wheel.
+default = ["mock"]
+mock = ["kiss-sdk/mock"]
+
+[dependencies]
+kiss-sdk = { path = "../kiss-sdk", features = ["rpc"] }
+pyo3 = { version = "0.29", features = ["extension-module", "abi3-py311"] }
+pyo3-async-runtimes = { version = "0.29", features = ["tokio-runtime"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+tokio = { version = "1", features = ["rt-multi-thread"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
