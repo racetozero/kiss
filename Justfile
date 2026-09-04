@@ -11,7 +11,7 @@ sdk-test-python:
 
 # Build the N-API package and run its suite in Node and Bun.
 sdk-test-node:
-    @cd crates/kiss-node && npm install --silent && npm run build && npm test && bun test test/end-to-end.test.cjs
+    @cd crates/kiss-node && npm install --silent && npm run build && npm test && bun test test/end-to-end.test.cjs && npm run test:deno
 
 # Build the browser WASM package and execute it in Deno against WebSocket RPC.
 sdk-test-wasm:

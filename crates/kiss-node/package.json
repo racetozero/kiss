@@ -5,14 +5,23 @@
   "license": "MIT",
   "repository": "github:racetozero/kiss",
   "main": "dist/index.js",
+  "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
   "files": ["dist", "kiss.node", "README.md"],
   "engines": {"node": ">=20"},
   "scripts": {
     "build:native": "cargo build --release && node scripts/copy-native.mjs",
     "build:ts": "tsc -p tsconfig.json",
     "build": "npm run build:native && npm run build:ts",
-    "test": "node --test test/*.test.cjs"
+    "test": "node --test test/*.test.cjs",
+    "test:deno": "deno test --allow-all test/deno-smoke.mts"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
