@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Added
+
+- Added the `kiss-sdk` Rust crate with a high-level session builder, typed
+  dispatcher, bounded streaming events, model/session controls, direct shell
+  execution, and a hermetic mock provider.
+- Added Python 3.11+ PyO3 bindings with async APIs, `StrEnum` options, and typed
+  protocol dictionaries.
+- Added N-API TypeScript bindings for Node.js, Bun, and Deno.
+- Added a WebAssembly browser client for RPC WebSocket sessions.
+- Added language-neutral JSONL RPC mode over stdin/stdout and WebSocket with
+  Pi-compatible command and event names.
+
 ## 0.0.3 - 2026-09-02
 
 ### Added

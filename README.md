@@ -43,6 +43,34 @@ Update an existing installation with:
 kiss update
 ```
 
+## Use KISS as an SDK
+
+KISS can be embedded in Rust, Python 3.11+, TypeScript on Node/Bun/Deno, or a
+browser application through WebAssembly. All SDKs share one Rust dispatcher and
+the same streaming event protocol.
+
+```rust
+let session = kiss_sdk::Session::builder().tools(["read", "bash"]).build().await?;
+session.prompt("What files are here?").await?;
+```
+
+```python
+async with await kiss_sdk.Session.create(tools=[kiss_sdk.ToolName.READ]) as session:
+    await session.prompt("What files are here?")
+```
+
+```typescript
+const session = await Session.create({ tools: ["read", "bash"] });
+await session.prompt("What files are here?");
+```
+
+For any other language, `kiss --mode rpc --no-session` accepts JSON commands on
+stdin and streams JSON responses/events on stdout. `--rpc-listen
+127.0.0.1:9944` serves the same protocol over WebSocket for the WASM browser
+client.
+
+See [SDK documentation](docs/sdk.md) and [RPC protocol documentation](docs/rpc.md).
+
 ## Performance
 
 KISS is built to stay responsive during everyday work, from file discovery in

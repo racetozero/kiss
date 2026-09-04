@@ -540,11 +540,32 @@ impl Session {
     /// panic escape would abort the host process, so all fallible work is
     /// converted here.
     pub async fn execute(self: &Arc<Self>, command: Command) -> Response {
+        self.execute_with_id(command, None).await
+    }
+
+    /// Execute a command while preserving an RPC request identifier.
+    ///
+    /// In-process callers normally use [`Session::execute`]. RPC transports use
+    /// this form so direct `bash_execution_update` events carry the same id as
+    /// the command that produced them.
+    pub async fn execute_with_id(
+        self: &Arc<Self>,
+        command: Command,
+        id: Option<String>,
+    ) -> Response {
         let name = command.name();
-        match self.execute_inner(command).await {
-            Ok(Some(data)) => Response::ok_data(name, data),
-            Ok(None) => Response::ok(name),
-            Err(error) => Response::err(name, error),
+        let result = match command {
+            Command::Bash { command } => self
+                .bash_with_id(&command, id.clone())
+                .await
+                .map(|result| Some(result.to_json()))
+                .map_err(SdkErrorText::from),
+            other => self.execute_inner(other).await,
+        };
+        match result {
+            Ok(Some(data)) => Response::ok_data(name, data).with_id(id),
+            Ok(None) => Response::ok(name).with_id(id),
+            Err(error) => Response::err(name, error).with_id(id),
         }
     }
 
@@ -744,10 +765,9 @@ impl Session {
                 self.inner.update_settings(settings);
                 Ok(None)
             }
-            Command::Bash { command } => {
-                let result = self.bash_with_id(&command, None).await?;
-                Ok(Some(result.to_json()))
-            }
+            // `execute_with_id` handles this before entering this match so
+            // streamed output can carry the request correlation id.
+            Command::Bash { .. } => unreachable!("bash is handled by execute_with_id"),
             Command::AbortBash {} => {
                 self.abort_bash();
                 Ok(None)
@@ -761,12 +781,19 @@ impl Session {
                     .collect();
                 Ok(Some(json!({"tools": tools})))
             }
-            Command::ExportHtml { output_path } => Err(SdkErrorText(format!(
-                "export_html is not implemented in this build{}",
-                output_path
-                    .map(|path| format!(" (requested {path})"))
-                    .unwrap_or_default()
-            ))),
+            Command::ExportHtml { output_path } => {
+                let path = output_path.map(PathBuf::from).unwrap_or_else(|| {
+                    self.inner
+                        .manager
+                        .lock()
+                        .unwrap()
+                        .session_file()
+                        .map(|path| path.with_extension("html"))
+                        .unwrap_or_else(|| self.cwd.join("kiss-session.html"))
+                });
+                self.export_html(&path)?;
+                Ok(Some(json!({"path": path})))
+            }
             Command::SwitchSession { session_path } => {
                 let manager =
                     kiss_coding::SessionManager::open(std::path::Path::new(&session_path))
@@ -806,6 +833,46 @@ impl Session {
             }
             Command::Ping {} => Ok(Some(json!({"pong": true}))),
         }
+    }
+
+    fn export_html(&self, path: &Path) -> Result<(), SdkErrorText> {
+        let mut body = String::new();
+        for message in self.messages() {
+            let (role, text) = match message {
+                AgentMessage::User(user) => ("user", user.content.as_text()),
+                AgentMessage::Assistant(assistant) => ("assistant", assistant.text()),
+                AgentMessage::ToolResult(result) => (
+                    "tool",
+                    result
+                        .content
+                        .iter()
+                        .filter_map(|block| match block {
+                            ContentBlock::Text { text, .. } => Some(text.as_str()),
+                            _ => None,
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                ),
+                other => (other.role(), message_text(&other)),
+            };
+            body.push_str(&format!(
+                "<section><h2>{}</h2><pre>{}</pre></section>\n",
+                escape_html(role),
+                escape_html(&text)
+            ));
+        }
+        let document = format!(
+            "<!doctype html><meta charset=\"utf-8\"><title>KISS session</title>\
+             <style>body{{max-width:60rem;margin:2rem auto;font:16px system-ui}}\
+             pre{{white-space:pre-wrap;background:#f5f5f5;padding:1rem}}</style>\
+             <h1>KISS session</h1>{body}"
+        );
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|error| SdkErrorText(format!("create {}: {error}", parent.display())))?;
+        }
+        std::fs::write(path, document)
+            .map_err(|error| SdkErrorText(format!("write {}: {error}", path.display())))
     }
 
     fn session_stats(&self) -> Value {
@@ -912,6 +979,13 @@ fn user_message(args: &PromptArgs) -> AgentMessage {
 }
 
 /// Recursively build `{entry, children}` nodes for `get_tree`.
+fn escape_html(text: &str) -> String {
+    text.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+}
+
 fn build_tree(manager: &kiss_coding::SessionManager, parent: Option<&str>) -> Vec<Value> {
     manager
         .children(parent)

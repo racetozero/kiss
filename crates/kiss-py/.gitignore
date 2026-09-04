@@ -1,0 +1,7 @@
+.venv/
+target/
+*.so
+*.pyd
+*.dylib
+__pycache__/
+.pytest_cache/

@@ -296,6 +296,23 @@ async fn session_statistics_count_the_conversation() {
 }
 
 #[tokio::test]
+async fn export_html_writes_an_escaped_transcript() {
+    let directory = tempfile::tempdir().expect("temp dir");
+    let (_provider, session) = session_with(directory.path(), MockScript::text("A < B & C")).await;
+    session.prompt("compare").await.expect("prompt succeeds");
+    let path = directory.path().join("transcript.html");
+    let response = session
+        .execute(Command::ExportHtml {
+            output_path: Some(path.display().to_string()),
+        })
+        .await;
+    assert!(response.success, "{response:?}");
+    let html = std::fs::read_to_string(path).expect("HTML exists");
+    assert!(html.contains("A &lt; B &amp; C"), "{html}");
+    assert!(!html.contains("A < B & C"), "content must be escaped");
+}
+
+#[tokio::test]
 async fn an_unknown_entry_cursor_is_reported_rather_than_ignored() {
     let directory = tempfile::tempdir().expect("temp dir");
     let (_provider, session) = session_with(directory.path(), MockScript::text("hi")).await;

@@ -183,8 +183,7 @@ fn dispatch(session: &Arc<Session>, line: &str, out: &mpsc::UnboundedSender<Stri
             let session = session.clone();
             let out = out.clone();
             tokio::spawn(async move {
-                let id = request.id.clone();
-                let response = session.execute(request.command).await.with_id(id);
+                let response = session.execute_with_id(request.command, request.id).await;
                 let _ = out.send(encode(&response));
             });
         }

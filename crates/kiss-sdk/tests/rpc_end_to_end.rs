@@ -237,6 +237,26 @@ async fn a_tool_call_reaches_the_client_and_the_filesystem() {
 }
 
 #[tokio::test]
+async fn direct_bash_updates_carry_the_request_id() {
+    let mut harness = Harness::start(MockScript::text("hi")).await;
+    harness
+        .send(json!({"id": "shell-7", "type": "bash", "command": "printf streamed"}))
+        .await;
+    let lines = harness
+        .read_until(|value| value["type"] == "response" && value["command"] == "bash")
+        .await;
+    let update = lines
+        .iter()
+        .find(|value| value["type"] == "bash_execution_update")
+        .expect("a streaming shell update");
+    assert_eq!(update["id"], "shell-7");
+    assert_eq!(update["delta"], "streamed");
+    let response = lines.last().unwrap();
+    assert_eq!(response["id"], "shell-7");
+    assert_eq!(response["data"]["exitCode"], 0);
+}
+
+#[tokio::test]
 async fn responses_are_decodable_with_the_shipped_client_helper() {
     let mut harness = Harness::start(MockScript::text("hi")).await;
     harness.send(json!({"id": "9", "type": "get_state"})).await;
