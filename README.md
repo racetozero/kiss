@@ -69,7 +69,8 @@ stdin and streams JSON responses/events on stdout. `--rpc-listen
 127.0.0.1:9944` serves the same protocol over WebSocket for the WASM browser
 client.
 
-See [SDK documentation](docs/sdk.md) and [RPC protocol documentation](docs/rpc.md).
+See [SDK documentation](docs/sdk.md), [RPC protocol documentation](docs/rpc.md),
+and the [FX WebAssembly architecture review](docs/fx-wasm-review.md).
 
 ## Performance
 
