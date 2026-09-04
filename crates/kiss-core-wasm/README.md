@@ -107,15 +107,16 @@ credentials, tools, and instructions.
 
 Current release budgets and measured baseline:
 
-- WASM: 567,046 bytes raw / 205,605 bytes gzip -9
+- WASM: 567,046 bytes raw / 207,274 bytes gzip -9
 - generated wasm-bindgen loader: 35,043 bytes
 - typed browser facade plus OpenAI-compatible adapter: 12,641 bytes
 - initial linear memory: 17 pages / 1,114,112 bytes
 
-The deterministic Deno performance fixture currently measures approximately
-0.16 ms warm prompt p50 and 0.29 ms p95, with 25 isolated agents completing in
-about 2.1 ms on the development machine. These figures exclude model/network
-latency and exist to detect SDK regressions, not to predict inference speed.
+Across three trials, the deterministic Deno performance fixture measured
+0.165-0.181 ms warm prompt median and 0.308-0.341 ms p95. Batches of 25 isolated
+agents completed in 1.600-1.675 ms median and 2.230-2.439 ms p95. These figures
+exclude model/network latency and exist to detect SDK regressions, not to
+predict inference speed.
 
 Run `deno test --allow-read --allow-net test/*.ts` after `wasm-pack build` to
 exercise the actual generated module. The only listener is a hermetic fake

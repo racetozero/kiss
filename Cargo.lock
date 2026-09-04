@@ -2027,6 +2027,7 @@ dependencies = [
  "futures",
  "kiss-agent",
  "kiss-ai",
+ "kiss-bench",
  "kiss-coding",
  "kiss-mcp",
  "serde",

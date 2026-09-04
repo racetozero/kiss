@@ -44,5 +44,6 @@ tokio-util = { workspace = true, optional = true }
 uuid = { workspace = true, optional = true }
 
 [dev-dependencies]
+kiss-bench = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }

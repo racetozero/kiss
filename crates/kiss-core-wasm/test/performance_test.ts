@@ -9,11 +9,28 @@ function percentile(values: number[], fraction: number): number {
   return sorted[Math.ceil(sorted.length * fraction) - 1];
 }
 
+function report(
+  name: string,
+  samplesMs: number[],
+  iterations: number,
+  work: string,
+): void {
+  const medianNs = Math.round(percentile(samplesMs, 0.5) * 1_000_000);
+  const p95Ns = Math.round(percentile(samplesMs, 0.95) * 1_000_000);
+  console.log(
+    `KISS_BENCH\t${name}\tmedian_ns=${medianNs}\tp95_ns=${p95Ns}` +
+      `\tsamples=${samplesMs.length}\titerations=${iterations}\twork=${work}`,
+  );
+}
+
 Deno.test("warm turns and 25 isolated agents stay within browser budgets", async () => {
   const initStarted = performance.now();
   await init();
   const initMs = performance.now() - initStarted;
-  assert(initMs < 1_000, `cached/module initialization took ${initMs.toFixed(3)}ms`);
+  assert(
+    initMs < 1_000,
+    `cached/module initialization took ${initMs.toFixed(3)}ms`,
+  );
 
   const provider = () => ({ content: [{ type: "text", text: "ok" }] });
   const agent = KissAgent.create({
@@ -22,28 +39,57 @@ Deno.test("warm turns and 25 isolated agents stay within browser budgets", async
   }, provider);
   for (let index = 0; index < 10; index += 1) await agent.prompt("warmup");
 
-  const samples: number[] = [];
+  const promptSamples: number[] = [];
   for (let index = 0; index < 100; index += 1) {
     const started = performance.now();
     await agent.prompt("measure");
-    samples.push(performance.now() - started);
+    promptSamples.push(performance.now() - started);
   }
-  const p50 = percentile(samples, 0.5);
-  const p95 = percentile(samples, 0.95);
-  assert(p50 < 5, `warm prompt p50 exceeded 5ms: ${p50.toFixed(3)}ms`);
-  assert(p95 < 20, `warm prompt p95 exceeded 20ms: ${p95.toFixed(3)}ms`);
+  const promptP50 = percentile(promptSamples, 0.5);
+  const promptP95 = percentile(promptSamples, 0.95);
+  assert(
+    promptP50 < 5,
+    `warm prompt p50 exceeded 5ms: ${promptP50.toFixed(3)}ms`,
+  );
+  assert(
+    promptP95 < 20,
+    `warm prompt p95 exceeded 20ms: ${promptP95.toFixed(3)}ms`,
+  );
   agent.close();
 
-  const agents = Array.from({ length: 25 }, () => KissAgent.create({
-    model: { id: "capacity", provider: "fixture", api: "host" },
-  }, provider));
-  const capacityStarted = performance.now();
-  const results = await Promise.all(agents.map((entry, index) => entry.prompt(`agent-${index}`)));
-  const capacityMs = performance.now() - capacityStarted;
-  assert(results.every((result) => result.text === "ok"), "all isolated agents must complete");
-  assert(agents.every((entry) => entry.state().messageCount === 2), "agent histories must remain isolated");
-  assert(capacityMs < 1_000, `25-agent fixture exceeded 1s: ${capacityMs.toFixed(3)}ms`);
-  for (const entry of agents) entry.close();
+  const capacitySamples: number[] = [];
+  for (let sample = 0; sample < 11; sample += 1) {
+    const agents = Array.from({ length: 25 }, () =>
+      KissAgent.create({
+        model: { id: "capacity", provider: "fixture", api: "host" },
+      }, provider));
+    const started = performance.now();
+    const results = await Promise.all(
+      agents.map((entry, index) => entry.prompt(`agent-${index}`)),
+    );
+    capacitySamples.push(performance.now() - started);
+    assert(
+      results.every((result) => result.text === "ok"),
+      "all isolated agents must complete",
+    );
+    assert(
+      agents.every((entry) => entry.state().messageCount === 2),
+      "agent histories must remain isolated",
+    );
+    for (const entry of agents) entry.close();
+  }
+  const capacityP95 = percentile(capacitySamples, 0.95);
+  assert(
+    capacityP95 < 1_000,
+    `25-agent fixture exceeded 1s p95: ${capacityP95.toFixed(3)}ms`,
+  );
 
-  console.log(`kiss-core-wasm performance: init=${initMs.toFixed(3)}ms warm-p50=${p50.toFixed(3)}ms warm-p95=${p95.toFixed(3)}ms agents25=${capacityMs.toFixed(3)}ms`);
+  report("wasm_module_init", [initMs], 1, "cached_deno_module");
+  report("wasm_warm_prompt", promptSamples, 1, "host_model_full_agent_turn");
+  report(
+    "wasm_parallel_agents_25",
+    capacitySamples,
+    1,
+    "25_isolated_full_agent_turns",
+  );
 });

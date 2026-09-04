@@ -20,9 +20,11 @@ sdk-test-wasm:
 # Verify every SDK surface end to end.
 sdk-test-all: sdk-test sdk-test-python sdk-test-node sdk-test-wasm
 
-# Run the release-mode performance benchmark suite through cargo-nextest.
+# Run native SDK/RPC and browser WASM benchmarks alongside the core suite.
 bench:
     @cargo nextest run --workspace --release --run-ignored only --no-capture -E 'test(~benchmark_performance_)'
+    @cargo nextest run -p kiss-sdk --features 'mock rpc' --release --run-ignored only --no-capture -E 'test(~benchmark_performance_)'
+    @cd crates/kiss-core-wasm && wasm-pack build --target web --release && deno test --allow-read test/performance_test.ts && node test/size.mjs && node test/wasm_memory.mjs
 
 # Test the cross-platform PGO build and benchmark helpers.
 pgo-test:
