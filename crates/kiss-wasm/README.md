@@ -1,6 +1,8 @@
 # @kiss-sdk/wasm
 
-A browser WebAssembly client for the language-neutral KISS RPC protocol.
+A browser WebAssembly client for the language-neutral KISS RPC protocol. This
+package controls a native KISS process; it does not run the agent in the module.
+Use `@kiss-sdk/core-wasm` when the agent loop itself must run in the browser.
 
 Browsers cannot run KISS's filesystem and shell tools inside their sandbox. Run
 the native agent explicitly and connect to it:

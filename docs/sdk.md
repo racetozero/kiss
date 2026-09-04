@@ -106,8 +106,60 @@ plus permissions required by enabled tools.
 
 ## Browser / WebAssembly
 
-A browser cannot spawn `bash` or access an arbitrary project directory. The
-WASM package is therefore a client for a deliberately started native agent:
+KISS offers two separate browser topologies.
+
+### Local agent kernel
+
+`@kiss-sdk/core-wasm` runs the conversation, model/tool turn loop, schema
+validation, events, cancellation, limits, and checkpoints inside WebAssembly.
+It needs no native KISS process, WebSocket, or JSPI support. The host explicitly
+provides model and tool capabilities:
+
+```sh
+wasm-pack build crates/kiss-core-wasm --target web --release
+```
+
+```ts
+import init, {
+  KissAgent,
+  createOpenAICompatibleProvider,
+} from "@kiss-sdk/core-wasm";
+await init();
+
+const provider = createOpenAICompatibleProvider({
+  url: "https://gateway.example/v1/chat/completions",
+  apiKey: shortLivedBrowserToken,
+});
+const agent = KissAgent.create({
+  model: { id: "my-model", provider: "openai", api: "openai-completions" },
+}, provider);
+
+agent.registerTool({
+  name: "lookup",
+  description: "Look up a value",
+  parameters: { type: "object", properties: { key: { type: "string" } }, required: ["key"] },
+}, async (args, { signal }) => lookup(args, { signal }));
+
+const result = await agent.prompt("Look up alpha", console.log);
+console.log(result.text);
+```
+
+If a model returns tool-call content, the WASM loop validates and executes the
+registered callback, adds its result to conversation history, and performs the
+next model turn. Model and tool callbacks receive `AbortSignal`. Browser agents
+also expose `steer`, `followUp`, `abort`, `setModel`, `setThinkingLevel`,
+`messages`, `clearHistory`, `state`, and bounded versioned `checkpoint` data.
+See `crates/kiss-core-wasm/README.md` and its no-server browser demo.
+
+Browsers still cannot acquire ambient native filesystem/process authority.
+Applications can register safe implementations backed by browser storage, the
+File System Access API, WebContainers, or a remote sandbox. Use short-lived
+model credentials in public browser applications.
+
+### Remote native agent
+
+`@kiss-sdk/wasm` remains the small WebSocket RPC client for applications that
+need KISS's native filesystem and shell implementations:
 
 ```sh
 kiss --mode rpc --rpc-listen 127.0.0.1:9944 --no-session
@@ -119,12 +171,11 @@ import init, { KissClient } from "@kiss-sdk/wasm";
 await init();
 const client = await KissClient.connect("ws://127.0.0.1:9944");
 client.onEvent((event) => console.log(event));
-await client.prompt("What files are here?"); // resolves when accepted
+await client.prompt("What files are here?");
 ```
 
-Keep the listener on loopback: RPC has no authentication and enabled tools can
-read, modify, and execute files. `crates/kiss-wasm/demo/index.html` is a complete
-streaming page.
+The current RPC WebSocket has no authentication or Origin enforcement. Treat it
+as development-only even on loopback until handshake authentication lands.
 
 ## Consistent operations
 

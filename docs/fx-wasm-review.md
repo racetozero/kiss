@@ -3,7 +3,13 @@
 Status: research note for future implementation work  
 Reviewed: 2026-09-04  
 FX revision: [`964c040491dcb40a4c6cc63ffdb0b89e9e85c9f4`](https://github.com/vercel-labs/fx/tree/964c040491dcb40a4c6cc63ffdb0b89e9e85c9f4)  
-KISS revision: `b9907eee881d67933d6771a05ca802addf7265ff`
+KISS revision at review time: `b9907eee881d67933d6771a05ca802addf7265ff`
+
+> **Implementation update:** KISS now has a separate `crates/kiss-core-wasm`
+> browser-local agent kernel in addition to the original `crates/kiss-wasm` RPC
+> client. The recommendations below are retained as the research record; items
+> describing local core WASM as future work should be read in that historical
+> context.
 
 ## Executive summary
 

@@ -19,7 +19,7 @@ grep-searcher.workspace = true
 ignore.workspace = true
 jsonschema.workspace = true
 kiss-agent.workspace = true
-kiss-ai.workspace = true
+kiss-ai = { workspace = true, features = ["native"] }
 kiss-workflow.workspace = true
 rand.workspace = true
 regex.workspace = true

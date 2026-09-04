@@ -340,6 +340,15 @@ fn fail_truncated_batch(tool_calls: &[ToolCall], emit: &EventSink) -> ExecutedBa
     }
 }
 
+enum PreparedToolCall {
+    Immediate(FinalizedCall),
+    Run {
+        tool: DynTool,
+        tool_call: ToolCall,
+        args: Value,
+    },
+}
+
 async fn execute_tool_batch(
     context: &AgentContext,
     tool_calls: &[ToolCall],
@@ -354,17 +363,8 @@ async fn execute_tool_batch(
     });
     let sequential = config.tool_execution == ExecutionMode::Sequential || force_sequential;
 
-    enum Prepared {
-        Immediate(FinalizedCall),
-        Run {
-            tool: DynTool,
-            tool_call: ToolCall,
-            args: Value,
-        },
-    }
-
     // Preflight sequentially in source order.
-    let mut prepared: Vec<Prepared> = Vec::new();
+    let mut prepared: Vec<PreparedToolCall> = Vec::new();
     for tc in tool_calls {
         emit(AgentEvent::ToolExecutionStart {
             tool_call_id: tc.id.clone(),
@@ -373,12 +373,12 @@ async fn execute_tool_batch(
         });
         let outcome = prepare_tool_call(context, tc, config, &cancel).await;
         prepared.push(match outcome {
-            Ok((tool, args)) => Prepared::Run {
+            Ok((tool, args)) => PreparedToolCall::Run {
                 tool,
                 tool_call: tc.clone(),
                 args,
             },
-            Err(finalized) => Prepared::Immediate(*finalized),
+            Err(finalized) => PreparedToolCall::Immediate(*finalized),
         });
         if cancel.is_cancelled() {
             break;
@@ -389,11 +389,11 @@ async fn execute_tool_batch(
     if sequential {
         for p in prepared {
             match p {
-                Prepared::Immediate(f) => {
+                PreparedToolCall::Immediate(f) => {
                     emit_execution_end(&f, emit);
                     finalized.push(f);
                 }
-                Prepared::Run {
+                PreparedToolCall::Run {
                     tool,
                     tool_call,
                     args,
@@ -409,57 +409,7 @@ async fn execute_tool_batch(
             }
         }
     } else {
-        // Execute concurrently; ToolExecutionEnd fires per-completion, but
-        // result messages are appended in source order afterwards.
-        let mut handles: Vec<ParallelEntry> = Vec::new();
-        enum ParallelEntry {
-            Ready(Box<FinalizedCall>),
-            Pending(tokio::task::JoinHandle<FinalizedCall>),
-        }
-        for p in prepared {
-            match p {
-                Prepared::Immediate(f) => {
-                    emit_execution_end(&f, emit);
-                    handles.push(ParallelEntry::Ready(Box::new(f)));
-                }
-                Prepared::Run {
-                    tool,
-                    tool_call,
-                    args,
-                } => {
-                    let config = config.clone();
-                    let cancel = cancel.clone();
-                    let emit = emit.clone();
-                    handles.push(ParallelEntry::Pending(tokio::spawn(async move {
-                        let f =
-                            run_and_finalize(tool, tool_call, args, &config, cancel, &emit).await;
-                        emit_execution_end(&f, &emit);
-                        f
-                    })));
-                }
-            }
-        }
-        for entry in handles {
-            match entry {
-                ParallelEntry::Ready(f) => finalized.push(*f),
-                ParallelEntry::Pending(handle) => match handle.await {
-                    Ok(f) => finalized.push(f),
-                    Err(join_err) => {
-                        // A panicking tool must not kill the loop.
-                        finalized.push(FinalizedCall {
-                            tool_call: ToolCall {
-                                id: String::new(),
-                                name: String::new(),
-                                arguments: Value::Null,
-                                thought_signature: None,
-                            },
-                            result: ToolResult::text(format!("tool task failed: {join_err}")),
-                            is_error: true,
-                        });
-                    }
-                },
-            }
-        }
+        finalized = execute_parallel_tools(prepared, config, cancel, emit).await;
     }
 
     let terminate = !finalized.is_empty() && finalized.iter().all(|f| f.result.terminate);
@@ -481,6 +431,106 @@ async fn execute_tool_batch(
         messages,
         terminate,
     }
+}
+
+#[cfg(feature = "native-tools")]
+async fn execute_parallel_tools(
+    prepared: Vec<PreparedToolCall>,
+    config: &AgentLoopConfig,
+    cancel: CancellationToken,
+    emit: &EventSink,
+) -> Vec<FinalizedCall> {
+    enum ParallelEntry {
+        Ready(Box<FinalizedCall>),
+        Pending(tokio::task::JoinHandle<FinalizedCall>),
+    }
+
+    let mut entries = Vec::with_capacity(prepared.len());
+    for prepared in prepared {
+        match prepared {
+            PreparedToolCall::Immediate(finalized) => {
+                emit_execution_end(&finalized, emit);
+                entries.push(ParallelEntry::Ready(Box::new(finalized)));
+            }
+            PreparedToolCall::Run {
+                tool,
+                tool_call,
+                args,
+            } => {
+                let config = config.clone();
+                let cancel = cancel.clone();
+                let emit = emit.clone();
+                entries.push(ParallelEntry::Pending(tokio::spawn(async move {
+                    let finalized =
+                        run_and_finalize(tool, tool_call, args, &config, cancel, &emit).await;
+                    emit_execution_end(&finalized, &emit);
+                    finalized
+                })));
+            }
+        }
+    }
+
+    let mut finalized = Vec::with_capacity(entries.len());
+    for entry in entries {
+        match entry {
+            ParallelEntry::Ready(value) => finalized.push(*value),
+            ParallelEntry::Pending(handle) => match handle.await {
+                Ok(value) => finalized.push(value),
+                Err(join_error) => {
+                    // A panicking native tool task must not kill the loop.
+                    finalized.push(FinalizedCall {
+                        tool_call: ToolCall {
+                            id: String::new(),
+                            name: String::new(),
+                            arguments: Value::Null,
+                            thought_signature: None,
+                        },
+                        result: ToolResult::text(format!("tool task failed: {join_error}")),
+                        is_error: true,
+                    });
+                }
+            },
+        }
+    }
+    finalized
+}
+
+#[cfg(not(feature = "native-tools"))]
+async fn execute_parallel_tools(
+    prepared: Vec<PreparedToolCall>,
+    config: &AgentLoopConfig,
+    cancel: CancellationToken,
+    emit: &EventSink,
+) -> Vec<FinalizedCall> {
+    use futures::future::{BoxFuture, join_all};
+
+    let mut calls: Vec<BoxFuture<'static, FinalizedCall>> = Vec::with_capacity(prepared.len());
+    for prepared in prepared {
+        let emit = emit.clone();
+        match prepared {
+            PreparedToolCall::Immediate(finalized) => calls.push(Box::pin(async move {
+                emit_execution_end(&finalized, &emit);
+                finalized
+            })),
+            PreparedToolCall::Run {
+                tool,
+                tool_call,
+                args,
+            } => {
+                let config = config.clone();
+                let cancel = cancel.clone();
+                calls.push(Box::pin(async move {
+                    let finalized =
+                        run_and_finalize(tool, tool_call, args, &config, cancel, &emit).await;
+                    emit_execution_end(&finalized, &emit);
+                    finalized
+                }));
+            }
+        }
+    }
+    // `join_all` polls every tool concurrently without requiring a native
+    // thread or a Tokio runtime, while preserving source order in the result.
+    join_all(calls).await
 }
 
 async fn prepare_tool_call(

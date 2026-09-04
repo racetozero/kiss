@@ -20,6 +20,7 @@ exclude = [
     "crates/kiss-py",
     "crates/kiss-node",
     "crates/kiss-wasm",
+    "crates/kiss-core-wasm",
 ]
 
 [workspace.package]
@@ -58,7 +59,7 @@ http = "1"
 ignore = "0.4"
 jsonschema = { version = "0.33", default-features = false }
 kiss-agent = { path = "crates/kiss-agent" }
-kiss-ai = { path = "crates/kiss-ai" }
+kiss-ai = { path = "crates/kiss-ai", default-features = false }
 kiss-bench = { path = "crates/kiss-bench" }
 kiss-coding = { path = "crates/kiss-coding" }
 kiss-mcp = { path = "crates/kiss-mcp" }

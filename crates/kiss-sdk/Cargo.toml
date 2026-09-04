@@ -12,6 +12,7 @@ default = ["native"]
 native = [
     "dep:kiss-agent",
     "dep:kiss-ai",
+    "kiss-ai/native",
     "dep:kiss-coding",
     "dep:kiss-mcp",
     "dep:tokio",

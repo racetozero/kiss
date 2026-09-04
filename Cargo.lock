@@ -1916,7 +1916,6 @@ dependencies = [
  "anyhow",
  "async-trait",
  "base64 0.22.1",
- "chrono",
  "dirs",
  "futures",
  "jsonschema",
@@ -1927,7 +1926,6 @@ dependencies = [
  "serde_json",
  "similar",
  "tempfile",
- "thiserror 2.0.20",
  "tokio",
  "tokio-util",
 ]
@@ -3513,6 +3511,7 @@ dependencies = [
  "bytes",
  "futures-core",
  "futures-sink",
+ "futures-util",
  "libc",
  "pin-project-lite",
  "tokio",

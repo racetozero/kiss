@@ -20,7 +20,7 @@ dirs.workspace = true
 futures.workspace = true
 ignore.workspace = true
 kiss-agent.workspace = true
-kiss-ai.workspace = true
+kiss-ai = { workspace = true, features = ["native"] }
 kiss-coding.workspace = true
 kiss-mcp.workspace = true
 kiss-sdk = { workspace = true, features = ["rpc"] }

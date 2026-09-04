@@ -6,29 +6,64 @@ license.workspace = true
 repository.workspace = true
 description = "Unified multi-provider LLM streaming API for the kiss coding harness"
 
+[features]
+default = ["native"]
+# Provider-neutral messages, models, streaming events, and cancellation. This
+# feature is intentionally usable by browser WebAssembly without sockets, TLS,
+# filesystem access, or a Tokio runtime.
+portable = []
+# Native provider transports, authentication, model registry, and protocol
+# adapters. Existing workspace users receive this feature by default.
+native = [
+    "portable",
+    "dep:anyhow",
+    "dep:aws-config",
+    "dep:aws-sdk-bedrockruntime",
+    "dep:aws-smithy-types",
+    "dep:base64",
+    "dep:dirs",
+    "dep:fs2",
+    "dep:futures",
+    "dep:rand",
+    "dep:reqwest",
+    "dep:rustls",
+    "dep:sha2",
+    "dep:tokio-tungstenite",
+    "dep:url",
+    "dep:uuid",
+    "dep:xxhash-rust",
+    "tokio/rt",
+    "tokio/macros",
+    "tokio/time",
+    "tokio/fs",
+]
+
 [dependencies]
-anyhow.workspace = true
-aws-config.workspace = true
-aws-sdk-bedrockruntime.workspace = true
-aws-smithy-types.workspace = true
-base64.workspace = true
 chrono.workspace = true
-dirs.workspace = true
-fs2.workspace = true
-futures.workspace = true
-rand.workspace = true
-reqwest.workspace = true
-rustls.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-sha2.workspace = true
+# Do not inherit the workspace's native Tokio feature set: portable builds only
+# need channels. Native features above add the runtime facilities adapters use.
+tokio = { version = "1", features = ["sync"] }
+tokio-util = { version = "0.7", features = ["rt"] }
 thiserror.workspace = true
-tokio.workspace = true
-tokio-tungstenite.workspace = true
-tokio-util.workspace = true
-url.workspace = true
-uuid.workspace = true
-xxhash-rust.workspace = true
+
+anyhow = { workspace = true, optional = true }
+aws-config = { workspace = true, optional = true }
+aws-sdk-bedrockruntime = { workspace = true, optional = true }
+aws-smithy-types = { workspace = true, optional = true }
+base64 = { workspace = true, optional = true }
+dirs = { workspace = true, optional = true }
+fs2 = { workspace = true, optional = true }
+futures = { workspace = true, optional = true }
+rand = { workspace = true, optional = true }
+reqwest = { workspace = true, optional = true }
+rustls = { workspace = true, optional = true }
+sha2 = { workspace = true, optional = true }
+tokio-tungstenite = { workspace = true, optional = true }
+url = { workspace = true, optional = true }
+uuid = { workspace = true, optional = true }
+xxhash-rust = { workspace = true, optional = true }
 
 [dev-dependencies]
 kiss-bench.workspace = true

@@ -105,7 +105,11 @@ pub struct AgentLoopConfig {
 }
 
 impl AgentLoopConfig {
-    pub fn new(model: Model) -> Self {
+    /// Construct a loop around an explicit provider stream.
+    ///
+    /// Portable embedders such as browser WebAssembly use this constructor so
+    /// the host owns network authority. Native callers normally use [`Self::new`].
+    pub fn with_stream(model: Model, stream_fn: StreamFn) -> Self {
         AgentLoopConfig {
             model,
             thinking_level: ThinkingLevel::Off,
@@ -124,9 +128,13 @@ impl AgentLoopConfig {
             after_tool_call: None,
             should_stop_after_turn: None,
             prepare_next_turn: None,
-            stream_fn: Arc::new(|model, context, options| {
-                kiss_ai::stream_simple(model, context, options)
-            }),
+            stream_fn,
         }
+    }
+
+    /// Construct a loop using KISS's native provider adapters.
+    #[cfg(feature = "native-tools")]
+    pub fn new(model: Model) -> Self {
+        Self::with_stream(model, Arc::new(kiss_ai::stream_simple))
     }
 }
