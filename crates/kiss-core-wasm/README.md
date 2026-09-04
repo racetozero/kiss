@@ -112,11 +112,10 @@ Current release budgets and measured baseline:
 - typed browser facade plus OpenAI-compatible adapter: 12,641 bytes
 - initial linear memory: 17 pages / 1,114,112 bytes
 
-Across three trials, the deterministic Deno performance fixture measured
-0.165-0.181 ms warm prompt median and 0.308-0.341 ms p95. Batches of 25 isolated
-agents completed in 1.600-1.675 ms median and 2.230-2.439 ms p95. These figures
-exclude model/network latency and exist to detect SDK regressions, not to
-predict inference speed.
+Across three trials, the deterministic Deno performance fixture averaged 0.195
+ms per warm prompt. Batches of 25 isolated agents averaged 1.649 ms. These
+figures exclude model/network latency and exist to detect SDK regressions, not
+to predict inference speed.
 
 Run `deno test --allow-read --allow-net test/*.ts` after `wasm-pack build` to
 exercise the actual generated module. The only listener is a hermetic fake

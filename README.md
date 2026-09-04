@@ -98,16 +98,16 @@ KISS operations, not model or network latency.
 These hermetic benchmarks isolate local SDK and transport overhead. The native
 SDK and RPC paths use `ping`; the browser benchmark runs a complete agent turn
 against an immediate host model callback. No benchmark calls an external model.
-Ranges are across three trials:
+Values are the mean across three trials:
 
-| Surface | Work | Median range | p95 range |
-| --- | --- | ---: | ---: |
-| Native SDK | Shared in-process command dispatch | 119-122 ns | 122-128 ns |
-| JSONL RPC | Client encode/decode, in-memory duplex, server dispatch | 2.288-2.362 us | 2.345-2.635 us |
-| Browser WASM | Warm full-agent prompt, 100 samples | 0.165-0.181 ms | 0.308-0.341 ms |
-| Browser WASM | 25 isolated agents in parallel, 11 batches | 1.600-1.675 ms | 2.230-2.439 ms |
+| Surface | Work | Mean |
+| --- | --- | ---: |
+| Native SDK | Shared in-process command dispatch | 129 ns |
+| JSONL RPC | Client encode/decode, in-memory duplex, server dispatch | 2.279 us |
+| Browser WASM | Warm full-agent prompt, 100 samples | 0.195 ms |
+| Browser WASM | 25 isolated agents in parallel, 11 batches | 1.649 ms |
 
-Fresh WASM module initialization took 20.273-21.265 ms per Deno process. The
+Fresh WASM module initialization averaged 20.049 ms per Deno process. The
 release module is 567,046 bytes raw and 207,274 bytes gzip, with 17 initial
 linear-memory pages (1,114,112 bytes). Model and tool callback time will
 normally dominate these local costs.
@@ -162,19 +162,10 @@ binary smaller and produced a modest latency improvement:
 
 ### Method
 
-The core, subagent, and workflow results used an Apple M4, macOS 26.5.1, and
-Rust 1.98.0 on 2026-09-01. The SDK, RPC, and WASM results used an AMD Ryzen 9
-5950X under WSL2, Rust 1.98.0, Deno 2.0.6, and Node 24.15.0 on 2026-09-04. Core
-and native SDK benchmarks used the Cargo `release` profile. The table reports
-the median result from three trials. Each core benchmark
-used 9-15 samples per trial. The subagent and workflow comparisons also used
-three trials, with 21 samples for matched feature comparisons and 9-21 samples
-for workflow operations. The native benchmarks did not call a model or start a
-real child session; WASM used an immediate, deterministic host callback. All
-reported benchmarks and budget checks passed. The optimized release comparison
-used three held-out trials on 2026-08-31. SDK/RPC samples used 15 batches of
-10,000/1,000 operations respectively. WASM trials used 100 warm prompts and 11
-parallel-agent batches. Lower latency values are better.
+Results are based on three release-mode runs using local, deterministic
+fixtures—no external models or network calls. Core benchmarks ran on an Apple
+M4; SDK, RPC, and WASM benchmarks ran on an AMD Ryzen 9 5950X under WSL2. PGO
+results use separate held-out runs. Lower is better.
 
 Run the full native and browser benchmark suite, including WASM size and memory
 budgets, with `just bench` (requires cargo-nextest, wasm-pack, Deno, and Node).

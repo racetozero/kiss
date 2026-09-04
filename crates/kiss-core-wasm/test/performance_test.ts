@@ -15,10 +15,13 @@ function report(
   iterations: number,
   work: string,
 ): void {
+  const meanMs = samplesMs.reduce((total, sample) => total + sample, 0) /
+    samplesMs.length;
+  const meanNs = Math.round(meanMs * 1_000_000);
   const medianNs = Math.round(percentile(samplesMs, 0.5) * 1_000_000);
   const p95Ns = Math.round(percentile(samplesMs, 0.95) * 1_000_000);
   console.log(
-    `KISS_BENCH\t${name}\tmedian_ns=${medianNs}\tp95_ns=${p95Ns}` +
+    `KISS_BENCH\t${name}\tmean_ns=${meanNs}\tmedian_ns=${medianNs}\tp95_ns=${p95Ns}` +
       `\tsamples=${samplesMs.length}\titerations=${iterations}\twork=${work}`,
   );
 }

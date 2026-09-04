@@ -83,12 +83,13 @@ pub fn report(name: &str, elapsed_ns: &mut [u128], iterations: usize, work: &str
         !elapsed_ns.is_empty(),
         "a benchmark needs at least one sample"
     );
+    let mean = elapsed_ns.iter().sum::<u128>() / elapsed_ns.len() as u128;
     elapsed_ns.sort_unstable();
     let median = elapsed_ns[elapsed_ns.len() / 2];
     let p95_index = (elapsed_ns.len() * 95).div_ceil(100).saturating_sub(1);
     let p95 = elapsed_ns[p95_index];
     println!(
-        "KISS_BENCH\t{name}\tmedian_ns={median}\tp95_ns={p95}\tsamples={}\titerations={iterations}\twork={work}",
+        "KISS_BENCH\t{name}\tmean_ns={mean}\tmedian_ns={median}\tp95_ns={p95}\tsamples={}\titerations={iterations}\twork={work}",
         elapsed_ns.len()
     );
 }
