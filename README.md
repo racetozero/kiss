@@ -262,8 +262,8 @@ not fetched yet, the prompt says so rather than guessing. Set
 immediately, and `workflows.size` to advise how many agents a script should
 aim for.
 
-While a run is going, a progress line appears under the transcript. Press
-`Ctrl+W`, or run `/workflows`, to open the full view:
+While a run is going, a progress line appears under the transcript. Run
+`/workflows` to open the full view:
 
 | Key | Action |
 | --- | --- |

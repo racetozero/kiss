@@ -557,7 +557,7 @@ pub(crate) fn progress_line(
         .map(|phase| phase.title.as_str())
         .unwrap_or("starting");
     let body = format!(
-        "{spinner} {name} · {phase} · {}/{} agents · {} tokens · ctrl+w opens the workflow view",
+        "{spinner} {name} · {phase} · {}/{} agents · {} tokens · /workflows opens the workflow view",
         snapshot.finished_agents(),
         snapshot.total_agents(),
         format_tokens(snapshot.tokens),

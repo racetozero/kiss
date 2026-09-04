@@ -1127,7 +1127,7 @@ pub async fn run(args: &Args) -> Result<i32> {
             && let Some(trigger) = workflow_trigger(&message)
         {
             app.cells.push(Cell::Notice(format!(
-                "running this as a dynamic workflow ({trigger}) · ctrl+w opens the progress view"
+                "running this as a dynamic workflow ({trigger}) · /workflows opens the progress view"
             )));
         }
         let session = session.clone();
@@ -2405,12 +2405,6 @@ fn handle_input(
         }
         app.ctrl_c_armed = false;
 
-        // Ctrl+W opens the progress view for the newest run.
-        if *key == KeyEvent::ctrl('w') {
-            open_workflow_view(app, session, None);
-            return Flow::Continue;
-        }
-
         if matches!(app.keybindings.action_for(key), Some(Action::Quit)) {
             if app.editor.is_empty() {
                 return Flow::Quit;
@@ -2588,7 +2582,7 @@ fn handle_input(
             && let Some(trigger) = workflow_trigger(&text)
         {
             app.cells.push(Cell::Notice(format!(
-                "running this as a dynamic workflow ({trigger}) · ctrl+w opens the progress view"
+                "running this as a dynamic workflow ({trigger}) · /workflows opens the progress view"
             )));
         }
         if app.working {
@@ -5044,7 +5038,7 @@ fn apply_picker_selection(
                     let _ = reply.send(kiss_coding::workflows::ApprovalDecision::Approve);
                 }
                 app.cells.push(Cell::Notice(format!(
-                    "running workflow {} · ctrl+w opens the progress view",
+                    "running workflow {} · /workflows opens the progress view",
                     plan.name
                 )));
             }
@@ -5660,7 +5654,7 @@ fn run_slash_command(
         "quit" | "exit" => return Flow::Quit,
         "help" | "hotkeys" => {
             app.cells.push(Cell::Notice(
-                "Input\n  Enter send · Shift+Enter or Alt+Enter newline · / commands and skills · $ skills · @ files · ! shell · !! shell outside context\nModels and effort\n  Shift+Tab effort · Ctrl+L select model · Ctrl+P next model · Ctrl+Shift+P previous model\nSession\n  Ctrl+D exit · Esc cancel · Ctrl+C interrupt or clear · double Esc tree\nDisplay and queues\n  Ctrl+O tools · Ctrl+T thinking · Ctrl+X copy · Ctrl+Enter follow-up · Alt+Up dequeue\nWorkflows\n  /workflow <prompt> runs one task as a workflow · /workflows browses runs · Ctrl+W opens the progress view\n  arrows select · Enter open · Esc back · j/k scroll · f filter · p pause · x stop · r restart · s save".into(),
+                "Input\n  Enter send · Shift+Enter or Alt+Enter newline · Ctrl+W delete previous word · / commands and skills · $ skills · @ files · ! shell · !! shell outside context\nModels and effort\n  Shift+Tab effort · Ctrl+L select model · Ctrl+P next model · Ctrl+Shift+P previous model\nSession\n  Ctrl+D exit · Esc cancel · Ctrl+C interrupt or clear · double Esc tree\nDisplay and queues\n  Ctrl+O tools · Ctrl+T thinking · Ctrl+X copy · Ctrl+Enter follow-up · Alt+Up dequeue\nWorkflows\n  /workflow <prompt> runs one task as a workflow · /workflows browses runs\n  arrows select · Enter open · Esc back · j/k scroll · f filter · p pause · x stop · r restart · s save".into(),
             ));
         }
         "model" => {
@@ -6521,6 +6515,36 @@ mod tests {
         app.editor.set_text("!git status");
         update_thinking_border(&mut app, ThinkingLevel::Max);
         assert_eq!(app.editor.border_color_token, "bashMode");
+    }
+
+    #[test]
+    fn ctrl_w_reaches_the_editor_and_deletes_the_previous_word() {
+        let mut app = test_app();
+        app.editor.set_text("one two");
+        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
+            "/synthetic",
+        )));
+        let args = Args::parse_from(["kiss"]);
+        let mut resources = test_resources();
+        let mut running_task = None;
+        let (file_tx, _file_rx) = mpsc::unbounded_channel();
+        let mut file_search = FileSearchService::new(file_tx);
+        let (command_tx, _command_rx) = mpsc::unbounded_channel();
+
+        let flow = handle_input(
+            &mut app,
+            &session,
+            &InputEvent::Key(KeyEvent::ctrl('w')),
+            &args,
+            &mut resources,
+            &mut running_task,
+            &mut file_search,
+            &command_tx,
+        );
+
+        assert!(matches!(flow, Flow::Continue));
+        assert_eq!(app.editor.text(), "one ");
+        assert!(app.workflow_view.is_none());
     }
 
     #[test]
