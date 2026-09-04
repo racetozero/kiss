@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KISS WASM SDK demo</title>
+  <style>
+    body { max-width: 60rem; margin: 3rem auto; padding: 0 1rem; font: 16px system-ui; }
+    form { display: flex; gap: .5rem; } input { flex: 1; padding: .7rem; }
+    button { padding: .7rem 1rem; } pre { white-space: pre-wrap; min-height: 10rem; background: #111; color: #eee; padding: 1rem; }
+    #status { color: #555; }
+  </style>
+</head>
+<body>
+  <h1>KISS browser SDK</h1>
+  <p>First run <code>kiss --mode rpc --rpc-listen 127.0.0.1:9944 --no-session</code>.</p>
+  <p id="status">Connecting…</p>
+  <form id="form">
+    <input id="prompt" value="What files are in the current directory?" aria-label="Prompt">
+    <button type="submit">Send</button>
+    <button id="abort" type="button">Abort</button>
+  </form>
+  <pre id="output"></pre>
+  <script type="module">
+    import init, { KissClient } from "../pkg/kiss_wasm.js";
+    const status = document.querySelector("#status");
+    const output = document.querySelector("#output");
+    try {
+      await init();
+      const client = await KissClient.connect("ws://127.0.0.1:9944");
+      status.textContent = "Connected";
+      client.onEvent((event) => {
+        if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
+          output.textContent += event.assistantMessageEvent.delta ?? "";
+        }
+        if (event.type === "agent_settled") status.textContent = "Connected — idle";
+      });
+      document.querySelector("#form").addEventListener("submit", async (event) => {
+        event.preventDefault(); output.textContent = ""; status.textContent = "Working…";
+        try { await client.prompt(document.querySelector("#prompt").value); }
+        catch (error) { status.textContent = String(error); }
+      });
+      document.querySelector("#abort").addEventListener("click", () => client.abort());
+    } catch (error) { status.textContent = `Could not connect: ${error}`; }
+  </script>
+</body>
+</html>

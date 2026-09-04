@@ -1,0 +1,34 @@
+# Browser-only binding crate; deliberately outside the native root workspace.
+[workspace]
+
+[package]
+name = "kiss-wasm"
+version = "0.0.3"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/racetozero/kiss"
+description = "WebAssembly browser client for the kiss agent RPC protocol"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+kiss-sdk = { path = "../kiss-sdk", default-features = false }
+js-sys = "0.3"
+serde = "1"
+serde-wasm-bindgen = "0.6"
+wasm-bindgen = "0.2"
+web-sys = { version = "0.3", features = [
+  "BinaryType",
+  "CloseEvent",
+  "ErrorEvent",
+  "Event",
+  "MessageEvent",
+  "WebSocket",
+  "console",
+] }
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
