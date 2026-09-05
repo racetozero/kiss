@@ -6,7 +6,7 @@
 
 [package]
 name = "kiss-py"
-version = "0.0.3"
+version = "0.0.4"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/racetozero/kiss"

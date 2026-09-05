@@ -1,6 +1,6 @@
 {
   "name": "@kiss-sdk/core-wasm",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Full KISS agent kernel running inside browser WebAssembly",
   "type": "module",
   "module": "./browser.js",
