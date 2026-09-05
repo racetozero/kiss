@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Fixed
+
+- Open the skill search menu for inline `$` mentions and invoke the selected
+  skill without replacing preceding prompt text.
+
 ## 0.0.4 - 2026-09-04
 
 ### Added

@@ -2023,9 +2023,6 @@ fn skill_token_query(
     editor: &Editor,
     skills: &[kiss_coding::skills::Skill],
 ) -> Option<(String, char, String)> {
-    if editor.cursor().0 != 0 {
-        return None;
-    }
     let before = editor.current_line_before_cursor();
     let token_start = before
         .char_indices()
@@ -2039,7 +2036,8 @@ fn skill_token_query(
         _ => return None,
     };
     let preceding = before[..token_start].trim();
-    if !preceding.is_empty()
+    if sigil == '/'
+        && !preceding.is_empty()
         && !kiss_coding::skills::parse_invocation(preceding, skills)
             .is_some_and(|invocation| invocation.request.is_empty())
     {
@@ -2362,7 +2360,11 @@ fn prepare_skill_input(
     resources: &InteractiveResources,
 ) -> Result<Option<String>> {
     let display = submission.display_text.trim();
-    let skills = if display.starts_with('$') || display.starts_with("/skill:") {
+    let skills = if display.starts_with("/skill:")
+        || display
+            .split_whitespace()
+            .any(|token| token.starts_with('$'))
+    {
         resources.skills.clone()
     } else {
         slash_invocable_skills(resources)
@@ -7541,7 +7543,7 @@ mod tests {
     }
 
     #[test]
-    fn dollar_completion_inserts_skills_without_submitting() {
+    fn dollar_completion_opens_inline_and_preserves_prompt() {
         let mut app = test_app();
         let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
             "/synthetic",
@@ -7552,7 +7554,7 @@ mod tests {
             file_path: "release/SKILL.md".into(),
             disable_model_invocation: false,
         }];
-        app.editor.set_text("$rel");
+        app.editor.set_text("hello $");
         sync_command_menu(&mut app, &session, &[], &skills, &[]);
 
         assert_eq!(
@@ -7566,7 +7568,7 @@ mod tests {
             handle_command_menu_key(&mut app, &key(Key::Enter)),
             Some(CommandMenuAction::Handled)
         );
-        assert_eq!(app.editor.text(), "$release ");
+        assert_eq!(app.editor.text(), "hello $release ");
     }
 
     #[test]
@@ -7645,6 +7647,19 @@ mod tests {
         assert!(model_text.contains("PRIVATE REVIEW BODY"));
         assert!(model_text.contains("PRIVATE TEST BODY"));
         assert!(model_text.ends_with("<user_request>\nline one\nline two\n</user_request>"));
+
+        let inline = EditorSubmission {
+            display_text: "please inspect this $review".into(),
+            text: "please inspect this $review".into(),
+        };
+        let inline_model_text = prepare_skill_input(&inline, &resources)
+            .unwrap()
+            .expect("inline skill invocation");
+        assert!(inline_model_text.contains("PRIVATE REVIEW BODY"));
+        assert!(
+            inline_model_text
+                .ends_with("<user_request>\nplease inspect this $review\n</user_request>")
+        );
 
         let stored = stored_user_text(&submission.display_text, &model_text);
         assert_eq!(visible_user_text(&stored), submission.display_text);

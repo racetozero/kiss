@@ -21,7 +21,7 @@ pub struct SkillInvocation {
     pub request: String,
 }
 
-/// Parse consecutive skill tokens at the start of user input.
+/// Parse leading skill commands and `$name` skill mentions anywhere in user input.
 pub fn parse_invocation(input: &str, skills: &[Skill]) -> Option<SkillInvocation> {
     let mut rest = input.trim_start();
     let mut skill_names = Vec::new();
@@ -43,6 +43,17 @@ pub fn parse_invocation(input: &str, skills: &[Skill]) -> Option<SkillInvocation
             skill_names.push(skill.name.clone());
         }
         rest = rest[token_end..].trim_start();
+    }
+
+    for name in rest
+        .split_whitespace()
+        .filter_map(|token| token.strip_prefix('$'))
+    {
+        if let Some(skill) = skills.iter().find(|skill| skill.name == name)
+            && !skill_names.contains(&skill.name)
+        {
+            skill_names.push(skill.name.clone());
+        }
     }
 
     (!skill_names.is_empty()).then(|| SkillInvocation {
@@ -297,7 +308,13 @@ mod tests {
                 request: "check this".into(),
             })
         );
-        assert_eq!(parse_invocation("cost is $review", &skills), None);
+        assert_eq!(
+            parse_invocation("please use $review and $tests", &skills),
+            Some(SkillInvocation {
+                skill_names: vec!["review".into(), "tests".into()],
+                request: "please use $review and $tests".into(),
+            })
+        );
         assert_eq!(parse_invocation("$unknown request", &skills), None);
     }
 
