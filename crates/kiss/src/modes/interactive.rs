@@ -324,7 +324,100 @@ struct ShellRunResult {
 const SPINNER: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const AUTO_RECAP_IDLE: Duration = Duration::from_secs(5 * 60);
 const MIN_FRAME_INTERVAL: Duration = Duration::from_millis(33);
+#[cfg(not(unix))]
+const RESIZE_POLL_INTERVAL: Duration = Duration::from_millis(25);
+const RESIZE_SETTLE_DELAY: Duration = Duration::from_millis(75);
 const MAX_READY_EVENTS_PER_TICK: usize = 256;
+
+#[derive(Debug)]
+struct ResizeState {
+    accepted: (usize, usize),
+    observed: (usize, usize),
+    settle_at: Option<Instant>,
+    recheck_at: Option<Instant>,
+}
+
+impl ResizeState {
+    fn new(size: (usize, usize)) -> Self {
+        Self {
+            accepted: size,
+            observed: size,
+            settle_at: None,
+            recheck_at: None,
+        }
+    }
+
+    fn observe(&mut self, size: (usize, usize), now: Instant) {
+        if size != self.observed {
+            self.observed = size;
+            self.settle_at = Some(now + RESIZE_SETTLE_DELAY);
+            self.recheck_at = None;
+        }
+    }
+
+    fn settle(&mut self, now: Instant) -> bool {
+        if !self.settle_at.is_some_and(|deadline| now >= deadline) {
+            return false;
+        }
+        self.settle_at = None;
+        if self.accepted == self.observed {
+            return false;
+        }
+        self.accepted = self.observed;
+        self.recheck_at = Some(now + RESIZE_SETTLE_DELAY);
+        true
+    }
+
+    fn recheck(&mut self, size: (usize, usize), now: Instant) {
+        if self.recheck_at.is_some_and(|deadline| now >= deadline) {
+            self.recheck_at = None;
+            self.observe(size, now);
+        }
+    }
+
+    fn next_deadline(&self) -> Option<Instant> {
+        self.settle_at.or(self.recheck_at)
+    }
+
+    fn pending(&self) -> bool {
+        self.settle_at.is_some()
+    }
+}
+
+fn resize_notifications(initial_size: (usize, usize)) -> mpsc::UnboundedReceiver<()> {
+    let (tx, rx) = mpsc::unbounded_channel();
+    #[cfg(unix)]
+    tokio::spawn(async move {
+        let Ok(mut signal) =
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::window_change())
+        else {
+            return;
+        };
+        while signal.recv().await.is_some() {
+            if tx.send(()).is_err() {
+                break;
+            }
+        }
+    });
+    #[cfg(not(unix))]
+    tokio::spawn(async move {
+        let mut observed = initial_size;
+        let mut ticker = tokio::time::interval(RESIZE_POLL_INTERVAL);
+        ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            ticker.tick().await;
+            let size = Terminal::size();
+            if size != observed {
+                observed = size;
+                if tx.send(()).is_err() {
+                    break;
+                }
+            }
+        }
+    });
+    let _ = initial_size;
+    rx
+}
 
 #[derive(Debug, PartialEq, Eq)]
 enum CommandMenuAction {
@@ -932,7 +1025,9 @@ pub async fn run(args: &Args) -> Result<i32> {
         }
     });
 
-    let (width, height) = Terminal::size();
+    let mut resize_state = ResizeState::new(Terminal::size());
+    let mut resize_rx = resize_notifications(resize_state.accepted);
+    let (width, height) = resize_state.accepted;
     let lines = provisional_lines(&mut provisional_editor, &provisional_theme, width);
     {
         let mut out = std::io::stdout().lock();
@@ -945,6 +1040,9 @@ pub async fn run(args: &Args) -> Result<i32> {
         tokio::spawn(async move { build_startup(&startup_args, true, sink).await });
     let mut submit_after_startup = false;
     let startup = 'startup: loop {
+        let resize_deadline = resize_state
+            .next_deadline()
+            .unwrap_or_else(|| Instant::now() + Duration::from_secs(86_400));
         tokio::select! {
             result = &mut startup_task => {
                 let result = result.context("startup task stopped")?;
@@ -970,11 +1068,30 @@ pub async fn run(args: &Args) -> Result<i32> {
                         }
                     }
                 }
-                let (width, height) = Terminal::size();
-                let lines = provisional_lines(&mut provisional_editor, &provisional_theme, width);
-                let mut out = std::io::stdout().lock();
-                renderer.render_frame(&lines, width, height, &mut out)?;
-                out.flush()?;
+                if !resize_state.pending() {
+                    let (width, height) = resize_state.accepted;
+                    let lines = provisional_lines(&mut provisional_editor, &provisional_theme, width);
+                    let mut out = std::io::stdout().lock();
+                    renderer.render_frame(&lines, width, height, &mut out)?;
+                    out.flush()?;
+                }
+            }
+            Some(()) = resize_rx.recv() => {
+                let now = Instant::now();
+                resize_state.observe(Terminal::size(), now);
+            }
+            _ = tokio::time::sleep_until(tokio::time::Instant::from_std(resize_deadline)),
+                if resize_state.next_deadline().is_some() => {
+                let now = Instant::now();
+                let redraw = resize_state.settle(now);
+                resize_state.recheck(Terminal::size(), now);
+                if redraw {
+                    let (width, height) = resize_state.accepted;
+                    let lines = provisional_lines(&mut provisional_editor, &provisional_theme, width);
+                    let mut out = std::io::stdout().lock();
+                    renderer.render_frame(&lines, width, height, &mut out)?;
+                    out.flush()?;
+                }
             }
         }
     };
@@ -1127,7 +1244,7 @@ pub async fn run(args: &Args) -> Result<i32> {
             && let Some(trigger) = workflow_trigger(&message)
         {
             app.cells.push(Cell::Notice(format!(
-                "running this as a dynamic workflow ({trigger}) · ctrl+w opens the progress view"
+                "running this as a dynamic workflow ({trigger}) · /workflows opens the progress view"
             )));
         }
         let session = session.clone();
@@ -1149,12 +1266,18 @@ pub async fn run(args: &Args) -> Result<i32> {
     file_search.warm(session.manager.lock().unwrap().cwd().to_path_buf());
 
     'main: loop {
+        let resize_deadline = resize_state
+            .next_deadline()
+            .unwrap_or_else(|| Instant::now() + Duration::from_secs(86_400));
         let render_is_active = app.working
             || app.command_status.is_some()
             || app.btw_panel.is_some()
             || app.recap_loading;
-        if dirty && (!render_is_active || Instant::now() >= next_render_at) {
-            let (width, height) = Terminal::size();
+        if dirty
+            && !resize_state.pending()
+            && (!render_is_active || Instant::now() >= next_render_at)
+        {
+            let (width, height) = resize_state.accepted;
             let lines = app.render(width, &session);
             let mut out = std::io::stdout().lock();
             renderer.render_frame(&lines, width, height, &mut out)?;
@@ -1165,7 +1288,21 @@ pub async fn run(args: &Args) -> Result<i32> {
 
         tokio::select! {
             _ = tokio::time::sleep_until(tokio::time::Instant::from_std(next_render_at)),
-                if dirty && render_is_active && Instant::now() < next_render_at => {}
+                if dirty && !resize_state.pending() && render_is_active && Instant::now() < next_render_at => {}
+            Some(()) = resize_rx.recv() => {
+                let now = Instant::now();
+                resize_state.observe(Terminal::size(), now);
+            }
+            _ = tokio::time::sleep_until(tokio::time::Instant::from_std(resize_deadline)),
+                if resize_state.next_deadline().is_some() => {
+                let now = Instant::now();
+                let redraw = resize_state.settle(now);
+                resize_state.recheck(Terminal::size(), now);
+                if redraw {
+                    dirty = true;
+                    next_render_at = now;
+                }
+            }
             _ = ticker.tick() => {
                 if app.working
                     || app.command_status.is_some()
@@ -1886,9 +2023,6 @@ fn skill_token_query(
     editor: &Editor,
     skills: &[kiss_coding::skills::Skill],
 ) -> Option<(String, char, String)> {
-    if editor.cursor().0 != 0 {
-        return None;
-    }
     let before = editor.current_line_before_cursor();
     let token_start = before
         .char_indices()
@@ -1902,7 +2036,8 @@ fn skill_token_query(
         _ => return None,
     };
     let preceding = before[..token_start].trim();
-    if !preceding.is_empty()
+    if sigil == '/'
+        && !preceding.is_empty()
         && !kiss_coding::skills::parse_invocation(preceding, skills)
             .is_some_and(|invocation| invocation.request.is_empty())
     {
@@ -2225,7 +2360,11 @@ fn prepare_skill_input(
     resources: &InteractiveResources,
 ) -> Result<Option<String>> {
     let display = submission.display_text.trim();
-    let skills = if display.starts_with('$') || display.starts_with("/skill:") {
+    let skills = if display.starts_with("/skill:")
+        || display
+            .split_whitespace()
+            .any(|token| token.starts_with('$'))
+    {
         resources.skills.clone()
     } else {
         slash_invocable_skills(resources)
@@ -2405,12 +2544,6 @@ fn handle_input(
         }
         app.ctrl_c_armed = false;
 
-        // Ctrl+W opens the progress view for the newest run.
-        if *key == KeyEvent::ctrl('w') {
-            open_workflow_view(app, session, None);
-            return Flow::Continue;
-        }
-
         if matches!(app.keybindings.action_for(key), Some(Action::Quit)) {
             if app.editor.is_empty() {
                 return Flow::Quit;
@@ -2588,7 +2721,7 @@ fn handle_input(
             && let Some(trigger) = workflow_trigger(&text)
         {
             app.cells.push(Cell::Notice(format!(
-                "running this as a dynamic workflow ({trigger}) · ctrl+w opens the progress view"
+                "running this as a dynamic workflow ({trigger}) · /workflows opens the progress view"
             )));
         }
         if app.working {
@@ -5044,7 +5177,7 @@ fn apply_picker_selection(
                     let _ = reply.send(kiss_coding::workflows::ApprovalDecision::Approve);
                 }
                 app.cells.push(Cell::Notice(format!(
-                    "running workflow {} · ctrl+w opens the progress view",
+                    "running workflow {} · /workflows opens the progress view",
                     plan.name
                 )));
             }
@@ -5660,7 +5793,7 @@ fn run_slash_command(
         "quit" | "exit" => return Flow::Quit,
         "help" | "hotkeys" => {
             app.cells.push(Cell::Notice(
-                "Input\n  Enter send · Shift+Enter or Alt+Enter newline · / commands and skills · $ skills · @ files · ! shell · !! shell outside context\nModels and effort\n  Shift+Tab effort · Ctrl+L select model · Ctrl+P next model · Ctrl+Shift+P previous model\nSession\n  Ctrl+D exit · Esc cancel · Ctrl+C interrupt or clear · double Esc tree\nDisplay and queues\n  Ctrl+O tools · Ctrl+T thinking · Ctrl+X copy · Ctrl+Enter follow-up · Alt+Up dequeue\nWorkflows\n  /workflow <prompt> runs one task as a workflow · /workflows browses runs · Ctrl+W opens the progress view\n  arrows select · Enter open · Esc back · j/k scroll · f filter · p pause · x stop · r restart · s save".into(),
+                "Input\n  Enter send · Shift+Enter or Alt+Enter newline · Ctrl+W delete previous word · / commands and skills · $ skills · @ files · ! shell · !! shell outside context\nModels and effort\n  Shift+Tab effort · Ctrl+L select model · Ctrl+P next model · Ctrl+Shift+P previous model\nSession\n  Ctrl+D exit · Esc cancel · Ctrl+C interrupt or clear · double Esc tree\nDisplay and queues\n  Ctrl+O tools · Ctrl+T thinking · Ctrl+X copy · Ctrl+Enter follow-up · Alt+Up dequeue\nWorkflows\n  /workflow <prompt> runs one task as a workflow · /workflows browses runs\n  arrows select · Enter open · Esc back · j/k scroll · f filter · p pause · x stop · r restart · s save".into(),
             ));
         }
         "model" => {
@@ -6524,6 +6657,82 @@ mod tests {
     }
 
     #[test]
+    fn resize_waits_for_a_quiet_period_before_accepting_the_size() {
+        let started = Instant::now();
+        let mut resize = ResizeState::new((100, 30));
+
+        resize.observe((120, 40), started);
+        assert!(resize.pending());
+        assert!(!resize.settle(started + RESIZE_SETTLE_DELAY - Duration::from_millis(1)));
+        assert_eq!(resize.accepted, (100, 30));
+
+        assert!(resize.settle(started + RESIZE_SETTLE_DELAY));
+        assert_eq!(resize.accepted, (120, 40));
+        assert!(!resize.pending());
+    }
+
+    #[test]
+    fn resize_burst_moves_the_deadline_and_accepts_only_the_final_size() {
+        let started = Instant::now();
+        let mut resize = ResizeState::new((100, 30));
+
+        resize.observe((110, 32), started);
+        resize.observe((120, 34), started + Duration::from_millis(50));
+        assert!(!resize.settle(started + RESIZE_SETTLE_DELAY));
+        assert_eq!(resize.accepted, (100, 30));
+
+        assert!(resize.settle(started + Duration::from_millis(50) + RESIZE_SETTLE_DELAY));
+        assert_eq!(resize.accepted, (120, 34));
+        assert!(!resize.settle(started + Duration::from_secs(1)));
+    }
+
+    #[test]
+    fn resize_recheck_catches_a_late_terminal_size() {
+        let started = Instant::now();
+        let mut resize = ResizeState::new((100, 30));
+        resize.observe((120, 40), started);
+        let settled = started + RESIZE_SETTLE_DELAY;
+        assert!(resize.settle(settled));
+
+        resize.recheck((121, 40), settled + RESIZE_SETTLE_DELAY);
+
+        assert!(resize.pending());
+        assert_eq!(resize.accepted, (120, 40));
+        assert!(resize.settle(settled + RESIZE_SETTLE_DELAY * 2));
+        assert_eq!(resize.accepted, (121, 40));
+    }
+
+    #[test]
+    fn ctrl_w_reaches_the_editor_and_deletes_the_previous_word() {
+        let mut app = test_app();
+        app.editor.set_text("one two");
+        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
+            "/synthetic",
+        )));
+        let args = Args::parse_from(["kiss"]);
+        let mut resources = test_resources();
+        let mut running_task = None;
+        let (file_tx, _file_rx) = mpsc::unbounded_channel();
+        let mut file_search = FileSearchService::new(file_tx);
+        let (command_tx, _command_rx) = mpsc::unbounded_channel();
+
+        let flow = handle_input(
+            &mut app,
+            &session,
+            &InputEvent::Key(KeyEvent::ctrl('w')),
+            &args,
+            &mut resources,
+            &mut running_task,
+            &mut file_search,
+            &command_tx,
+        );
+
+        assert!(matches!(flow, Flow::Continue));
+        assert_eq!(app.editor.text(), "one ");
+        assert!(app.workflow_view.is_none());
+    }
+
+    #[test]
     fn recap_is_one_line_without_a_duplicate_prefix_and_is_bounded() {
         assert_eq!(
             normalize_recap("Recap: merged the change\nthen ran tests"),
@@ -7334,7 +7543,7 @@ mod tests {
     }
 
     #[test]
-    fn dollar_completion_inserts_skills_without_submitting() {
+    fn dollar_completion_opens_inline_and_preserves_prompt() {
         let mut app = test_app();
         let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
             "/synthetic",
@@ -7345,7 +7554,7 @@ mod tests {
             file_path: "release/SKILL.md".into(),
             disable_model_invocation: false,
         }];
-        app.editor.set_text("$rel");
+        app.editor.set_text("hello $");
         sync_command_menu(&mut app, &session, &[], &skills, &[]);
 
         assert_eq!(
@@ -7359,7 +7568,7 @@ mod tests {
             handle_command_menu_key(&mut app, &key(Key::Enter)),
             Some(CommandMenuAction::Handled)
         );
-        assert_eq!(app.editor.text(), "$release ");
+        assert_eq!(app.editor.text(), "hello $release ");
     }
 
     #[test]
@@ -7438,6 +7647,19 @@ mod tests {
         assert!(model_text.contains("PRIVATE REVIEW BODY"));
         assert!(model_text.contains("PRIVATE TEST BODY"));
         assert!(model_text.ends_with("<user_request>\nline one\nline two\n</user_request>"));
+
+        let inline = EditorSubmission {
+            display_text: "please inspect this $review".into(),
+            text: "please inspect this $review".into(),
+        };
+        let inline_model_text = prepare_skill_input(&inline, &resources)
+            .unwrap()
+            .expect("inline skill invocation");
+        assert!(inline_model_text.contains("PRIVATE REVIEW BODY"));
+        assert!(
+            inline_model_text
+                .ends_with("<user_request>\nplease inspect this $review\n</user_request>")
+        );
 
         let stored = stored_user_text(&submission.display_text, &model_text);
         assert_eq!(visible_user_text(&stored), submission.display_text);

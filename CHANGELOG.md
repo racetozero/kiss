@@ -2,6 +2,40 @@
 
 ## Unreleased
 
+### Fixed
+
+- Open the skill search menu for inline `$` mentions and invoke the selected
+  skill without replacing preceding prompt text.
+
+## 0.0.4 - 2026-09-04
+
+### Added
+
+- Added the `kiss-sdk` Rust crate with a high-level session builder, typed
+  dispatcher, bounded streaming events, model/session controls, direct shell
+  execution, and a hermetic mock provider.
+- Added Python 3.11+ PyO3 bindings with async APIs, `StrEnum` options, and typed
+  protocol dictionaries.
+- Added N-API TypeScript bindings for Node.js, Bun, and Deno.
+- Added a WebAssembly browser client for RPC WebSocket sessions.
+- Added language-neutral JSONL RPC mode over stdin/stdout and WebSocket with
+  Pi-compatible command and event names.
+- Added a full browser WebAssembly agent with portable provider support.
+
+### Changed
+
+- Added SDK documentation and release checks for each language binding.
+- Added SDK, RPC, and browser WebAssembly performance benchmarks with mean
+  results.
+- Reduced repeated terminal redraws during rapid window resizing.
+
+### Fixed
+
+- Added a Deno-compatible ESM entry point for the TypeScript SDK.
+- Restored keyboard shortcuts, including `Ctrl+W`, Kitty and keypad Enter,
+  and `Shift+Tab`.
+- Fixed terminal rendering after rapid window size changes.
+
 ## 0.0.3 - 2026-09-02
 
 ### Added

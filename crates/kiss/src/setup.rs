@@ -35,8 +35,9 @@ pub struct ReloadedRuntime {
     pub system_prompt: String,
 }
 
-pub const DEFAULT_TOOLS: &[&str] = &["read", "write", "edit", "bash"];
-pub const ALL_TOOLS: &[&str] = &["read", "write", "edit", "bash", "grep", "find", "ls", "mcp"];
+// The tool table lives in kiss-sdk so the command-line program and every SDK
+// surface agree on which tools exist and how they are built.
+pub use kiss_sdk::tools::{ALL_TOOLS, DEFAULT_TOOLS, build_tools};
 
 pub fn selected_tool_names(args: &Args) -> Vec<String> {
     if args.no_tools {
@@ -52,52 +53,6 @@ pub fn selected_tool_names(args: &Args) -> Vec<String> {
         names.retain(|n| *n != excluded);
     }
     names
-}
-
-pub fn build_tools(
-    names: &[String],
-    cwd: &std::path::Path,
-    settings: &Settings,
-    mcp: Option<&McpManager>,
-) -> Vec<DynTool> {
-    let mut tools: Vec<DynTool> = Vec::new();
-    for name in names {
-        let tool: Option<DynTool> = match name.as_str() {
-            "read" => Some(Arc::new(kiss_agent::tools::read::ReadTool {
-                cwd: cwd.to_path_buf(),
-            })),
-            "bash" => {
-                let mut bash = kiss_agent::tools::bash::BashTool::new(cwd.to_path_buf());
-                bash.shell_path = settings.shell_path.clone();
-                bash.command_prefix = settings.shell_command_prefix.clone();
-                Some(Arc::new(bash))
-            }
-            "edit" => Some(Arc::new(kiss_agent::tools::edit::EditTool {
-                cwd: cwd.to_path_buf(),
-            })),
-            "write" => Some(Arc::new(kiss_agent::tools::write::WriteTool {
-                cwd: cwd.to_path_buf(),
-            })),
-            "grep" => Some(Arc::new(kiss_coding::tools::grep::GrepTool {
-                cwd: cwd.to_path_buf(),
-            })),
-            "find" => Some(Arc::new(kiss_coding::tools::find::FindTool {
-                cwd: cwd.to_path_buf(),
-            })),
-            "ls" => Some(Arc::new(kiss_coding::tools::ls::LsTool {
-                cwd: cwd.to_path_buf(),
-            })),
-            "mcp" => mcp
-                .cloned()
-                .map(kiss_mcp::McpTool::new)
-                .map(|tool| Arc::new(tool) as DynTool),
-            _ => None,
-        };
-        if let Some(t) = tool {
-            tools.push(t);
-        }
-    }
-    tools
 }
 
 fn configured_tools(

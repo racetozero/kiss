@@ -6,23 +6,46 @@ license.workspace = true
 repository.workspace = true
 description = "Agent runtime for the kiss coding harness"
 
+[features]
+default = ["native-tools"]
+# The agent loop, messages, events, schema validation, and host-tool contract.
+# It contains no filesystem, process, or network implementation.
+portable = ["kiss-ai/portable"]
+# Existing native read/write/edit/bash implementations.
+native-tools = [
+    "portable",
+    "kiss-ai/native",
+    "dep:base64",
+    "dep:dirs",
+    "dep:libc",
+    "dep:jsonschema",
+    "dep:similar",
+    "dep:tempfile",
+    "tokio/rt",
+    "tokio/process",
+    "tokio/io-util",
+    "tokio/fs",
+    "tokio/time",
+]
+
 [dependencies]
 anyhow.workspace = true
 async-trait.workspace = true
-base64.workspace = true
-chrono.workspace = true
-dirs.workspace = true
 futures.workspace = true
-jsonschema.workspace = true
+jsonschema = { workspace = true, optional = true }
 kiss-ai.workspace = true
-libc.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-similar.workspace = true
-tempfile.workspace = true
-thiserror.workspace = true
-tokio.workspace = true
-tokio-util.workspace = true
+# Portable code needs synchronization only. Native tool features add runtime,
+# process, filesystem, I/O, and time support above.
+tokio = { version = "1", features = ["sync"] }
+tokio-util = { version = "0.7", features = ["rt"] }
+
+base64 = { workspace = true, optional = true }
+dirs = { workspace = true, optional = true }
+libc = { workspace = true, optional = true }
+similar = { workspace = true, optional = true }
+tempfile = { workspace = true, optional = true }
 
 [dev-dependencies]
 kiss-bench.workspace = true

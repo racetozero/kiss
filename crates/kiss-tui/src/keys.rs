@@ -154,6 +154,7 @@ impl InputDecoder {
                     b'Q' => Key::F(2),
                     b'R' => Key::F(3),
                     b'S' => Key::F(4),
+                    b'M' => Key::Enter,
                     _ => return Some((None, 3)),
                 };
                 Some((
@@ -264,8 +265,19 @@ impl InputDecoder {
         let mut event = KeyEvent::default();
         // Modifier encoding: CSI 1;<mods> X or CSI <num>;<mods> ~
         let parts: Vec<&str> = params.split(';').collect();
-        if parts.len() >= 2
-            && let Ok(m) = parts[1].parse::<u8>()
+        let modifier_parts = parts.get(1).map(|part| part.split(':').collect::<Vec<_>>());
+        if modifier_parts
+            .as_ref()
+            .and_then(|parts| parts.get(1))
+            .and_then(|event_type| event_type.parse::<u8>().ok())
+            == Some(3)
+        {
+            return Some((None, consumed));
+        }
+        if let Some(m) = modifier_parts
+            .as_ref()
+            .and_then(|parts| parts.first())
+            .and_then(|modifier| modifier.parse::<u8>().ok())
         {
             let m = m.saturating_sub(1);
             event.shift = m & 1 != 0;
@@ -305,10 +317,16 @@ impl InputDecoder {
                 // Kitty keyboard protocol: codepoint;mods u
                 match parts
                     .first()
+                    .and_then(|p| p.split(':').next())
                     .and_then(|p| p.parse::<u32>().ok())
                     .and_then(char::from_u32)
                 {
-                    Some('\r') => Key::Enter,
+                    Some('\t') if event.shift => {
+                        event.shift = false;
+                        Key::BackTab
+                    }
+                    Some('\t') => Key::Tab,
+                    Some('\r') | Some('\u{e046}') => Key::Enter,
                     Some('\x1b') => Key::Escape,
                     Some(c) => Key::Char(c),
                     None => return Some((None, consumed)),
@@ -455,6 +473,35 @@ mod tests {
     fn terminal_backtab_matches_shift_tab_spec() {
         assert_eq!(
             decode(b"\x1b[Z"),
+            vec![InputEvent::Key(KeyEvent::parse("shift+tab").unwrap())]
+        );
+    }
+
+    #[test]
+    fn kitty_protocol_normalizes_tab_and_enter_keys() {
+        assert_eq!(
+            decode(b"\x1b[9;2u"),
+            vec![InputEvent::Key(KeyEvent::parse("shift+tab").unwrap())]
+        );
+        assert_eq!(
+            decode(b"\x1b[13u"),
+            vec![InputEvent::Key(KeyEvent::parse("enter").unwrap())]
+        );
+        assert_eq!(
+            decode(b"\x1b[57414u"),
+            vec![InputEvent::Key(KeyEvent::parse("enter").unwrap())]
+        );
+        assert_eq!(
+            decode(b"\x1bOM"),
+            vec![InputEvent::Key(KeyEvent::parse("enter").unwrap())]
+        );
+    }
+
+    #[test]
+    fn kitty_protocol_ignores_key_release_events() {
+        assert!(decode(b"\x1b[13;1:3u").is_empty());
+        assert_eq!(
+            decode(b"\x1b[9;2:1u"),
             vec![InputEvent::Key(KeyEvent::parse("shift+tab").unwrap())]
         );
     }

@@ -43,6 +43,39 @@ Update an existing installation with:
 kiss update
 ```
 
+## Use KISS as an SDK
+
+KISS can be embedded in Rust, Python 3.11+, TypeScript on Node/Bun/Deno, or a
+browser application through WebAssembly. All SDKs share one Rust dispatcher and
+the same streaming event protocol.
+
+```rust
+let session = kiss_sdk::Session::builder().tools(["read", "bash"]).build().await?;
+session.prompt("What files are here?").await?;
+```
+
+```python
+async with await kiss_sdk.Session.create(tools=[kiss_sdk.ToolName.READ]) as session:
+    await session.prompt("What files are here?")
+```
+
+```typescript
+const session = await Session.create({ tools: ["read", "bash"] });
+await session.prompt("What files are here?");
+```
+
+For browsers, `@kiss-sdk/core-wasm` runs the agent conversation and model/tool
+loop directly inside WebAssembly using explicit JavaScript model and tool
+capabilities—no KISS server or WebSocket is required. `@kiss-sdk/wasm` remains
+the remote client when an application specifically needs native filesystem and
+shell tools.
+
+For any other language, `kiss --mode rpc --no-session` accepts JSON commands on
+stdin and streams JSON responses/events on stdout.
+
+See [SDK documentation](docs/sdk.md), [RPC protocol documentation](docs/rpc.md),
+and the [browser WebAssembly documentation](crates/kiss-core-wasm/README.md).
+
 ## Performance
 
 KISS is built to stay responsive during everyday work, from file discovery in
@@ -59,6 +92,25 @@ KISS operations, not model or network latency.
 | Grep | 1,000 files and 200 matches | 15.251 ms | 18.772 ms |
 | Incremental Markdown | 200 streaming prefix renders | 17.557 ms | 18.032 ms |
 | Unchanged frame | 10,000 logical rows | 156.370 us | 157.783 us |
+
+### SDK, RPC, and browser WebAssembly
+
+These hermetic benchmarks isolate local SDK and transport overhead. The native
+SDK and RPC paths use `ping`; the browser benchmark runs a complete agent turn
+against an immediate host model callback. No benchmark calls an external model.
+Values are the mean across three trials:
+
+| Surface | Work | Mean |
+| --- | --- | ---: |
+| Native SDK | Shared in-process command dispatch | 129 ns |
+| JSONL RPC | Client encode/decode, in-memory duplex, server dispatch | 2.279 us |
+| Browser WASM | Warm full-agent prompt, 100 samples | 0.195 ms |
+| Browser WASM | 25 isolated agents in parallel, 11 batches | 1.649 ms |
+
+Fresh WASM module initialization averaged 20.049 ms per Deno process. The
+release module is 567,046 bytes raw and 207,274 bytes gzip, with 17 initial
+linear-memory pages (1,114,112 bytes). Model and tool callback time will
+normally dominate these local costs.
 
 ### Subagent overhead
 
@@ -96,6 +148,26 @@ The interpreter used 2.70-2.93 us per agent call. Arming a workflow added
 707-728 ns to request preparation. The workflow tool and its instructions are
 absent until a workflow turn is armed.
 
+### TUI rendering and resize
+
+The terminal user interface combines rapid resize events and redraws once 75
+ms after the final change. The following release-mode results measure local
+rendering. They do not include terminal parsing or remote connection time:
+
+| Measure | Test size | Median | p95 |
+| --- | --- | ---: | ---: |
+| Full renderer | 1,800 logical rows | 0.345 ms | 0.599 ms |
+| Unchanged renderer | 10,000 logical rows | 0.219 ms | 0.243 ms |
+| Last-row update | 10,000 logical rows | 0.203 ms | 0.209 ms |
+| Cached transcript render | 2,885 logical rows | 0.092 ms | 0.121 ms |
+| Spinner transcript render | 2,885 logical rows | 0.104 ms | 0.182 ms |
+| Full resize redraw | 1,800 logical rows | 0.362 ms | 0.975 ms |
+
+The full resize redraw wrote 178,231 bytes. This output volume is why KISS
+waits for the final stable size instead of replaying the transcript for every
+intermediate size. These results were measured on an AMD Ryzen 9 5950X under
+WSL2.
+
 ### Release builds
 
 KISS release binaries use profile-guided optimization. On macOS, this made the
@@ -110,17 +182,13 @@ binary smaller and produced a modest latency improvement:
 
 ### Method
 
-The core, subagent, and workflow results used an Apple M4, macOS 26.5.1, and
-Rust 1.98.0 on 2026-09-01. Core benchmarks used the Cargo `release` profile.
-The table reports the median result from three trials. Each core benchmark
-used 9-15 samples per trial. The subagent and workflow comparisons also used
-three trials, with 21 samples for matched feature comparisons and 9-21 samples
-for workflow operations. These tests did not call a model or start a real
-child session. The complete run passed all 17 performance tests. The optimized
-release comparison used three held-out trials on 2026-08-31. Lower latency
-values are better.
+Results are based on three release-mode runs using local, deterministic
+fixtures—no external models or network calls. Core benchmarks ran on an Apple
+M4; SDK, RPC, and WASM benchmarks ran on an AMD Ryzen 9 5950X under WSL2. PGO
+results use separate held-out runs. Lower is better.
 
-Run the full benchmark suite with `just bench`.
+Run the full native and browser benchmark suite, including WASM size and memory
+budgets, with `just bench` (requires cargo-nextest, wasm-pack, Deno, and Node).
 
 ## Quick start
 
@@ -214,8 +282,8 @@ not fetched yet, the prompt says so rather than guessing. Set
 immediately, and `workflows.size` to advise how many agents a script should
 aim for.
 
-While a run is going, a progress line appears under the transcript. Press
-`Ctrl+W`, or run `/workflows`, to open the full view:
+While a run is going, a progress line appears under the transcript. Run
+`/workflows` to open the full view:
 
 | Key | Action |
 | --- | --- |

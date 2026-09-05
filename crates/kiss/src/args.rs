@@ -209,9 +209,15 @@ pub struct Args {
     #[arg(short = 'p', long)]
     pub print: bool,
 
-    /// Output mode: json emits one event per line.
+    /// Output mode: `json` emits one event per line; `rpc` also accepts
+    /// commands as JSON lines on stdin (see docs/rpc.md).
     #[arg(long, value_name = "MODE")]
     pub mode: Option<String>,
+
+    /// Serve `--mode rpc` over WebSocket on this address instead of stdin and
+    /// stdout, for example 127.0.0.1:9944. Browser clients need this.
+    #[arg(long, value_name = "ADDR")]
+    pub rpc_listen: Option<String>,
 
     /// Export a session file to HTML: --export <in> [out]
     #[arg(long, num_args = 1..=2, value_name = "FILE")]

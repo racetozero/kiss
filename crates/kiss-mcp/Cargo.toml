@@ -13,7 +13,7 @@ dirs.workspace = true
 fs2.workspace = true
 http.workspace = true
 kiss-agent.workspace = true
-kiss-ai.workspace = true
+kiss-ai = { workspace = true, features = ["native"] }
 reqwest-mcp.workspace = true
 rmcp.workspace = true
 rustls.workspace = true

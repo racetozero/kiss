@@ -42,6 +42,39 @@ jobs:
       - name: Clippy on Windows
         run: cargo clippy --workspace --all-targets -- -D warnings
 
+  wasm-agent:
+    name: Browser WASM agent
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@e67fa11c4b9316fa714ddf0abed07a0c3143b95b # v2
+        with:
+          tool: wasm-pack
+      - uses: denoland/setup-deno@e95548e56dfa95d4e1a28d6f422fafe75c4c26fb # v2.0.3
+        with:
+          deno-version: v2.x
+      - name: Check portable agent crates
+        run: |
+          cargo clippy -p kiss-ai --no-default-features --features portable --target wasm32-unknown-unknown -- -D warnings
+          cargo clippy -p kiss-agent --no-default-features --features portable --target wasm32-unknown-unknown -- -D warnings
+      - name: Format standalone browser crate
+        run: cargo fmt --manifest-path crates/kiss-core-wasm/Cargo.toml -- --check
+      - name: Build and lint browser agent
+        run: |
+          wasm-pack build crates/kiss-core-wasm --target web --release
+          cargo clippy --manifest-path crates/kiss-core-wasm/Cargo.toml --target wasm32-unknown-unknown -- -D warnings
+      - name: Test actual WebAssembly module
+        run: deno test --allow-read --allow-net crates/kiss-core-wasm/test/*.ts
+      - name: Enforce browser artifact budgets
+        run: |
+          node crates/kiss-core-wasm/test/size.mjs
+          node crates/kiss-core-wasm/test/wasm_memory.mjs
+
   pgo-scripts:
     strategy:
       fail-fast: false

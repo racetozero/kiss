@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KISS in-browser agent</title>
+  <style>
+    body { max-width: 60rem; margin: 3rem auto; padding: 0 1rem; font: 16px system-ui; }
+    form { display: flex; gap: .5rem; } input { flex: 1; padding: .7rem; }
+    button { padding: .7rem 1rem; } pre { white-space: pre-wrap; min-height: 10rem; background: #111; color: #eee; padding: 1rem; }
+    #status { color: #555; }
+  </style>
+</head>
+<body>
+  <h1>KISS agent running inside WebAssembly</h1>
+  <p>This deterministic demo runs the conversation and tool loop locally. It opens no WebSocket and needs no native KISS process.</p>
+  <p id="status">Loading WASM…</p>
+  <form id="form">
+    <input id="prompt" value="What is stored under greeting?" aria-label="Prompt">
+    <button type="submit">Run</button>
+    <button id="abort" type="button">Abort</button>
+  </form>
+  <pre id="output"></pre>
+  <script type="module">
+    import init, { KissAgent } from "../pkg/kiss_core_wasm.js";
+    await init();
+
+    const files = new Map([["greeting", "hello from a JavaScript host tool"]]);
+    let turn = 0;
+    const provider = async (request, emit, signal) => {
+      if (signal.aborted) return { stopReason: "aborted", errorMessage: "aborted" };
+      turn += 1;
+      const hasToolResult = request.context.messages.some((message) => message.role === "toolResult");
+      if (!hasToolResult) {
+        return {
+          content: [{ type: "toolCall", id: `read-${turn}`, name: "read_memory", arguments: { key: "greeting" } }],
+          stopReason: "toolUse",
+        };
+      }
+      const toolResult = request.context.messages.findLast((message) => message.role === "toolResult");
+      const text = `The value is: ${toolResult.content[0].text}`;
+      emit({ type: "text_start", contentIndex: 0 });
+      emit({ type: "text_delta", contentIndex: 0, delta: text });
+      emit({ type: "text_end", contentIndex: 0, content: text });
+      return { content: [{ type: "text", text }] };
+    };
+
+    const agent = KissAgent.create({
+      model: { id: "browser-fixture", provider: "browser", api: "host" },
+      systemPrompt: "Read requested values with tools.",
+    }, provider);
+    agent.registerTool({
+      name: "read_memory",
+      description: "Read a value from the browser's in-memory workspace",
+      parameters: {
+        type: "object",
+        properties: { key: { type: "string" } },
+        required: ["key"],
+        additionalProperties: false,
+      },
+    }, ({ key }) => files.get(key) ?? `No value named ${key}`);
+
+    const status = document.querySelector("#status");
+    const output = document.querySelector("#output");
+    status.textContent = "Ready — no RPC server required";
+    document.querySelector("#form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      output.textContent = "";
+      status.textContent = "Agent running in WASM…";
+      try {
+        const result = await agent.prompt(document.querySelector("#prompt").value, (event) => {
+          if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
+            output.textContent += event.assistantMessageEvent.delta;
+          }
+        });
+        status.textContent = `Settled (${result.stopReason})`;
+      } catch (error) {
+        status.textContent = String(error);
+      }
+    });
+    document.querySelector("#abort").addEventListener("click", () => agent.abort());
+  </script>
+</body>
+</html>

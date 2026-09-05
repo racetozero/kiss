@@ -1878,7 +1878,7 @@ dependencies = [
 
 [[package]]
 name = "kiss"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -1893,6 +1893,7 @@ dependencies = [
  "kiss-bench",
  "kiss-coding",
  "kiss-mcp",
+ "kiss-sdk",
  "kiss-tui",
  "libc",
  "reqwest 0.12.28",
@@ -1910,12 +1911,11 @@ dependencies = [
 
 [[package]]
 name = "kiss-agent"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "anyhow",
  "async-trait",
  "base64 0.22.1",
- "chrono",
  "dirs",
  "futures",
  "jsonschema",
@@ -1926,14 +1926,13 @@ dependencies = [
  "serde_json",
  "similar",
  "tempfile",
- "thiserror 2.0.20",
  "tokio",
  "tokio-util",
 ]
 
 [[package]]
 name = "kiss-ai"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "anyhow",
  "aws-config",
@@ -1963,11 +1962,11 @@ dependencies = [
 
 [[package]]
 name = "kiss-bench"
-version = "0.0.3"
+version = "0.0.4"
 
 [[package]]
 name = "kiss-coding"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1998,7 +1997,7 @@ dependencies = [
 
 [[package]]
 name = "kiss-mcp"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2020,8 +2019,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "kiss-sdk"
+version = "0.0.4"
+dependencies = [
+ "anyhow",
+ "dirs",
+ "futures",
+ "kiss-agent",
+ "kiss-ai",
+ "kiss-bench",
+ "kiss-coding",
+ "kiss-mcp",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.20",
+ "tokio",
+ "tokio-tungstenite",
+ "tokio-util",
+ "uuid",
+]
+
+[[package]]
 name = "kiss-tui"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "anyhow",
  "crossterm",
@@ -2039,7 +2060,7 @@ dependencies = [
 
 [[package]]
 name = "kiss-workflow"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3491,6 +3512,7 @@ dependencies = [
  "bytes",
  "futures-core",
  "futures-sink",
+ "futures-util",
  "libc",
  "pin-project-lite",
  "tokio",

@@ -2,10 +2,15 @@
 //! return the unified event stream. Never returns `Err` — every failure is a
 //! terminal `Error` event.
 
+#[cfg(feature = "native")]
 use crate::api;
+#[cfg(feature = "native")]
 use crate::event::{EventSink, EventStream};
+#[cfg(feature = "native")]
 use crate::model::Model;
-use crate::types::{Context, ThinkingLevel};
+#[cfg(feature = "native")]
+use crate::types::Context;
+use crate::types::ThinkingLevel;
 use tokio_util::sync::CancellationToken;
 
 /// Network transport for providers that support more than one streaming path.
@@ -33,6 +38,7 @@ pub enum ToolChoice {
     Function(String),
 }
 
+#[cfg(feature = "native")]
 impl ToolChoice {
     pub(crate) fn openai_chat_value(&self) -> serde_json::Value {
         match self {
@@ -68,6 +74,7 @@ pub struct StreamOptions {
     pub cancel: CancellationToken,
 }
 
+#[cfg(feature = "native")]
 pub fn stream_simple(model: &Model, context: &Context, options: &StreamOptions) -> EventStream {
     ensure_tls_crypto_provider();
     let (sink, stream) = EventStream::channel();
@@ -80,6 +87,7 @@ pub fn stream_simple(model: &Model, context: &Context, options: &StreamOptions) 
     stream
 }
 
+#[cfg(feature = "native")]
 async fn dispatch(model: Model, context: Context, mut options: StreamOptions, sink: EventSink) {
     options.reasoning = model.map_thinking_level(options.reasoning);
     match model.api.as_str() {
@@ -103,6 +111,7 @@ async fn dispatch(model: Model, context: Context, mut options: StreamOptions, si
 }
 
 /// Shared HTTP client with connection pooling across requests.
+#[cfg(feature = "native")]
 pub fn http_client() -> &'static reqwest::Client {
     ensure_tls_crypto_provider();
     static CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
@@ -115,6 +124,7 @@ pub fn http_client() -> &'static reqwest::Client {
     })
 }
 
+#[cfg(feature = "native")]
 fn ensure_tls_crypto_provider() {
     static INSTALL: std::sync::Once = std::sync::Once::new();
     INSTALL.call_once(|| {
@@ -128,7 +138,7 @@ fn ensure_tls_crypto_provider() {
     });
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "native"))]
 mod tests {
     #[test]
     fn tls_crypto_provider_is_installed_for_clients() {

@@ -72,7 +72,11 @@ type StopFn = Arc<dyn for<'a> Fn(&'a TurnInfo<'a>) -> BoxFuture<bool> + Send + S
 type PrepareTurnFn =
     Arc<dyn for<'a> Fn(&'a TurnInfo<'a>) -> BoxFuture<Option<TurnUpdate>> + Send + Sync>;
 type ApiKeyFn = Arc<dyn Fn(String) -> BoxFuture<Option<String>> + Send + Sync>;
-type StreamFn =
+/// The function the loop calls to reach a model provider.
+///
+/// It is public so embedders and tests can substitute their own transport (for
+/// example a scripted fake provider) without going through the network.
+pub type StreamFn =
     Arc<dyn Fn(&Model, &kiss_ai::Context, &StreamOptions) -> kiss_ai::EventStream + Send + Sync>;
 
 /// Everything the loop needs besides the context.
@@ -101,7 +105,11 @@ pub struct AgentLoopConfig {
 }
 
 impl AgentLoopConfig {
-    pub fn new(model: Model) -> Self {
+    /// Construct a loop around an explicit provider stream.
+    ///
+    /// Portable embedders such as browser WebAssembly use this constructor so
+    /// the host owns network authority. Native callers normally use [`Self::new`].
+    pub fn with_stream(model: Model, stream_fn: StreamFn) -> Self {
         AgentLoopConfig {
             model,
             thinking_level: ThinkingLevel::Off,
@@ -120,9 +128,13 @@ impl AgentLoopConfig {
             after_tool_call: None,
             should_stop_after_turn: None,
             prepare_next_turn: None,
-            stream_fn: Arc::new(|model, context, options| {
-                kiss_ai::stream_simple(model, context, options)
-            }),
+            stream_fn,
         }
+    }
+
+    /// Construct a loop using KISS's native provider adapters.
+    #[cfg(feature = "native-tools")]
+    pub fn new(model: Model) -> Self {
+        Self::with_stream(model, Arc::new(kiss_ai::stream_simple))
     }
 }
