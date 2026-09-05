@@ -609,6 +609,24 @@ mod tests {
     }
 
     #[test]
+    fn resize_redraw_is_one_complete_synchronized_frame() {
+        let mut renderer = DiffRenderer::new();
+        let lines = generated_lines(200);
+        let refs = lines.iter().map(String::as_str).collect::<Vec<_>>();
+        render(&mut renderer, &refs, 120, 40);
+
+        let output = render(&mut renderer, &refs, 100, 40);
+
+        assert_eq!(output.matches("\x1b[?2026h").count(), 1);
+        assert_eq!(output.matches("\x1b[?2026l").count(), 1);
+        assert_eq!(output.matches("\x1b[2J\x1b[H\x1b[3J").count(), 1);
+        assert_eq!(
+            output.matches("deterministic renderer benchmark").count(),
+            200
+        );
+    }
+
+    #[test]
     fn cursor_marker_is_removed_and_positions_cursor() {
         let mut renderer = DiffRenderer::new();
         let output = render(&mut renderer, &[&format!("ab{CURSOR_MARKER}cd")], 20, 5);
@@ -666,6 +684,33 @@ mod tests {
                 output.clear();
                 renderer
                     .render_frame(&changed, 120, 40, &mut output)
+                    .unwrap();
+                output.len()
+            },
+        );
+    }
+
+    #[test]
+    #[ignore = "release-mode performance benchmark"]
+    fn benchmark_performance_renderer_resize() {
+        let lines = generated_lines(1_800);
+        let mut renderer = DiffRenderer::new();
+        let mut output = Vec::with_capacity(256 * 1024);
+        renderer.render_frame(&lines, 120, 40, &mut output).unwrap();
+        output.clear();
+        renderer.render_frame(&lines, 100, 40, &mut output).unwrap();
+        let resize_bytes = output.len();
+        let mut wide = false;
+        kiss_bench::measure(
+            "renderer_resize_1800",
+            11,
+            3,
+            &format!("1800_logical_rows_{resize_bytes}_output_bytes"),
+            || {
+                wide = !wide;
+                output.clear();
+                renderer
+                    .render_frame(&lines, if wide { 120 } else { 100 }, 40, &mut output)
                     .unwrap();
                 output.len()
             },

@@ -148,6 +148,26 @@ The interpreter used 2.70-2.93 us per agent call. Arming a workflow added
 707-728 ns to request preparation. The workflow tool and its instructions are
 absent until a workflow turn is armed.
 
+### TUI rendering and resize
+
+The terminal user interface combines rapid resize events and redraws once 75
+ms after the final change. The following release-mode results measure local
+rendering. They do not include terminal parsing or remote connection time:
+
+| Measure | Test size | Median | p95 |
+| --- | --- | ---: | ---: |
+| Full renderer | 1,800 logical rows | 0.345 ms | 0.599 ms |
+| Unchanged renderer | 10,000 logical rows | 0.219 ms | 0.243 ms |
+| Last-row update | 10,000 logical rows | 0.203 ms | 0.209 ms |
+| Cached transcript render | 2,885 logical rows | 0.092 ms | 0.121 ms |
+| Spinner transcript render | 2,885 logical rows | 0.104 ms | 0.182 ms |
+| Full resize redraw | 1,800 logical rows | 0.362 ms | 0.975 ms |
+
+The full resize redraw wrote 178,231 bytes. This output volume is why KISS
+waits for the final stable size instead of replaying the transcript for every
+intermediate size. These results were measured on an AMD Ryzen 9 5950X under
+WSL2.
+
 ### Release builds
 
 KISS release binaries use profile-guided optimization. On macOS, this made the

@@ -324,7 +324,100 @@ struct ShellRunResult {
 const SPINNER: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const AUTO_RECAP_IDLE: Duration = Duration::from_secs(5 * 60);
 const MIN_FRAME_INTERVAL: Duration = Duration::from_millis(33);
+#[cfg(not(unix))]
+const RESIZE_POLL_INTERVAL: Duration = Duration::from_millis(25);
+const RESIZE_SETTLE_DELAY: Duration = Duration::from_millis(75);
 const MAX_READY_EVENTS_PER_TICK: usize = 256;
+
+#[derive(Debug)]
+struct ResizeState {
+    accepted: (usize, usize),
+    observed: (usize, usize),
+    settle_at: Option<Instant>,
+    recheck_at: Option<Instant>,
+}
+
+impl ResizeState {
+    fn new(size: (usize, usize)) -> Self {
+        Self {
+            accepted: size,
+            observed: size,
+            settle_at: None,
+            recheck_at: None,
+        }
+    }
+
+    fn observe(&mut self, size: (usize, usize), now: Instant) {
+        if size != self.observed {
+            self.observed = size;
+            self.settle_at = Some(now + RESIZE_SETTLE_DELAY);
+            self.recheck_at = None;
+        }
+    }
+
+    fn settle(&mut self, now: Instant) -> bool {
+        if !self.settle_at.is_some_and(|deadline| now >= deadline) {
+            return false;
+        }
+        self.settle_at = None;
+        if self.accepted == self.observed {
+            return false;
+        }
+        self.accepted = self.observed;
+        self.recheck_at = Some(now + RESIZE_SETTLE_DELAY);
+        true
+    }
+
+    fn recheck(&mut self, size: (usize, usize), now: Instant) {
+        if self.recheck_at.is_some_and(|deadline| now >= deadline) {
+            self.recheck_at = None;
+            self.observe(size, now);
+        }
+    }
+
+    fn next_deadline(&self) -> Option<Instant> {
+        self.settle_at.or(self.recheck_at)
+    }
+
+    fn pending(&self) -> bool {
+        self.settle_at.is_some()
+    }
+}
+
+fn resize_notifications(initial_size: (usize, usize)) -> mpsc::UnboundedReceiver<()> {
+    let (tx, rx) = mpsc::unbounded_channel();
+    #[cfg(unix)]
+    tokio::spawn(async move {
+        let Ok(mut signal) =
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::window_change())
+        else {
+            return;
+        };
+        while signal.recv().await.is_some() {
+            if tx.send(()).is_err() {
+                break;
+            }
+        }
+    });
+    #[cfg(not(unix))]
+    tokio::spawn(async move {
+        let mut observed = initial_size;
+        let mut ticker = tokio::time::interval(RESIZE_POLL_INTERVAL);
+        ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            ticker.tick().await;
+            let size = Terminal::size();
+            if size != observed {
+                observed = size;
+                if tx.send(()).is_err() {
+                    break;
+                }
+            }
+        }
+    });
+    let _ = initial_size;
+    rx
+}
 
 #[derive(Debug, PartialEq, Eq)]
 enum CommandMenuAction {
@@ -932,7 +1025,9 @@ pub async fn run(args: &Args) -> Result<i32> {
         }
     });
 
-    let (width, height) = Terminal::size();
+    let mut resize_state = ResizeState::new(Terminal::size());
+    let mut resize_rx = resize_notifications(resize_state.accepted);
+    let (width, height) = resize_state.accepted;
     let lines = provisional_lines(&mut provisional_editor, &provisional_theme, width);
     {
         let mut out = std::io::stdout().lock();
@@ -945,6 +1040,9 @@ pub async fn run(args: &Args) -> Result<i32> {
         tokio::spawn(async move { build_startup(&startup_args, true, sink).await });
     let mut submit_after_startup = false;
     let startup = 'startup: loop {
+        let resize_deadline = resize_state
+            .next_deadline()
+            .unwrap_or_else(|| Instant::now() + Duration::from_secs(86_400));
         tokio::select! {
             result = &mut startup_task => {
                 let result = result.context("startup task stopped")?;
@@ -970,11 +1068,30 @@ pub async fn run(args: &Args) -> Result<i32> {
                         }
                     }
                 }
-                let (width, height) = Terminal::size();
-                let lines = provisional_lines(&mut provisional_editor, &provisional_theme, width);
-                let mut out = std::io::stdout().lock();
-                renderer.render_frame(&lines, width, height, &mut out)?;
-                out.flush()?;
+                if !resize_state.pending() {
+                    let (width, height) = resize_state.accepted;
+                    let lines = provisional_lines(&mut provisional_editor, &provisional_theme, width);
+                    let mut out = std::io::stdout().lock();
+                    renderer.render_frame(&lines, width, height, &mut out)?;
+                    out.flush()?;
+                }
+            }
+            Some(()) = resize_rx.recv() => {
+                let now = Instant::now();
+                resize_state.observe(Terminal::size(), now);
+            }
+            _ = tokio::time::sleep_until(tokio::time::Instant::from_std(resize_deadline)),
+                if resize_state.next_deadline().is_some() => {
+                let now = Instant::now();
+                let redraw = resize_state.settle(now);
+                resize_state.recheck(Terminal::size(), now);
+                if redraw {
+                    let (width, height) = resize_state.accepted;
+                    let lines = provisional_lines(&mut provisional_editor, &provisional_theme, width);
+                    let mut out = std::io::stdout().lock();
+                    renderer.render_frame(&lines, width, height, &mut out)?;
+                    out.flush()?;
+                }
             }
         }
     };
@@ -1149,12 +1266,18 @@ pub async fn run(args: &Args) -> Result<i32> {
     file_search.warm(session.manager.lock().unwrap().cwd().to_path_buf());
 
     'main: loop {
+        let resize_deadline = resize_state
+            .next_deadline()
+            .unwrap_or_else(|| Instant::now() + Duration::from_secs(86_400));
         let render_is_active = app.working
             || app.command_status.is_some()
             || app.btw_panel.is_some()
             || app.recap_loading;
-        if dirty && (!render_is_active || Instant::now() >= next_render_at) {
-            let (width, height) = Terminal::size();
+        if dirty
+            && !resize_state.pending()
+            && (!render_is_active || Instant::now() >= next_render_at)
+        {
+            let (width, height) = resize_state.accepted;
             let lines = app.render(width, &session);
             let mut out = std::io::stdout().lock();
             renderer.render_frame(&lines, width, height, &mut out)?;
@@ -1165,7 +1288,21 @@ pub async fn run(args: &Args) -> Result<i32> {
 
         tokio::select! {
             _ = tokio::time::sleep_until(tokio::time::Instant::from_std(next_render_at)),
-                if dirty && render_is_active && Instant::now() < next_render_at => {}
+                if dirty && !resize_state.pending() && render_is_active && Instant::now() < next_render_at => {}
+            Some(()) = resize_rx.recv() => {
+                let now = Instant::now();
+                resize_state.observe(Terminal::size(), now);
+            }
+            _ = tokio::time::sleep_until(tokio::time::Instant::from_std(resize_deadline)),
+                if resize_state.next_deadline().is_some() => {
+                let now = Instant::now();
+                let redraw = resize_state.settle(now);
+                resize_state.recheck(Terminal::size(), now);
+                if redraw {
+                    dirty = true;
+                    next_render_at = now;
+                }
+            }
             _ = ticker.tick() => {
                 if app.working
                     || app.command_status.is_some()
@@ -6515,6 +6652,52 @@ mod tests {
         app.editor.set_text("!git status");
         update_thinking_border(&mut app, ThinkingLevel::Max);
         assert_eq!(app.editor.border_color_token, "bashMode");
+    }
+
+    #[test]
+    fn resize_waits_for_a_quiet_period_before_accepting_the_size() {
+        let started = Instant::now();
+        let mut resize = ResizeState::new((100, 30));
+
+        resize.observe((120, 40), started);
+        assert!(resize.pending());
+        assert!(!resize.settle(started + RESIZE_SETTLE_DELAY - Duration::from_millis(1)));
+        assert_eq!(resize.accepted, (100, 30));
+
+        assert!(resize.settle(started + RESIZE_SETTLE_DELAY));
+        assert_eq!(resize.accepted, (120, 40));
+        assert!(!resize.pending());
+    }
+
+    #[test]
+    fn resize_burst_moves_the_deadline_and_accepts_only_the_final_size() {
+        let started = Instant::now();
+        let mut resize = ResizeState::new((100, 30));
+
+        resize.observe((110, 32), started);
+        resize.observe((120, 34), started + Duration::from_millis(50));
+        assert!(!resize.settle(started + RESIZE_SETTLE_DELAY));
+        assert_eq!(resize.accepted, (100, 30));
+
+        assert!(resize.settle(started + Duration::from_millis(50) + RESIZE_SETTLE_DELAY));
+        assert_eq!(resize.accepted, (120, 34));
+        assert!(!resize.settle(started + Duration::from_secs(1)));
+    }
+
+    #[test]
+    fn resize_recheck_catches_a_late_terminal_size() {
+        let started = Instant::now();
+        let mut resize = ResizeState::new((100, 30));
+        resize.observe((120, 40), started);
+        let settled = started + RESIZE_SETTLE_DELAY;
+        assert!(resize.settle(settled));
+
+        resize.recheck((121, 40), settled + RESIZE_SETTLE_DELAY);
+
+        assert!(resize.pending());
+        assert_eq!(resize.accepted, (120, 40));
+        assert!(resize.settle(settled + RESIZE_SETTLE_DELAY * 2));
+        assert_eq!(resize.accepted, (121, 40));
     }
 
     #[test]
