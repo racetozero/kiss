@@ -3437,6 +3437,13 @@ fn open_model_picker(app: &mut App, session: &Arc<kiss_coding::AgentSession>) {
     open_model_picker_with_filter(app, session, None);
 }
 
+fn save_default_hint(keybindings: &Keybindings) -> String {
+    match keybindings.key_for(Action::SaveDefault) {
+        Some(key) => format!("{key} or shift+enter"),
+        None => "shift+enter".into(),
+    }
+}
+
 fn open_model_picker_with_filter(
     app: &mut App,
     session: &Arc<kiss_coding::AgentSession>,
@@ -3456,7 +3463,10 @@ fn open_model_picker_with_filter(
         })
         .collect();
     let mut list = SelectList::new(
-        "Select model (enter uses, shift+enter saves default)",
+        format!(
+            "Select model (enter uses, {} saves default)",
+            save_default_hint(&app.keybindings)
+        ),
         items,
         app.theme.clone(),
     );
@@ -3499,7 +3509,10 @@ fn open_thinking_picker(app: &mut App, session: &Arc<kiss_coding::AgentSession>)
         })
         .collect();
     let mut list = SelectList::new(
-        "Thinking level (enter uses, shift+enter saves default)",
+        format!(
+            "Thinking level (enter uses, {} saves default)",
+            save_default_hint(&app.keybindings)
+        ),
         items,
         app.theme.clone(),
     );
@@ -4918,7 +4931,9 @@ fn handle_picker_key(
         && key.key == Key::Char(' ')
         && !key.ctrl
         && !key.alt;
-    if key.key == Key::Enter || activates_settings {
+    let saves_default = matches!(&picker.kind, PickerKind::Model | PickerKind::Thinking)
+        && matches!(app.keybindings.action_for(key), Some(Action::SaveDefault));
+    if key.key == Key::Enter || activates_settings || saves_default {
         let mut picker = app.picker.take().expect("picker is present");
         let value = picker.list.current().map(|item| item.value);
         let filter = std::mem::take(&mut picker.list.filter);
@@ -4931,7 +4946,7 @@ fn handle_picker_key(
                     value,
                     filter,
                 },
-                key.shift,
+                key.shift || saves_default,
                 resources,
                 command_tx,
             );

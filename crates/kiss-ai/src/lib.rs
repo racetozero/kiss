@@ -20,7 +20,7 @@ pub mod stream;
 pub mod types;
 
 pub use event::{AssistantEvent, EventSink, EventStream};
-pub use model::{Model, ModelCost, OpenAICompat};
+pub use model::{Model, ModelCost, ModelCostTier, OpenAICompat};
 #[cfg(feature = "native")]
 pub use registry::Registry;
 #[cfg(feature = "native")]

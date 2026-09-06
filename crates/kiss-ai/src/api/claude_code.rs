@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 use sha2::{Digest as _, Sha256};
 use std::path::PathBuf;
 
-pub const VERSION: &str = "2.1.224";
+pub const VERSION: &str = "2.1.251";
 pub const ENTRYPOINT: &str = "sdk-cli";
 const CCH_PLACEHOLDER: &str = "cch=00000";
 const CCH_SEED: u64 = 0x4d65_9218_e32a_3268;
@@ -269,7 +269,7 @@ mod tests {
     fn recovered_prompt_fingerprint_matches() {
         assert_eq!(
             version_fingerprint(&context("Reply with exactly: PROBE_OK")),
-            "f97"
+            "3e7"
         );
     }
 
@@ -277,28 +277,28 @@ mod tests {
     fn prompt_fingerprint_uses_javascript_utf16_indexes() {
         assert_eq!(
             version_fingerprint(&context("😀Reply with exactly: PROBE_OK")),
-            "686"
+            "77a"
         );
         assert_eq!(
             version_fingerprint(&context("abcd😀efghijklmnopqrstuvw")),
-            "39f"
+            "eab"
         );
     }
 
     #[test]
     fn recovered_body_checksum_matches() {
-        let body = r#"{"model":"claude-opus-5","messages":[{"role":"user","content":"A"}],"max_tokens":64000,"stream":true,"system":[{"type":"text","text":"x-anthropic-billing-header: cc_version=2.1.224.000; cc_entrypoint=sdk-cli; cch=00000;"}]}"#;
-        let expected_normalized = r#"{"model":"","messages":[{"role":"user","content":"A"}],"stream":true,"system":[{"type":"text","text":"x-anthropic-billing-header: cc_version=2.1.224.000; cc_entrypoint=sdk-cli; cch=00000;"}]}"#;
+        let body = r#"{"model":"claude-opus-5","messages":[{"role":"user","content":"A"}],"max_tokens":64000,"stream":true,"system":[{"type":"text","text":"x-anthropic-billing-header: cc_version=2.1.251.000; cc_entrypoint=sdk-cli; cch=00000;"}]}"#;
+        let expected_normalized = r#"{"model":"","messages":[{"role":"user","content":"A"}],"stream":true,"system":[{"type":"text","text":"x-anthropic-billing-header: cc_version=2.1.251.000; cc_entrypoint=sdk-cli; cch=00000;"}]}"#;
         assert_eq!(
             xxhash64(expected_normalized.as_bytes(), CCH_SEED),
-            0x6a37_bc2b_f327_ba34
+            0x7508_c24c_94be_40b4
         );
         let mut parsed: Value = serde_json::from_str(body).unwrap();
         parsed["model"] = json!("");
         parsed.as_object_mut().unwrap().shift_remove("max_tokens");
         assert_eq!(serde_json::to_string(&parsed).unwrap(), expected_normalized);
         let patched = patch_cch(body).unwrap();
-        assert!(patched.contains("cch=7ba34"), "{patched}");
+        assert!(patched.contains("cch=e40b4"), "{patched}");
     }
 
     #[test]

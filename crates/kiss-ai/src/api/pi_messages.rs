@@ -207,6 +207,9 @@ fn apply_terminal_fields(data: &Value, builder: &mut PartialBuilder) {
     if let Some(response_id) = data["responseId"].as_str() {
         builder.message.response_id = Some(response_id.to_string());
     }
+    if let Some(level) = data["providerThinkingLevel"].as_str() {
+        builder.message.provider_thinking_level = Some(level.to_string());
+    }
 }
 
 fn parse_stop_reason(value: &Value) -> StopReason {
@@ -262,6 +265,7 @@ mod tests {
                     "type":"done",
                     "reason":"stop",
                     "responseId":"radius-response",
+                    "providerThinkingLevel":"xhigh",
                     "usage":{
                         "input":4,"output":1,"cacheRead":0,"cacheWrite":0,
                         "totalTokens":5,
@@ -318,6 +322,7 @@ mod tests {
         assert_eq!(output.stop_reason, StopReason::Stop);
         assert_eq!(output.text(), "hello");
         assert_eq!(output.response_id.as_deref(), Some("radius-response"));
+        assert_eq!(output.provider_thinking_level.as_deref(), Some("xhigh"));
         assert_eq!(output.usage.input, 4);
 
         let request = server.await.unwrap();

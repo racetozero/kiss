@@ -5,14 +5,14 @@
 //! scrolled: cursor movement sequences operate on screen rows, not on logical
 //! frame indices. The renderer is the only frame writer in the TUI.
 
-use crate::text::{display_width, strip_ansi, truncate_to_width};
+use crate::text::{display_width, strip_ansi, truncate_to_width, wrap_terminal_text};
 use std::borrow::Cow;
 use std::io::Write;
 use std::sync::Arc;
 
 /// Zero-width APC sequence inserted by a focused component at its cursor.
 /// The renderer removes it and positions the terminal cursor at that cell.
-pub const CURSOR_MARKER: &str = "\x1b_pi:c\x07";
+pub use crate::text::CURSOR_MARKER;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct CursorPosition {
@@ -89,6 +89,22 @@ impl DiffRenderer {
     ) -> std::io::Result<()> {
         let width = width.max(1);
         let height = height.max(1);
+        let wrapped = new_lines
+            .iter()
+            .any(|line| display_width(line) > width)
+            .then(|| {
+                new_lines
+                    .iter()
+                    .flat_map(|line| {
+                        if display_width(line) <= width {
+                            vec![line.clone()]
+                        } else {
+                            wrap_terminal_text(line, width)
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            });
+        let new_lines = wrapped.as_deref().unwrap_or(new_lines);
         let can_reuse = self.width == width;
         let prepared = prepare_lines(
             new_lines,
@@ -509,6 +525,33 @@ mod tests {
         let mut renderer = DiffRenderer::new();
         render(&mut renderer, &["a", "b"], 80, 24);
         assert!(render(&mut renderer, &["a", "b"], 80, 24).is_empty());
+    }
+
+    #[test]
+    fn overlong_rows_wrap_instead_of_truncating() {
+        let mut renderer = DiffRenderer::new();
+        let mut terminal = VirtualTerminal::new(14, 5);
+        terminal.feed(&render(
+            &mut renderer,
+            &["skills: ponytail, linkup-search"],
+            14,
+            5,
+        ));
+
+        assert_eq!(
+            &terminal.history()[..3],
+            &["skills: ponyta", "il, linkup-sea", "rch"]
+        );
+        assert_eq!(renderer.line_count(), 3);
+    }
+
+    #[test]
+    fn wrapped_rows_keep_style_changes() {
+        let mut renderer = DiffRenderer::new();
+        render(&mut renderer, &["\x1b[31mabcdef\x1b[0m"], 3, 5);
+        let update = render(&mut renderer, &["\x1b[34mabcdef\x1b[0m"], 3, 5);
+
+        assert!(update.contains("\x1b[34m"));
     }
 
     #[test]

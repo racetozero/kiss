@@ -396,6 +396,7 @@ mod tests {
                 output: 2.0,
                 cache_read: 0.5,
                 cache_write: 1.5,
+                tiers: Vec::new(),
             },
             context_window: 100_000,
             max_tokens: 1_000,

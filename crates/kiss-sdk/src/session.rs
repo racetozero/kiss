@@ -220,6 +220,12 @@ impl SessionBuilder {
         self
     }
 
+    /// Restore externally managed entries in a non-persistent session.
+    pub fn restore_entries(mut self, entries: Vec<kiss_coding::SessionEntry>) -> Self {
+        self.options.session = crate::options::SessionSource::InMemoryEntries(entries);
+        self
+    }
+
     pub fn session_dir(mut self, dir: impl Into<PathBuf>) -> Self {
         self.options.session_dir = Some(dir.into());
         self

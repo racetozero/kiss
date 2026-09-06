@@ -13,6 +13,22 @@ pub enum MermaidMode {
     Streaming,
 }
 
+fn latex_relational_joins(source: &str) -> String {
+    [
+        ("\\leftouterjoin", "⟕"),
+        ("\\rightouterjoin", "⟖"),
+        ("\\fullouterjoin", "⟗"),
+        ("\\bowtie", "⋈"),
+        ("\\Join", "⋈"),
+        ("\\ltimes", "⋉"),
+        ("\\rtimes", "⋊"),
+    ]
+    .into_iter()
+    .fold(source.to_string(), |text, (command, symbol)| {
+        text.replace(command, symbol)
+    })
+}
+
 pub struct MarkdownRenderer {
     theme: Theme,
     pub code_indent: String,
@@ -324,12 +340,13 @@ impl MarkdownRenderer {
                     }
                 }
                 Event::InlineMath(math) => {
-                    if let Ok(rendered) = mdwright_latex::render_unicode_math(&math)
+                    let normalized = latex_relational_joins(&math);
+                    if let Ok(rendered) = mdwright_latex::render_unicode_math(&normalized)
                         && rendered.lines().len() == 1
                     {
                         current.push_str(&self.theme.fg("mdCode", &rendered.as_text()));
                     } else {
-                        let rendered = mdwright_latex::translate_latex_to_unicode(&math);
+                        let rendered = mdwright_latex::translate_latex_to_unicode(&normalized);
                         if rendered.is_lossless() {
                             current.push_str(&self.theme.fg("mdCode", rendered.text()));
                         } else {
@@ -339,7 +356,8 @@ impl MarkdownRenderer {
                 }
                 Event::DisplayMath(math) => {
                     flush(&mut current, &mut out, quote_depth, width, &self.theme);
-                    match mdwright_latex::render_unicode_math(&math) {
+                    let normalized = latex_relational_joins(&math);
+                    match mdwright_latex::render_unicode_math(&normalized) {
                         Ok(rendered) if rendered.width() <= width => {
                             out.extend(
                                 rendered
@@ -579,6 +597,17 @@ mod tests {
         assert!(text.contains('a'));
         assert!(text.contains('b'));
         assert!(text.contains('─'));
+    }
+
+    #[test]
+    fn latex_relational_join_symbols_render_as_unicode() {
+        let lines = render_plain(
+            "$R \\bowtie S \\ltimes T \\rtimes U \\leftouterjoin V \\rightouterjoin W \\fullouterjoin X$",
+        );
+        let text = lines.join("\n");
+        for symbol in ['⋈', '⋉', '⋊', '⟕', '⟖', '⟗'] {
+            assert!(text.contains(symbol), "missing {symbol} in {text:?}");
+        }
     }
 
     #[test]

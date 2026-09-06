@@ -52,10 +52,18 @@ pub fn build_system_prompt(options: &SystemPromptOptions) -> String {
         prompt.push_str("</project_context>\n");
     }
 
-    let has_read = options.selected_tools.iter().any(|t| t == "read");
-    if has_read && !options.skills.is_empty() {
+    let file_read_tool = options
+        .selected_tools
+        .iter()
+        .find(|tool| matches!(tool.as_str(), "read" | "bash"));
+    if let Some(tool) = file_read_tool
+        && !options.skills.is_empty()
+    {
         prompt.push('\n');
-        prompt.push_str(&crate::skills::format_skills_for_prompt(options.skills));
+        prompt.push_str(&crate::skills::format_skills_for_prompt_with_tool(
+            options.skills,
+            tool,
+        ));
         prompt.push('\n');
     }
 
@@ -116,6 +124,26 @@ mod tests {
         assert!(p.contains("- bash:"));
         assert!(p.contains("Use bash for file operations"));
         assert!(p.ends_with("Current working directory: /work"));
+    }
+
+    #[test]
+    fn skills_are_available_with_bash_as_the_only_reader() {
+        let tools = vec!["bash".to_string()];
+        let skill = Skill {
+            name: "example".into(),
+            description: "Example skill".into(),
+            file_path: "/skills/example/SKILL.md".into(),
+            disable_model_invocation: false,
+        };
+        let mut options = base_options(&tools);
+        options.skills = std::slice::from_ref(&skill);
+        let prompt = build_system_prompt(&options);
+        assert!(prompt.contains("<name>example</name>"));
+        assert!(prompt.contains("Use bash to load a skill's file"));
+
+        let no_reader = vec!["edit".to_string()];
+        options.selected_tools = &no_reader;
+        assert!(!build_system_prompt(&options).contains("<available_skills>"));
     }
 
     #[test]

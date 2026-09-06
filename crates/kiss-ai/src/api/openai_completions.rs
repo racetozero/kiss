@@ -20,6 +20,7 @@ struct Compat {
     reasoning_content_on_assistant: bool,
     thinking_format: Option<String>,
     max_tokens_field: &'static str,
+    vllm_priority: Option<i64>,
 }
 
 fn detect_compat(model: &Model) -> Compat {
@@ -43,6 +44,7 @@ fn detect_compat(model: &Model) -> Compat {
             _ if is_openai => "max_completion_tokens",
             _ => "max_tokens",
         },
+        vllm_priority: c.vllm_priority,
     }
 }
 
@@ -474,6 +476,9 @@ fn build_request(
         body["stream_options"] = json!({"include_usage": true});
     }
     body[compat.max_tokens_field] = json!(options.max_tokens.unwrap_or(model.max_tokens));
+    if let Some(priority) = compat.vllm_priority {
+        body["priority"] = json!(priority);
+    }
     if let Some(t) = options.temperature {
         body["temperature"] = json!(t);
     }
@@ -568,6 +573,21 @@ mod tests {
             ..Default::default()
         }));
         assert!(!lenient.finish_reason);
+    }
+
+    #[test]
+    fn vllm_priority_is_sent() {
+        let model = model_with_compat(OpenAICompat {
+            vllm_priority: Some(7),
+            ..Default::default()
+        });
+        let body = build_request(
+            &model,
+            &Context::default(),
+            &StreamOptions::default(),
+            &detect_compat(&model),
+        );
+        assert_eq!(body["priority"], 7);
     }
 
     #[test]

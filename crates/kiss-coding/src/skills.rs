@@ -209,6 +209,10 @@ fn escape_xml(value: &str) -> String {
 }
 
 pub fn format_skills_for_prompt(skills: &[Skill]) -> String {
+    format_skills_for_prompt_with_tool(skills, "read")
+}
+
+pub fn format_skills_for_prompt_with_tool(skills: &[Skill], tool: &str) -> String {
     let visible: Vec<&Skill> = skills
         .iter()
         .filter(|s| !s.disable_model_invocation)
@@ -216,8 +220,8 @@ pub fn format_skills_for_prompt(skills: &[Skill]) -> String {
     if visible.is_empty() {
         return String::new();
     }
-    let mut out = String::from(
-        "The following skills provide specialized instructions for specific tasks.\nRead the full skill file when the task matches its description.\nWhen a skill file references a relative path, resolve it against the skill directory (parent of SKILL.md / dirname of the path) and use that absolute path in tool commands.\n\n<available_skills>\n",
+    let mut out = format!(
+        "The following skills provide specialized instructions for specific tasks.\nUse {tool} to load a skill's file when the task matches its description.\nWhen a skill file references a relative path, resolve it against the skill directory (parent of SKILL.md / dirname of the path) and use that absolute path in tool commands.\n\n<available_skills>\n",
     );
     for skill in visible {
         out.push_str("  <skill>\n");

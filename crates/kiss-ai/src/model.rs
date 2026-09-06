@@ -4,10 +4,24 @@ use crate::ThinkingLevel;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ModelCost {
     /// USD per million input tokens.
+    pub input: f64,
+    pub output: f64,
+    #[serde(default)]
+    pub cache_read: f64,
+    #[serde(default)]
+    pub cache_write: f64,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tiers: Vec<ModelCostTier>,
+}
+
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelCostTier {
+    pub input_tokens_above: u64,
     pub input: f64,
     pub output: f64,
     #[serde(default)]
@@ -27,6 +41,11 @@ pub struct OpenAICompat {
     pub requires_reasoning_content_on_assistant_messages: Option<bool>,
     pub thinking_format: Option<String>,
     pub max_tokens_field: Option<String>,
+    pub vllm_priority: Option<i64>,
+    pub supports_max_output_tokens: Option<bool>,
+    pub force_adaptive_thinking: Option<bool>,
+    pub supports_temperature: Option<bool>,
+    pub supports_mid_convo_effort: Option<bool>,
 }
 
 impl OpenAICompat {
@@ -49,6 +68,19 @@ impl OpenAICompat {
                 .or(self.requires_reasoning_content_on_assistant_messages),
             thinking_format: override_values.thinking_format.or(self.thinking_format),
             max_tokens_field: override_values.max_tokens_field.or(self.max_tokens_field),
+            vllm_priority: override_values.vllm_priority.or(self.vllm_priority),
+            supports_max_output_tokens: override_values
+                .supports_max_output_tokens
+                .or(self.supports_max_output_tokens),
+            force_adaptive_thinking: override_values
+                .force_adaptive_thinking
+                .or(self.force_adaptive_thinking),
+            supports_temperature: override_values
+                .supports_temperature
+                .or(self.supports_temperature),
+            supports_mid_convo_effort: override_values
+                .supports_mid_convo_effort
+                .or(self.supports_mid_convo_effort),
         }
     }
 }
@@ -153,9 +185,6 @@ impl Model {
     }
 
     pub fn map_thinking_level(&self, level: ThinkingLevel) -> ThinkingLevel {
-        if level == ThinkingLevel::Off {
-            return level;
-        }
         let level = self.clamp_thinking_level(level);
         match self.thinking_level_map.get(level.as_str()) {
             Some(None) => ThinkingLevel::Off,
@@ -215,6 +244,11 @@ mod tests {
         assert_eq!(
             model.map_thinking_level(ThinkingLevel::Max),
             ThinkingLevel::Max
+        );
+        model.thinking_level_map.insert("off".into(), None);
+        assert_eq!(
+            model.map_thinking_level(ThinkingLevel::Off),
+            ThinkingLevel::Low
         );
     }
 }

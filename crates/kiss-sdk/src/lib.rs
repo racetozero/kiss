@@ -77,6 +77,8 @@ pub use kiss_agent::{AgentMessage, DynTool, StreamFn};
 #[cfg(feature = "native")]
 pub use kiss_ai::{Model, ThinkingLevel};
 #[cfg(feature = "native")]
+pub use kiss_coding::SessionEntry;
+#[cfg(feature = "native")]
 pub use options::{SessionOptions, SessionSource};
 #[cfg(feature = "native")]
 pub use session::{

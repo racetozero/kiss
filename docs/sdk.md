@@ -41,7 +41,9 @@ async fn main() -> anyhow::Result<()> {
 `SessionOptions` configures `cwd`, model/provider/key, `models_file`, thinking
 level, tool allow/exclude lists, custom Rust tools, prompts, project trust,
 event capacity, and session persistence. SDK sessions are in-memory by default;
-choose `SessionSource::Create` to persist one.
+choose `SessionSource::Create` to persist one. Rust callers can restore caller-owned
+history without creating a file through `SessionBuilder::restore_entries` or
+`SessionSource::InMemoryEntries`.
 
 ## Python 3.11+
 

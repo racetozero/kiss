@@ -233,6 +233,22 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
             None => break,
         }
     }
+
+    // SSE permits the final event to end at EOF without a blank separator.
+    parser.finish(&mut events);
+    for event in events.drain(..) {
+        match handle_event(&event, &mut builder, &mut state) {
+            Flow::Continue => {}
+            Flow::Done(reason) => {
+                builder.finish(reason, model);
+                return;
+            }
+            Flow::Error(msg) => {
+                builder.fail(msg, false, model);
+                return;
+            }
+        }
+    }
     builder.fail("response stream ended before completion", false, model);
 }
 
@@ -1036,7 +1052,13 @@ pub(crate) fn build_request(model: &Model, context: &Context, options: &StreamOp
         "store": false,
         "parallel_tool_calls": true,
     });
-    if model.api != "openai-codex-responses" {
+    if model.api != "openai-codex-responses"
+        && model
+            .compat
+            .as_ref()
+            .and_then(|compat| compat.supports_max_output_tokens)
+            .unwrap_or(true)
+    {
         body["max_output_tokens"] = json!(options.max_tokens.unwrap_or(model.max_tokens));
     }
     if let Some(system) = &context.system_prompt {
@@ -1157,6 +1179,17 @@ mod request_tests {
     }
 
     #[test]
+    fn response_request_omits_unsupported_output_limit() {
+        let mut model = model("openai-responses", "https://api.openai.com/v1");
+        model.compat = Some(crate::model::OpenAICompat {
+            supports_max_output_tokens: Some(false),
+            ..Default::default()
+        });
+        let body = build_request(&model, &Context::default(), &StreamOptions::default());
+        assert!(body.get("max_output_tokens").is_none());
+    }
+
+    #[test]
     fn codex_request_omits_unsupported_output_limit() {
         let body = build_request(
             &model("openai-codex-responses", "https://chatgpt.com/backend-api"),
@@ -1167,7 +1200,7 @@ mod request_tests {
     }
 
     #[tokio::test]
-    async fn codex_stream_sends_subscription_headers_and_decodes_sse() {
+    async fn codex_stream_flushes_terminal_event_at_eof() {
         let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
         let address = listener.local_addr().unwrap();
         let server = tokio::spawn(async move {
@@ -1217,10 +1250,11 @@ mod request_tests {
                     json!({"type":"response.completed","response":{"status":"completed","usage":{"input_tokens":12,"input_tokens_details":{"cached_tokens":2},"output_tokens":3,"output_tokens_details":{"reasoning_tokens":1}}}}),
                 ),
             ];
-            let body = events
+            let mut body = events
                 .into_iter()
                 .map(|(event, data)| format!("event: {event}\ndata: {data}\n\n"))
                 .collect::<String>();
+            body.truncate(body.len() - 2);
             let response = format!(
                 "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
                 body.len()

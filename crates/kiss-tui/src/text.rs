@@ -3,6 +3,9 @@
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
+/// Zero-width APC sequence inserted by a focused component at its cursor.
+pub const CURSOR_MARKER: &str = "\x1b_pi:c\x07";
+
 /// Display width of a string, ignoring ANSI escape sequences.
 pub fn display_width(s: &str) -> usize {
     let bytes = s.as_bytes();
@@ -137,6 +140,123 @@ pub fn wrap_text(text: &str, width: usize) -> Vec<String> {
     lines
 }
 
+/// Hard-wrap terminal text without changing spaces, ANSI styles, links, or a
+/// focused component's cursor marker.
+pub fn wrap_terminal_text(text: &str, width: usize) -> Vec<String> {
+    if width == 0 {
+        return vec![String::new()];
+    }
+
+    let mut lines = Vec::new();
+    let mut line = String::new();
+    let mut line_width = 0;
+    let mut sgr = String::new();
+    let mut hyperlink: Option<String> = None;
+    let mut index = 0;
+
+    while index < text.len() {
+        if text[index..].starts_with(CURSOR_MARKER) {
+            if line_width == width {
+                push_terminal_line(&mut lines, &mut line, hyperlink.is_some());
+                line.push_str(&sgr);
+                if let Some(link) = &hyperlink {
+                    line.push_str(link);
+                }
+                line_width = 0;
+            }
+            line.push_str(CURSOR_MARKER);
+            index += CURSOR_MARKER.len();
+            continue;
+        }
+
+        if text.as_bytes()[index] == b'\x1b' {
+            let end = ansi_sequence_end(text, index);
+            let sequence = &text[index..end];
+            line.push_str(sequence);
+            if sequence.starts_with("\x1b[") && sequence.ends_with('m') {
+                if matches!(sequence, "\x1b[m" | "\x1b[0m") {
+                    sgr.clear();
+                } else {
+                    sgr.push_str(sequence);
+                }
+            } else if let Some(target) = osc8_target(sequence) {
+                hyperlink = (!target.is_empty()).then(|| sequence.to_string());
+            }
+            index = end;
+            continue;
+        }
+
+        let grapheme = text[index..]
+            .graphemes(true)
+            .next()
+            .expect("index is before the end of text");
+        let grapheme_width = grapheme.width();
+        if line_width > 0 && line_width + grapheme_width > width {
+            push_terminal_line(&mut lines, &mut line, hyperlink.is_some());
+            line.push_str(&sgr);
+            if let Some(link) = &hyperlink {
+                line.push_str(link);
+            }
+            line_width = 0;
+        }
+        line.push_str(grapheme);
+        line_width += grapheme_width;
+        index += grapheme.len();
+    }
+
+    lines.push(line);
+    lines
+}
+
+fn push_terminal_line(lines: &mut Vec<String>, line: &mut String, close_hyperlink: bool) {
+    if close_hyperlink {
+        line.push_str("\x1b]8;;\x07");
+    }
+    lines.push(std::mem::take(line));
+}
+
+fn ansi_sequence_end(text: &str, start: usize) -> usize {
+    let bytes = text.as_bytes();
+    let mut index = start + 1;
+    match bytes.get(index) {
+        Some(b'[') => {
+            index += 1;
+            while index < bytes.len() {
+                let byte = bytes[index];
+                index += 1;
+                if (0x40..=0x7e).contains(&byte) {
+                    break;
+                }
+            }
+        }
+        Some(b']' | b'_') => {
+            index += 1;
+            while index < bytes.len() {
+                if bytes[index] == b'\x07' {
+                    index += 1;
+                    break;
+                }
+                if bytes[index] == b'\x1b' && bytes.get(index + 1) == Some(&b'\\') {
+                    index += 2;
+                    break;
+                }
+                index += 1;
+            }
+        }
+        Some(_) => index += 1,
+        None => {}
+    }
+    index
+}
+
+fn osc8_target(sequence: &str) -> Option<&str> {
+    let payload = sequence
+        .strip_prefix("\x1b]8;;")?
+        .strip_suffix('\x07')
+        .or_else(|| sequence.strip_prefix("\x1b]8;;")?.strip_suffix("\x1b\\"))?;
+    Some(payload)
+}
+
 /// Truncate to `width` columns with an ellipsis when cut.
 pub fn truncate_to_width(text: &str, width: usize) -> String {
     if display_width(text) <= width {
@@ -200,6 +320,26 @@ mod tests {
     fn hard_break_long_word() {
         let wrapped = wrap_text("abcdefghij", 4);
         assert_eq!(wrapped, vec!["abcd", "efgh", "ij"]);
+    }
+
+    #[test]
+    fn terminal_wrap_preserves_styles_spaces_links_and_cursor() {
+        assert_eq!(
+            wrap_terminal_text("\x1b[31mabcdef\x1b[0m", 3),
+            ["\x1b[31mabc", "\x1b[31mdef\x1b[0m"]
+        );
+        assert_eq!(wrap_terminal_text("  abc  ", 4), ["  ab", "c  "]);
+        assert_eq!(
+            wrap_terminal_text("\x1b]8;;https://x\x07abcdef\x1b]8;;\x07", 3),
+            [
+                "\x1b]8;;https://x\x07abc\x1b]8;;\x07",
+                "\x1b]8;;https://x\x07def\x1b]8;;\x07"
+            ]
+        );
+        assert_eq!(
+            wrap_terminal_text(&format!("abcd{CURSOR_MARKER}ef"), 4),
+            ["abcd", &format!("{CURSOR_MARKER}ef")]
+        );
     }
 
     #[test]

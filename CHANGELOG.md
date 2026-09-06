@@ -2,8 +2,20 @@
 
 ## Unreleased
 
+### Added
+
+- Updated Pi compatibility to v0.85.1, including GPT-6 Astra, the refreshed
+  model catalog, tiered model prices, persistent Claude effort, and restorable
+  in-memory sessions.
+- Added custom-provider request controls for vLLM priority and Responses output
+  token limits.
+
 ### Fixed
 
+- Wrap long TUI rows instead of hiding their remaining text behind an ellipsis.
+- Flush terminal OpenAI Codex SSE events even when EOF has no blank separator.
+- Keep skills available when Bash is the only enabled file-reading tool.
+- Make the model/thinking picker default-save shortcut configurable.
 - Open the skill search menu for inline `$` mentions and invoke the selected
   skill without replacing preceding prompt text.
 

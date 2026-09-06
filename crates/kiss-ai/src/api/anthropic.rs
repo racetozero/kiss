@@ -24,6 +24,14 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
     };
 
     let body = build_request(model, context, options);
+    if model
+        .compat
+        .as_ref()
+        .and_then(|compat| compat.supports_mid_convo_effort)
+        .unwrap_or(false)
+    {
+        builder.message.provider_thinking_level = Some(adaptive_effort(model, options.reasoning));
+    }
     let oauth = model.provider == "anthropic"
         && crate::auth::is_oauth_access_token(&model.provider, &api_key);
     let bearer = crate::auth::is_bearer_access_token(&model.provider, &api_key);
@@ -53,7 +61,7 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
             .bearer_auth(&api_key)
             .header("accept", "application/json")
             .header("anthropic-dangerous-direct-browser-access", "true")
-            .header("anthropic-beta", "claude-code-20250219,oauth-2025-04-20")
+            .header("anthropic-beta", beta_features(model, true).join(","))
             .header(
                 "user-agent",
                 format!(
@@ -70,6 +78,10 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
         }
     } else {
         request = request.json(&body);
+        let beta_features = beta_features(model, false);
+        if !beta_features.is_empty() {
+            request = request.header("anthropic-beta", beta_features.join(","));
+        }
     }
     request = if oauth {
         request
@@ -311,6 +323,47 @@ fn handle_event(event: &SseEvent, builder: &mut PartialBuilder, state: &mut Deco
     }
 }
 
+const MID_CONVERSATION_OUTPUT_CONFIG_BETA: &str = "mid-conversation-output-config-2026-07-01";
+const THINKING_BINDING_CONTROLS_BETA: &str = "thinking-binding-controls-2026-08-01";
+
+fn supports_mid_convo_effort(model: &Model) -> bool {
+    model
+        .compat
+        .as_ref()
+        .and_then(|compat| compat.supports_mid_convo_effort)
+        .unwrap_or(false)
+}
+
+fn adaptive_effort(model: &Model, level: crate::ThinkingLevel) -> String {
+    if let Some(Some(mapped)) = model.thinking_level_map.get(level.as_str()) {
+        return mapped.clone();
+    }
+    match level {
+        crate::ThinkingLevel::Minimal | crate::ThinkingLevel::Low => "low",
+        crate::ThinkingLevel::Medium => "medium",
+        crate::ThinkingLevel::High => "high",
+        crate::ThinkingLevel::Xhigh => "xhigh",
+        crate::ThinkingLevel::Max => "max",
+        crate::ThinkingLevel::Off => "high",
+    }
+    .into()
+}
+
+fn beta_features(model: &Model, oauth: bool) -> Vec<&'static str> {
+    let mut features = if oauth {
+        vec!["claude-code-20250219", "oauth-2025-04-20"]
+    } else {
+        Vec::new()
+    };
+    if supports_mid_convo_effort(model) {
+        features.extend([
+            MID_CONVERSATION_OUTPUT_CONFIG_BETA,
+            THINKING_BINDING_CONTROLS_BETA,
+        ]);
+    }
+    features
+}
+
 fn build_request(model: &Model, context: &Context, options: &StreamOptions) -> Value {
     let mut body = json!({
         "model": model.id,
@@ -326,10 +379,31 @@ fn build_request(model: &Model, context: &Context, options: &StreamOptions) -> V
             "cache_control": {"type": "ephemeral"},
         }]);
     }
-    if let Some(t) = options.temperature {
+    let compat = model.compat.as_ref();
+    let managed_effort = supports_mid_convo_effort(model);
+    let adaptive = compat
+        .and_then(|compat| compat.force_adaptive_thinking)
+        .unwrap_or(false);
+    if let Some(t) = options.temperature
+        && options.reasoning == crate::ThinkingLevel::Off
+        && !managed_effort
+        && compat
+            .and_then(|compat| compat.supports_temperature)
+            .unwrap_or(true)
+    {
         body["temperature"] = json!(t);
     }
-    if model.reasoning
+    if managed_effort {
+        body["thinking"] = json!({
+            "type": "adaptive",
+            "display": "summarized",
+            "block_binding": {"prefix_mismatch_behavior": "drop_block"},
+        });
+        body["output_config"] = json!({"effort": "high"});
+    } else if model.reasoning && options.reasoning != crate::ThinkingLevel::Off && adaptive {
+        body["thinking"] = json!({"type": "adaptive", "display": "summarized"});
+        body["output_config"] = json!({"effort": adaptive_effort(model, options.reasoning)});
+    } else if model.reasoning
         && let Some(budget) = thinking_budget(
             options.reasoning,
             options.max_tokens.unwrap_or(model.max_tokens),
@@ -402,6 +476,18 @@ fn build_request(model: &Model, context: &Context, options: &StreamOptions) -> V
                     }
                 }
                 if !content.is_empty() {
+                    if managed_effort
+                        && assistant.api == "anthropic-messages"
+                        && assistant.provider == model.provider
+                        && let Some(effort) = assistant.provider_thinking_level.as_deref()
+                        && matches!(effort, "low" | "medium" | "high" | "xhigh" | "max")
+                    {
+                        messages.push(json!({
+                            "role": "system",
+                            "content": [],
+                            "output_config": {"effort": effort},
+                        }));
+                    }
                     messages.push(json!({"role": "assistant", "content": content}));
                 }
             }
@@ -436,6 +522,14 @@ fn build_request(model: &Model, context: &Context, options: &StreamOptions) -> V
         last_part["cache_control"] = json!({"type": "ephemeral"});
     }
 
+    if managed_effort {
+        messages.push(json!({
+            "role": "system",
+            "content": [],
+            "output_config": {"effort": adaptive_effort(model, options.reasoning)},
+        }));
+    }
+
     body["messages"] = Value::Array(messages);
     body
 }
@@ -448,5 +542,102 @@ fn user_block(block: &ContentBlock) -> Option<Value> {
             "source": {"type": "base64", "media_type": mime_type, "data": data},
         })),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::OpenAICompat;
+    use crate::types::{AssistantMessage, UserMessage};
+    use std::collections::BTreeMap;
+
+    fn model(compat: OpenAICompat) -> Model {
+        Model {
+            id: "claude-test".into(),
+            name: "Claude Test".into(),
+            api: "anthropic-messages".into(),
+            provider: "anthropic".into(),
+            base_url: "https://api.anthropic.com".into(),
+            reasoning: true,
+            input: vec!["text".into()],
+            cost: Default::default(),
+            context_window: 1_000_000,
+            max_tokens: 128_000,
+            compat: Some(compat),
+            thinking_level_map: BTreeMap::new(),
+            headers: BTreeMap::new(),
+        }
+    }
+
+    #[test]
+    fn managed_effort_replays_historical_and_active_levels() {
+        let model = model(OpenAICompat {
+            supports_mid_convo_effort: Some(true),
+            force_adaptive_thinking: Some(true),
+            ..Default::default()
+        });
+        let mut previous =
+            AssistantMessage::empty("anthropic-messages", "anthropic", "claude-test");
+        previous.content.push(ContentBlock::text("answer"));
+        previous.provider_thinking_level = Some("low".into());
+        let context = Context {
+            messages: vec![
+                Message::User(UserMessage {
+                    content: UserContent::Text("first".into()),
+                    timestamp: 1,
+                }),
+                Message::Assistant(previous),
+                Message::User(UserMessage {
+                    content: UserContent::Text("next".into()),
+                    timestamp: 2,
+                }),
+            ],
+            ..Default::default()
+        };
+        let options = StreamOptions {
+            reasoning: crate::ThinkingLevel::Xhigh,
+            ..Default::default()
+        };
+        let body = build_request(&model, &context, &options);
+        assert_eq!(body["thinking"]["type"], "adaptive");
+        assert_eq!(
+            body["thinking"]["block_binding"]["prefix_mismatch_behavior"],
+            "drop_block"
+        );
+        assert_eq!(body["output_config"]["effort"], "high");
+        assert_eq!(body["messages"][1]["role"], "system");
+        assert_eq!(body["messages"][1]["output_config"]["effort"], "low");
+        assert_eq!(
+            body["messages"][3]["content"][0]["cache_control"]["type"],
+            "ephemeral"
+        );
+        assert_eq!(body["messages"][4]["role"], "system");
+        assert_eq!(body["messages"][4]["output_config"]["effort"], "xhigh");
+        assert!(beta_features(&model, false).contains(&MID_CONVERSATION_OUTPUT_CONFIG_BETA));
+        assert!(beta_features(&model, false).contains(&THINKING_BINDING_CONTROLS_BETA));
+    }
+
+    #[test]
+    fn adaptive_and_budget_models_keep_distinct_request_shapes() {
+        let adaptive = model(OpenAICompat {
+            force_adaptive_thinking: Some(true),
+            supports_temperature: Some(false),
+            ..Default::default()
+        });
+        let options = StreamOptions {
+            reasoning: crate::ThinkingLevel::Max,
+            temperature: Some(0.5),
+            ..Default::default()
+        };
+        let body = build_request(&adaptive, &Context::default(), &options);
+        assert_eq!(body["thinking"]["type"], "adaptive");
+        assert_eq!(body["output_config"]["effort"], "max");
+        assert!(body.get("temperature").is_none());
+
+        let budget = model(OpenAICompat::default());
+        let body = build_request(&budget, &Context::default(), &options);
+        assert_eq!(body["thinking"]["type"], "enabled");
+        assert!(body["thinking"]["budget_tokens"].as_u64().is_some());
     }
 }

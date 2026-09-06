@@ -8,7 +8,7 @@ use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-/// Generated model data verified against `@earendil-works/pi-ai` 0.84.4.
+/// Generated model data verified against `@earendil-works/pi-ai` 0.85.1.
 const BUILTIN_PROVIDER_CATALOGS: &[&str] = &[
     include_str!("../data/providers/amazon-bedrock.json"),
     include_str!("../data/providers/ant-ling.json"),
@@ -495,6 +495,56 @@ mod tests {
             })
             .collect();
         assert!(unsupported.is_empty(), "unsupported APIs: {unsupported:?}");
+    }
+
+    #[test]
+    fn pi_0851_catalog_changes_are_present() {
+        let registry = Registry::from_builtin();
+        for provider in ["openai", "openai-codex"] {
+            let (model, _) = registry
+                .resolve(&format!("{provider}/gpt-6-astra"), None)
+                .expect("GPT-6 Astra");
+            assert_eq!(model.id, "gpt-6-astra");
+            assert!(!model.cost.tiers.is_empty());
+        }
+        for provider in [
+            "qwen-token-plan",
+            "qwen-token-plan-cn",
+            "qwen-token-plan-individual",
+        ] {
+            assert!(
+                registry
+                    .resolve(&format!("{provider}/qwen3.8-flash"), None)
+                    .is_some(),
+                "missing Qwen3.8 Flash for {provider}"
+            );
+        }
+        assert!(registry.resolve("xai/grok-build-0.1", None).is_none());
+
+        let (baseten, _) = registry
+            .resolve("baseten/zai-org/GLM-5.2", None)
+            .expect("Baseten GLM-5.2");
+        assert!(!baseten.supports_images());
+
+        let (fable, _) = registry
+            .resolve("github-copilot/claude-fable-5", None)
+            .expect("Copilot Claude Fable 5");
+        assert_eq!(fable.api, "anthropic-messages");
+        assert_eq!(
+            fable
+                .compat
+                .as_ref()
+                .and_then(|compat| compat.force_adaptive_thinking),
+            Some(true)
+        );
+
+        let (managed, _) = registry
+            .resolve("anthropic/claude-fable-5-1", None)
+            .expect("Anthropic Claude Fable 5.1");
+        assert_eq!(
+            managed.map_thinking_level(ThinkingLevel::Off),
+            ThinkingLevel::Minimal
+        );
     }
 
     #[test]

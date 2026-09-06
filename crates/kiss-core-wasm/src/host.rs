@@ -151,6 +151,7 @@ pub fn model_stream(
                     model: model.id,
                     response_model: response.response_model,
                     response_id: response.response_id,
+                    provider_thinking_level: response.provider_thinking_level,
                     usage: response.usage,
                     stop_reason,
                     error_message: response.error_message,

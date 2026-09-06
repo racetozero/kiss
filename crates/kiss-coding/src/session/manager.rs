@@ -81,6 +81,16 @@ impl SessionManager {
         }
     }
 
+    /// Restore an in-memory session from entries managed by an SDK caller.
+    pub fn in_memory_with_entries(cwd: &Path, entries: Vec<SessionEntry>) -> Self {
+        let mut manager = Self::in_memory(cwd);
+        for entry in entries {
+            manager.insert_entry(entry);
+        }
+        manager.leaf_id = manager.entries.last().map(|entry| entry.id().to_string());
+        manager
+    }
+
     pub fn open(path: &Path) -> Result<Self> {
         let text = std::fs::read_to_string(path)
             .with_context(|| format!("open session {}", path.display()))?;
@@ -1178,6 +1188,22 @@ mod tests {
         std::fs::write(&target, source.to_jsonl().unwrap()).unwrap();
         let reopened = SessionManager::open(&target).unwrap();
         assert_eq!(reopened.entries().len(), 1);
+    }
+
+    #[test]
+    fn in_memory_session_restores_external_entries() {
+        let mut original = SessionManager::in_memory(Path::new("/work"));
+        original
+            .append_message(AgentMessage::user("restored"))
+            .unwrap();
+        let restored =
+            SessionManager::in_memory_with_entries(Path::new("/work"), original.entries().to_vec());
+        assert_eq!(
+            restored.build_session_context().messages,
+            original.build_session_context().messages
+        );
+        assert_eq!(restored.leaf_id(), original.leaf_id());
+        assert!(!restored.is_persisted());
     }
 
     #[test]

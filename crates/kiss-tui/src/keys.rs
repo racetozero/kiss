@@ -1,5 +1,7 @@
 //! Terminal key decoding and key-spec parsing ("ctrl+x", "alt+enter").
 
+use std::fmt;
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Key {
     Char(char),
@@ -89,6 +91,39 @@ impl KeyEvent {
             _ => return None,
         };
         Some(event)
+    }
+}
+
+impl fmt::Display for KeyEvent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.ctrl {
+            f.write_str("ctrl+")?;
+        }
+        if self.alt {
+            f.write_str("alt+")?;
+        }
+        if self.shift {
+            f.write_str("shift+")?;
+        }
+        match self.key {
+            Key::Char(' ') => f.write_str("space"),
+            Key::Char(c) => write!(f, "{c}"),
+            Key::Enter => f.write_str("enter"),
+            Key::Tab => f.write_str("tab"),
+            Key::BackTab => f.write_str("backtab"),
+            Key::Backspace => f.write_str("backspace"),
+            Key::Delete => f.write_str("delete"),
+            Key::Up => f.write_str("up"),
+            Key::Down => f.write_str("down"),
+            Key::Left => f.write_str("left"),
+            Key::Right => f.write_str("right"),
+            Key::Home => f.write_str("home"),
+            Key::End => f.write_str("end"),
+            Key::PageUp => f.write_str("pageup"),
+            Key::PageDown => f.write_str("pagedown"),
+            Key::Escape => f.write_str("escape"),
+            Key::F(number) => write!(f, "f{number}"),
+        }
     }
 }
 

@@ -9,7 +9,7 @@
 
 use kiss_sdk::mock::{MockProvider, MockScript, MockTurn};
 use kiss_sdk::protocol::{Command, StreamingBehavior};
-use kiss_sdk::{PromptArgs, Session, SessionOptions};
+use kiss_sdk::{PromptArgs, Session, SessionOptions, ThinkingLevel};
 use serde_json::json;
 use std::sync::Arc;
 use std::time::Duration;
@@ -26,6 +26,8 @@ async fn session_with(
         cwd: directory.to_path_buf(),
         model: Some("mock/mock-1".into()),
         models_file: Some(provider.catalog_path()),
+        thinking_level: Some(ThinkingLevel::Off),
+        settings: Some(kiss_coding::Settings::default()),
         // Project files in a temporary directory are ours, but leaving trust
         // off keeps the test independent of the developer's global settings.
         trust_project_files: false,

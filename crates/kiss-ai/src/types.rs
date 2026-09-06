@@ -155,6 +155,9 @@ pub struct AssistantMessage {
     pub response_model: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub response_id: Option<String>,
+    /// Exact provider-native effort used for this response.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_thinking_level: Option<String>,
     pub usage: Usage,
     pub stop_reason: StopReason,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -173,6 +176,7 @@ impl AssistantMessage {
             model: model.to_string(),
             response_model: None,
             response_id: None,
+            provider_thinking_level: None,
             usage: Usage::default(),
             stop_reason: StopReason::Pending,
             error_message: None,
@@ -312,6 +316,11 @@ mod tests {
         });
         let v = serde_json::to_value(&tc).unwrap();
         assert_eq!(v["type"], "toolCall");
+
+        let mut assistant = AssistantMessage::empty("anthropic-messages", "anthropic", "claude");
+        assistant.provider_thinking_level = Some("xhigh".into());
+        let v = serde_json::to_value(assistant).unwrap();
+        assert_eq!(v["providerThinkingLevel"], "xhigh");
     }
 
     #[test]

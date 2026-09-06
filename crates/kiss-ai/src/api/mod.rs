@@ -236,11 +236,23 @@ impl PartialBuilder {
 pub fn finalize_cost(usage: &mut Usage, model: &Model) {
     let per = |tokens: u64, rate: f64| tokens as f64 * rate / 1_000_000.0;
     let c = &model.cost;
+    let input_tokens = usage.input + usage.cache_read + usage.cache_write;
+    let tier = c
+        .tiers
+        .iter()
+        .filter(|tier| input_tokens > tier.input_tokens_above)
+        .max_by_key(|tier| tier.input_tokens_above);
     let cost = Cost {
-        input: per(usage.input, c.input),
-        output: per(usage.output, c.output),
-        cache_read: per(usage.cache_read, c.cache_read),
-        cache_write: per(usage.cache_write, c.cache_write),
+        input: per(usage.input, tier.map_or(c.input, |tier| tier.input)),
+        output: per(usage.output, tier.map_or(c.output, |tier| tier.output)),
+        cache_read: per(
+            usage.cache_read,
+            tier.map_or(c.cache_read, |tier| tier.cache_read),
+        ),
+        cache_write: per(
+            usage.cache_write,
+            tier.map_or(c.cache_write, |tier| tier.cache_write),
+        ),
         total: 0.0,
     };
     usage.cost = Cost {
@@ -354,6 +366,54 @@ mod provider_header_tests {
         );
         model.provider = "openai".into();
         assert_eq!(provider_base_url(&model, "secret"), model.base_url);
+    }
+
+    #[test]
+    fn cost_uses_the_highest_matching_input_tier() {
+        let mut model = Model {
+            id: "tiered".into(),
+            name: String::new(),
+            api: "openai-responses".into(),
+            provider: "test".into(),
+            base_url: String::new(),
+            reasoning: false,
+            input: vec!["text".into()],
+            cost: crate::ModelCost {
+                input: 1.0,
+                output: 2.0,
+                tiers: vec![crate::ModelCostTier {
+                    input_tokens_above: 100,
+                    input: 10.0,
+                    output: 20.0,
+                    ..Default::default()
+                }],
+                ..Default::default()
+            },
+            context_window: 1,
+            max_tokens: 1,
+            compat: None,
+            thinking_level_map: Default::default(),
+            headers: Default::default(),
+        };
+        let mut usage = Usage {
+            input: 101,
+            output: 10,
+            ..Default::default()
+        };
+        finalize_cost(&mut usage, &model);
+        assert_eq!(usage.cost.input, 0.00101);
+        assert_eq!(usage.cost.output, 0.0002);
+
+        model.cost.tiers.push(crate::ModelCostTier {
+            input_tokens_above: 1_000,
+            input: 100.0,
+            output: 200.0,
+            ..Default::default()
+        });
+        usage.input = 1_001;
+        finalize_cost(&mut usage, &model);
+        assert_eq!(usage.cost.input, 0.1001);
+        assert_eq!(usage.cost.output, 0.002);
     }
 
     #[test]

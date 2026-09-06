@@ -21,12 +21,14 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 /// Where the session's history comes from and whether it is written to disk.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub enum SessionSource {
     /// Nothing is written to disk. This is the SDK default: a library should
     /// not silently create files under the user's home directory.
     #[default]
     InMemory,
+    /// Restore entries held by the caller without writing them to disk.
+    InMemoryEntries(Vec<kiss_coding::SessionEntry>),
     /// Create a new session file in the session directory.
     Create,
     /// Continue the most recent session for this working directory.
@@ -36,6 +38,11 @@ pub enum SessionSource {
     /// Copy an existing session file into a new one and continue there.
     Fork(PathBuf),
 }
+
+// Keep the public `Eq` bound from earlier SDK releases. Session entries come
+// from JSON-compatible history, where non-finite floating-point costs are not
+// valid values.
+impl Eq for SessionSource {}
 
 /// Everything needed to build a [`crate::Session`].
 #[derive(Clone)]
@@ -296,6 +303,9 @@ impl SessionOptions {
             .unwrap_or_else(default_session_dir);
         Ok(match &self.session {
             SessionSource::InMemory => SessionManager::in_memory(cwd),
+            SessionSource::InMemoryEntries(entries) => {
+                SessionManager::in_memory_with_entries(cwd, entries.clone())
+            }
             SessionSource::Create => SessionManager::create(cwd, Some(dir))?,
             SessionSource::ContinueRecent => SessionManager::continue_recent(cwd, Some(dir))?,
             SessionSource::Open(path) => SessionManager::open(path)?,
@@ -311,6 +321,26 @@ mod tests {
     #[test]
     fn the_default_session_writes_nothing_to_disk() {
         assert_eq!(SessionOptions::default().session, SessionSource::InMemory);
+    }
+
+    #[test]
+    fn externally_managed_entries_restore_in_memory() {
+        fn requires_eq<T: Eq>() {}
+        requires_eq::<SessionSource>();
+
+        let cwd = Path::new("/work");
+        let mut original = SessionManager::in_memory(cwd);
+        original
+            .append_message(kiss_agent::AgentMessage::user("restored"))
+            .unwrap();
+        let options = SessionOptions {
+            cwd: cwd.into(),
+            session: SessionSource::InMemoryEntries(original.entries().to_vec()),
+            ..Default::default()
+        };
+        let restored = options.open_manager(cwd, &Settings::default()).unwrap();
+        assert_eq!(restored.build_session_context().messages.len(), 1);
+        assert!(!restored.is_persisted());
     }
 
     #[test]

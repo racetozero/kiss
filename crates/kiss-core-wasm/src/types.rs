@@ -185,6 +185,7 @@ pub struct HostModelResponse {
     pub stop_reason: Option<StopReason>,
     pub response_model: Option<String>,
     pub response_id: Option<String>,
+    pub provider_thinking_level: Option<String>,
     pub raw_stop_reason: Option<String>,
     pub error_message: Option<String>,
 }

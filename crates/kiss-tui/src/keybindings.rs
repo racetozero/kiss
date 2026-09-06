@@ -15,6 +15,7 @@ pub enum Action {
     CycleModel,
     CycleModelBackward,
     SelectModel,
+    SaveDefault,
     CycleThinking,
     ToggleThinking,
     CopyLastResponse,
@@ -38,6 +39,7 @@ impl Action {
             Action::CycleModel => "cycleModel",
             Action::CycleModelBackward => "cycleModelBackward",
             Action::SelectModel => "selectModel",
+            Action::SaveDefault => "saveDefault",
             Action::CycleThinking => "cycleThinking",
             Action::ToggleThinking => "toggleThinking",
             Action::CopyLastResponse => "copyLastResponse",
@@ -61,6 +63,7 @@ impl Action {
             Action::CycleModel,
             Action::CycleModelBackward,
             Action::SelectModel,
+            Action::SaveDefault,
             Action::CycleThinking,
             Action::ToggleThinking,
             Action::CopyLastResponse,
@@ -84,6 +87,7 @@ impl Action {
             Action::CycleModel => "ctrl+p",
             Action::CycleModelBackward => "shift+ctrl+p",
             Action::SelectModel => "ctrl+l",
+            Action::SaveDefault => "ctrl+s",
             Action::CycleThinking => "shift+tab",
             Action::ToggleThinking => "ctrl+t",
             Action::CopyLastResponse => "ctrl+x",
@@ -145,6 +149,12 @@ impl Keybindings {
     pub fn action_for(&self, key: &KeyEvent) -> Option<Action> {
         self.map.get(key).copied()
     }
+
+    pub fn key_for(&self, action: Action) -> Option<&KeyEvent> {
+        self.map
+            .iter()
+            .find_map(|(key, mapped)| (*mapped == action).then_some(key))
+    }
 }
 
 #[cfg(test)]
@@ -171,6 +181,10 @@ mod tests {
             Some(Action::CycleThinking)
         );
         assert_eq!(
+            kb.action_for(&KeyEvent::parse("ctrl+s").unwrap()),
+            Some(Action::SaveDefault)
+        );
+        assert_eq!(
             kb.action_for(&KeyEvent::parse("ctrl+d").unwrap()),
             Some(Action::Quit)
         );
@@ -183,5 +197,9 @@ mod tests {
             Some(Action::QueueFollowUp)
         );
         assert_eq!(kb.action_for(&KeyEvent::parse("alt+enter").unwrap()), None);
+        assert_eq!(
+            kb.key_for(Action::SaveDefault).map(ToString::to_string),
+            Some("ctrl+s".into())
+        );
     }
 }

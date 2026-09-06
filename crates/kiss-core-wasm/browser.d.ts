@@ -104,6 +104,7 @@ export interface ModelResponse {
   stopReason?: StopReason;
   responseModel?: string;
   responseId?: string;
+  providerThinkingLevel?: string;
   rawStopReason?: string;
   errorMessage?: string;
 }
