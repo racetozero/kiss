@@ -5,7 +5,7 @@ use crate::model::{Model, ModelCost, OpenAICompat};
 use crate::types::ThinkingLevel;
 use anyhow::{Context as _, Result};
 use serde::Deserialize;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 
 /// Generated model data verified against `@earendil-works/pi-ai` 0.85.1.
@@ -166,6 +166,7 @@ struct RadiusGatewayModel {
 #[derive(Debug, Clone)]
 pub struct Registry {
     models: Vec<Model>,
+    model_indices: HashMap<(String, String), usize>,
     /// Placeholder API keys declared in models.json (e.g. "ollama").
     pub declared_keys: BTreeMap<String, String>,
 }
@@ -175,6 +176,7 @@ impl Registry {
     pub fn load(custom_path: Option<&Path>) -> Registry {
         let mut registry = Registry {
             models: Vec::new(),
+            model_indices: HashMap::new(),
             declared_keys: BTreeMap::new(),
         };
         registry.merge_builtins();
@@ -197,6 +199,7 @@ impl Registry {
     pub fn from_builtin() -> Registry {
         let mut r = Registry {
             models: Vec::new(),
+            model_indices: HashMap::new(),
             declared_keys: BTreeMap::new(),
         };
         r.merge_builtins();
@@ -289,13 +292,11 @@ impl Registry {
     }
 
     fn upsert(&mut self, model: Model) {
-        if let Some(existing) = self
-            .models
-            .iter_mut()
-            .find(|entry| entry.provider == model.provider && entry.id == model.id)
-        {
-            *existing = model;
+        let key = (model.provider.clone(), model.id.clone());
+        if let Some(&index) = self.model_indices.get(&key) {
+            self.models[index] = model;
         } else {
+            self.model_indices.insert(key, self.models.len());
             self.models.push(model);
         }
     }
@@ -307,6 +308,12 @@ impl Registry {
             .collect::<std::collections::HashSet<_>>();
         self.models
             .retain(|model| model.provider != provider || model_ids.contains(model.id.as_str()));
+        self.model_indices = self
+            .models
+            .iter()
+            .enumerate()
+            .map(|(index, model)| ((model.provider.clone(), model.id.clone()), index))
+            .collect();
     }
 
     fn merge_catalog(&mut self, text: &str) -> Result<()> {

@@ -7,6 +7,9 @@ repository.workspace = true
 publish = false
 description = "Deterministic workflow orchestration scripts for KISS"
 
+[lints]
+workspace = true
+
 [dependencies]
 anyhow.workspace = true
 async-trait.workspace = true

@@ -6,6 +6,9 @@ license.workspace = true
 repository.workspace = true
 description = "Coding harness: sessions, tools, compaction, settings, skills"
 
+[lints]
+workspace = true
+
 [dependencies]
 anyhow.workspace = true
 async-trait.workspace = true
@@ -26,6 +29,7 @@ regex.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 serde_yaml.workspace = true
+tempfile.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
@@ -33,4 +37,3 @@ uuid.workspace = true
 
 [dev-dependencies]
 kiss-bench.workspace = true
-tempfile.workspace = true

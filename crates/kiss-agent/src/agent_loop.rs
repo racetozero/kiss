@@ -212,11 +212,12 @@ async fn stream_assistant(
     cancel: CancellationToken,
     emit: &EventSink,
 ) -> AssistantMessage {
-    let mut messages = context.messages.clone();
-    if let Some(transform) = &config.transform_context {
-        messages = transform(messages).await;
-    }
-    let llm_messages = (config.convert_to_llm)(&messages);
+    let transformed = match &config.transform_context {
+        Some(transform) => Some(transform(context.messages.clone()).await),
+        None => None,
+    };
+    let messages = transformed.as_deref().unwrap_or(&context.messages);
+    let llm_messages = (config.convert_to_llm)(messages);
     let llm_context = kiss_ai::Context {
         system_prompt: Some(context.system_prompt.clone()),
         openai_responses_input: context.openai_responses_input.clone(),

@@ -7,5 +7,8 @@ repository.workspace = true
 publish = false
 description = "Shared benchmark timing support for KISS tests"
 
+[lints]
+workspace = true
+
 [lib]
 path = "src/lib.rs"

@@ -6,6 +6,9 @@ license.workspace = true
 repository.workspace = true
 description = "Agent runtime for the kiss coding harness"
 
+[lints]
+workspace = true
+
 [features]
 default = ["native-tools"]
 # The agent loop, messages, events, schema validation, and host-tool contract.

@@ -9,6 +9,7 @@ mod modes {
     pub mod rpc;
 }
 mod mcp_cli;
+mod session_sources;
 mod setup;
 mod slash_commands;
 mod update;

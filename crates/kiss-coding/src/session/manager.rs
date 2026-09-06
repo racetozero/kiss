@@ -162,7 +162,6 @@ impl SessionManager {
                 .map(|path| path.display().to_string())
                 .unwrap_or_else(|| format!("session:{}", self.header.id)),
         );
-        manager.rewrite_file()?;
         Ok(manager)
     }
 
@@ -171,12 +170,11 @@ impl SessionManager {
         let origin = Self::open(source)?;
         let mut manager = Self::create(cwd, session_dir)?;
         manager.header.parent_session = Some(source.display().to_string());
-        manager.rewrite_file()?;
         for entry in &origin.entries {
             manager.insert_entry(entry.clone());
-            manager.append_line(&serde_json::to_string(entry)?)?;
         }
         manager.leaf_id = origin.leaf_id.clone();
+        manager.rewrite_file()?;
         Ok(manager)
     }
 
@@ -282,6 +280,9 @@ impl SessionManager {
                 });
                 first_message = text.map(|t| t.chars().take(120).collect());
             }
+        }
+        if entry_count == 0 {
+            return None;
         }
         let modified = std::fs::metadata(path).and_then(|m| m.modified()).ok()?;
         Some(SessionListing {
@@ -413,13 +414,27 @@ impl SessionManager {
             return Ok(());
         }
         if self.append_file.is_none() {
-            self.reopen_append_file()?;
+            let path = self.file.as_ref().expect("a persisted session has a path");
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            let is_new = !path.exists();
+            let mut file = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(path)?;
+            if is_new {
+                writeln!(file, "{}", serde_json::to_string(&self.header)?)?;
+            }
+            self.append_file = Some(file);
         }
         let file = self
             .append_file
             .as_mut()
             .expect("a persisted session has an append file");
         writeln!(file, "{line}")?;
+        file.flush()?;
+        file.sync_data()?;
         Ok(())
     }
 
@@ -433,11 +448,10 @@ impl SessionManager {
 
     fn assign_new_file(&mut self) -> Result<()> {
         let dir = self.session_dir.join(cwd_slug(&self.cwd));
-        std::fs::create_dir_all(&dir)?;
         let stamp = chrono::Utc::now().format("%Y-%m-%d-%H-%M-%S");
         let path = dir.join(format!("{stamp}_{}.jsonl", self.header.id));
         self.file = Some(path);
-        self.rewrite_file()
+        Ok(())
     }
 
     /// Rewrite the whole file (header + entries). Used at creation and fork.
@@ -445,6 +459,9 @@ impl SessionManager {
         let Some(path) = self.file.clone() else {
             return Ok(());
         };
+        if self.entries.is_empty() && !path.exists() {
+            return Ok(());
+        }
         self.append_file = None;
         let mut out = serde_json::to_string(&self.header)?;
         out.push('\n');
@@ -452,7 +469,16 @@ impl SessionManager {
             out.push_str(&serde_json::to_string(entry)?);
             out.push('\n');
         }
-        std::fs::write(path, out)?;
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let parent = path
+            .parent()
+            .context("session file has no parent directory")?;
+        let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
+        temporary.write_all(out.as_bytes())?;
+        temporary.as_file().sync_all()?;
+        temporary.persist(&path).map_err(|error| error.error)?;
         self.reopen_append_file()?;
         Ok(())
     }
@@ -1114,6 +1140,31 @@ mod tests {
     }
 
     #[test]
+    fn empty_session_is_lazy_and_header_only_files_are_hidden() {
+        let dir = tempfile::tempdir().unwrap();
+        let cwd = dir.path().join("project");
+        let sessions = dir.path().join("sessions");
+        let mut manager = SessionManager::create(&cwd, Some(sessions.clone())).unwrap();
+        let path = manager.session_file().unwrap().to_path_buf();
+        assert!(!path.exists());
+
+        let legacy = path.with_file_name("legacy.jsonl");
+        std::fs::create_dir_all(legacy.parent().unwrap()).unwrap();
+        std::fs::write(
+            &legacy,
+            format!("{}\n", serde_json::to_string(manager.header()).unwrap()),
+        )
+        .unwrap();
+        assert!(SessionManager::list(&cwd, &sessions).unwrap().is_empty());
+
+        manager
+            .append_message(AgentMessage::user("first message"))
+            .unwrap();
+        assert!(path.exists());
+        assert_eq!(SessionManager::list(&cwd, &sessions).unwrap().len(), 1);
+    }
+
+    #[test]
     fn child_session_records_its_parent() {
         let parent = manager();
         let child = parent.create_child().unwrap();
@@ -1127,7 +1178,11 @@ mod tests {
         std::fs::create_dir_all(&cwd).unwrap();
         let parent = SessionManager::create(&cwd, Some(dir.path().join("sessions"))).unwrap();
         let parent_file = parent.session_file().unwrap().display().to_string();
-        let child = parent.create_child().unwrap();
+        let mut child = parent.create_child().unwrap();
+        assert!(!child.session_file().unwrap().exists());
+        child
+            .append_message(AgentMessage::user("child work"))
+            .unwrap();
         let reopened = SessionManager::open(child.session_file().unwrap()).unwrap();
         assert_eq!(
             reopened.header().parent_session.as_deref(),

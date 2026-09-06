@@ -6,6 +6,9 @@ license.workspace = true
 repository.workspace = true
 description = "kiss: a fast, minimal terminal coding agent"
 
+[lints]
+workspace = true
+
 [[bin]]
 name = "kiss"
 path = "src/main.rs"

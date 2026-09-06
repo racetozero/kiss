@@ -6,6 +6,9 @@ license.workspace = true
 repository.workspace = true
 description = "First-class MCP client support for KISS"
 
+[lints]
+workspace = true
+
 [dependencies]
 anyhow.workspace = true
 async-trait.workspace = true

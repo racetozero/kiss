@@ -3,6 +3,7 @@
 
 use crate::args::Args;
 use crate::file_search::{FileSearchMatch, FileSearchQuery, FileSearchResult, FileSearchService};
+use crate::session_sources::{self, SessionRecord, SessionSource};
 use crate::setup::{Startup, build_startup, reload_runtime};
 use crate::slash_commands;
 use crate::workflow_ui::{self, ViewAction, WorkflowView};
@@ -112,7 +113,7 @@ enum PickerKind {
     Model,
     Thinking,
     ScopedModels,
-    Session(Vec<PathBuf>, bool),
+    Session(Vec<SessionRecord>, bool),
     Tree,
     TreeSummary(String),
     Fork,
@@ -3595,30 +3596,29 @@ fn account_allows_model(model: &kiss_ai::Model, copilot_models: Option<&[String]
 
 fn open_session_picker(app: &mut App, session: &Arc<kiss_coding::AgentSession>, global: bool) {
     let manager = session.manager.lock().unwrap();
-    let listings = if global {
-        kiss_coding::SessionManager::list_all(manager.session_dir())
-    } else {
-        kiss_coding::SessionManager::list(manager.cwd(), manager.session_dir())
-    };
+    let listings = session_sources::discover(manager.cwd(), manager.session_dir(), global);
     let current = manager.session_file().map(PathBuf::from);
     drop(manager);
     match listings {
         Ok(listings) if !listings.is_empty() => {
-            let paths: Vec<PathBuf> = listings.iter().map(|item| item.path.clone()).collect();
             let items = listings
                 .iter()
                 .enumerate()
                 .map(|(value, listing)| SelectItem {
-                    label: listing
-                        .name
-                        .clone()
-                        .or_else(|| listing.first_message.clone())
-                        .unwrap_or_else(|| listing.id.clone()),
+                    label: listing.title.clone(),
                     detail: Some(format!(
-                        "{} entries · {}{}",
-                        listing.entry_count,
-                        shorten_path(&listing.cwd),
-                        if current.as_ref() == Some(&listing.path) {
+                        "{}{} · {}{}",
+                        listing
+                            .entry_count
+                            .map(|count| format!("{count} entries · "))
+                            .unwrap_or_default(),
+                        listing.source.name(),
+                        shorten_path(&listing.cwd.display().to_string()),
+                        if listing
+                            .source
+                            .kiss_path()
+                            .is_some_and(|path| current.as_deref() == Some(path))
+                        {
                             " · current"
                         } else {
                             ""
@@ -3637,7 +3637,7 @@ fn open_session_picker(app: &mut App, session: &Arc<kiss_coding::AgentSession>, 
             );
             list.max_visible = 14;
             app.picker = Some(Picker {
-                kind: PickerKind::Session(paths, global),
+                kind: PickerKind::Session(listings, global),
                 list,
             });
         }
@@ -4910,19 +4910,23 @@ fn handle_picker_key(
         return Flow::Continue;
     }
     if *key == KeyEvent::ctrl('r')
-        && let PickerKind::Session(paths, _) = &picker.kind
+        && let PickerKind::Session(records, _) = &picker.kind
     {
         let path = picker
             .list
             .current()
-            .and_then(|item| paths.get(item.value))
-            .cloned();
+            .and_then(|item| records.get(item.value))
+            .and_then(|record| record.source.kiss_path())
+            .map(Path::to_path_buf);
         if let Some(path) = path {
             app.picker = None;
             app.secret_prompt = Some(SecretPrompt {
                 kind: SecretPromptKind::SessionRename(path),
                 value: String::new(),
             });
+        } else {
+            app.cells
+                .push(Cell::Notice("only KISS sessions can be renamed".into()));
         }
         return Flow::Continue;
     }
@@ -5066,9 +5070,9 @@ fn apply_picker_selection(
             }
             _ => {}
         },
-        PickerKind::Session(paths, _) => {
-            if let Some(path) = paths.get(value) {
-                switch_session(app, session, path);
+        PickerKind::Session(records, _) => {
+            if let Some(record) = records.get(value) {
+                switch_session(app, session, record);
             }
         }
         PickerKind::Fork => {
@@ -5398,14 +5402,30 @@ fn apply_settings_selection(
     save_interactive_settings(app, session, resources);
 }
 
-fn switch_session(app: &mut App, session: &Arc<kiss_coding::AgentSession>, path: &std::path::Path) {
-    match kiss_coding::SessionManager::open(path) {
+fn switch_session(app: &mut App, session: &Arc<kiss_coding::AgentSession>, record: &SessionRecord) {
+    let result = match &record.source {
+        SessionSource::Kiss(path) => kiss_coding::SessionManager::open(path),
+        source => session_sources::import(source).and_then(|messages| {
+            if messages.is_empty() {
+                anyhow::bail!("session has no user or assistant text");
+            }
+            let session_dir = session.manager.lock().unwrap().session_dir().to_path_buf();
+            let mut manager = kiss_coding::SessionManager::create(&record.cwd, Some(session_dir))?;
+            for message in messages {
+                manager.append_message(message)?;
+            }
+            manager.append_session_info(&record.title)?;
+            Ok(manager)
+        }),
+    };
+    match result {
         Ok(manager) => {
             session.replace_manager(manager);
             app.cells = session_cells(session);
             app.cells.push(Cell::Notice(format!(
-                "resumed {}",
-                shorten_path(&path.display().to_string())
+                "resumed {} session {}",
+                record.source.name(),
+                record.id
             )));
             update_thinking_border(app, session.thinking_level());
             refresh_git_branch(app, session);

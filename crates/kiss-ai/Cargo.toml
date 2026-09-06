@@ -6,6 +6,9 @@ license.workspace = true
 repository.workspace = true
 description = "Unified multi-provider LLM streaming API for the kiss coding harness"
 
+[lints]
+workspace = true
+
 [features]
 default = ["native"]
 # Provider-neutral messages, models, streaming events, and cancellation. This

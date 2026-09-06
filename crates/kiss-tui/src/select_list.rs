@@ -2,7 +2,7 @@
 //! settings, tree view).
 
 use crate::component::Component;
-use crate::text::{display_width, fit_to_width, truncate_to_width};
+use crate::text::{display_width, fit_to_width, truncate_to_width, wrap_text};
 use crate::theme::Theme;
 
 #[derive(Debug, Clone)]
@@ -161,15 +161,17 @@ impl Component for SelectList {
     fn render(&mut self, width: usize) -> Vec<String> {
         let mut lines = Vec::new();
         let theme = self.theme.clone();
-        lines.push(theme.fg(
-            "accent",
-            &theme.bold(&truncate_to_width(&self.title, width)),
-        ));
+        lines.extend(
+            wrap_text(&self.title, width)
+                .into_iter()
+                .map(|line| theme.fg("accent", &theme.bold(&line))),
+        );
         if !self.filter.is_empty() {
-            lines.push(theme.fg(
-                "muted",
-                &truncate_to_width(&format!("filter: {}", self.filter), width),
-            ));
+            lines.extend(
+                wrap_text(&format!("filter: {}", self.filter), width)
+                    .into_iter()
+                    .map(|line| theme.fg("muted", &line)),
+            );
         }
         let indices = self.filtered_indices();
         if indices.is_empty() {
@@ -185,24 +187,29 @@ impl Component for SelectList {
         for (row, &item_idx) in indices[start..start + visible].iter().enumerate() {
             let absolute = start + row;
             let item = &self.items[item_idx];
-            let marker = if absolute == self.selected {
-                "→ "
-            } else {
-                "  "
-            };
-            let mut label = format!("{marker}{}", item.label);
+            let mut label = item.label.clone();
             if let Some(detail) = &item.detail {
                 label.push_str(&format!("  {detail}"));
             }
-            let line = truncate_to_width(&label, width);
-            if absolute == self.selected {
-                lines.push(format!(
-                    "{}{}\x1b[49m",
-                    theme.color("selectedBg").bg_code(),
-                    fit_to_width(&line, width)
-                ));
-            } else {
-                lines.push(line);
+            for (part, text) in wrap_text(&label, width.saturating_sub(2).max(1))
+                .into_iter()
+                .enumerate()
+            {
+                let marker = if part == 0 && absolute == self.selected {
+                    "→ "
+                } else {
+                    "  "
+                };
+                let line = format!("{marker}{text}");
+                if absolute == self.selected {
+                    lines.push(format!(
+                        "{}{}\x1b[49m",
+                        theme.color("selectedBg").bg_code(),
+                        fit_to_width(&line, width)
+                    ));
+                } else {
+                    lines.push(line);
+                }
             }
         }
         if indices.len() > visible {
@@ -313,5 +320,27 @@ mod tests {
         let rendered = list.render_compact(80, "");
         let plain = crate::text::strip_ansi(&rendered[0]);
         assert!(plain.contains(file_name));
+    }
+
+    #[test]
+    fn regular_rows_wrap_without_ellipsis() {
+        let mut list = SelectList::new(
+            "A long picker title",
+            vec![SelectItem {
+                label: "a long session name".into(),
+                detail: Some("12 entries".into()),
+                value: 0,
+            }],
+            Theme::dark(),
+        );
+        let lines = list.render(12);
+        let plain = lines
+            .iter()
+            .map(|line| crate::text::strip_ansi(line))
+            .collect::<Vec<_>>();
+        assert!(plain.len() > 3);
+        assert!(plain.iter().all(|line| !line.contains('…')));
+        assert_eq!(plain.iter().filter(|line| line.starts_with('→')).count(), 1);
+        assert!(plain.iter().skip(1).any(|line| line.starts_with("  ")));
     }
 }

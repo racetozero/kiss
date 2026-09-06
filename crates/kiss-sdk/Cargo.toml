@@ -6,6 +6,9 @@ license.workspace = true
 repository.workspace = true
 description = "Embeddable SDK and JSON-line RPC protocol for the kiss coding agent"
 
+[lints]
+workspace = true
+
 [features]
 default = ["native"]
 # The full in-process agent. Requires a filesystem and a process spawner.

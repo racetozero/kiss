@@ -102,7 +102,7 @@ pub struct EphemeralResponse {
 
 pub struct AgentSession {
     pub manager: Mutex<SessionManager>,
-    pub registry: Registry,
+    pub registry: Arc<Registry>,
     base_tools: Mutex<Vec<DynTool>>,
     tools: Mutex<Vec<DynTool>>,
     settings: Mutex<Settings>,
@@ -144,7 +144,7 @@ impl AgentSession {
     pub fn new(
         manager: SessionManager,
         tools: Vec<DynTool>,
-        registry: Registry,
+        registry: impl Into<Arc<Registry>>,
         settings: Settings,
         system_prompt: String,
         model: Model,
@@ -170,7 +170,7 @@ impl AgentSession {
     pub fn new_with_subagents_allowed(
         manager: SessionManager,
         tools: Vec<DynTool>,
-        registry: Registry,
+        registry: impl Into<Arc<Registry>>,
         settings: Settings,
         system_prompt: String,
         model: Model,
@@ -181,7 +181,7 @@ impl AgentSession {
     ) -> Arc<Self> {
         let session = Arc::new(AgentSession {
             manager: Mutex::new(manager),
-            registry,
+            registry: registry.into(),
             base_tools: Mutex::new(tools.clone()),
             tools: Mutex::new(tools),
             settings: Mutex::new(settings),
@@ -774,7 +774,11 @@ impl AgentSession {
             let parent = self.manager.lock().unwrap();
             (
                 parent.create_child()?,
-                parent.build_session_context().messages,
+                if fork_turns == ForkTurns::None {
+                    Vec::new()
+                } else {
+                    parent.build_session_context().messages
+                },
                 parent.session_id().to_string(),
             )
         };
@@ -996,7 +1000,7 @@ impl AgentSession {
         let mut attempt: u32 = 0;
         loop {
             let messages = kiss_agent::run_agent_loop_continue(
-                context.clone(),
+                context,
                 config.clone(),
                 cancel.clone(),
                 sink.clone(),
@@ -1355,23 +1359,34 @@ fn auto_compaction_needed(
 
 fn is_transient(error: &str) -> bool {
     let e = error.to_lowercase();
-    [
-        "429",
-        "500",
-        "502",
-        "503",
-        "504",
-        "overloaded",
-        "rate limit",
-        "timeout",
-        "timed out",
-        "connection",
-        "stream error",
-        "request failed",
-        "unexpectedly",
-    ]
-    .iter()
-    .any(|needle| e.contains(needle))
+    let transient_status = [429, 500, 502, 503, 504].iter().any(|status| {
+        [
+            format!("http {status}"),
+            format!("status {status}"),
+            format!("status: {status}"),
+            format!("status code {status}"),
+        ]
+        .iter()
+        .any(|marker| e.contains(marker))
+    });
+    transient_status
+        || [
+            "overloaded",
+            "rate limit",
+            "timeout",
+            "timed out",
+            "connection reset",
+            "connection refused",
+            "connection closed",
+            "connection aborted",
+            "connection error",
+            "failed to connect",
+            "network error",
+            "stream error",
+            "request failed",
+        ]
+        .iter()
+        .any(|needle| e.contains(needle))
 }
 
 #[cfg(test)]
@@ -1395,6 +1410,15 @@ mod ephemeral_tests {
             thinking_level_map: BTreeMap::new(),
             headers: BTreeMap::new(),
         }
+    }
+
+    #[test]
+    fn transient_errors_require_a_status_or_specific_network_failure() {
+        assert!(is_transient("request failed with HTTP 503"));
+        assert!(is_transient("connection reset by peer"));
+        assert!(is_transient("rate limit exceeded"));
+        assert!(!is_transient("model has a 500 token limit"));
+        assert!(!is_transient("connection settings are invalid"));
     }
 
     fn remote_result() -> kiss_ai::api::openai_compaction::RemoteCompactionResult {
@@ -1614,12 +1638,37 @@ mod ephemeral_tests {
         let child = parent
             .create_subagent_session("inspect", "/root/inspect", ForkTurns::All, None, None)
             .unwrap();
+        assert!(Arc::ptr_eq(&parent.registry, &child.registry));
         assert!(child.available_tool_names().is_empty());
         let context = child.manager.lock().unwrap().build_session_context();
         assert!(matches!(
             context.messages.as_slice(),
             [AgentMessage::User(user)] if user.content.as_text() == "parent context"
         ));
+    }
+
+    #[test]
+    fn child_without_forked_turns_does_not_copy_parent_context() {
+        let parent = settings_test_session(Settings::default(), true);
+        parent
+            .manager
+            .lock()
+            .unwrap()
+            .append_message(AgentMessage::user("parent context"))
+            .unwrap();
+
+        let child = parent
+            .create_subagent_session("inspect", "/root/inspect", ForkTurns::None, None, None)
+            .unwrap();
+        assert!(
+            child
+                .manager
+                .lock()
+                .unwrap()
+                .build_session_context()
+                .messages
+                .is_empty()
+        );
     }
 
     #[test]

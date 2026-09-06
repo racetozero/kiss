@@ -17,6 +17,7 @@ fn registry() -> &'static Registry {
 pub async fn lock_path(path: &Path) -> tokio::sync::OwnedMutexGuard<()> {
     let lock = {
         let mut map = registry().lock().expect("mutation registry poisoned");
+        map.retain(|_, lock| Arc::strong_count(lock) > 1);
         map.entry(path.to_path_buf()).or_default().clone()
     };
     lock.lock_owned().await

@@ -6,6 +6,9 @@ license.workspace = true
 repository.workspace = true
 description = "Differential-rendering terminal UI library for kiss"
 
+[lints]
+workspace = true
+
 [dependencies]
 anyhow.workspace = true
 crossterm.workspace = true
