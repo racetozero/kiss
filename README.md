@@ -125,6 +125,19 @@ shell tools.
 For any other language, `kiss --mode rpc --no-session` accepts JSON commands on
 stdin and streams JSON responses/events on stdout.
 
+### RPC over WebSocket
+
+For browser and remote clients, start a WebSocket server:
+
+```bash
+kiss --mode rpc --rpc-listen 127.0.0.1:9944 --no-session
+```
+
+Connect to `ws://127.0.0.1:9944`. WebSocket clients use the same JSON messages
+as standard input and output, and all clients share one KISS session. The
+server has no authentication, so keep it on loopback unless a secure proxy and
+an operating-system sandbox protect it.
+
 See [SDK documentation](docs/sdk.md), [RPC protocol documentation](docs/rpc.md),
 and the [browser WebAssembly documentation](crates/kiss-core-wasm/README.md).
 
