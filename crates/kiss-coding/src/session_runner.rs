@@ -593,7 +593,8 @@ impl AgentSession {
         {
             return Some(key.clone());
         }
-        kiss_ai::auth::resolve_api_key_async(provider, &self.registry.declared_keys)
+        let credential_provider = self.registry.credential_provider(provider);
+        kiss_ai::auth::resolve_api_key_async(credential_provider, &self.registry.declared_keys)
             .await
             .ok()
             .flatten()
@@ -609,9 +610,11 @@ impl AgentSession {
         config.session_id = Some(self.manager.lock().unwrap().session_id().to_string());
         let settings = self.settings();
         config.transport = settings.transport;
+        let registry = self.registry.clone();
         let declared = self.registry.declared_keys.clone();
         let api_key_override = self.api_key_override.clone();
         config.get_api_key = Some(Arc::new(move |provider| {
+            let registry = registry.clone();
             let declared = declared.clone();
             let api_key_override = api_key_override.clone();
             Box::pin(async move {
@@ -620,7 +623,8 @@ impl AgentSession {
                 {
                     return Some(key);
                 }
-                kiss_ai::auth::resolve_api_key_async(&provider, &declared)
+                let credential_provider = registry.credential_provider(&provider).to_string();
+                kiss_ai::auth::resolve_api_key_async(&credential_provider, &declared)
                     .await
                     .ok()
                     .flatten()

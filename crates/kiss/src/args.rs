@@ -137,6 +137,68 @@ pub enum McpCommand {
 }
 
 #[derive(Debug, Clone, Subcommand)]
+pub enum ProviderCommand {
+    /// List custom providers.
+    List {
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Add or replace a custom OpenAI-compatible provider.
+    Add {
+        /// Provider ID used in provider/model selectors.
+        id: String,
+
+        /// Root API URL, without an inferred `/v1` suffix.
+        #[arg(long)]
+        base_url: String,
+
+        /// API wire format: chat-completions, responses, or codex.
+        #[arg(long)]
+        api: kiss_ai::provider_config::ProviderApi,
+
+        /// Model ID served by this provider.
+        #[arg(long)]
+        model: String,
+
+        /// Provider display name.
+        #[arg(long)]
+        name: Option<String>,
+
+        /// Model display name.
+        #[arg(long)]
+        model_name: Option<String>,
+
+        /// Environment variable that contains the provider API key.
+        #[arg(long, conflicts_with = "auth_provider")]
+        api_key_env: Option<String>,
+
+        /// Existing provider whose saved credentials authenticate this provider.
+        #[arg(long)]
+        auth_provider: Option<String>,
+
+        /// HTTP header. Repeat as KEY=VALUE.
+        #[arg(long = "header", value_name = "KEY=VALUE")]
+        headers: Vec<String>,
+
+        /// Mark this model as a reasoning model.
+        #[arg(long)]
+        reasoning: bool,
+
+        /// Model context window.
+        #[arg(long, default_value_t = 128_000)]
+        context_window: u64,
+
+        /// Maximum output tokens.
+        #[arg(long, default_value_t = 16_384)]
+        max_tokens: u64,
+    },
+
+    /// Remove a custom provider.
+    Remove { id: String },
+}
+
+#[derive(Debug, Clone, Subcommand)]
 pub enum Command {
     /// Update KISS to the latest GitHub release.
     Update,
@@ -145,6 +207,12 @@ pub enum Command {
     Mcp {
         #[command(subcommand)]
         command: McpCommand,
+    },
+
+    /// Configure OpenAI-compatible model providers.
+    Provider {
+        #[command(subcommand)]
+        command: ProviderCommand,
     },
 
     /// Save credentials for a provider.
@@ -444,6 +512,35 @@ mod tests {
                     no_browser: true,
                 }
             }) if name == "demo"
+        ));
+    }
+
+    #[test]
+    fn parses_custom_codex_provider() {
+        let args = Args::try_parse_from([
+            "kiss",
+            "provider",
+            "add",
+            "codex-lb",
+            "--base-url",
+            "http://127.0.0.1:2455/backend-api/codex",
+            "--api",
+            "codex",
+            "--model",
+            "gpt-5.6-sol",
+            "--reasoning",
+        ])
+        .unwrap();
+        assert!(matches!(
+            args.command,
+            Some(Command::Provider {
+                command: ProviderCommand::Add {
+                    id,
+                    api: kiss_ai::provider_config::ProviderApi::Codex,
+                    reasoning: true,
+                    ..
+                }
+            }) if id == "codex-lb"
         ));
     }
 }

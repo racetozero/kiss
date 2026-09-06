@@ -92,6 +92,12 @@ pub(crate) const LLAMA_SLASH_COMMAND: SlashCommand =
 pub(crate) const KISS_SLASH_COMMANDS: &[SlashCommand] = &[
     SlashCommand::new("mcp", "Manage MCP servers", None),
     SlashCommand::new(
+        "provider",
+        "Manage custom OpenAI-compatible providers",
+        Some("[list|add|remove]"),
+    ),
+    SlashCommand::new("providers", "List custom OpenAI-compatible providers", None),
+    SlashCommand::new(
         "btw",
         "Ask a quick read-only side question",
         Some("<question>"),
@@ -232,8 +238,17 @@ mod tests {
     fn user_visible_surface_includes_shipped_llama_command() {
         let names: Vec<&str> = commands().map(|command| command.name).collect();
         assert_eq!(
-            &names[names.len() - 6..],
-            ["llama", "mcp", "btw", "recap", "workflow", "workflows"]
+            &names[names.len() - 8..],
+            [
+                "llama",
+                "mcp",
+                "provider",
+                "providers",
+                "btw",
+                "recap",
+                "workflow",
+                "workflows"
+            ]
         );
         assert_eq!(
             names.len(),

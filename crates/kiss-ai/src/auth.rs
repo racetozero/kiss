@@ -338,7 +338,16 @@ pub fn resolve_api_key_local(
     if provider == "google-vertex" && has_google_application_credentials() {
         return Some("google-application-default-credentials".into());
     }
-    declared.get(provider).cloned()
+    declared.get(provider).and_then(|value| {
+        value
+            .strip_prefix('$')
+            .map(|variable| {
+                std::env::var(variable)
+                    .ok()
+                    .filter(|value| !value.is_empty())
+            })
+            .unwrap_or_else(|| Some(value.clone()))
+    })
 }
 
 /// Resolve a local credential, then try one automatic external import.

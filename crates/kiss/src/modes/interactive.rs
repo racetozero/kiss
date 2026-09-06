@@ -5816,6 +5816,99 @@ fn start_llama_action(
     });
 }
 
+fn run_provider_command(app: &mut App, arguments: &str) {
+    use kiss_ai::provider_config::{self, AddProvider, ProviderApi};
+
+    let parts = arguments.split_whitespace().collect::<Vec<_>>();
+    match parts.first().copied().unwrap_or("list") {
+        "list" if parts.len() == 1 => match provider_config::list() {
+            Ok(providers) if providers.is_empty() => app.cells.push(Cell::Notice(format!(
+                "No custom providers configured.\n\n{}",
+                provider_tui_usage()
+            ))),
+            Ok(providers) => {
+                let rows = providers
+                    .iter()
+                    .map(|provider| {
+                        format!(
+                            "• {} · {} · {}\n  models: {}",
+                            provider.id,
+                            provider.api,
+                            provider.base_url,
+                            provider.models.join(", ")
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                app.cells.push(Cell::Notice(format!(
+                    "Custom providers\n\n{rows}\n\n{}",
+                    provider_tui_usage()
+                )));
+            }
+            Err(error) => app.cells.push(Cell::Error(format!(
+                "could not list custom providers: {error:#}"
+            ))),
+        },
+        "add" if (5..=6).contains(&parts.len()) => {
+            let api = match parts[2].parse::<ProviderApi>() {
+                Ok(api) => api,
+                Err(error) => {
+                    app.cells.push(Cell::Error(format!("{error:#}")));
+                    return;
+                }
+            };
+            let credential = parts.get(5).copied();
+            let auth_provider = credential
+                .and_then(|value| value.strip_prefix("auth:"))
+                .map(str::to_owned);
+            let api_key_env = credential
+                .filter(|value| !value.starts_with("auth:"))
+                .map(|value| value.trim_start_matches('$').to_owned());
+            let id = parts[1].to_string();
+            let result = provider_config::add(&AddProvider {
+                id: id.clone(),
+                name: None,
+                base_url: parts[3].to_string(),
+                api,
+                model_id: parts[4].to_string(),
+                model_name: None,
+                api_key_env,
+                auth_provider,
+                headers: std::collections::BTreeMap::new(),
+                reasoning: api != ProviderApi::ChatCompletions,
+                context_window: 128_000,
+                max_tokens: 16_384,
+            });
+            match result {
+                Ok(_) => app.cells.push(Cell::Notice(format!(
+                    "Saved provider {id}. Restart KISS to load its models."
+                ))),
+                Err(error) => app
+                    .cells
+                    .push(Cell::Error(format!("could not save provider: {error:#}"))),
+            }
+        }
+        "remove" if parts.len() == 2 => match provider_config::remove(parts[1]) {
+            Ok(true) => app.cells.push(Cell::Notice(format!(
+                "Removed provider {}. Restart KISS to update the model list.",
+                parts[1]
+            ))),
+            Ok(false) => app.cells.push(Cell::Notice(format!(
+                "No custom provider named {}.",
+                parts[1]
+            ))),
+            Err(error) => app
+                .cells
+                .push(Cell::Error(format!("could not remove provider: {error:#}"))),
+        },
+        _ => app.cells.push(Cell::Notice(provider_tui_usage().into())),
+    }
+}
+
+fn provider_tui_usage() -> &'static str {
+    "Usage:\n/provider add <id> <chat-completions|responses|codex> <base-url> <model> [KEY_ENV|auth:<provider>]\n/provider list\n/provider remove <id>"
+}
+
 fn run_slash_command(
     app: &mut App,
     session: &Arc<kiss_coding::AgentSession>,
@@ -5878,6 +5971,8 @@ fn run_slash_command(
         "scoped-models" => open_scoped_models_picker(app, session, resources),
         "settings" => open_settings_picker(app, session, resources),
         "mcp" => open_mcp_picker(app, session, args, command_tx),
+        "provider" => run_provider_command(app, &rest),
+        "providers" => run_provider_command(app, "list"),
         "btw" => {
             if rest.is_empty() {
                 app.cells

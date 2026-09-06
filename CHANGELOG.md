@@ -2,10 +2,16 @@
 
 ## Unreleased
 
+### Added
+
+- Added CLI and TUI commands to add, list, and remove OpenAI-compatible Chat
+  Completions, Responses, and Codex API providers, including CodexLB.
+
 ### Changed
 
 - Added repeatable interactive startup and idle-memory measurements to the
   benchmark suite.
+- Made Catppuccin Mocha the default dark terminal theme.
 
 ## 0.0.5 - 2026-09-05
 

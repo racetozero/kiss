@@ -82,19 +82,18 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
         }
     };
     let codex_account_id = if model.api == "openai-codex-responses" {
-        let Some(account_id) = crate::auth::openai_codex::decode_jwt_account_id(&api_key) else {
+        let account_id = crate::auth::openai_codex::decode_jwt_account_id(&api_key);
+        if model.provider == "openai-codex" && account_id.is_none() {
             builder.fail("OpenAI Codex access token has no account ID", false, model);
             return;
-        };
-        Some(account_id)
+        }
+        account_id
     } else {
         None
     };
     let mut state = DecodeState::default();
 
-    if let Some(account_id) = codex_account_id.as_deref()
-        && options.transport != Transport::Sse
-    {
+    if model.api == "openai-codex-responses" && options.transport != Transport::Sse {
         let fallback_active = if let Some(session_id) = options.session_id.as_deref() {
             websocket_fallback_sessions()
                 .lock()
@@ -109,7 +108,7 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
                 &url,
                 &body,
                 &api_key,
-                account_id,
+                codex_account_id.as_deref().unwrap_or_default(),
                 options,
                 &mut builder,
                 &mut state,
@@ -156,14 +155,13 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
         "openai-codex-responses" => {
             request = request
                 .bearer_auth(&api_key)
-                .header(
-                    "chatgpt-account-id",
-                    codex_account_id.as_deref().unwrap_or_default(),
-                )
                 .header("originator", "kiss")
                 .header("user-agent", concat!("kiss/", env!("CARGO_PKG_VERSION")))
                 .header("OpenAI-Beta", "responses=experimental")
                 .header("accept", "text/event-stream");
+            if let Some(account_id) = codex_account_id.as_deref() {
+                request = request.header("chatgpt-account-id", account_id);
+            }
             if let Some(session_id) = &options.session_id {
                 request = request
                     .header("session-id", session_id)
@@ -372,7 +370,9 @@ async fn connect_codex_websocket(
         "authorization",
         &format!("Bearer {api_key}"),
     )?;
-    insert_websocket_header(request.headers_mut(), "chatgpt-account-id", account_id)?;
+    if !account_id.is_empty() {
+        insert_websocket_header(request.headers_mut(), "chatgpt-account-id", account_id)?;
+    }
     insert_websocket_header(request.headers_mut(), "originator", "kiss")?;
     insert_websocket_header(
         request.headers_mut(),

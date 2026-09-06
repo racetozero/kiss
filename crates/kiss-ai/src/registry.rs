@@ -109,6 +109,8 @@ struct CatalogProvider {
     #[serde(default)]
     api_key: Option<String>,
     #[serde(default)]
+    auth_provider: Option<String>,
+    #[serde(default)]
     compat: Option<OpenAICompat>,
     #[serde(default)]
     headers: BTreeMap<String, String>,
@@ -169,6 +171,7 @@ pub struct Registry {
     model_indices: HashMap<(String, String), usize>,
     /// Placeholder API keys declared in models.json (e.g. "ollama").
     pub declared_keys: BTreeMap<String, String>,
+    auth_providers: BTreeMap<String, String>,
 }
 
 impl Registry {
@@ -178,6 +181,7 @@ impl Registry {
             models: Vec::new(),
             model_indices: HashMap::new(),
             declared_keys: BTreeMap::new(),
+            auth_providers: BTreeMap::new(),
         };
         registry.merge_builtins();
         let overlay = custom_path
@@ -201,6 +205,7 @@ impl Registry {
             models: Vec::new(),
             model_indices: HashMap::new(),
             declared_keys: BTreeMap::new(),
+            auth_providers: BTreeMap::new(),
         };
         r.merge_builtins();
         r
@@ -322,6 +327,10 @@ impl Registry {
             if let Some(key) = &provider.api_key {
                 self.declared_keys.insert(provider_id.clone(), key.clone());
             }
+            if let Some(auth_provider) = &provider.auth_provider {
+                self.auth_providers
+                    .insert(provider_id.clone(), auth_provider.clone());
+            }
             for m in provider.models {
                 let model = Model {
                     id: m.id.clone(),
@@ -356,6 +365,14 @@ impl Registry {
 
     pub fn all(&self) -> &[Model] {
         &self.models
+    }
+
+    /// Provider whose credentials authenticate requests for `provider`.
+    pub fn credential_provider<'a>(&'a self, provider: &'a str) -> &'a str {
+        self.auth_providers
+            .get(provider)
+            .map(String::as_str)
+            .unwrap_or(provider)
     }
 
     /// Resolve a model pattern: `provider/id`, exact id, then case-insensitive

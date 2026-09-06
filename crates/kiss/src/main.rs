@@ -9,6 +9,7 @@ mod modes {
     pub mod rpc;
 }
 mod mcp_cli;
+mod provider_cli;
 mod session_sources;
 mod setup;
 mod slash_commands;
@@ -99,6 +100,7 @@ async fn run_command(command: &Command) -> anyhow::Result<i32> {
     match command {
         Command::Update => update::run().await,
         Command::Mcp { command } => mcp_cli::run(command).await,
+        Command::Provider { command } => provider_cli::run(command),
         Command::Login {
             provider,
             device_auth,

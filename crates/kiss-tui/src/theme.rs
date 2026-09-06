@@ -122,36 +122,36 @@ impl Theme {
     pub fn dark() -> Theme {
         let mut colors = BTreeMap::new();
         let mut set = |k: &str, c: Color| colors.insert(k.to_string(), c);
-        set("accent", Color::Rgb(0x7a, 0xa2, 0xf7));
-        set("border", Color::Indexed(240));
-        set("borderAccent", Color::Rgb(0x7a, 0xa2, 0xf7));
-        set("borderMuted", Color::Indexed(238));
-        set("success", Color::Rgb(0x9e, 0xce, 0x6a));
-        set("error", Color::Rgb(0xf7, 0x76, 0x8e));
-        set("warning", Color::Rgb(0xe0, 0xaf, 0x68));
-        set("muted", Color::Indexed(245));
-        set("dim", Color::Indexed(240));
-        set("text", Color::Default);
-        set("thinkingText", Color::Indexed(245));
-        set("thinkingOff", Color::Rgb(0x50, 0x50, 0x50));
-        set("thinkingMinimal", Color::Rgb(0x6e, 0x6e, 0x6e));
-        set("thinkingLow", Color::Rgb(0x5f, 0x87, 0xaf));
-        set("thinkingMedium", Color::Rgb(0x81, 0xa2, 0xbe));
-        set("thinkingHigh", Color::Rgb(0xb2, 0x94, 0xbb));
-        set("thinkingXhigh", Color::Rgb(0xd1, 0x83, 0xe8));
-        set("thinkingMax", Color::Rgb(0xff, 0x5f, 0xff));
-        set("bashMode", Color::Rgb(0xb5, 0xbd, 0x68));
-        set("selectedBg", Color::Indexed(237));
-        set("userMessageBg", Color::Indexed(236));
-        set("userMessageText", Color::Default);
-        set("toolTitle", Color::Rgb(0x7a, 0xa2, 0xf7));
-        set("toolOutput", Color::Indexed(250));
-        set("diffAdded", Color::Rgb(0x9e, 0xce, 0x6a));
-        set("diffRemoved", Color::Rgb(0xf7, 0x76, 0x8e));
-        set("mdHeading", Color::Rgb(0x7a, 0xa2, 0xf7));
-        set("mdCode", Color::Rgb(0xe0, 0xaf, 0x68));
-        set("mdLink", Color::Rgb(0x7d, 0xcf, 0xff));
-        set("mdQuote", Color::Indexed(245));
+        set("accent", Color::Rgb(0xcb, 0xa6, 0xf7));
+        set("border", Color::Rgb(0x58, 0x5b, 0x70));
+        set("borderAccent", Color::Rgb(0xcb, 0xa6, 0xf7));
+        set("borderMuted", Color::Rgb(0x31, 0x32, 0x44));
+        set("success", Color::Rgb(0xa6, 0xe3, 0xa1));
+        set("error", Color::Rgb(0xf3, 0x8b, 0xa8));
+        set("warning", Color::Rgb(0xf9, 0xe2, 0xaf));
+        set("muted", Color::Rgb(0x7f, 0x84, 0x9c));
+        set("dim", Color::Rgb(0x58, 0x5b, 0x70));
+        set("text", Color::Rgb(0xcd, 0xd6, 0xf4));
+        set("thinkingText", Color::Rgb(0x93, 0x99, 0xb2));
+        set("thinkingOff", Color::Rgb(0x58, 0x5b, 0x70));
+        set("thinkingMinimal", Color::Rgb(0x6c, 0x70, 0x86));
+        set("thinkingLow", Color::Rgb(0x74, 0xc7, 0xec));
+        set("thinkingMedium", Color::Rgb(0x89, 0xb4, 0xfa));
+        set("thinkingHigh", Color::Rgb(0xb4, 0xbe, 0xfe));
+        set("thinkingXhigh", Color::Rgb(0xcb, 0xa6, 0xf7));
+        set("thinkingMax", Color::Rgb(0xf5, 0xc2, 0xe7));
+        set("bashMode", Color::Rgb(0xa6, 0xe3, 0xa1));
+        set("selectedBg", Color::Rgb(0x45, 0x47, 0x5a));
+        set("userMessageBg", Color::Rgb(0x31, 0x32, 0x44));
+        set("userMessageText", Color::Rgb(0xcd, 0xd6, 0xf4));
+        set("toolTitle", Color::Rgb(0x89, 0xb4, 0xfa));
+        set("toolOutput", Color::Rgb(0xba, 0xc2, 0xde));
+        set("diffAdded", Color::Rgb(0xa6, 0xe3, 0xa1));
+        set("diffRemoved", Color::Rgb(0xf3, 0x8b, 0xa8));
+        set("mdHeading", Color::Rgb(0xcb, 0xa6, 0xf7));
+        set("mdCode", Color::Rgb(0xfa, 0xb3, 0x87));
+        set("mdLink", Color::Rgb(0x89, 0xdc, 0xeb));
+        set("mdQuote", Color::Rgb(0x93, 0x99, 0xb2));
         Theme {
             name: "dark".into(),
             colors,
@@ -217,17 +217,18 @@ mod tests {
     }
 
     #[test]
-    fn builtin_thinking_colors_match_pi_v0843() {
+    fn dark_theme_uses_catppuccin_mocha() {
         let dark = Theme::dark();
-        assert_eq!(dark.color("thinkingOff"), Color::Rgb(0x50, 0x50, 0x50));
-        assert_eq!(dark.color("thinkingMinimal"), Color::Rgb(0x6e, 0x6e, 0x6e));
-        assert_eq!(dark.color("thinkingLow"), Color::Rgb(0x5f, 0x87, 0xaf));
-        assert_eq!(dark.color("thinkingMedium"), Color::Rgb(0x81, 0xa2, 0xbe));
-        assert_eq!(dark.color("thinkingHigh"), Color::Rgb(0xb2, 0x94, 0xbb));
-        assert_eq!(dark.color("thinkingXhigh"), Color::Rgb(0xd1, 0x83, 0xe8));
-        assert_eq!(dark.color("thinkingMax"), Color::Rgb(0xff, 0x5f, 0xff));
-        assert_eq!(dark.color("bashMode"), Color::Rgb(0xb5, 0xbd, 0x68));
+        assert_eq!(dark.color("text"), Color::Rgb(0xcd, 0xd6, 0xf4));
+        assert_eq!(dark.color("accent"), Color::Rgb(0xcb, 0xa6, 0xf7));
+        assert_eq!(dark.color("selectedBg"), Color::Rgb(0x45, 0x47, 0x5a));
+        assert_eq!(dark.color("success"), Color::Rgb(0xa6, 0xe3, 0xa1));
+        assert_eq!(dark.color("warning"), Color::Rgb(0xf9, 0xe2, 0xaf));
+        assert_eq!(dark.color("error"), Color::Rgb(0xf3, 0x8b, 0xa8));
+        assert_eq!(dark.color("thinkingMax"), Color::Rgb(0xf5, 0xc2, 0xe7));
+        assert_eq!(dark.color("bashMode"), Color::Rgb(0xa6, 0xe3, 0xa1));
 
+        // The built-in light theme remains available.
         let light = Theme::light();
         assert_eq!(light.color("thinkingOff"), Color::Rgb(0xb0, 0xb0, 0xb0));
         assert_eq!(light.color("thinkingMinimal"), Color::Rgb(0x76, 0x76, 0x76));

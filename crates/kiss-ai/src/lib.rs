@@ -13,6 +13,8 @@ pub mod event;
 pub mod json_salvage;
 pub mod model;
 #[cfg(feature = "native")]
+pub mod provider_config;
+#[cfg(feature = "native")]
 pub mod registry;
 #[cfg(feature = "native")]
 pub mod sse;

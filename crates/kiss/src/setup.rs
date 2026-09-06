@@ -181,7 +181,11 @@ pub fn resolve_model(
         }
     }
     for model in registry.all() {
-        if kiss_ai::auth::resolve_api_key_local(&model.provider, &registry.declared_keys).is_some()
+        if kiss_ai::auth::resolve_api_key_local(
+            registry.credential_provider(&model.provider),
+            &registry.declared_keys,
+        )
+        .is_some()
         {
             return Ok((model.clone(), None));
         }
@@ -191,15 +195,19 @@ pub fn resolve_model(
     let external = kiss_ai::auth::external::discover();
     let mut checked = std::collections::HashSet::new();
     for model in registry.all() {
-        if !checked.insert(model.provider.as_str()) {
+        let credential_provider = registry.credential_provider(&model.provider);
+        if !checked.insert(credential_provider) {
             continue;
         }
-        if kiss_ai::auth::external::auto_import_unique_from_sources(&model.provider, &external)
+        if kiss_ai::auth::external::auto_import_unique_from_sources(credential_provider, &external)
             .ok()
             .flatten()
             .is_some()
-            && kiss_ai::auth::resolve_api_key_local(&model.provider, &registry.declared_keys)
-                .is_some()
+            && kiss_ai::auth::resolve_api_key_local(
+                registry.credential_provider(&model.provider),
+                &registry.declared_keys,
+            )
+            .is_some()
         {
             return Ok((model.clone(), None));
         }
