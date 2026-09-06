@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Added repeatable interactive startup and idle-memory measurements to the
+  benchmark suite.
+
 ## 0.0.5 - 2026-09-05
 
 ### Added

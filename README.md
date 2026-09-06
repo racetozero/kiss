@@ -136,23 +136,21 @@ KISS operations, not model or network latency.
 
 ### Harness startup and memory
 
-These measurements use the same categories as
-[jcode's performance report](https://github.com/1jehuang/jcode#performance--resource-efficiency):
-idle memory, time to the first frame, and time until typed input appears.
+These measurements use the KISS 0.0.5 distribution binary. They cover idle
+memory, time to the first frame, and time until typed input appears.
 
 | Measure | KISS result |
 | --- | ---: |
-| Warm time to first frame | 5.2 ms median, 3.9-24.8 ms range |
-| Warm time to first input | 5.3 ms median, 4.0-26.6 ms range |
-| One idle session | 15.7 MiB RSS |
-| Ten idle sessions | 157.7 MiB RSS |
-| Extra RSS per added session | about 15.8 MiB |
+| Warm time to first frame | 3.655 ms mean |
+| Warm time to first input | 3.732 ms mean |
+| One idle session | 15.094 MiB mean RSS |
+| Ten idle sessions | 162.755 MiB mean RSS |
+| Extra RSS per added session | 16.407 MiB mean |
 
-The first launch after a new release build took 845.6 ms to show a frame and
-846.3 ms to show input. The next ten warm launches produced the results above.
-RSS is the resident memory reported by macOS; it is not Linux proportional set
-size (PSS), so do not compare the memory values directly across operating
-systems.
+The startup results use ten launches after one warm-up. The memory results use
+three trials. RSS is the resident memory reported by macOS; it is not Linux
+proportional set size (PSS), so do not compare the memory values directly
+across operating systems.
 
 ### Benchmarks
 
@@ -256,13 +254,16 @@ binary smaller and produced a modest latency improvement:
 
 Results are based on release-mode runs using local, deterministic fixtures—no
 external models or network calls. The harness startup test used a 160 by 40 PTY
-and `kiss --no-session` on macOS 26.5.1 with an Apple M4. Startup times use ten
-warm launches. Memory is the median of repeated idle samples. Core benchmarks
-also ran on an Apple M4; SDK, RPC, and WASM benchmarks ran on an AMD Ryzen 9
-5950X under WSL2. PGO results use separate held-out runs. Lower is better.
+and `kiss --no-session` on macOS 26.5.1 with an Apple M4. Startup times are the
+mean of ten warm launches. Memory values are the mean of three idle samples.
+Core benchmarks also ran on an Apple M4; SDK, RPC, and WASM benchmarks ran on
+an AMD Ryzen 9 5950X under WSL2. PGO results use separate held-out runs. Lower
+is better.
 
-Run the full native and browser benchmark suite, including WASM size and memory
-budgets, with `just bench` (requires cargo-nextest, wasm-pack, Deno, and Node).
+Run the full native and browser benchmark suite, including harness startup and
+memory, WASM size, and memory budgets, with `just bench` (requires
+cargo-nextest, wasm-pack, Deno, and Node). Harness results are also written to
+`target/harness-benchmark.json`.
 
 ## Subagents
 

@@ -22,6 +22,8 @@ sdk-test-all: sdk-test sdk-test-python sdk-test-node sdk-test-wasm
 
 # Run native SDK/RPC and browser WASM benchmarks alongside the core suite.
 bench:
+    @cargo build --release -p kiss
+    @python3 scripts/benchmark_kiss_harness.py --json target/harness-benchmark.json
     @cargo nextest run --workspace --release --run-ignored only --no-capture -E 'test(~benchmark_performance_)'
     @cargo nextest run -p kiss-sdk --features 'mock rpc' --release --run-ignored only --no-capture -E 'test(~benchmark_performance_)'
     @cd crates/kiss-core-wasm && wasm-pack build --target web --release && deno test --allow-read test/performance_test.ts && node test/size.mjs && node test/wasm_memory.mjs

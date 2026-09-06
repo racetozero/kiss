@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import build_kiss_pgo
+import benchmark_kiss_harness
 import benchmark_kiss_pgo
 from pgo_common import geometric_mean, prepare_fixture
 
@@ -62,6 +63,13 @@ class BuildPgoTests(unittest.TestCase):
 
 
 class BenchmarkTests(unittest.TestCase):
+    def test_linux_pss_parser_reads_smaps_rollup(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            smaps = Path(temporary) / "smaps_rollup"
+            smaps.write_text("Rss: 42 kB\nPss: 17 kB\n", encoding="utf-8")
+            with patch.object(benchmark_kiss_harness, "Path", return_value=smaps):
+                self.assertEqual(benchmark_kiss_harness.linux_pss_kib(123), 17)
+
     def test_fixture_does_not_forward_credentials(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             with patch.dict(
