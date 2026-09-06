@@ -3,23 +3,24 @@
 from __future__ import annotations
 
 import argparse
-import fcntl
 import json
 import os
 import platform
-import pty
 import select
 import signal
 import statistics
 import struct
 import subprocess
 import sys
-import termios
 import time
 from pathlib import Path
 
 
 def start(binary: Path) -> tuple[subprocess.Popen[bytes], int]:
+    import fcntl
+    import pty
+    import termios
+
     master, slave = pty.openpty()
     fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 40, 160, 0, 0))
     environment = os.environ.copy()
