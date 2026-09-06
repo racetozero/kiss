@@ -14,7 +14,7 @@ plugin runtime.
 
 ## Why KISS
 
-- **Fast:** one native binary with a responsive terminal interface.
+- **Fast:** a native binary that reaches its first warm frame in about 5 ms.
 - **Flexible:** more than 1,000 models from the Pi model catalog.
 - **Focused:** `read`, `write`, `edit`, and `bash` are the default tools.
 - **Persistent:** resume, branch, compact, import, and export sessions.
@@ -42,6 +42,58 @@ Update an existing installation with:
 ```bash
 kiss update
 ```
+
+## Quick start
+
+Sign in with your ChatGPT subscription and start KISS:
+
+```bash
+kiss login openai-codex
+kiss
+```
+
+For a server or SSH session:
+
+```bash
+kiss login openai-codex --device-auth
+```
+
+Anthropic login and credential import are also available:
+
+```bash
+kiss login anthropic
+kiss auth import
+```
+
+Use KISS interactively or for one task:
+
+```bash
+kiss "explain this repository"
+kiss -p "summarize the current changes"
+cat error.log | kiss -p "find the cause"
+```
+
+## Terminal workflow
+
+- Type `/` to find commands.
+- Type `@` to find and attach files.
+- Type `!command` to run a shell command.
+- Press `Shift+Tab` to change reasoning effort.
+- Press `Esc` or `Ctrl+C` to stop active work.
+- Press `Ctrl+D` on an empty input to exit.
+- Use the Up arrow to restore earlier prompts.
+
+Useful commands include `/login`, `/model`, `/mcp`, `/compact`, `/resume`,
+`/export`, `/settings`, and `/hotkeys`.
+
+KISS can accept a new instruction while the agent works. Press `Enter` to
+steer the current task, or `Alt+Enter` to queue a follow-up task.
+
+### Resume sessions from other coding agents
+
+Run `/resume` to continue a KISS, Pi, Claude Code, or OpenAI Codex session in
+KISS. The picker shows sessions for the current working directory by default.
+Press `Ctrl+G` to switch between the project and global scopes.
 
 ## Use KISS as an SDK
 
@@ -81,6 +133,26 @@ and the [browser WebAssembly documentation](crates/kiss-core-wasm/README.md).
 KISS is built to stay responsive during everyday work, from file discovery in
 large repositories to streaming model output. These benchmarks measure local
 KISS operations, not model or network latency.
+
+### Harness startup and memory
+
+These measurements use the same categories as
+[jcode's performance report](https://github.com/1jehuang/jcode#performance--resource-efficiency):
+idle memory, time to the first frame, and time until typed input appears.
+
+| Measure | KISS result |
+| --- | ---: |
+| Warm time to first frame | 5.2 ms median, 3.9-24.8 ms range |
+| Warm time to first input | 5.3 ms median, 4.0-26.6 ms range |
+| One idle session | 15.7 MiB RSS |
+| Ten idle sessions | 157.7 MiB RSS |
+| Extra RSS per added session | about 15.8 MiB |
+
+The first launch after a new release build took 845.6 ms to show a frame and
+846.3 ms to show input. The next ten warm launches produced the results above.
+RSS is the resident memory reported by macOS; it is not Linux proportional set
+size (PSS), so do not compare the memory values directly across operating
+systems.
 
 ### Benchmarks
 
@@ -182,59 +254,15 @@ binary smaller and produced a modest latency improvement:
 
 ### Method
 
-Results are based on three release-mode runs using local, deterministic
-fixtures—no external models or network calls. Core benchmarks ran on an Apple
-M4; SDK, RPC, and WASM benchmarks ran on an AMD Ryzen 9 5950X under WSL2. PGO
-results use separate held-out runs. Lower is better.
+Results are based on release-mode runs using local, deterministic fixtures—no
+external models or network calls. The harness startup test used a 160 by 40 PTY
+and `kiss --no-session` on macOS 26.5.1 with an Apple M4. Startup times use ten
+warm launches. Memory is the median of repeated idle samples. Core benchmarks
+also ran on an Apple M4; SDK, RPC, and WASM benchmarks ran on an AMD Ryzen 9
+5950X under WSL2. PGO results use separate held-out runs. Lower is better.
 
 Run the full native and browser benchmark suite, including WASM size and memory
 budgets, with `just bench` (requires cargo-nextest, wasm-pack, Deno, and Node).
-
-## Quick start
-
-Sign in with your ChatGPT subscription and start KISS:
-
-```bash
-kiss login openai-codex
-kiss
-```
-
-For a server or SSH session:
-
-```bash
-kiss login openai-codex --device-auth
-```
-
-Anthropic login and credential import are also available:
-
-```bash
-kiss login anthropic
-kiss auth import
-```
-
-Use KISS interactively or for one task:
-
-```bash
-kiss "explain this repository"
-kiss -p "summarize the current changes"
-cat error.log | kiss -p "find the cause"
-```
-
-## Terminal workflow
-
-- Type `/` to find commands.
-- Type `@` to find and attach files.
-- Type `!command` to run a shell command.
-- Press `Shift+Tab` to change reasoning effort.
-- Press `Esc` or `Ctrl+C` to stop active work.
-- Press `Ctrl+D` on an empty input to exit.
-- Use the Up arrow to restore earlier prompts.
-
-Useful commands include `/login`, `/model`, `/mcp`, `/compact`, `/resume`,
-`/export`, `/settings`, and `/hotkeys`.
-
-KISS can accept a new instruction while the agent works. Press `Enter` to
-steer the current task, or `Alt+Enter` to queue a follow-up task.
 
 ## Subagents
 

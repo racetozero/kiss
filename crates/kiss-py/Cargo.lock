@@ -1702,12 +1702,11 @@ dependencies = [
 
 [[package]]
 name = "kiss-agent"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "anyhow",
  "async-trait",
  "base64 0.22.1",
- "chrono",
  "dirs",
  "futures",
  "jsonschema",
@@ -1717,14 +1716,13 @@ dependencies = [
  "serde_json",
  "similar",
  "tempfile",
- "thiserror 2.0.20",
  "tokio",
  "tokio-util",
 ]
 
 [[package]]
 name = "kiss-ai"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "anyhow",
  "aws-config",
@@ -1752,7 +1750,7 @@ dependencies = [
 
 [[package]]
 name = "kiss-coding"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1773,6 +1771,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
+ "tempfile",
  "thiserror 2.0.20",
  "tokio",
  "tokio-util",
@@ -1781,7 +1780,7 @@ dependencies = [
 
 [[package]]
 name = "kiss-mcp"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1803,7 +1802,7 @@ dependencies = [
 
 [[package]]
 name = "kiss-py"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "kiss-sdk",
  "pyo3",
@@ -1814,7 +1813,7 @@ dependencies = [
 
 [[package]]
 name = "kiss-sdk"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "anyhow",
  "dirs",
@@ -1834,7 +1833,7 @@ dependencies = [
 
 [[package]]
 name = "kiss-workflow"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3202,6 +3201,7 @@ dependencies = [
  "bytes",
  "futures-core",
  "futures-sink",
+ "futures-util",
  "libc",
  "pin-project-lite",
  "tokio",

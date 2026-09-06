@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.0.5 - 2026-09-05
 
 ### Added
 
@@ -9,6 +9,16 @@
   in-memory sessions.
 - Added custom-provider request controls for vLLM priority and Responses output
   token limits.
+- Added project and global resume support for KISS, Pi, Claude Code, and OpenAI
+  Codex sessions.
+
+### Changed
+
+- Shared the model registry across agents, indexed model updates, reduced
+  transcript copies, made session writes atomic, cleaned up idle mutation locks,
+  and made transient-error detection stricter.
+- Hid header-only sessions and delayed session-file creation until the first
+  entry.
 
 ### Fixed
 
@@ -18,6 +28,8 @@
 - Make the model/thinking picker default-save shortcut configurable.
 - Open the skill search menu for inline `$` mentions and invoke the selected
   skill without replacing preceding prompt text.
+- Made the resume picker compact and kept terminal rendering stable after a
+  resumed OpenAI Codex session.
 
 ## 0.0.4 - 2026-09-04
 
