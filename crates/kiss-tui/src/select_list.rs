@@ -19,6 +19,8 @@ pub struct SelectList {
     pub selected: usize,
     pub max_visible: usize,
     pub title: String,
+    /// Put secondary detail on its own indented line.
+    pub detail_below: bool,
     theme: Theme,
     filtered_cache: Option<Vec<usize>>,
 }
@@ -31,6 +33,7 @@ impl SelectList {
             selected: 0,
             max_visible: 10,
             title: title.into(),
+            detail_below: false,
             theme,
             filtered_cache: None,
         }
@@ -188,19 +191,34 @@ impl Component for SelectList {
             let absolute = start + row;
             let item = &self.items[item_idx];
             let mut label = item.label.clone();
-            if let Some(detail) = &item.detail {
+            if !self.detail_below
+                && let Some(detail) = &item.detail
+            {
                 label.push_str(&format!("  {detail}"));
             }
-            for (part, text) in wrap_text(&label, width.saturating_sub(2).max(1))
+            let mut item_lines = wrap_text(&label, width.saturating_sub(2).max(1))
                 .into_iter()
-                .enumerate()
+                .map(|text| (text, false))
+                .collect::<Vec<_>>();
+            if self.detail_below
+                && let Some(detail) = &item.detail
             {
+                item_lines.extend(
+                    wrap_text(detail, width.saturating_sub(4).max(1))
+                        .into_iter()
+                        .map(|text| (format!("  {text}"), true)),
+                );
+            }
+            for (part, (text, is_detail)) in item_lines.into_iter().enumerate() {
                 let marker = if part == 0 && absolute == self.selected {
                     "→ "
                 } else {
                     "  "
                 };
-                let line = format!("{marker}{text}");
+                let mut line = format!("{marker}{text}");
+                if is_detail && absolute != self.selected {
+                    line = theme.fg("muted", &line);
+                }
                 if absolute == self.selected {
                     lines.push(format!(
                         "{}{}\x1b[49m",
@@ -342,5 +360,27 @@ mod tests {
         assert!(plain.iter().all(|line| !line.contains('…')));
         assert_eq!(plain.iter().filter(|line| line.starts_with('→')).count(), 1);
         assert!(plain.iter().skip(1).any(|line| line.starts_with("  ")));
+    }
+
+    #[test]
+    fn detail_below_makes_a_compact_two_line_item() {
+        let mut list = SelectList::new(
+            "Sessions",
+            vec![SelectItem {
+                label: "Fix the renderer".into(),
+                detail: Some("Codex · 12 entries · ~/dev/kiss".into()),
+                value: 0,
+            }],
+            Theme::dark(),
+        );
+        list.detail_below = true;
+        let plain = list
+            .render(80)
+            .into_iter()
+            .map(|line| crate::text::strip_ansi(&line))
+            .collect::<Vec<_>>();
+        assert_eq!(plain.len(), 3);
+        assert!(plain[1].starts_with("→ Fix the renderer"));
+        assert!(plain[2].starts_with("    Codex · 12 entries"));
     }
 }

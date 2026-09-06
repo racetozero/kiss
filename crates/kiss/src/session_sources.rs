@@ -1,10 +1,9 @@
-use anyhow::{Context as _, Result};
+use anyhow::Result;
 use kiss_agent::AgentMessage;
 use kiss_ai::{AssistantMessage, ContentBlock, StopReason};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::time::{Duration, SystemTime};
+use std::time::SystemTime;
 
 type SessionMetadata = (String, String, PathBuf, usize);
 
@@ -14,7 +13,6 @@ pub(crate) enum SessionSource {
     Pi(PathBuf),
     Claude(PathBuf),
     Codex(PathBuf),
-    OpenCode(String),
 }
 
 impl SessionSource {
@@ -24,7 +22,6 @@ impl SessionSource {
             Self::Pi(_) => "Pi",
             Self::Claude(_) => "Claude Code",
             Self::Codex(_) => "Codex",
-            Self::OpenCode(_) => "OpenCode",
         }
     }
 
@@ -78,8 +75,9 @@ pub(crate) fn discover(cwd: &Path, kiss_dir: &Path, global: bool) -> Result<Vec<
         SessionSource::Codex,
         codex_metadata,
     );
-    add_opencode_records(&mut records);
-
+    for record in &mut records {
+        record.title = compact_title(&record.title);
+    }
     if !global {
         records.retain(|record| record.cwd == cwd);
     }
@@ -102,16 +100,6 @@ pub(crate) fn import(source: &SessionSource) -> Result<Vec<AgentMessage>> {
         }
         SessionSource::Claude(path) => parse_jsonl(path, claude_message),
         SessionSource::Codex(path) => parse_jsonl(path, codex_message),
-        SessionSource::OpenCode(id) => {
-            let output = Command::new("opencode")
-                .args(["export", id])
-                .output()
-                .context("run opencode export")?;
-            if !output.status.success() {
-                anyhow::bail!("opencode export failed");
-            }
-            opencode_messages(&serde_json::from_slice(&output.stdout)?)
-        }
     }
 }
 
@@ -241,7 +229,21 @@ fn codex_message(value: &Value) -> Option<AgentMessage> {
     } else {
         ["output_text"].as_slice()
     };
-    message(role, content_text(payload.get("content")?, kinds), "codex")
+    let text = content_text(payload.get("content")?, kinds);
+    if role == "user" && is_codex_context(&text) {
+        return None;
+    }
+    message(role, text, "codex")
+}
+
+fn is_codex_context(text: &str) -> bool {
+    let text = text.trim_start();
+    text.starts_with("# AGENTS.md instructions for ")
+        || text.starts_with("<environment_context>")
+        || text.starts_with("<permissions instructions>")
+        || text.starts_with("<collaboration_mode>")
+        || text.starts_with("<model_switch>")
+        || text.starts_with("<turn_aborted>")
 }
 
 fn content_text(content: &Value, kinds: &[&str]) -> String {
@@ -291,60 +293,14 @@ fn first_user_text(messages: &[AgentMessage]) -> Option<String> {
     })
 }
 
-fn add_opencode_records(records: &mut Vec<SessionRecord>) {
-    let Ok(output) = Command::new("opencode")
-        .args(["session", "list", "--format", "json"])
-        .output()
-    else {
-        return;
-    };
-    if !output.status.success() {
-        return;
-    }
-    let Ok(values) = serde_json::from_slice::<Vec<Value>>(&output.stdout) else {
-        return;
-    };
-    for value in values {
-        let Some(id) = value.get("id").and_then(Value::as_str) else {
-            continue;
-        };
-        let Some(cwd) = value.get("directory").and_then(Value::as_str) else {
-            continue;
-        };
-        let modified = value
-            .get("updated")
-            .or_else(|| value.get("created"))
-            .and_then(Value::as_u64)
-            .map(|value| SystemTime::UNIX_EPOCH + Duration::from_millis(value))
-            .unwrap_or(SystemTime::UNIX_EPOCH);
-        records.push(SessionRecord {
-            source: SessionSource::OpenCode(id.to_string()),
-            id: id.to_string(),
-            title: value
-                .get("title")
-                .and_then(Value::as_str)
-                .unwrap_or(id)
-                .to_string(),
-            cwd: PathBuf::from(cwd),
-            modified,
-            entry_count: None,
-        });
-    }
-}
-
-fn opencode_messages(value: &Value) -> Result<Vec<AgentMessage>> {
-    let rows = value
-        .get("messages")
-        .and_then(Value::as_array)
-        .context("OpenCode export has no messages")?;
-    Ok(rows
-        .iter()
-        .filter_map(|row| {
-            let role = row.get("info")?.get("role")?.as_str()?;
-            let text = content_text(row.get("parts")?, &["text"]);
-            message(role, text, "opencode")
-        })
-        .collect())
+fn compact_title(title: &str) -> String {
+    title
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .take(120)
+        .collect()
 }
 
 #[cfg(test)]
@@ -377,18 +333,15 @@ mod tests {
     }
 
     #[test]
-    fn opencode_export_imports_text_parts() {
-        let export = serde_json::json!({"messages": [
-            {"info": {"role": "user"}, "parts": [{"type": "text", "text": "hello"}]},
-            {"info": {"role": "assistant"}, "parts": [
-                {"type": "text", "text": "world"}, {"type": "tool", "name": "bash"}
+    fn codex_context_is_not_a_session_title() {
+        let context = serde_json::json!({
+            "type": "response_item",
+            "payload": {"type": "message", "role": "user", "content": [
+                {"type": "input_text", "text": "# AGENTS.md instructions for /project\n\n<INSTRUCTIONS>"}
             ]}
-        ]});
-        let messages = opencode_messages(&export).unwrap();
-        assert_eq!(messages.len(), 2);
-        assert!(
-            matches!(&messages[1], AgentMessage::Assistant(message) if message.text() == "world")
-        );
+        });
+        assert!(codex_message(&context).is_none());
+        assert_eq!(compact_title("one\n\n two   three"), "one two three");
     }
 
     #[test]

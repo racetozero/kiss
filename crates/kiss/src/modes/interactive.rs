@@ -1450,6 +1450,7 @@ fn handle_session_event(
                         && (position == 0 || !matches!(app.cells[position - 1], Cell::Thinking(_)))
                     {
                         app.cells.insert(position, Cell::Thinking(String::new()));
+                        app.cell_render_cache.truncate(position);
                     }
                 }
                 AssistantEvent::ThinkingDelta { delta, .. } => {
@@ -1464,6 +1465,7 @@ fn handle_session_event(
                             thinking.push_str(&delta);
                         } else {
                             app.cells.insert(position, Cell::Thinking(delta));
+                            app.cell_render_cache.truncate(position);
                         }
                     }
                 }
@@ -3607,12 +3609,12 @@ fn open_session_picker(app: &mut App, session: &Arc<kiss_coding::AgentSession>, 
                 .map(|(value, listing)| SelectItem {
                     label: listing.title.clone(),
                     detail: Some(format!(
-                        "{}{} · {}{}",
+                        "{} · {}{}{}",
+                        listing.source.name(),
                         listing
                             .entry_count
                             .map(|count| format!("{count} entries · "))
                             .unwrap_or_default(),
-                        listing.source.name(),
                         shorten_path(&listing.cwd.display().to_string()),
                         if listing
                             .source
@@ -3635,7 +3637,8 @@ fn open_session_picker(app: &mut App, session: &Arc<kiss_coding::AgentSession>, 
                 items,
                 app.theme.clone(),
             );
-            list.max_visible = 14;
+            list.max_visible = 5;
+            list.detail_below = true;
             app.picker = Some(Picker {
                 kind: PickerKind::Session(listings, global),
                 list,
@@ -5099,6 +5102,7 @@ fn apply_picker_selection(
                     Ok(manager) => {
                         session.replace_manager(manager);
                         app.cells.clear();
+                        app.cell_render_cache.clear();
                         app.editor.set_text(&text);
                         app.cells
                             .push(Cell::Notice("forked to a new session".into()));
@@ -5422,6 +5426,7 @@ fn switch_session(app: &mut App, session: &Arc<kiss_coding::AgentSession>, recor
         Ok(manager) => {
             session.replace_manager(manager);
             app.cells = session_cells(session);
+            app.cell_render_cache.clear();
             app.cells.push(Cell::Notice(format!(
                 "resumed {} session {}",
                 record.source.name(),
@@ -5940,6 +5945,7 @@ fn run_slash_command(
                 Ok(manager) => {
                     session.replace_manager(manager);
                     app.cells = session_cells(session);
+                    app.cell_render_cache.clear();
                     app.cells
                         .push(Cell::Notice("cloned to a new session".into()));
                     refresh_git_branch(app, session);
@@ -6062,6 +6068,7 @@ fn run_slash_command(
                 Ok(new_manager) => {
                     session.replace_manager(new_manager);
                     app.cells.clear();
+                    app.cell_render_cache.clear();
                     app.cells.push(Cell::Notice("started a new session".into()));
                     refresh_git_branch(app, session);
                 }
@@ -6310,6 +6317,7 @@ fn import_session(
         Ok(manager) => {
             session.replace_manager(manager);
             app.cells = session_cells(session);
+            app.cell_render_cache.clear();
             app.cells.push(Cell::Notice(format!(
                 "imported {} into a new Kiss session",
                 shorten_path(&source.display().to_string())
@@ -7432,6 +7440,8 @@ mod tests {
                 &session,
             );
         }
+        let _ = app.render(80, &session);
+        assert_eq!(app.cell_render_cache.len(), 1);
         handle_session_event(
             &mut app,
             SessionEvent::Agent(Box::new(AgentEvent::MessageUpdate {
@@ -7443,6 +7453,7 @@ mod tests {
             &mut file_search,
             &session,
         );
+        assert!(app.cell_render_cache.is_empty());
         partial.content = vec![ContentBlock::Text {
             text: "hello!".into(),
             text_signature: None,
