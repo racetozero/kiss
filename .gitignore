@@ -276,6 +276,7 @@ $RECYCLE.BIN/
 # Local agent instructions, plans, and design notes
 /AGENTS.md
 /CLAUDE.md
+/subagents.md
 /.agent/
 /.agent/plans/
 /PI_UPSTREAM.md
