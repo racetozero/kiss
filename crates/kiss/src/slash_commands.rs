@@ -115,8 +115,8 @@ pub(crate) const KISS_SLASH_COMMANDS: &[SlashCommand] = &[
     SlashCommand::new("workflows", "Browse and manage workflow runs", None),
     SlashCommand::new(
         "loop",
-        "Run a bounded goal loop in a new session",
-        Some("<goal> [--iterations N]"),
+        "Run a goal loop in a new session",
+        Some("[interval] <goal> [--iterations N]"),
     ),
     SlashCommand::new(
         "autoresearch",

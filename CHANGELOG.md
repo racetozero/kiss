@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Made loop and autoresearch jobs run until completion or an explicit stop when
+  no iteration limit is given.
+- Added optional compound intervals such as `15m` and `2d4h` to `/loop`.
+
 ## 0.0.6 - 2026-09-07
 
 ### Added

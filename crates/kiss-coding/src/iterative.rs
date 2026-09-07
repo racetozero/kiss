@@ -13,9 +13,32 @@ pub type JobId = u64;
 
 const MAX_ACTIVE_JOBS: usize = 4;
 const MAX_RETAINED_JOBS: usize = 20;
-pub const DEFAULT_LOOP_ITERATIONS: u32 = 10;
-pub const DEFAULT_AUTORESEARCH_ITERATIONS: u32 = 25;
 pub const MAX_ITERATIONS: u32 = 100;
+
+pub fn format_interval(interval: Duration) -> String {
+    let mut nanos = interval.as_nanos();
+    let units = [
+        (86_400_000_000_000_u128, "d"),
+        (3_600_000_000_000, "h"),
+        (60_000_000_000, "m"),
+        (1_000_000_000, "s"),
+        (1_000_000, "ms"),
+        (1_000, "us"),
+        (1, "ns"),
+    ];
+    let mut output = String::new();
+    for (size, suffix) in units {
+        let count = nanos / size;
+        if count > 0 {
+            output.push_str(&format!("{count}{suffix}"));
+            nanos %= size;
+        }
+    }
+    if output.is_empty() {
+        output.push_str("0s");
+    }
+    output
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JobKind {
@@ -28,13 +51,6 @@ impl JobKind {
         match self {
             Self::Loop => "loop",
             Self::Autoresearch => "autoresearch",
-        }
-    }
-
-    pub fn default_limit(self) -> u32 {
-        match self {
-            Self::Loop => DEFAULT_LOOP_ITERATIONS,
-            Self::Autoresearch => DEFAULT_AUTORESEARCH_ITERATIONS,
         }
     }
 }
@@ -73,7 +89,8 @@ pub struct JobSnapshot {
     pub goal: String,
     pub status: JobStatus,
     pub iteration: u32,
-    pub limit: u32,
+    pub limit: Option<u32>,
+    pub interval: Option<Duration>,
     pub tokens: u64,
     pub elapsed: Duration,
     pub session_id: String,
@@ -88,7 +105,8 @@ pub struct JobSummary {
     pub goal: String,
     pub status: JobStatus,
     pub iteration: u32,
-    pub limit: u32,
+    pub limit: Option<u32>,
+    pub interval: Option<Duration>,
     pub tokens: u64,
     pub elapsed: Duration,
 }
@@ -105,7 +123,8 @@ pub struct JobRecord {
     id: JobId,
     kind: JobKind,
     goal: String,
-    limit: u32,
+    limit: Option<u32>,
+    interval: Option<Duration>,
     session_id: String,
     child: Arc<AgentSession>,
     started: Instant,
@@ -126,6 +145,7 @@ impl JobRecord {
             status: state.status,
             iteration: state.iteration,
             limit: self.limit,
+            interval: self.interval,
             tokens: state.tokens,
             elapsed: self.started.elapsed(),
             session_id: self.session_id.clone(),
@@ -143,6 +163,7 @@ impl JobRecord {
             status: state.status,
             iteration: state.iteration,
             limit: self.limit,
+            interval: self.interval,
             tokens: state.tokens,
             elapsed: self.started.elapsed(),
         }
@@ -235,6 +256,7 @@ impl IterativeRuntime {
         kind: JobKind,
         goal: impl Into<String>,
         limit: Option<u32>,
+        interval: Option<Duration>,
     ) -> anyhow::Result<Arc<JobRecord>> {
         let goal = goal.into();
         if goal.trim().is_empty() {
@@ -245,9 +267,16 @@ impl IterativeRuntime {
             .upgrade()
             .ok_or_else(|| anyhow::anyhow!("the parent session has closed"))?;
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
-        let limit = limit
-            .unwrap_or_else(|| kind.default_limit())
-            .clamp(1, MAX_ITERATIONS);
+        if limit.is_some() && interval.is_some() {
+            anyhow::bail!("an interval and --iterations cannot be used together");
+        }
+        if kind == JobKind::Autoresearch && interval.is_some() {
+            anyhow::bail!("autoresearch does not support an interval");
+        }
+        if interval.is_some_and(|interval| interval.is_zero()) {
+            anyhow::bail!("the interval must be greater than zero");
+        }
+        let limit = limit.map(|limit| limit.clamp(1, MAX_ITERATIONS));
         let task_name = format!("{}_{}", kind.label(), id);
         let child = parent.create_subagent_session(
             &task_name,
@@ -263,6 +292,7 @@ impl IterativeRuntime {
             kind,
             goal,
             limit,
+            interval,
             session_id,
             child,
             started: Instant::now(),
@@ -317,7 +347,8 @@ impl IterativeRuntime {
         }
         job.set_status(JobStatus::Running);
 
-        for iteration in 1..=job.limit {
+        let mut iteration = 1_u32;
+        loop {
             if !job.wait_until_ready().await {
                 job.set_status(JobStatus::Stopped);
                 return;
@@ -357,8 +388,21 @@ impl IterativeRuntime {
                 job.set_status(JobStatus::Completed);
                 return;
             }
+            if job.limit == Some(iteration) {
+                job.set_status(JobStatus::Completed);
+                return;
+            }
+            if let Some(interval) = job.interval {
+                tokio::select! {
+                    _ = job.cancel.cancelled() => {
+                        job.set_status(JobStatus::Stopped);
+                        return;
+                    }
+                    _ = tokio::time::sleep(interval) => {}
+                }
+            }
+            iteration = iteration.saturating_add(1);
         }
-        job.set_status(JobStatus::Completed);
     }
 
     pub fn get(&self, id: JobId) -> Option<Arc<JobRecord>> {
@@ -405,9 +449,13 @@ fn contains_completion_marker(result: &str) -> bool {
     result.to_ascii_lowercase().contains("[goal-complete]")
 }
 
-fn iteration_prompt(kind: JobKind, goal: &str, iteration: u32, limit: u32) -> String {
+fn iteration_prompt(kind: JobKind, goal: &str, iteration: u32, limit: Option<u32>) -> String {
+    let position = limit.map_or_else(
+        || format!("iteration {iteration}"),
+        |limit| format!("iteration {iteration} of {limit}"),
+    );
     let common = format!(
-        "You are in iteration {iteration} of {limit} for this goal:\n\n{goal}\n\nWork directly in the shared repository. Make one useful, verified unit of progress. Do not ask for permission. End the answer with exactly [goal-complete] if the goal is fully achieved and verified. Otherwise end with exactly [continue]."
+        "You are in {position} for this goal:\n\n{goal}\n\nWork directly in the shared repository. Make one useful, verified unit of progress. Do not ask for permission. End the answer with exactly [goal-complete] if the goal is fully achieved and verified. Otherwise end with exactly [continue]."
     );
     match kind {
         JobKind::Loop => common,
@@ -424,20 +472,29 @@ mod tests {
     use std::sync::atomic::AtomicUsize;
 
     #[test]
-    fn job_defaults_are_bounded() {
-        assert_eq!(JobKind::Loop.default_limit(), 10);
-        assert_eq!(JobKind::Autoresearch.default_limit(), 25);
-        assert!(JobKind::Autoresearch.default_limit() <= MAX_ITERATIONS);
+    fn unlimited_prompts_do_not_claim_a_limit() {
+        let prompt = iteration_prompt(JobKind::Loop, "fix tests", 2, None);
+        assert!(prompt.contains("iteration 2 for this goal"));
+        assert!(!prompt.contains("iteration 2 of"));
+    }
+
+    #[test]
+    fn interval_format_uses_compound_units() {
+        assert_eq!(
+            format_interval(Duration::from_secs(2 * 86_400 + 4 * 3_600)),
+            "2d4h"
+        );
+        assert_eq!(format_interval(Duration::from_millis(1_500)), "1s500ms");
     }
 
     #[test]
     fn prompts_define_progress_and_completion() {
-        let loop_prompt = iteration_prompt(JobKind::Loop, "fix tests", 2, 10);
+        let loop_prompt = iteration_prompt(JobKind::Loop, "fix tests", 2, Some(10));
         assert!(loop_prompt.contains("iteration 2 of 10"));
         assert!(loop_prompt.contains("[goal-complete]"));
         assert!(loop_prompt.contains("[continue]"));
 
-        let research = iteration_prompt(JobKind::Autoresearch, "make it faster", 1, 25);
+        let research = iteration_prompt(JobKind::Autoresearch, "make it faster", 1, None);
         assert!(research.contains("baseline"));
         assert!(research.contains("success metric"));
         assert!(research.contains("revert a regression"));
@@ -493,7 +550,9 @@ mod tests {
         })));
 
         let runtime = parent.iterative_jobs().unwrap();
-        let job = runtime.start(JobKind::Loop, "finish it", Some(8)).unwrap();
+        let job = runtime
+            .start(JobKind::Loop, "finish it", None, None)
+            .unwrap();
         let mut updates = job.subscribe();
         tokio::time::timeout(Duration::from_secs(2), async {
             while !job.snapshot().status.is_finished() {
@@ -506,6 +565,7 @@ mod tests {
         let snapshot = job.snapshot();
         assert_eq!(snapshot.status, JobStatus::Completed);
         assert_eq!(snapshot.iteration, 2);
+        assert_eq!(snapshot.limit, None);
         assert_eq!(calls.load(Ordering::SeqCst), 2);
         let messages = job
             .child

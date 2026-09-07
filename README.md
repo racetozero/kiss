@@ -301,26 +301,44 @@ KISS allows four active child turns and one child level. A child starts with
 fresh context unless the main agent explicitly copies parent turns. Project
 settings cannot enable this feature. `--no-tools` also keeps it off.
 
-See [subagents.md](subagents.md) for the design analysis and tradeoffs.
-
 ## Loop and autoresearch jobs
 
-Use a loop when a task needs more than one independent attempt:
+Use a loop when a task needs repeated work. With no limit, it runs until the
+goal is complete or you stop it:
+
+```text
+/loop make the parser tests pass
+```
+
+Put an interval before the goal to wait between turns. The first turn starts
+immediately. Intervals accept compound day, hour, minute, second, millisecond,
+microsecond, and nanosecond values:
+
+```text
+/loop 2d4h review dependency updates
+/loop 15m check the deployment and fix new errors
+```
+
+Use `--iterations` for a fixed number of turns:
 
 ```text
 /loop make the parser tests pass --iterations 8
 ```
 
-Use autoresearch when each attempt needs the same measurement:
+Use autoresearch when each attempt needs the same measurement. It also runs
+until completion or manual stop when you do not give an iteration limit:
 
 ```text
+/autoresearch reduce Markdown render time; verify with the existing benchmark
 /autoresearch reduce Markdown render time; verify with the existing benchmark --iterations 20
 ```
 
 Each job branches from the current conversation into a new KISS session. It
-keeps its context between iterations and stops when the goal is complete or
-the iteration limit is reached. A loop uses 10 iterations by default.
-Autoresearch uses 25. The maximum explicit limit is 100.
+keeps its context between iterations and stops when the goal is complete, you
+stop it, or its optional iteration limit is reached. An interval and
+`--iterations` cannot be used together. Autoresearch does not accept an
+interval. Both commands are unlimited by default. The maximum explicit
+iteration limit is 100.
 
 Jobs run independently. Start another command while one runs, then use
 `/jobs`, `/loop` without a goal, or `/autoresearch` without a goal to open the

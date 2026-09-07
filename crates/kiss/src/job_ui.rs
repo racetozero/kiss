@@ -1,7 +1,7 @@
 //! The compact progress view for `/loop` and `/autoresearch` jobs.
 
 use crate::workflow_ui::{format_elapsed, format_tokens};
-use kiss_coding::iterative::{IterativeRuntime, JobRecord, JobStatus};
+use kiss_coding::iterative::{IterativeRuntime, JobRecord, JobStatus, format_interval};
 use kiss_tui::{Key, KeyEvent, Theme, text};
 use std::sync::Arc;
 
@@ -90,13 +90,16 @@ impl JobView {
         let mut lines = vec![theme.fg("accent", &theme.bold("Jobs")), String::new()];
         for (index, job) in summaries.iter().enumerate() {
             let marker = if index == self.selected { "▸" } else { " " };
+            let progress = job.limit.map_or_else(
+                || format!("{}/∞", job.iteration),
+                |limit| format!("{}/{limit}", job.iteration),
+            );
             let row = format!(
-                "{marker} #{:<3} {:<12} {:<9} {:>3}/{:<3} {:>8}",
+                "{marker} #{:<3} {:<12} {:<9} {:>7} {:>8}",
                 job.id,
                 job.kind.label(),
                 job.status.label(),
-                job.iteration,
-                job.limit,
+                progress,
                 format_tokens(job.tokens),
             );
             lines.push(if index == self.selected {
@@ -129,6 +132,14 @@ fn render_detail(
     width: usize,
     theme: &Theme,
 ) -> Vec<String> {
+    let progress = job.limit.map_or_else(
+        || format!("iteration {}", job.iteration),
+        |limit| format!("iteration {}/{limit}", job.iteration),
+    );
+    let cadence = job
+        .interval
+        .map(|interval| format!(" · every {}", format_interval(interval)))
+        .unwrap_or_default();
     let mut lines = vec![format!(
         "{} {}",
         theme.fg(
@@ -138,10 +149,10 @@ fn render_detail(
         theme.fg(
             status_color(job.status),
             &format!(
-                "{} · iteration {}/{} · {} tokens · {}",
+                "{} · {}{} · {} tokens · {}",
                 job.status.label(),
-                job.iteration,
-                job.limit,
+                progress,
+                cadence,
                 format_tokens(job.tokens),
                 format_elapsed(job.elapsed),
             )
@@ -224,7 +235,8 @@ mod tests {
             goal: "Reduce renderer latency while all focused tests stay green.".repeat(8),
             status: JobStatus::Running,
             iteration: 12,
-            limit: 25,
+            limit: None,
+            interval: None,
             tokens: 42_000,
             elapsed: Duration::from_secs(95),
             session_id: "00000000-0000-0000-0000-000000000007".into(),
