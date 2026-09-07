@@ -18,9 +18,12 @@ mermaid-text.workspace = true
 pulldown-cmark.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+syntect.workspace = true
 tokio.workspace = true
+two-face.workspace = true
 unicode-segmentation.workspace = true
 unicode-width.workspace = true
+url.workspace = true
 
 [dev-dependencies]
 kiss-bench.workspace = true

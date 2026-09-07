@@ -182,6 +182,9 @@ pub fn session_event_json(event: &SessionEvent) -> Option<Value> {
             };
             json!({"type": "workflow_outcome", "run": run, "name": name, "status": status})
         }
+        SessionEvent::Iterative { job, version } => {
+            json!({"type": "iterative_progress", "job": job, "version": version})
+        }
     })
 }
 

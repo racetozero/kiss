@@ -5,6 +5,7 @@ use crate::compaction::{
     self, estimate_context_tokens, extract_file_ops, file_ops_details, plan_compaction,
     should_compact,
 };
+use crate::iterative::IterativeRuntime;
 use crate::session::manager::SessionManager;
 use crate::settings::{QueueMode, Settings};
 use crate::subagents::{ForkTurns, SUBAGENT_SYSTEM_PROMPT, SubagentRuntime, fork_messages};
@@ -57,6 +58,11 @@ pub enum SessionEvent {
         run: Option<crate::workflows::RunId>,
         name: String,
         status: WorkflowTurnStatus,
+    },
+    /// A loop or autoresearch job changed. The terminal reads its snapshot.
+    Iterative {
+        job: crate::iterative::JobId,
+        version: u64,
     },
 }
 
@@ -120,6 +126,7 @@ pub struct AgentSession {
     subagents_allowed: bool,
     subagents: OnceLock<Arc<SubagentRuntime>>,
     workflows: OnceLock<Arc<WorkflowRuntime>>,
+    iterative: OnceLock<Arc<IterativeRuntime>>,
     workflow_approver: Mutex<Option<WorkflowApprover>>,
     /// Optional replacement for the provider streaming function. Embedders and
     /// tests install one to run the whole loop against a scripted fake model.
@@ -127,6 +134,10 @@ pub struct AgentSession {
 }
 
 impl AgentSession {
+    pub(crate) fn emit_iterative(&self, job: crate::iterative::JobId, version: u64) {
+        (self.sink)(SessionEvent::Iterative { job, version });
+    }
+
     pub(crate) fn emit_workflow(&self, run: crate::workflows::RunId, version: u64) {
         (self.sink)(SessionEvent::Workflow { run, version });
     }
@@ -199,6 +210,7 @@ impl AgentSession {
             subagents_allowed,
             subagents: OnceLock::new(),
             workflows: OnceLock::new(),
+            iterative: OnceLock::new(),
             workflow_approver: Mutex::new(None),
             stream_fn: Mutex::new(None),
         });
@@ -207,6 +219,8 @@ impl AgentSession {
             assert!(session.subagents.set(runtime).is_ok());
             let workflows = WorkflowRuntime::new(Arc::downgrade(&session));
             assert!(session.workflows.set(workflows).is_ok());
+            let iterative = IterativeRuntime::new(Arc::downgrade(&session));
+            assert!(session.iterative.set(iterative).is_ok());
         }
         session.rebuild_tools();
         session
@@ -282,6 +296,9 @@ impl AgentSession {
         if let Some(runtime) = self.workflows.get() {
             runtime.stop_all();
         }
+        if let Some(runtime) = self.iterative.get() {
+            runtime.stop_all();
+        }
     }
 
     fn stop_workflows(&self) {
@@ -314,6 +331,10 @@ impl AgentSession {
 
     pub fn workflows(&self) -> Option<Arc<WorkflowRuntime>> {
         self.workflows.get().cloned()
+    }
+
+    pub fn iterative_jobs(&self) -> Option<Arc<IterativeRuntime>> {
+        self.iterative.get().cloned()
     }
 
     /// Install the callback that asks the user to approve a run.
@@ -369,6 +390,9 @@ impl AgentSession {
             runtime.reset();
         }
         if let Some(runtime) = self.workflows.get() {
+            runtime.stop_all();
+        }
+        if let Some(runtime) = self.iterative.get() {
             runtime.stop_all();
         }
         let context = manager.build_session_context();

@@ -113,6 +113,17 @@ pub(crate) const KISS_SLASH_COMMANDS: &[SlashCommand] = &[
         Some("<prompt>"),
     ),
     SlashCommand::new("workflows", "Browse and manage workflow runs", None),
+    SlashCommand::new(
+        "loop",
+        "Run a bounded goal loop in a new session",
+        Some("<goal> [--iterations N]"),
+    ),
+    SlashCommand::new(
+        "autoresearch",
+        "Run measured experiments in a new session",
+        Some("<goal> [--iterations N]"),
+    ),
+    SlashCommand::new("jobs", "Browse and manage iterative jobs", None),
 ];
 
 pub(crate) fn commands() -> impl Iterator<Item = &'static SlashCommand> {
@@ -238,7 +249,7 @@ mod tests {
     fn user_visible_surface_includes_shipped_llama_command() {
         let names: Vec<&str> = commands().map(|command| command.name).collect();
         assert_eq!(
-            &names[names.len() - 8..],
+            &names[names.len() - 11..],
             [
                 "llama",
                 "mcp",
@@ -247,7 +258,10 @@ mod tests {
                 "btw",
                 "recap",
                 "workflow",
-                "workflows"
+                "workflows",
+                "loop",
+                "autoresearch",
+                "jobs"
             ]
         );
         assert_eq!(

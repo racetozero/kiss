@@ -3,6 +3,7 @@
 
 use crate::args::Args;
 use crate::file_search::{FileSearchMatch, FileSearchQuery, FileSearchResult, FileSearchService};
+use crate::job_ui::{self, JobView, JobViewAction};
 use crate::session_sources::{self, SessionRecord, SessionSource};
 use crate::setup::{Startup, build_startup, reload_runtime};
 use crate::slash_commands;
@@ -95,6 +96,8 @@ struct App {
     mcp_config_paths: Option<kiss_mcp::config::ConfigPaths>,
     /// The open `/workflows` progress view, if any.
     workflow_view: Option<WorkflowView>,
+    /// The open `/jobs` loop and autoresearch view, if any.
+    job_view: Option<JobView>,
     /// Bumped whenever a workflow run changes, so the frame is marked dirty.
     workflow_version: u64,
     /// Runtime-verified workflow results waiting for the end of this turn.
@@ -443,6 +446,14 @@ impl App {
             return lines;
         }
 
+        if let Some(view) = &mut self.job_view {
+            lines.push(String::new());
+            lines.extend(view.render(width, &self.theme));
+            lines.push(String::new());
+            lines.extend(self.footer(width, session));
+            return lines;
+        }
+
         if self.cell_render_cache.len() < self.cells.len() {
             self.cell_render_cache
                 .resize_with(self.cells.len(), || None);
@@ -614,6 +625,11 @@ impl App {
                 warn_over,
                 &self.theme,
             ));
+        }
+        if let Some(runtime) = session.iterative_jobs()
+            && runtime.active_count() > 0
+        {
+            lines.push(job_ui::progress_line(&runtime, &self.theme, width));
         }
         if let Some(recap) = &self.recap {
             lines.push(self.theme.fg("muted", &format!("※ recap: {recap}")));
@@ -1223,6 +1239,7 @@ pub async fn run(args: &Args) -> Result<i32> {
         mcp_servers: Vec::new(),
         mcp_config_paths: None,
         workflow_view: None,
+        job_view: None,
         workflow_version: 0,
         workflow_outcomes: Vec::new(),
     };
@@ -1613,6 +1630,7 @@ fn handle_session_event(
             app.workflow_outcomes
                 .push(format!("verified workflow{run} `{name}` {result}"));
         }
+        SessionEvent::Iterative { .. } => {}
     }
 }
 
@@ -2471,6 +2489,15 @@ fn handle_input(
                     open_workflow_save_picker(app, run);
                 }
             }
+        }
+        return Flow::Continue;
+    }
+
+    if let Some(view) = &mut app.job_view {
+        if let InputEvent::Key(key) = event
+            && view.handle_key(key) == JobViewAction::Close
+        {
+            app.job_view = None;
         }
         return Flow::Continue;
     }
@@ -4121,6 +4148,84 @@ fn open_workflow_view(
             "no workflow has run in this session yet".into(),
         )),
     }
+}
+
+fn start_or_open_job(
+    app: &mut App,
+    session: &Arc<kiss_coding::AgentSession>,
+    kind: kiss_coding::iterative::JobKind,
+    arguments: &str,
+) {
+    if arguments.trim().is_empty() {
+        open_job_view(app, session);
+        return;
+    }
+    let (goal, limit) = match parse_job_request(arguments) {
+        Ok(request) => request,
+        Err(error) => {
+            app.cells.push(Cell::Error(error));
+            return;
+        }
+    };
+    let Some(runtime) = session.iterative_jobs() else {
+        app.cells.push(Cell::Error(
+            "iterative jobs are not available in this session".into(),
+        ));
+        return;
+    };
+    match runtime.start(kind, goal, limit) {
+        Ok(job) => {
+            let snapshot = job.snapshot();
+            app.cells.push(Cell::Notice(format!(
+                "started {} job #{} in session {} · up to {} iterations · /jobs opens the job view",
+                snapshot.kind.label(),
+                snapshot.id,
+                snapshot.session_id,
+                snapshot.limit,
+            )));
+        }
+        Err(error) => app.cells.push(Cell::Error(format!(
+            "could not start {}: {error:#}",
+            kind.label()
+        ))),
+    }
+}
+
+fn parse_job_request(arguments: &str) -> Result<(String, Option<u32>), String> {
+    let arguments = arguments.trim();
+    let Some((goal, value)) = arguments.rsplit_once("--iterations") else {
+        return Ok((arguments.to_string(), None));
+    };
+    let value = value.trim();
+    if value.is_empty() || value.split_whitespace().count() != 1 {
+        return Err("use --iterations N at the end of the job goal".into());
+    }
+    let limit = value
+        .parse::<u32>()
+        .ok()
+        .filter(|limit| *limit > 0)
+        .ok_or_else(|| "iterations must be a positive number".to_string())?;
+    let goal = goal.trim();
+    if goal.is_empty() {
+        return Err("the job goal cannot be empty".into());
+    }
+    Ok((goal.to_string(), Some(limit)))
+}
+
+fn open_job_view(app: &mut App, session: &Arc<kiss_coding::AgentSession>) {
+    let Some(runtime) = session.iterative_jobs() else {
+        app.cells.push(Cell::Notice(
+            "iterative jobs are not available in this session".into(),
+        ));
+        return;
+    };
+    if runtime.summaries().is_empty() {
+        app.cells.push(Cell::Notice(
+            "no loop or autoresearch jobs have run in this session".into(),
+        ));
+        return;
+    }
+    app.job_view = Some(JobView::new(runtime));
 }
 
 /// Choose which run to open when there is more than one.
@@ -6025,6 +6130,14 @@ fn run_slash_command(
             }
         }
         "workflows" => open_workflow_runs_picker(app, session),
+        "loop" => start_or_open_job(app, session, kiss_coding::iterative::JobKind::Loop, &rest),
+        "autoresearch" => start_or_open_job(
+            app,
+            session,
+            kiss_coding::iterative::JobKind::Autoresearch,
+            &rest,
+        ),
+        "jobs" => open_job_view(app, session),
         "tree" => open_tree_picker(app, session),
         "fork" => open_fork_picker(app, session),
         "clone" => {
@@ -6665,6 +6778,7 @@ mod tests {
             mcp_servers: Vec::new(),
             mcp_config_paths: None,
             workflow_view: None,
+            job_view: None,
             workflow_version: 0,
             workflow_outcomes: Vec::new(),
         }
@@ -6868,6 +6982,45 @@ mod tests {
         assert!(matches!(flow, Flow::Continue));
         assert_eq!(app.editor.text(), "one ");
         assert!(app.workflow_view.is_none());
+    }
+
+    #[test]
+    fn ctrl_r_expands_collapsed_tool_output() {
+        let mut app = test_app();
+        app.cells.push(Cell::ToolCall {
+            title: "mcp".into(),
+            output: (1..=9)
+                .map(|line| format!("line {line}"))
+                .collect::<Vec<_>>()
+                .join("\n"),
+            is_error: false,
+            done: true,
+        });
+        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
+            "/synthetic",
+        )));
+        assert!(app.render(80, &session).join("\n").contains("3 more lines"));
+
+        let args = Args::parse_from(["kiss"]);
+        let mut resources = test_resources();
+        let mut running_task = None;
+        let (file_tx, _file_rx) = mpsc::unbounded_channel();
+        let mut file_search = FileSearchService::new(file_tx);
+        let (command_tx, _command_rx) = mpsc::unbounded_channel();
+        handle_input(
+            &mut app,
+            &session,
+            &InputEvent::Key(KeyEvent::ctrl('r')),
+            &args,
+            &mut resources,
+            &mut running_task,
+            &mut file_search,
+            &command_tx,
+        );
+
+        let expanded = kiss_tui::text::strip_ansi(&app.render(80, &session).join("\n"));
+        assert!(expanded.contains("line 9"));
+        assert!(!expanded.contains("more lines"));
     }
 
     #[test]
@@ -8028,6 +8181,20 @@ mod tests {
         assert_eq!(result.exit_code, Some(7));
         assert!(result.exclude_from_context);
         assert!(!result.cancelled);
+    }
+
+    #[test]
+    fn iterative_job_arguments_accept_an_optional_bound() {
+        assert_eq!(
+            parse_job_request("fix the parser --iterations 7").unwrap(),
+            ("fix the parser".into(), Some(7))
+        );
+        assert_eq!(
+            parse_job_request("measure startup time").unwrap(),
+            ("measure startup time".into(), None)
+        );
+        assert!(parse_job_request("fix it --iterations 0").is_err());
+        assert!(parse_job_request("--iterations 4").is_err());
     }
 
     #[cfg(unix)]

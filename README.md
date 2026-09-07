@@ -81,11 +81,16 @@ cat error.log | kiss -p "find the cause"
 - Type `!command` to run a shell command.
 - Press `Shift+Tab` to change reasoning effort.
 - Press `Esc` or `Ctrl+C` to stop active work.
+- Press `Ctrl+R` to expand or collapse long tool results.
 - Press `Ctrl+D` on an empty input to exit.
 - Use the Up arrow to restore earlier prompts.
 
+Assistant Markdown uses bold text, cyan underlined terminal hyperlinks,
+automatic links for bare web URLs, and syntax colors for fenced code.
+
 Useful commands include `/login`, `/model`, `/mcp`, `/compact`, `/resume`,
-`/provider`, `/export`, `/settings`, and `/hotkeys`.
+`/loop`, `/autoresearch`, `/jobs`, `/provider`, `/export`, `/settings`, and
+`/hotkeys`.
 
 KISS can accept a new instruction while the agent works. Press `Enter` to
 steer the current task, or `Alt+Enter` to queue a follow-up task.
@@ -155,11 +160,11 @@ time to the first frame, and time until typed input appears.
 
 | Measure | KISS result |
 | --- | ---: |
-| Warm time to first frame | 5.338 ms mean |
-| Warm time to first input | 5.397 ms mean |
-| One idle session | 15.755 MiB mean RSS |
-| Ten idle sessions | 157.984 MiB mean RSS |
-| Extra RSS per added session | 15.803 MiB mean |
+| Warm time to first frame | 5.037 ms mean |
+| Warm time to first input | 5.094 ms mean |
+| One idle session | 15.802 MiB mean RSS |
+| Ten idle sessions | 159.010 MiB mean RSS |
+| Extra RSS per added session | 15.912 MiB mean |
 
 The startup results use ten launches after one warm-up. The memory results use
 three trials. RSS is the resident memory reported by macOS; it is not Linux
@@ -174,7 +179,8 @@ across operating systems.
 | File search | 500,000 files, three warm queries | 7.110 ms | 7.690 ms |
 | SSE parsing | 10,000 events | 0.931 ms | 0.973 ms |
 | Grep | 1,000 files and 200 matches | 6.933 ms | 8.340 ms |
-| Incremental Markdown | 200 streaming prefix renders | 12.772 ms | 12.857 ms |
+| Incremental Markdown | 200 streaming prefix renders | 12.427 ms | 12.576 ms |
+| Rust syntax highlighting | One 200-line fence | 5.830 ms | 6.165 ms |
 | Unchanged frame | 10,000 logical rows | 0.876 ms | 0.885 ms |
 
 ### SDK, RPC, and browser WebAssembly
@@ -231,6 +237,13 @@ the latest full-suite means:
 The interpreter used 2.185 us per agent call. Arming a workflow added 651 ns
 to request preparation. The workflow tool and its instructions are
 absent until a workflow turn is armed.
+
+### Iterative job overhead
+
+Loop and autoresearch jobs sleep between model turns and update the terminal
+through small version events. Rendering a job detail view with a long goal and
+result averaged 45.193 us (46.595 us p95). Model, tool, and verification time
+will normally be much larger.
 
 ### TUI rendering and resize
 
@@ -289,6 +302,41 @@ fresh context unless the main agent explicitly copies parent turns. Project
 settings cannot enable this feature. `--no-tools` also keeps it off.
 
 See [subagents.md](subagents.md) for the design analysis and tradeoffs.
+
+## Loop and autoresearch jobs
+
+Use a loop when a task needs more than one independent attempt:
+
+```text
+/loop make the parser tests pass --iterations 8
+```
+
+Use autoresearch when each attempt needs the same measurement:
+
+```text
+/autoresearch reduce Markdown render time; verify with the existing benchmark --iterations 20
+```
+
+Each job branches from the current conversation into a new KISS session. It
+keeps its context between iterations and stops when the goal is complete or
+the iteration limit is reached. A loop uses 10 iterations by default.
+Autoresearch uses 25. The maximum explicit limit is 100.
+
+Jobs run independently. Start another command while one runs, then use
+`/jobs`, `/loop` without a goal, or `/autoresearch` without a goal to open the
+job view.
+
+| Key | Action |
+| --- | --- |
+| Up or Down | Select a job or scroll its latest result |
+| Enter or Right | Open the selected job |
+| `p` | Pause or resume between iterations |
+| `x` | Stop the selected job |
+| Escape or Left | Return to the job list or close it |
+
+Autoresearch asks the child session to set a repeatable baseline, test one
+small change per iteration, keep improvements, and revert regressions. It uses
+the normal KISS tools and does not add a permission step.
 
 ## Dynamic workflows
 

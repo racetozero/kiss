@@ -95,7 +95,7 @@ impl Action {
             Action::ExternalEditor => "ctrl+g",
             Action::HistoryPrev => "up",
             Action::HistoryNext => "down",
-            Action::ExpandTools => "ctrl+o",
+            Action::ExpandTools => "ctrl+r",
             Action::Clear => "ctrl+c",
         }
     }
@@ -197,6 +197,10 @@ mod tests {
             Some(Action::QueueFollowUp)
         );
         assert_eq!(kb.action_for(&KeyEvent::parse("alt+enter").unwrap()), None);
+        assert_eq!(
+            kb.action_for(&KeyEvent::parse("ctrl+r").unwrap()),
+            Some(Action::ExpandTools)
+        );
         assert_eq!(
             kb.key_for(Action::SaveDefault).map(ToString::to_string),
             Some("ctrl+s".into())

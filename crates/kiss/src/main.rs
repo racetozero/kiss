@@ -2,6 +2,7 @@ mod args;
 mod auth_flow;
 mod export;
 mod file_search;
+mod job_ui;
 mod modes {
     pub mod interactive;
     pub mod json;

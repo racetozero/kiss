@@ -92,6 +92,17 @@ pub fn strip_ansi(s: &str) -> String {
 /// Wrap plain text to `width` columns on grapheme boundaries, preferring
 /// word breaks. Returns at least one (possibly empty) line.
 pub fn wrap_text(text: &str, width: usize) -> Vec<String> {
+    if text.as_bytes().contains(&b'\x1b') {
+        return wrap_styled_words(text, width);
+    }
+    wrap_plain_text(text, width)
+}
+
+fn wrap_plain_text(text: &str, width: usize) -> Vec<String> {
+    wrap_plain_text_inner(text, width, false)
+}
+
+fn wrap_plain_text_inner(text: &str, width: usize, nul_is_zero_width: bool) -> Vec<String> {
     if width == 0 {
         return vec![String::new()];
     }
@@ -104,11 +115,11 @@ pub fn wrap_text(text: &str, width: usize) -> Vec<String> {
         let mut current = String::new();
         let mut current_width = 0usize;
         for word in raw_line.split_inclusive(' ') {
-            let word_width = word.width();
+            let word_width = wrap_width(word, nul_is_zero_width);
             // A separator at the end of the candidate does not occupy a
             // visible cell after the line is emitted. Count it only after a
             // later word turns it into an internal separator.
-            if current_width + word.trim_end_matches(' ').width() <= width {
+            if current_width + wrap_width(word.trim_end_matches(' '), nul_is_zero_width) <= width {
                 current.push_str(word);
                 current_width += word_width;
                 continue;
@@ -120,7 +131,7 @@ pub fn wrap_text(text: &str, width: usize) -> Vec<String> {
             let mut piece = String::new();
             let mut piece_width = 0usize;
             for grapheme in word.graphemes(true) {
-                let gw = grapheme.width();
+                let gw = wrap_width(grapheme, nul_is_zero_width);
                 if piece_width + gw > width {
                     lines.push(piece.clone());
                     piece.clear();
@@ -138,6 +149,73 @@ pub fn wrap_text(text: &str, width: usize) -> Vec<String> {
         lines.push(String::new());
     }
     lines
+}
+
+fn wrap_width(text: &str, nul_is_zero_width: bool) -> usize {
+    if nul_is_zero_width {
+        text.split('\0').map(UnicodeWidthStr::width).sum()
+    } else {
+        text.width()
+    }
+}
+
+/// Word-wrap styled terminal text while keeping escape sequences at zero
+/// width. Active links are closed at each line end and reopened on the next
+/// line, which avoids terminal-dependent links that span rows.
+fn wrap_styled_words(text: &str, width: usize) -> Vec<String> {
+    let mut masked = String::with_capacity(text.len());
+    let mut sequences = Vec::new();
+    let mut index = 0;
+    while index < text.len() {
+        if text.as_bytes()[index] == b'\x1b' {
+            let end = ansi_sequence_end(text, index);
+            sequences.push(&text[index..end]);
+            masked.push('\0');
+            index = end;
+        } else {
+            let character = text[index..].chars().next().unwrap();
+            masked.push(character);
+            index += character.len_utf8();
+        }
+    }
+
+    let mut sequence_index = 0;
+    let mut sgr = String::new();
+    let mut hyperlink: Option<String> = None;
+    wrap_plain_text_inner(&masked, width, true)
+        .into_iter()
+        .map(|line| {
+            let mut rendered = String::new();
+            if sequence_index > 0 {
+                rendered.push_str(&sgr);
+                if let Some(link) = &hyperlink {
+                    rendered.push_str(link);
+                }
+            }
+            for character in line.chars() {
+                if character != '\0' {
+                    rendered.push(character);
+                    continue;
+                }
+                let sequence = sequences[sequence_index];
+                sequence_index += 1;
+                rendered.push_str(sequence);
+                if sequence.starts_with("\x1b[") && sequence.ends_with('m') {
+                    if matches!(sequence, "\x1b[m" | "\x1b[0m") {
+                        sgr.clear();
+                    } else {
+                        sgr.push_str(sequence);
+                    }
+                } else if let Some(target) = osc8_target(sequence) {
+                    hyperlink = (!target.is_empty()).then(|| sequence.to_string());
+                }
+            }
+            if hyperlink.is_some() {
+                rendered.push_str("\x1b]8;;\x1b\\");
+            }
+            rendered
+        })
+        .collect()
 }
 
 /// Hard-wrap terminal text without changing spaces, ANSI styles, links, or a
@@ -215,7 +293,7 @@ fn push_terminal_line(lines: &mut Vec<String>, line: &mut String, close_hyperlin
     lines.push(std::mem::take(line));
 }
 
-fn ansi_sequence_end(text: &str, start: usize) -> usize {
+pub(crate) fn ansi_sequence_end(text: &str, start: usize) -> usize {
     let bytes = text.as_bytes();
     let mut index = start + 1;
     match bytes.get(index) {
@@ -249,7 +327,7 @@ fn ansi_sequence_end(text: &str, start: usize) -> usize {
     index
 }
 
-fn osc8_target(sequence: &str) -> Option<&str> {
+pub(crate) fn osc8_target(sequence: &str) -> Option<&str> {
     let payload = sequence
         .strip_prefix("\x1b]8;;")?
         .strip_suffix('\x07')
@@ -314,6 +392,20 @@ mod tests {
         // CJK chars are width 2.
         let wrapped = wrap_text("日本語のテキスト", 6);
         assert!(wrapped.iter().all(|l| l.width() <= 6));
+    }
+
+    #[test]
+    fn word_wrap_preserves_styles_and_reopens_links() {
+        let link = "\x1b]8;;https://example.com\x1b\\\x1b[4mhello world\x1b[24m\x1b]8;;\x1b\\";
+        let wrapped = wrap_text(link, 5);
+        assert_eq!(wrapped.len(), 2, "{wrapped:?}");
+        assert!(wrapped.iter().all(|line| display_width(line) == 5));
+        assert!(
+            wrapped
+                .iter()
+                .all(|line| line.contains("\x1b]8;;https://example.com\x1b\\"))
+        );
+        assert!(wrapped.iter().all(|line| line.ends_with("\x1b]8;;\x1b\\")));
     }
 
     #[test]

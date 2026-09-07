@@ -6,12 +6,17 @@
 
 - Added CLI and TUI commands to add, list, and remove OpenAI-compatible Chat
   Completions, Responses, and Codex API providers, including CodexLB.
+- Added bounded `/loop` and `/autoresearch` jobs. Each job branches into a new
+  session, and `/jobs` shows live progress and controls for multiple jobs.
+- Added bold Markdown text, cyan underlined terminal hyperlinks, automatic
+  links for bare HTTP and HTTPS URLs, and fenced-code syntax highlighting.
 
 ### Changed
 
 - Added repeatable interactive startup and idle-memory measurements to the
   benchmark suite.
 - Made Catppuccin Mocha the default dark terminal theme.
+- Made `Ctrl+R` expand and collapse long tool results, as the TUI hint states.
 
 ## 0.0.5 - 2026-09-05
 

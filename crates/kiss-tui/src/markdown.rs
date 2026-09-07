@@ -1,9 +1,43 @@
 //! Terminal Markdown renderer (streaming-friendly: render is pure text-in,
 //! lines-out, so callers can re-render partial documents cheaply).
 
-use crate::text::wrap_text;
+use crate::text::{ansi_sequence_end, osc8_target, wrap_text};
 use crate::theme::Theme;
 use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
+use std::borrow::Cow;
+use std::sync::OnceLock;
+use syntect::easy::HighlightLines;
+use syntect::highlighting::{FontStyle, Style as SyntaxStyle, Theme as SyntaxTheme};
+use syntect::parsing::SyntaxSet;
+use two_face::theme::EmbeddedThemeName;
+
+const MAX_HIGHLIGHT_BYTES: usize = 512 * 1024;
+const MAX_HIGHLIGHT_LINES: usize = 10_000;
+const MAX_HIGHLIGHT_LINE_BYTES: usize = 4 * 1024;
+const MAX_LINK_BYTES: usize = 2 * 1024;
+
+fn syntax_set() -> &'static SyntaxSet {
+    static SYNTAX_SET: OnceLock<SyntaxSet> = OnceLock::new();
+    SYNTAX_SET.get_or_init(two_face::syntax::extra_newlines)
+}
+
+fn syntax_theme(theme: &Theme) -> &'static SyntaxTheme {
+    static DARK: OnceLock<SyntaxTheme> = OnceLock::new();
+    static LIGHT: OnceLock<SyntaxTheme> = OnceLock::new();
+    if theme.name.eq_ignore_ascii_case("light") {
+        LIGHT.get_or_init(|| {
+            two_face::theme::extra()
+                .get(EmbeddedThemeName::CatppuccinLatte)
+                .clone()
+        })
+    } else {
+        DARK.get_or_init(|| {
+            two_face::theme::extra()
+                .get(EmbeddedThemeName::CatppuccinMocha)
+                .clone()
+        })
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum MermaidMode {
@@ -169,7 +203,9 @@ impl MarkdownRenderer {
         let parser = Parser::new_ext(markdown, options);
 
         let mut current = String::new();
+        let mut has_bare_url = false;
         let mut styles: Vec<&'static str> = Vec::new();
+        let mut links: Vec<bool> = Vec::new();
         let mut list_stack: Vec<Option<u64>> = Vec::new();
         let mut in_code_block = false;
         let mut code_buffer = String::new();
@@ -181,6 +217,7 @@ impl MarkdownRenderer {
         let mut heading: Option<HeadingLevel> = None;
 
         let flush = |current: &mut String,
+                     has_bare_url: &mut bool,
                      out: &mut Vec<String>,
                      quote_depth: usize,
                      width: usize,
@@ -194,17 +231,30 @@ impl MarkdownRenderer {
                 String::new()
             };
             let prefix_width = 2 * quote_depth;
-            for line in wrap_text(current, width.saturating_sub(prefix_width).max(10)) {
+            let linked = if *has_bare_url {
+                linkify_bare_urls(current, theme, false)
+            } else {
+                Cow::Borrowed(current.as_str())
+            };
+            for line in wrap_text(&linked, width.saturating_sub(prefix_width).max(10)) {
                 out.push(format!("{prefix}{line}"));
             }
             current.clear();
+            *has_bare_url = false;
         };
 
         for event in parser {
             match event {
                 Event::Start(tag) => match tag {
                     Tag::Heading { level, .. } => {
-                        flush(&mut current, &mut out, quote_depth, width, &self.theme);
+                        flush(
+                            &mut current,
+                            &mut has_bare_url,
+                            &mut out,
+                            quote_depth,
+                            width,
+                            &self.theme,
+                        );
                         if !out.is_empty() {
                             out.push(String::new());
                         }
@@ -215,11 +265,27 @@ impl MarkdownRenderer {
                             out.push(String::new());
                         }
                     }
-                    Tag::Strong => styles.push("\x1b[1m"),
-                    Tag::Emphasis => styles.push("\x1b[3m"),
-                    Tag::Strikethrough => styles.push("\x1b[9m"),
+                    Tag::Strong => {
+                        current.push_str("\x1b[1m");
+                        styles.push("\x1b[1m");
+                    }
+                    Tag::Emphasis => {
+                        current.push_str("\x1b[3m");
+                        styles.push("\x1b[3m");
+                    }
+                    Tag::Strikethrough => {
+                        current.push_str("\x1b[9m");
+                        styles.push("\x1b[9m");
+                    }
                     Tag::CodeBlock(kind) => {
-                        flush(&mut current, &mut out, quote_depth, width, &self.theme);
+                        flush(
+                            &mut current,
+                            &mut has_bare_url,
+                            &mut out,
+                            quote_depth,
+                            width,
+                            &self.theme,
+                        );
                         if !out.is_empty() {
                             out.push(String::new());
                         }
@@ -241,7 +307,14 @@ impl MarkdownRenderer {
                         list_stack.push(start);
                     }
                     Tag::Item => {
-                        flush(&mut current, &mut out, quote_depth, width, &self.theme);
+                        flush(
+                            &mut current,
+                            &mut has_bare_url,
+                            &mut out,
+                            quote_depth,
+                            width,
+                            &self.theme,
+                        );
                         let depth = list_stack.len().saturating_sub(1);
                         let marker = match list_stack.last_mut() {
                             Some(Some(n)) => {
@@ -255,30 +328,69 @@ impl MarkdownRenderer {
                         current.push_str(&self.theme.fg("accent", &marker));
                     }
                     Tag::BlockQuote(_) => {
-                        flush(&mut current, &mut out, quote_depth, width, &self.theme);
+                        flush(
+                            &mut current,
+                            &mut has_bare_url,
+                            &mut out,
+                            quote_depth,
+                            width,
+                            &self.theme,
+                        );
                         quote_depth += 1;
                     }
-                    Tag::Link { .. } => styles.push("\x1b[4m"),
+                    Tag::Link { dest_url, .. } => {
+                        let target = terminal_link_target(&dest_url);
+                        if let Some(target) = target {
+                            current.push_str("\x1b]8;;");
+                            current.push_str(target);
+                            current.push_str("\x1b\\");
+                        }
+                        current.push_str(&self.theme.color("mdLink").fg_code());
+                        current.push_str("\x1b[4m");
+                        styles.push("\x1b[4m");
+                        links.push(target.is_some());
+                    }
                     Tag::Table(_) => {
-                        flush(&mut current, &mut out, quote_depth, width, &self.theme);
+                        flush(
+                            &mut current,
+                            &mut has_bare_url,
+                            &mut out,
+                            quote_depth,
+                            width,
+                            &self.theme,
+                        );
                         in_table = true;
                         table_rows.clear();
                     }
                     Tag::TableRow | Tag::TableHead => table_row.clear(),
-                    Tag::TableCell => current.clear(),
+                    Tag::TableCell => {
+                        current.clear();
+                        has_bare_url = false;
+                    }
                     _ => {}
                 },
                 Event::End(tag) => match tag {
                     TagEnd::Heading(_) => {
                         let level = heading.take().unwrap_or(HeadingLevel::H3);
                         let hashes = "#".repeat(level as usize);
-                        let text = format!("{hashes} {current}");
+                        let linked = if has_bare_url {
+                            linkify_bare_urls(&current, &self.theme, true)
+                        } else {
+                            Cow::Borrowed(current.as_str())
+                        };
+                        let text = format!("{hashes} {linked}");
                         out.push(self.theme.fg("mdHeading", &self.theme.bold(&text)));
                         current.clear();
+                        has_bare_url = false;
                     }
-                    TagEnd::Paragraph => {
-                        flush(&mut current, &mut out, quote_depth, width, &self.theme)
-                    }
+                    TagEnd::Paragraph => flush(
+                        &mut current,
+                        &mut has_bare_url,
+                        &mut out,
+                        quote_depth,
+                        width,
+                        &self.theme,
+                    ),
                     TagEnd::Strong | TagEnd::Emphasis | TagEnd::Strikethrough => {
                         styles.pop();
                         current.push_str("\x1b[22m\x1b[23m\x1b[29m");
@@ -299,21 +411,53 @@ impl MarkdownRenderer {
                         code_language = None;
                     }
                     TagEnd::List(_) => {
-                        flush(&mut current, &mut out, quote_depth, width, &self.theme);
+                        flush(
+                            &mut current,
+                            &mut has_bare_url,
+                            &mut out,
+                            quote_depth,
+                            width,
+                            &self.theme,
+                        );
                         list_stack.pop();
                     }
-                    TagEnd::Item => flush(&mut current, &mut out, quote_depth, width, &self.theme),
+                    TagEnd::Item => flush(
+                        &mut current,
+                        &mut has_bare_url,
+                        &mut out,
+                        quote_depth,
+                        width,
+                        &self.theme,
+                    ),
                     TagEnd::BlockQuote(_) => {
-                        flush(&mut current, &mut out, quote_depth, width, &self.theme);
+                        flush(
+                            &mut current,
+                            &mut has_bare_url,
+                            &mut out,
+                            quote_depth,
+                            width,
+                            &self.theme,
+                        );
                         quote_depth = quote_depth.saturating_sub(1);
                     }
                     TagEnd::Link => {
                         styles.pop();
-                        current.push_str("\x1b[24m");
+                        current.push_str("\x1b[24m\x1b[39m");
+                        if links.pop().unwrap_or(false) {
+                            current.push_str("\x1b]8;;\x1b\\");
+                        }
+                        if heading.is_some() {
+                            current.push_str(&self.theme.color("mdHeading").fg_code());
+                        }
                     }
                     TagEnd::TableCell => {
-                        table_row.push(crate::text::strip_ansi(&current));
+                        table_row.push(if has_bare_url {
+                            linkify_bare_urls(&current, &self.theme, false).into_owned()
+                        } else {
+                            current.clone()
+                        });
                         current.clear();
+                        has_bare_url = false;
                     }
                     TagEnd::TableRow | TagEnd::TableHead => {
                         table_rows.push(table_row.clone());
@@ -330,6 +474,9 @@ impl MarkdownRenderer {
                     if in_code_block {
                         code_buffer.push_str(&text);
                     } else {
+                        if links.is_empty() && contains_web_prefix(&text) {
+                            has_bare_url = true;
+                        }
                         current.push_str(&text);
                     }
                 }
@@ -355,7 +502,14 @@ impl MarkdownRenderer {
                     }
                 }
                 Event::DisplayMath(math) => {
-                    flush(&mut current, &mut out, quote_depth, width, &self.theme);
+                    flush(
+                        &mut current,
+                        &mut has_bare_url,
+                        &mut out,
+                        quote_depth,
+                        width,
+                        &self.theme,
+                    );
                     let normalized = latex_relational_joins(&math);
                     match mdwright_latex::render_unicode_math(&normalized) {
                         Ok(rendered) if rendered.width() <= width => {
@@ -370,15 +524,36 @@ impl MarkdownRenderer {
                     }
                 }
                 Event::SoftBreak => current.push(' '),
-                Event::HardBreak => flush(&mut current, &mut out, quote_depth, width, &self.theme),
+                Event::HardBreak => flush(
+                    &mut current,
+                    &mut has_bare_url,
+                    &mut out,
+                    quote_depth,
+                    width,
+                    &self.theme,
+                ),
                 Event::Rule => {
-                    flush(&mut current, &mut out, quote_depth, width, &self.theme);
+                    flush(
+                        &mut current,
+                        &mut has_bare_url,
+                        &mut out,
+                        quote_depth,
+                        width,
+                        &self.theme,
+                    );
                     out.push(self.theme.fg("dim", &"─".repeat(width.min(40))));
                 }
                 _ => {}
             }
         }
-        flush(&mut current, &mut out, quote_depth, width, &self.theme);
+        flush(
+            &mut current,
+            &mut has_bare_url,
+            &mut out,
+            quote_depth,
+            width,
+            &self.theme,
+        );
         if in_code_block && !code_buffer.is_empty() {
             out.extend(self.render_code_block(
                 &code_buffer,
@@ -416,6 +591,12 @@ impl MarkdownRenderer {
             && mermaid_mode != MermaidMode::Off
             && (!is_streaming || mermaid_mode == MermaidMode::Streaming);
         if !render_allowed {
+            if complete_fence
+                && let Some(language) = language
+                && let Some(lines) = self.highlight_code(source, language)
+            {
+                return lines;
+            }
             return source_lines();
         }
 
@@ -444,6 +625,35 @@ impl MarkdownRenderer {
                 lines
             }
         }
+    }
+
+    fn highlight_code(&self, source: &str, language: &str) -> Option<Vec<String>> {
+        if source.len() > MAX_HIGHLIGHT_BYTES
+            || source.lines().count() > MAX_HIGHLIGHT_LINES
+            || source
+                .split('\n')
+                .any(|line| line.len() > MAX_HIGHLIGHT_LINE_BYTES)
+        {
+            return None;
+        }
+        let syntaxes = syntax_set();
+        let syntax = syntaxes
+            .find_syntax_by_token(language)
+            .or_else(|| syntaxes.find_syntax_by_extension(language))?;
+        let mut highlighter = HighlightLines::new(syntax, syntax_theme(&self.theme));
+        source
+            .trim_end_matches('\n')
+            .split('\n')
+            .map(|line| {
+                let source_line = format!("{line}\n");
+                let ranges = highlighter.highlight_line(&source_line, syntaxes).ok()?;
+                let mut rendered = self.code_indent.clone();
+                for (style, text) in ranges {
+                    append_syntax_span(&mut rendered, style, text.trim_end_matches('\n'));
+                }
+                Some(rendered)
+            })
+            .collect()
     }
 
     fn render_table(&self, rows: &[Vec<String>], width: usize) -> Vec<String> {
@@ -483,6 +693,184 @@ impl MarkdownRenderer {
     }
 }
 
+fn append_syntax_span(output: &mut String, style: SyntaxStyle, text: &str) {
+    if text.is_empty() {
+        return;
+    }
+    let color = style.foreground;
+    output.push_str(&format!("\x1b[38;2;{};{};{}m", color.r, color.g, color.b));
+    if style.font_style.contains(FontStyle::BOLD) {
+        output.push_str("\x1b[1m");
+    }
+    if style.font_style.contains(FontStyle::ITALIC) {
+        output.push_str("\x1b[3m");
+    }
+    if style.font_style.contains(FontStyle::UNDERLINE) {
+        output.push_str("\x1b[4m");
+    }
+    output.push_str(text);
+    output.push_str("\x1b[0m");
+}
+
+fn linkify_bare_urls<'a>(styled: &'a str, theme: &Theme, heading: bool) -> Cow<'a, str> {
+    let mut plain = String::with_capacity(styled.len());
+    let mut plain_to_styled = vec![0usize];
+    let mut protected = Vec::new();
+    let mut in_link = false;
+    let mut index = 0;
+    while index < styled.len() {
+        if styled.as_bytes()[index] == b'\x1b' {
+            let end = ansi_sequence_end(styled, index);
+            if let Some(target) = osc8_target(&styled[index..end]) {
+                in_link = !target.is_empty();
+            }
+            index = end;
+            continue;
+        }
+        let character = styled[index..]
+            .chars()
+            .next()
+            .expect("index is before the end of styled text");
+        plain_to_styled[plain.len()] = index;
+        plain.push(character);
+        protected.extend(std::iter::repeat_n(in_link, character.len_utf8()));
+        index += character.len_utf8();
+        plain_to_styled.resize(plain.len() + 1, index);
+    }
+
+    let ranges = bare_web_link_ranges(&plain)
+        .into_iter()
+        .filter(|range| !protected[range.clone()].iter().any(|protected| *protected))
+        .collect::<Vec<_>>();
+    if ranges.is_empty() {
+        return Cow::Borrowed(styled);
+    }
+
+    let mut output = String::with_capacity(styled.len() + ranges.len() * 48);
+    let mut copied_through = 0;
+    for range in ranges {
+        let start = plain_to_styled[range.start];
+        let end = plain_to_styled[range.end];
+        output.push_str(&styled[copied_through..start]);
+        append_styled_terminal_link(
+            &mut output,
+            &plain[range],
+            &styled[start..end],
+            theme,
+            heading,
+        );
+        copied_through = end;
+    }
+    output.push_str(&styled[copied_through..]);
+    Cow::Owned(output)
+}
+
+fn append_styled_terminal_link(
+    output: &mut String,
+    destination: &str,
+    label: &str,
+    theme: &Theme,
+    heading: bool,
+) {
+    output.push_str("\x1b]8;;");
+    output.push_str(destination);
+    output.push_str("\x1b\\");
+    output.push_str(&theme.color("mdLink").fg_code());
+    output.push_str("\x1b[4m");
+    output.push_str(label);
+    output.push_str("\x1b[24m\x1b[39m\x1b]8;;\x1b\\");
+    if heading {
+        output.push_str(&theme.color("mdHeading").fg_code());
+    }
+}
+
+fn bare_web_link_ranges(text: &str) -> Vec<std::ops::Range<usize>> {
+    let mut ranges = Vec::new();
+    let mut search_from = 0;
+    for token in text.split_whitespace() {
+        let Some(relative_start) = text[search_from..].find(token) else {
+            continue;
+        };
+        let token_start = search_from + relative_start;
+        search_from = token_start + token.len();
+        let leading = token
+            .find(|character: char| !is_link_punctuation(character))
+            .unwrap_or(token.len());
+        let trailing = trailing_url_end(&token[leading..]) + leading;
+        if leading < trailing && terminal_link_target(&token[leading..trailing]).is_some() {
+            ranges.push(token_start + leading..token_start + trailing);
+        }
+    }
+    ranges
+}
+
+fn contains_web_prefix(text: &str) -> bool {
+    text.as_bytes()
+        .windows(7)
+        .any(|window| window.eq_ignore_ascii_case(b"http://"))
+        || text
+            .as_bytes()
+            .windows(8)
+            .any(|window| window.eq_ignore_ascii_case(b"https://"))
+}
+
+fn is_link_punctuation(character: char) -> bool {
+    matches!(
+        character,
+        '(' | ')' | '[' | ']' | '{' | '}' | '<' | '>' | ',' | '.' | ';' | '!' | '\'' | '"'
+    )
+}
+
+fn trailing_url_end(candidate: &str) -> usize {
+    let mut balances = [0isize; 4];
+    for character in candidate.chars() {
+        match character {
+            '(' => balances[0] += 1,
+            ')' => balances[0] -= 1,
+            '[' => balances[1] += 1,
+            ']' => balances[1] -= 1,
+            '{' => balances[2] += 1,
+            '}' => balances[2] -= 1,
+            '<' => balances[3] += 1,
+            '>' => balances[3] -= 1,
+            _ => {}
+        }
+    }
+    let mut end = candidate.len();
+    while let Some(character) = candidate[..end].chars().next_back() {
+        let balance = match character {
+            ')' => Some(&mut balances[0]),
+            ']' => Some(&mut balances[1]),
+            '}' => Some(&mut balances[2]),
+            '>' => Some(&mut balances[3]),
+            _ => None,
+        };
+        let trim = if let Some(balance) = balance {
+            let unmatched = *balance < 0;
+            *balance += 1;
+            unmatched
+        } else {
+            matches!(character, ',' | '.' | ';' | '!' | '\'' | '"')
+        };
+        if !trim {
+            break;
+        }
+        end -= character.len_utf8();
+    }
+    end
+}
+
+fn terminal_link_target(destination: &str) -> Option<&str> {
+    if destination.len() > MAX_LINK_BYTES
+        || destination.chars().any(|character| character.is_control())
+    {
+        return None;
+    }
+    let parsed = url::Url::parse(destination).ok()?;
+    (matches!(parsed.scheme(), "http" | "https") && parsed.host_str().is_some())
+        .then_some(destination)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -509,6 +897,87 @@ mod tests {
         let lines = render_plain("# Title\n\nBody text here.");
         assert_eq!(lines[0], "# Title");
         assert!(lines.contains(&"Body text here.".to_string()));
+    }
+
+    #[test]
+    fn strong_text_writes_bold_terminal_codes() {
+        let lines = MarkdownRenderer::new(Theme::dark()).render("This is **important**.", 60);
+        let text = lines.join("\n");
+        assert!(text.contains("\x1b[1mimportant\x1b[22m"), "{text:?}");
+    }
+
+    #[test]
+    fn inline_link_text_is_underlined() {
+        let lines =
+            MarkdownRenderer::new(Theme::dark()).render("Read [OpenAI](https://openai.com).", 60);
+        let text = lines.join("\n");
+        assert!(text.contains("\x1b[4mOpenAI\x1b[24m"), "{text:?}");
+        assert!(
+            text.contains("\x1b]8;;https://openai.com\x1b\\"),
+            "{text:?}"
+        );
+        assert!(
+            text.contains(&format!(
+                "{}\x1b[4mOpenAI",
+                Theme::dark().color("mdLink").fg_code()
+            )),
+            "{text:?}"
+        );
+        assert!(text.contains("\x1b]8;;\x1b\\"), "{text:?}");
+    }
+
+    #[test]
+    fn bare_web_urls_are_cyan_underlined_terminal_links() {
+        let lines = MarkdownRenderer::new(Theme::dark()).render(
+            "See (https://example.com/a_(b)). Then HTTPS://example.org/docs.",
+            100,
+        );
+        let text = lines.join("\n");
+        for destination in ["https://example.com/a_(b)", "HTTPS://example.org/docs"] {
+            assert!(
+                text.contains(&format!("\x1b]8;;{destination}\x1b\\")),
+                "{text:?}"
+            );
+        }
+        assert!(text.contains(&Theme::dark().color("mdLink").fg_code()));
+        assert_eq!(
+            strip_ansi(&text),
+            "See (https://example.com/a_(b)). Then HTTPS://example.org/docs."
+        );
+    }
+
+    #[test]
+    fn fenced_code_uses_syntax_highlighting() {
+        let lines = MarkdownRenderer::new(Theme::dark())
+            .render("```rust\nfn main() { let answer = 42; }\n```", 100);
+        let text = lines.join("\n");
+        assert!(text.contains("\x1b[38;2;"), "{text:?}");
+        assert_eq!(strip_ansi(&text), "  fn main() { let answer = 42; }");
+    }
+
+    #[test]
+    fn terminal_links_wrap_with_a_link_on_each_row() {
+        let lines = MarkdownRenderer::new(Theme::dark()).render(
+            "Read [a long linked label](https://example.com/docs) now.",
+            12,
+        );
+        let linked = lines
+            .iter()
+            .filter(|line| line.contains("\x1b]8;;https://example.com/docs\x1b\\"))
+            .count();
+        assert!(linked >= 2, "{lines:?}");
+        assert!(
+            lines
+                .iter()
+                .all(|line| crate::text::display_width(line) <= 12)
+        );
+    }
+
+    #[test]
+    fn terminal_links_reject_control_sequences() {
+        assert!(terminal_link_target("https://example.com").is_some());
+        assert!(terminal_link_target("javascript:alert(1)").is_none());
+        assert!(terminal_link_target("https://example.com/\x1b]8;;evil").is_none());
     }
 
     #[test]
@@ -670,6 +1139,25 @@ mod tests {
                     })
                     .sum::<usize>()
             },
+        );
+    }
+
+    #[test]
+    #[ignore = "release-mode performance benchmark"]
+    fn benchmark_performance_markdown_syntax() {
+        let source = (0..200)
+            .map(|index| format!("fn item_{index}() -> usize {{ {index} }}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let markdown = format!("```rust\n{source}\n```");
+        let renderer = MarkdownRenderer::new(Theme::dark());
+        std::hint::black_box(renderer.render(&markdown, 100));
+        kiss_bench::measure(
+            "markdown_syntax_rust_200",
+            11,
+            10,
+            "one_200_line_rust_fence",
+            || renderer.render(&markdown, 100).len(),
         );
     }
 
