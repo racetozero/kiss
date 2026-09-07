@@ -150,16 +150,16 @@ KISS operations, not model or network latency.
 
 ### Harness startup and memory
 
-These measurements use the KISS 0.0.5 distribution binary. They cover idle
-memory, time to the first frame, and time until typed input appears.
+These measurements use the current KISS release build. They cover idle memory,
+time to the first frame, and time until typed input appears.
 
 | Measure | KISS result |
 | --- | ---: |
-| Warm time to first frame | 3.655 ms mean |
-| Warm time to first input | 3.732 ms mean |
-| One idle session | 15.094 MiB mean RSS |
-| Ten idle sessions | 162.755 MiB mean RSS |
-| Extra RSS per added session | 16.407 MiB mean |
+| Warm time to first frame | 5.338 ms mean |
+| Warm time to first input | 5.397 ms mean |
+| One idle session | 15.755 MiB mean RSS |
+| Ten idle sessions | 157.984 MiB mean RSS |
+| Extra RSS per added session | 15.803 MiB mean |
 
 The startup results use ten launches after one warm-up. The memory results use
 three trials. RSS is the resident memory reported by macOS; it is not Linux
@@ -168,68 +168,68 @@ across operating systems.
 
 ### Benchmarks
 
-| User action | Test size | Typical time | p95 |
+| User action | Test size | Mean | p95 |
 | --- | --- | ---: | ---: |
-| File search | 100,000 files, three warm queries | 5.724 ms | 6.238 ms |
-| File search | 500,000 files, three warm queries | 12.515 ms | 14.315 ms |
-| SSE parsing | 10,000 events | 1.540 ms | 1.707 ms |
-| Grep | 1,000 files and 200 matches | 15.251 ms | 18.772 ms |
-| Incremental Markdown | 200 streaming prefix renders | 17.557 ms | 18.032 ms |
-| Unchanged frame | 10,000 logical rows | 156.370 us | 157.783 us |
+| File search | 100,000 files, three warm queries | 4.606 ms | 4.889 ms |
+| File search | 500,000 files, three warm queries | 7.110 ms | 7.690 ms |
+| SSE parsing | 10,000 events | 0.931 ms | 0.973 ms |
+| Grep | 1,000 files and 200 matches | 6.933 ms | 8.340 ms |
+| Incremental Markdown | 200 streaming prefix renders | 12.772 ms | 12.857 ms |
+| Unchanged frame | 10,000 logical rows | 0.876 ms | 0.885 ms |
 
 ### SDK, RPC, and browser WebAssembly
 
 These hermetic benchmarks isolate local SDK and transport overhead. The native
 SDK and RPC paths use `ping`; the browser benchmark runs a complete agent turn
 against an immediate host model callback. No benchmark calls an external model.
-Values are the mean across three trials:
+The table shows means from the latest full-suite run:
 
 | Surface | Work | Mean |
 | --- | --- | ---: |
-| Native SDK | Shared in-process command dispatch | 129 ns |
-| JSONL RPC | Client encode/decode, in-memory duplex, server dispatch | 2.279 us |
-| Browser WASM | Warm full-agent prompt, 100 samples | 0.195 ms |
-| Browser WASM | 25 isolated agents in parallel, 11 batches | 1.649 ms |
+| Native SDK | Shared in-process command dispatch | 113 ns |
+| JSONL RPC | Client encode/decode, in-memory duplex, server dispatch | 14.439 us |
+| Browser WASM | Warm full-agent prompt, 100 samples | 0.077 ms |
+| Browser WASM | 25 isolated agents in parallel, 11 batches | 0.749 ms |
 
-Fresh WASM module initialization averaged 20.049 ms per Deno process. The
-release module is 567,046 bytes raw and 207,274 bytes gzip, with 17 initial
+Fresh WASM module initialization averaged 11.269 ms per Deno process. The
+release module is 574,734 bytes raw and 209,375 bytes gzip, with 17 initial
 linear-memory pages (1,114,112 bytes). Model and tool callback time will
 normally dominate these local costs.
 
 ### Subagent overhead
 
 Subagents are off by default, so standard sessions do not load their six
-control tools. Three trials measured this local overhead:
+control tools. The latest full-suite run measured this local overhead:
 
-| Measure | State | Median range | p95 range |
+| Measure | State | Mean | p95 |
 | --- | --- | ---: | ---: |
-| Session setup | Off | 305.665-328.389 us | 338.670-348.442 us |
-| Session setup | On | 306.161-327.709 us | 335.922-341.570 us |
-| Request preparation | Off | 225-239 ns | 231-248 ns |
-| Request preparation | On | 325-347 ns | 341-393 ns |
+| Session setup | Off | 358.845 us | 364.466 us |
+| Session setup | On | 358.352 us | 361.740 us |
+| Request preparation | Off | 171 ns | 177 ns |
+| Request preparation | On | 242 ns | 249 ns |
 
-Session setup had no repeatable slowdown. Request preparation added 100-108
-ns when the six control tools were present and stayed below 0.4 us in total.
+Session setup had no measured slowdown. Request preparation added 71 ns when
+the six control tools were present and stayed below 0.25 us in total.
 
 ### Dynamic workflow overhead
 
 Workflow benchmarks use an instant local agent runner. They measure
 orchestration only and do not include model or network time. The table shows
-the range across three trials:
+the latest full-suite means:
 
-| Measure | Test size | Median range | p95 range |
+| Measure | Test size | Mean | p95 |
 | --- | --- | ---: | ---: |
-| Script parsing | 200-line script | 73.028-79.245 us | 77.136-80.637 us |
-| Interpreter | 1,000 agent calls | 2.703-2.930 ms | 3.268-3.672 ms |
-| Progress snapshot | 500 agents, 5 phases | 53.576-58.055 us | 84.903-89.773 us |
-| Phase view | 500 agents, 5 phases | 11.380-18.821 us | 12.196-20.901 us |
-| Agent detail view | One prompt and result | 5.063-8.038 us | 5.156-8.227 us |
-| Unchanged view | 500 agents, cached | 344-509 ns | 392-638 ns |
-| Request preparation | Workflow disarmed | 337-359 ns | 341-400 ns |
-| Request preparation | Workflow armed | 1.051-1.087 us | 1.064-1.185 us |
+| Script parsing | 200-line script | 57.884 us | 59.922 us |
+| Interpreter | 1,000 agent calls | 2.185 ms | 2.423 ms |
+| Progress snapshot | 500 agents, 5 phases | 43.075 us | 64.816 us |
+| Phase view | 500 agents, 5 phases | 11.298 us | 12.207 us |
+| Agent detail view | One prompt and result | 4.886 us | 5.021 us |
+| Unchanged view | 500 agents, cached | 311 ns | 317 ns |
+| Request preparation | Workflow disarmed | 262 ns | 274 ns |
+| Request preparation | Workflow armed | 913 ns | 934 ns |
 
-The interpreter used 2.70-2.93 us per agent call. Arming a workflow added
-707-728 ns to request preparation. The workflow tool and its instructions are
+The interpreter used 2.185 us per agent call. Arming a workflow added 651 ns
+to request preparation. The workflow tool and its instructions are
 absent until a workflow turn is armed.
 
 ### TUI rendering and resize
@@ -238,19 +238,18 @@ The terminal user interface combines rapid resize events and redraws once 75
 ms after the final change. The following release-mode results measure local
 rendering. They do not include terminal parsing or remote connection time:
 
-| Measure | Test size | Median | p95 |
+| Measure | Test size | Mean | p95 |
 | --- | --- | ---: | ---: |
-| Full renderer | 1,800 logical rows | 0.345 ms | 0.599 ms |
-| Unchanged renderer | 10,000 logical rows | 0.219 ms | 0.243 ms |
-| Last-row update | 10,000 logical rows | 0.203 ms | 0.209 ms |
-| Cached transcript render | 2,885 logical rows | 0.092 ms | 0.121 ms |
-| Spinner transcript render | 2,885 logical rows | 0.104 ms | 0.182 ms |
-| Full resize redraw | 1,800 logical rows | 0.362 ms | 0.975 ms |
+| Full renderer | 1,800 logical rows | 0.398 ms | 0.436 ms |
+| Unchanged renderer | 10,000 logical rows | 0.876 ms | 0.885 ms |
+| Last-row update | 10,000 logical rows | 0.895 ms | 0.916 ms |
+| Cached transcript render | 2,885 logical rows | 0.058 ms | 0.063 ms |
+| Spinner transcript render | 2,885 logical rows | 0.055 ms | 0.057 ms |
+| Full resize redraw | 1,800 logical rows | 0.435 ms | 0.477 ms |
 
 The full resize redraw wrote 178,231 bytes. This output volume is why KISS
 waits for the final stable size instead of replaying the transcript for every
-intermediate size. These results were measured on an AMD Ryzen 9 5950X under
-WSL2.
+intermediate size.
 
 ### Release builds
 
@@ -270,9 +269,8 @@ Results are based on release-mode runs using local, deterministic fixtures—no
 external models or network calls. The harness startup test used a 160 by 40 PTY
 and `kiss --no-session` on macOS 26.5.1 with an Apple M4. Startup times are the
 mean of ten warm launches. Memory values are the mean of three idle samples.
-Core benchmarks also ran on an Apple M4; SDK, RPC, and WASM benchmarks ran on
-an AMD Ryzen 9 5950X under WSL2. PGO results use separate held-out runs. Lower
-is better.
+Core, SDK, RPC, and WASM benchmarks also ran on the Apple M4. PGO results use
+separate held-out runs. Lower is better.
 
 Run the full native and browser benchmark suite, including harness startup and
 memory, WASM size, and memory budgets, with `just bench` (requires
