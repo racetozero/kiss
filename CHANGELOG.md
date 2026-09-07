@@ -1,12 +1,18 @@
 # Changelog
 
-## Unreleased
+## 0.0.7 - 2026-09-07
+
+### Added
+
+- Added native Windows ARM64 release artifacts.
 
 ### Changed
 
 - Made loop and autoresearch jobs run until completion or an explicit stop when
   no iteration limit is given.
 - Added optional compound intervals such as `15m` and `2d4h` to `/loop`.
+- Reorganized the README around product value, first use, core workflows,
+  integrations, and measured performance.
 
 ## 0.0.6 - 2026-09-07
 

@@ -1711,7 +1711,7 @@ dependencies = [
 
 [[package]]
 name = "kiss-agent"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1731,7 +1731,7 @@ dependencies = [
 
 [[package]]
 name = "kiss-ai"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "anyhow",
  "aws-config",
@@ -1759,7 +1759,7 @@ dependencies = [
 
 [[package]]
 name = "kiss-coding"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1789,7 +1789,7 @@ dependencies = [
 
 [[package]]
 name = "kiss-mcp"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1811,7 +1811,7 @@ dependencies = [
 
 [[package]]
 name = "kiss-node"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "kiss-sdk",
  "napi",
@@ -1823,7 +1823,7 @@ dependencies = [
 
 [[package]]
 name = "kiss-sdk"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "anyhow",
  "dirs",
@@ -1843,7 +1843,7 @@ dependencies = [
 
 [[package]]
 name = "kiss-workflow"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "anyhow",
  "async-trait",
