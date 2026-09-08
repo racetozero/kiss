@@ -3,10 +3,10 @@
 # Copyright 2022-2024, axodotdev
 # SPDX-License-Identifier: MIT or Apache-2.0
 #
-# KISS overrides: build-local-artifacts trains target-specific PGO profiles,
-# sets macOS-only RUSTFLAGS for safe ICF, and keeps the default token permission
-# read-only. `dist generate` removes these overrides. Reapply them after a dist
-# upgrade.
+# KISS overrides: build-local-artifacts trains target-specific PGO profiles
+# where Rust provides a profiling runtime, sets macOS-only RUSTFLAGS for safe
+# ICF, and keeps the default token permission read-only. `dist generate`
+# removes these overrides. Reapply them after a dist upgrade.
 #
 # CI that:
 #
@@ -151,10 +151,12 @@ jobs:
         run: |
           ${{ matrix.packages_install }}
       - name: Install PGO toolchain support
+        if: ${{ !contains(matrix.targets, 'aarch64-pc-windows-msvc') }}
         run: |
           rustup target add "${{ join(matrix.targets, '') }}"
           rustup component add llvm-tools-preview
       - name: Train target-specific PGO profile
+        if: ${{ !contains(matrix.targets, 'aarch64-pc-windows-msvc') }}
         run: |
           python scripts/build_kiss_pgo.py --target "${{ join(matrix.targets, '') }}" --target-dir "${{ runner.temp }}/kiss-pgo" --train-only --github-env
       - name: Build artifacts

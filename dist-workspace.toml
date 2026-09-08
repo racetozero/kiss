@@ -6,10 +6,10 @@ packages = ["kiss"]
 [dist]
 # The preferred dist version to use in CI (Cargo.toml SemVer syntax)
 cargo-dist-version = "0.32.0"
-# The generated workflow has reviewed KISS overrides: every release target uses
-# PGO, macOS release builds use safe ICF, and the default token permission is
-# read-only. `dist generate` removes these overrides, so review and reapply them
-# after updating dist.
+# The generated workflow has reviewed KISS overrides: release targets use PGO
+# where Rust provides a profiling runtime, macOS release builds use safe ICF,
+# and the default token permission is read-only. `dist generate` removes these
+# overrides, so review and reapply them after updating dist.
 allow-dirty = ["ci"]
 # CI backends to support
 ci = "github"
@@ -29,7 +29,7 @@ install-path = "CARGO_HOME"
 install-updater = false
 # Which actions to run on pull requests
 pr-run-mode = "plan"
-# Build Windows ARM64 natively so its PGO training binary can run in CI.
+# Build Windows ARM64 natively on GitHub's ARM64 runner.
 github-custom-runners = { "aarch64-pc-windows-msvc" = "windows-11-arm" }
 # Whether dist should create a Github Release or use an existing draft
 create-release = true
