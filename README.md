@@ -40,7 +40,9 @@ powershell -ExecutionPolicy ByPass -c "irm https://raw.githubusercontent.com/rac
 ```
 
 The installer selects the correct release, verifies its SHA-256 checksum, and
-installs `kiss` in your user binary directory.
+installs `kiss` in your user binary directory. On Linux, if the glibc
+release needs a newer `GLIBC_*` version than the system provides, it
+automatically installs the matching musl release.
 
 Update later with:
 

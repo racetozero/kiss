@@ -15,9 +15,19 @@ mkdir -p "$release_directory" "$payload_directory" "$install_directory"
 
 write_archive() {
     local payload="$1"
-    printf '%s\n' "$payload" >"$payload_directory/kiss"
-    chmod +x "$payload_directory/kiss"
-    tar -czf "$release_directory/$archive_name" -C "$temporary_root/payload" "kiss-$target"
+    local archive_target="${2:-$target}"
+    local archive_payload_directory="$temporary_root/payload/kiss-$archive_target"
+    local archive_name="kiss-$archive_target.tar.gz"
+    mkdir -p "$archive_payload_directory"
+    cat >"$archive_payload_directory/kiss" <<EOF
+#!/bin/sh
+if [ "\${1:-}" = "--version" ]; then
+    exit 0
+fi
+printf '%s\\n' "$payload"
+EOF
+    chmod +x "$archive_payload_directory/kiss"
+    tar -czf "$release_directory/$archive_name" -C "$temporary_root/payload" "kiss-$archive_target"
     if command -v sha256sum >/dev/null 2>&1; then
         hash="$(sha256sum "$release_directory/$archive_name" | awk '{ print $1 }')"
     else
@@ -36,13 +46,13 @@ run_installer() {
 
 write_archive "first"
 run_installer
-[[ "$(cat "$install_directory/kiss")" == "first" ]]
+[[ "$("$install_directory/kiss")" == "first" ]]
 [[ -x "$install_directory/kiss" ]]
 echo "ok: shell installer installs a verified archive"
 
 write_archive "replacement"
 run_installer
-[[ "$(cat "$install_directory/kiss")" == "replacement" ]]
+[[ "$("$install_directory/kiss")" == "replacement" ]]
 echo "ok: shell installer replaces an existing binary"
 
 printf '%064d  %s\n' 0 "$archive_name" >"$release_directory/$archive_name.sha256"
@@ -50,8 +60,30 @@ if run_installer >/dev/null 2>&1; then
     echo "checksum failure unexpectedly succeeded" >&2
     exit 1
 fi
-[[ "$(cat "$install_directory/kiss")" == "replacement" ]]
+[[ "$("$install_directory/kiss")" == "replacement" ]]
 echo "ok: checksum failure keeps the existing binary"
+
+cat >"$temporary_root/glibc-kiss" <<'EOF'
+#!/bin/sh
+if [ "${1:-}" = "--version" ]; then
+    echo "kiss version GLIBC_2.38 not found required by kiss" >&2
+    exit 1
+fi
+printf '%s\n' "glibc"
+EOF
+chmod +x "$temporary_root/glibc-kiss"
+cp "$temporary_root/glibc-kiss" "$payload_directory/kiss"
+tar -czf "$release_directory/$archive_name" -C "$temporary_root/payload" "kiss-$target"
+hash="$(sha256sum "$release_directory/$archive_name" | awk '{ print $1 }')"
+printf '%s  %s\n' "$hash" "$archive_name" >"$release_directory/$archive_name.sha256"
+write_archive "musl" "x86_64-unknown-linux-musl"
+KISS_VERSION="0.0.1" \
+    KISS_TARGET="$target" \
+    KISS_INSTALL_DIR="$install_directory" \
+    KISS_RELEASES_URL="file://$temporary_root/releases" \
+    sh "$repo_root/install.sh"
+[[ "$("$install_directory/kiss")" == "musl" ]]
+echo "ok: glibc runtime failure selects musl release"
 
 if KISS_VERSION="0.0.1" \
     KISS_TARGET="unsupported-target" \
@@ -96,5 +128,5 @@ FAKE_RELEASE_DIRECTORY="$release_directory" \
     KISS_TARGET="$target" \
     KISS_INSTALL_DIR="$install_directory" \
     sh "$repo_root/install.sh"
-[[ "$(cat "$install_directory/kiss")" == "private-release" ]]
+[[ "$("$install_directory/kiss")" == "private-release" ]]
 echo "ok: authenticated gh path installs a private release"

@@ -143,6 +143,20 @@ download_release() {
         fail "could not download $checksum_name"
 }
 
+verify_staged_binary() {
+    probe_directory="$temporary_directory/probe-$target"
+    mkdir "$probe_directory"
+    tar -xzf "$temporary_directory/$archive_name" -C "$probe_directory"
+    probe_output=''
+    if probe_output="$("$probe_directory/kiss-$target/kiss" --version 2>&1)"; then
+        return 0
+    fi
+    case "$probe_output" in
+        *GLIBC_[0-9.]*not\ found* | *version*GLIBC_[0-9.]*not\ found*) return 2 ;;
+        *) return 1 ;;
+    esac
+}
+
 verify_archive() {
     checksum_file="$temporary_directory/$checksum_name"
     archive_file="$temporary_directory/$archive_name"
@@ -206,4 +220,23 @@ checksum_name="$archive_name.sha256"
 say "Installing kiss $version for $target"
 download_release
 verify_archive
+case "$target" in
+    *-unknown-linux-gnu)
+        if verify_staged_binary; then
+            :
+        else
+            probe_status=$?
+            if [ "$probe_status" -eq 2 ]; then
+                target="${target%-gnu}-musl"
+                archive_name="kiss-$target.tar.gz"
+                checksum_name="$archive_name.sha256"
+                say "The glibc runtime is too old; using the musl release for $target"
+                download_release
+                verify_archive
+            else
+                fail "the release binary could not run on this system"
+            fi
+        fi
+        ;;
+esac
 install_binary
