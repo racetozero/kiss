@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.0.8 - 2026-09-12
+
+### Added
+
+- Added `kiss doctor` and `kiss doctor --summary` with local health checks and
+  reachability tables for every provider SSE, WebSocket, AWS event-stream, and
+  login destination.
+- Added Azure OpenAI authentication with API keys, bearer tokens, and the
+  Microsoft Entra default credential chain.
+- Added Responses WebSocket and cached WebSocket transport for the standard
+  OpenAI and Azure OpenAI providers.
+
+### Changed
+
+- Made cross-agent session discovery and import faster and reduced repeated
+  session-file parsing.
+
+### Fixed
+
+- Made the Linux installer use the musl release when the system glibc is not
+  available or is too old.
+
 ## 0.0.7 - 2026-09-07
 
 ### Added
