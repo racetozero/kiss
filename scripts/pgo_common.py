@@ -133,7 +133,10 @@ def prepare_fixture(root: Path, base_url: str) -> tuple[Path, dict[str, str]]:
                         "name": "KISS PGO fixture",
                         "contextWindow": 128_000,
                         "maxTokens": 4_096,
-                    }
+                    },
+                    {"id": "claude-sonnet", "name": "Claude Sonnet"},
+                    {"id": "gpt-5", "name": "GPT-5"},
+                    {"id": "gpt-5.6", "name": "GPT-5.6"},
                 ],
             }
         }
