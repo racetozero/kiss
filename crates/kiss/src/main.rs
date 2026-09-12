@@ -63,7 +63,7 @@ async fn run(args: Args) -> anyhow::Result<i32> {
     if let Some(search) = &args.list_models {
         let registry = kiss_ai::Registry::load(None);
         let needle = search.to_lowercase();
-        for model in registry.all() {
+        for (_, model) in registry.available_models() {
             let label = format!("{}/{}", model.provider, model.id);
             if needle.is_empty() || label.to_lowercase().contains(&needle) {
                 println!(

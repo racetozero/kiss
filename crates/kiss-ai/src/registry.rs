@@ -5,7 +5,7 @@ use crate::model::{Model, ModelCost, OpenAICompat};
 use crate::types::ThinkingLevel;
 use anyhow::{Context as _, Result};
 use serde::Deserialize;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
 /// Generated model data verified against `@earendil-works/pi-ai` 0.85.1.
@@ -169,6 +169,7 @@ struct RadiusGatewayModel {
 pub struct Registry {
     models: Vec<Model>,
     model_indices: HashMap<(String, String), usize>,
+    manually_configured_providers: BTreeSet<String>,
     /// Placeholder API keys declared in models.json (e.g. "ollama").
     pub declared_keys: BTreeMap<String, String>,
     auth_providers: BTreeMap<String, String>,
@@ -180,6 +181,7 @@ impl Registry {
         let mut registry = Registry {
             models: Vec::new(),
             model_indices: HashMap::new(),
+            manually_configured_providers: BTreeSet::new(),
             declared_keys: BTreeMap::new(),
             auth_providers: BTreeMap::new(),
         };
@@ -204,6 +206,7 @@ impl Registry {
         let mut r = Registry {
             models: Vec::new(),
             model_indices: HashMap::new(),
+            manually_configured_providers: BTreeSet::new(),
             declared_keys: BTreeMap::new(),
             auth_providers: BTreeMap::new(),
         };
@@ -324,6 +327,8 @@ impl Registry {
     fn merge_catalog(&mut self, text: &str) -> Result<()> {
         let catalog: CatalogFile = serde_json::from_str(text).context("parse model catalog")?;
         for (provider_id, provider) in catalog.providers {
+            self.manually_configured_providers
+                .insert(provider_id.clone());
             if let Some(key) = &provider.api_key {
                 self.declared_keys.insert(provider_id.clone(), key.clone());
             }
@@ -365,6 +370,35 @@ impl Registry {
 
     pub fn all(&self) -> &[Model] {
         &self.models
+    }
+
+    /// Models from providers that the user configured or can authenticate.
+    /// The index is the model's position in `all()`.
+    pub fn available_models(&self) -> Vec<(usize, &Model)> {
+        let no_declared_keys = BTreeMap::new();
+        let authenticated: BTreeSet<String> = self
+            .models
+            .iter()
+            .map(|model| self.credential_provider(&model.provider))
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .filter(|provider| {
+                crate::auth::resolve_api_key_local(provider, &no_declared_keys).is_some()
+            })
+            .map(str::to_owned)
+            .collect();
+        self.available_models_for(&authenticated)
+    }
+
+    fn available_models_for(&self, authenticated: &BTreeSet<String>) -> Vec<(usize, &Model)> {
+        self.models
+            .iter()
+            .enumerate()
+            .filter(|(_, model)| {
+                self.manually_configured_providers.contains(&model.provider)
+                    || authenticated.contains(self.credential_provider(&model.provider))
+            })
+            .collect()
     }
 
     /// Provider whose credentials authenticate requests for `provider`.
@@ -666,6 +700,28 @@ mod tests {
         assert_eq!(model.api, "openai-responses");
         assert_eq!(model.headers["x-provider"], "one");
         assert_eq!(model.headers["x-model"], "two");
+    }
+
+    #[test]
+    fn available_models_require_authentication_or_manual_configuration() {
+        let mut registry = Registry::from_builtin();
+        registry
+            .merge_catalog(
+                r#"{"providers":{"local":{"baseUrl":"http://localhost","api":"openai-completions","models":[{"id":"local-model"}]}}}"#,
+            )
+            .unwrap();
+        let available = registry.available_models_for(&BTreeSet::from(["openai".into()]));
+        assert!(
+            available
+                .iter()
+                .any(|(_, model)| model.provider == "openai")
+        );
+        assert!(available.iter().any(|(_, model)| model.provider == "local"));
+        assert!(
+            !available
+                .iter()
+                .any(|(_, model)| model.provider == "anthropic")
+        );
     }
 
     #[test]
