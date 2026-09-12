@@ -9,6 +9,7 @@ use crate::stream::{StreamOptions, Transport, http_client};
 use crate::types::{ContentBlock, Context, Message, StopReason, UserContent};
 use futures::{SinkExt, StreamExt};
 use serde_json::{Value, json};
+use sha2::{Digest as _, Sha256};
 use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
@@ -20,16 +21,17 @@ use tokio_tungstenite::tungstenite::{Error as WebSocketError, Message as WebSock
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async};
 
 const CODEX_WEBSOCKET_BETA: &str = "responses_websockets=2026-02-06";
-const CODEX_WEBSOCKET_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
-const CODEX_WEBSOCKET_IDLE_TTL: Duration = Duration::from_secs(5 * 60);
-const CODEX_WEBSOCKET_MAX_AGE: Duration = Duration::from_secs(55 * 60);
+const WEBSOCKET_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
+const WEBSOCKET_IDLE_TTL: Duration = Duration::from_secs(5 * 60);
+const WEBSOCKET_MAX_AGE: Duration = Duration::from_secs(55 * 60);
 
-type CodexSocket = WebSocketStream<MaybeTlsStream<TcpStream>>;
+type ResponsesSocket = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct SocketCacheKey {
     session_id: String,
-    account_id: String,
+    credential_hash: [u8; 32],
+    response_url: String,
 }
 
 struct Continuation {
@@ -39,7 +41,7 @@ struct Continuation {
 }
 
 struct CachedSocket {
-    socket: CodexSocket,
+    socket: ResponsesSocket,
     continuation: Option<Continuation>,
 }
 
@@ -56,9 +58,17 @@ fn socket_cache() -> &'static Mutex<SocketCache> {
     CACHE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-fn websocket_fallback_sessions() -> &'static Mutex<std::collections::HashSet<String>> {
-    static SESSIONS: OnceLock<Mutex<std::collections::HashSet<String>>> = OnceLock::new();
+fn websocket_fallback_sessions() -> &'static Mutex<std::collections::HashSet<SocketCacheKey>> {
+    static SESSIONS: OnceLock<Mutex<std::collections::HashSet<SocketCacheKey>>> = OnceLock::new();
     SESSIONS.get_or_init(|| Mutex::new(std::collections::HashSet::new()))
+}
+
+fn socket_cache_key(session_id: &str, response_url: &str, api_key: &str) -> SocketCacheKey {
+    SocketCacheKey {
+        session_id: session_id.to_string(),
+        credential_hash: Sha256::digest(api_key.as_bytes()).into(),
+        response_url: response_url.to_string(),
+    }
 }
 
 pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, sink: EventSink) {
@@ -93,17 +103,20 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
     };
     let mut state = DecodeState::default();
 
-    if model.api == "openai-codex-responses" && options.transport != Transport::Sse {
+    if (model.api == "openai-codex-responses"
+        || (model.provider == "openai" && model.api == "openai-responses"))
+        && options.transport != Transport::Sse
+    {
         let fallback_active = if let Some(session_id) = options.session_id.as_deref() {
             websocket_fallback_sessions()
                 .lock()
                 .await
-                .contains(session_id)
+                .contains(&socket_cache_key(session_id, &url, &api_key))
         } else {
             false
         };
         if !fallback_active {
-            match stream_codex_websocket(
+            match stream_websocket(
                 model,
                 &url,
                 &body,
@@ -137,7 +150,7 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
                         websocket_fallback_sessions()
                             .lock()
                             .await
-                            .insert(session_id);
+                            .insert(socket_cache_key(&session_id, &url, &api_key));
                     }
                 }
             }
@@ -323,15 +336,15 @@ struct SocketLease {
     cache_key: Option<SocketCacheKey>,
 }
 
-fn codex_websocket_url(response_url: &str) -> anyhow::Result<String> {
+fn websocket_url(response_url: &str) -> anyhow::Result<String> {
     let mut url = url::Url::parse(response_url)?;
     let scheme = match url.scheme() {
         "https" => "wss",
         "http" => "ws",
-        other => anyhow::bail!("unsupported Codex URL scheme: {other}"),
+        other => anyhow::bail!("unsupported Responses WebSocket URL scheme: {other}"),
     };
     url.set_scheme(scheme)
-        .map_err(|_| anyhow::anyhow!("cannot make Codex WebSocket URL"))?;
+        .map_err(|_| anyhow::anyhow!("cannot make Responses WebSocket URL"))?;
     Ok(url.to_string())
 }
 
@@ -348,15 +361,15 @@ fn insert_websocket_header(
     Ok(())
 }
 
-async fn connect_codex_websocket(
+async fn connect_websocket(
     model: &Model,
     response_url: &str,
     api_key: &str,
     account_id: &str,
     request_id: &str,
     options: &StreamOptions,
-) -> Result<CodexSocket, WebSocketFailure> {
-    let websocket_url = codex_websocket_url(response_url)
+) -> Result<ResponsesSocket, WebSocketFailure> {
+    let websocket_url = websocket_url(response_url)
         .map_err(|error| WebSocketFailure::protocol(error.to_string()))?;
     let mut request = websocket_url
         .as_str()
@@ -370,18 +383,20 @@ async fn connect_codex_websocket(
         "authorization",
         &format!("Bearer {api_key}"),
     )?;
-    if !account_id.is_empty() {
-        insert_websocket_header(request.headers_mut(), "chatgpt-account-id", account_id)?;
+    if model.api == "openai-codex-responses" {
+        if !account_id.is_empty() {
+            insert_websocket_header(request.headers_mut(), "chatgpt-account-id", account_id)?;
+        }
+        insert_websocket_header(request.headers_mut(), "originator", "kiss")?;
+        insert_websocket_header(
+            request.headers_mut(),
+            "user-agent",
+            concat!("kiss/", env!("CARGO_PKG_VERSION")),
+        )?;
+        insert_websocket_header(request.headers_mut(), "openai-beta", CODEX_WEBSOCKET_BETA)?;
+        insert_websocket_header(request.headers_mut(), "x-client-request-id", request_id)?;
+        insert_websocket_header(request.headers_mut(), "session-id", request_id)?;
     }
-    insert_websocket_header(request.headers_mut(), "originator", "kiss")?;
-    insert_websocket_header(
-        request.headers_mut(),
-        "user-agent",
-        concat!("kiss/", env!("CARGO_PKG_VERSION")),
-    )?;
-    insert_websocket_header(request.headers_mut(), "openai-beta", CODEX_WEBSOCKET_BETA)?;
-    insert_websocket_header(request.headers_mut(), "x-client-request-id", request_id)?;
-    insert_websocket_header(request.headers_mut(), "session-id", request_id)?;
 
     let connect = async {
         tokio::select! {
@@ -391,7 +406,7 @@ async fn connect_codex_websocket(
             _ = options.cancel.cancelled() => Err(WebSocketFailure::aborted()),
         }
     };
-    tokio::time::timeout(CODEX_WEBSOCKET_CONNECT_TIMEOUT, connect)
+    tokio::time::timeout(WEBSOCKET_CONNECT_TIMEOUT, connect)
         .await
         .map_err(|_| WebSocketFailure::transport("WebSocket connection timed out"))?
 }
@@ -405,7 +420,7 @@ fn format_websocket_error(error: &WebSocketError) -> String {
     }
 }
 
-async fn acquire_codex_socket(
+async fn acquire_socket(
     model: &Model,
     response_url: &str,
     api_key: &str,
@@ -415,18 +430,15 @@ async fn acquire_codex_socket(
     let cache_key = options
         .session_id
         .as_ref()
-        .map(|session_id| SocketCacheKey {
-            session_id: session_id.clone(),
-            account_id: account_id.to_string(),
-        });
+        .map(|session_id| socket_cache_key(session_id, response_url, api_key));
     let mut cache_new_connection = cache_key.is_some();
 
     if let Some(key) = cache_key.as_ref() {
         let now = Instant::now();
         let mut cache = socket_cache().lock().await;
         let expired = cache.get(key).is_some_and(|entry| {
-            now.duration_since(entry.last_used) >= CODEX_WEBSOCKET_IDLE_TTL
-                || now.duration_since(entry.created_at) >= CODEX_WEBSOCKET_MAX_AGE
+            now.duration_since(entry.last_used) >= WEBSOCKET_IDLE_TTL
+                || now.duration_since(entry.created_at) >= WEBSOCKET_MAX_AGE
         });
         if expired {
             cache.remove(key);
@@ -448,7 +460,7 @@ async fn acquire_codex_socket(
         .session_id
         .clone()
         .unwrap_or_else(|| format!("{:032x}", rand::random::<u128>()));
-    let socket = connect_codex_websocket(
+    let socket = connect_websocket(
         model,
         response_url,
         api_key,
@@ -487,7 +499,7 @@ async fn acquire_codex_socket(
     })
 }
 
-async fn release_codex_socket(mut lease: SocketLease, keep: bool) {
+async fn release_socket(mut lease: SocketLease, keep: bool) {
     let Some(key) = lease.cache_key.clone() else {
         let _ = lease.guard.socket.close(None).await;
         return;
@@ -517,7 +529,7 @@ async fn release_codex_socket(mut lease: SocketLease, keep: bool) {
     let shared = Arc::clone(&lease.shared);
     drop(lease);
     tokio::spawn(async move {
-        tokio::time::sleep(CODEX_WEBSOCKET_IDLE_TTL).await;
+        tokio::time::sleep(WEBSOCKET_IDLE_TTL).await;
         let removed = {
             let mut cache = socket_cache().lock().await;
             let can_remove = cache.get(&key).is_some_and(|entry| {
@@ -562,7 +574,9 @@ fn websocket_frame(body: &Value) -> Result<WebSocketMessage, WebSocketFailure> {
     let mut frame = body
         .as_object()
         .cloned()
-        .ok_or_else(|| WebSocketFailure::protocol("Codex request body is not an object"))?;
+        .ok_or_else(|| WebSocketFailure::protocol("Responses request body is not an object"))?;
+    frame.remove("stream");
+    frame.remove("background");
     frame.insert("type".into(), json!("response.create"));
     Ok(WebSocketMessage::Text(
         Value::Object(frame).to_string().into(),
@@ -592,10 +606,10 @@ fn websocket_json(message: WebSocketMessage) -> Result<Option<Value>, WebSocketF
     };
     serde_json::from_slice(&bytes)
         .map(Some)
-        .map_err(|_| WebSocketFailure::protocol("invalid JSON in Codex WebSocket response"))
+        .map_err(|_| WebSocketFailure::protocol("invalid JSON in Responses WebSocket response"))
 }
 
-fn codex_event_error(data: &Value) -> Option<(String, String)> {
+fn websocket_event_error(data: &Value) -> Option<(String, String)> {
     let event_type = data["type"].as_str()?;
     match event_type {
         "error" => {
@@ -623,7 +637,7 @@ fn codex_event_error(data: &Value) -> Option<(String, String)> {
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn stream_codex_websocket(
+async fn stream_websocket(
     model: &Model,
     response_url: &str,
     full_body: &Value,
@@ -633,7 +647,7 @@ async fn stream_codex_websocket(
     builder: &mut PartialBuilder,
     state: &mut DecodeState,
 ) -> Result<StopReason, WebSocketFailure> {
-    let mut lease = acquire_codex_socket(model, response_url, api_key, account_id, options).await?;
+    let mut lease = acquire_socket(model, response_url, api_key, account_id, options).await?;
     let use_continuation = matches!(
         options.transport,
         Transport::Auto | Transport::WebSocketCached
@@ -658,12 +672,12 @@ async fn stream_codex_websocket(
         let sent = tokio::select! {
             result = lease.guard.socket.send(frame) => result,
             _ = options.cancel.cancelled() => {
-                release_codex_socket(lease, false).await;
+                release_socket(lease, false).await;
                 return Err(WebSocketFailure::aborted());
             }
         };
         if let Err(error) = sent {
-            release_codex_socket(lease, false).await;
+            release_socket(lease, false).await;
             return Err(WebSocketFailure::transport(format_websocket_error(&error)));
         }
 
@@ -671,18 +685,18 @@ async fn stream_codex_websocket(
             let message = tokio::select! {
                 message = lease.guard.socket.next() => message,
                 _ = options.cancel.cancelled() => {
-                    release_codex_socket(lease, false).await;
+                    release_socket(lease, false).await;
                     return Err(WebSocketFailure::aborted());
                 }
             };
             let message = match message {
                 Some(Ok(message)) => message,
                 Some(Err(error)) => {
-                    release_codex_socket(lease, false).await;
+                    release_socket(lease, false).await;
                     return Err(WebSocketFailure::transport(format_websocket_error(&error)));
                 }
                 None => {
-                    release_codex_socket(lease, false).await;
+                    release_socket(lease, false).await;
                     return Err(WebSocketFailure::transport(
                         "WebSocket closed before response completion",
                     ));
@@ -692,11 +706,11 @@ async fn stream_codex_websocket(
                 Ok(Some(data)) => data,
                 Ok(None) => continue,
                 Err(error) => {
-                    release_codex_socket(lease, false).await;
+                    release_socket(lease, false).await;
                     return Err(error);
                 }
             };
-            if let Some((code, message)) = codex_event_error(&data) {
+            if let Some((code, message)) = websocket_event_error(&data) {
                 if code == "previous_response_not_found"
                     && request_body.get("previous_response_id").is_some()
                     && !retried_missing_continuation
@@ -707,7 +721,7 @@ async fn stream_codex_websocket(
                     break;
                 }
                 let is_transport = code == "websocket_connection_limit_reached";
-                release_codex_socket(lease, false).await;
+                release_socket(lease, false).await;
                 return Err(WebSocketFailure {
                     message,
                     is_transport,
@@ -731,11 +745,11 @@ async fn stream_codex_websocket(
                             last_response_items: state.response_items.clone(),
                         });
                     }
-                    release_codex_socket(lease, true).await;
+                    release_socket(lease, true).await;
                     return Ok(reason);
                 }
                 Flow::Error(message) => {
-                    release_codex_socket(lease, false).await;
+                    release_socket(lease, false).await;
                     return Err(WebSocketFailure::protocol(message));
                 }
             }
@@ -1393,6 +1407,144 @@ mod request_tests {
             }),
         )
         .await;
+    }
+
+    #[allow(clippy::result_large_err)]
+    #[tokio::test]
+    async fn openai_websocket_modes_send_delta_or_full_input() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let (headers_tx, headers_rx) = oneshot::channel();
+        let server = tokio::spawn(async move {
+            let (socket, _) = listener.accept().await.unwrap();
+            let mut handshake = None;
+            let mut socket = accept_hdr_async(
+                socket,
+                |request: &tokio_tungstenite::tungstenite::handshake::server::Request,
+                 response: tokio_tungstenite::tungstenite::handshake::server::Response| {
+                    let headers = request
+                        .headers()
+                        .iter()
+                        .map(|(name, value)| {
+                            (
+                                name.as_str().to_string(),
+                                value.to_str().unwrap_or_default().to_string(),
+                            )
+                        })
+                        .collect::<BTreeMap<_, _>>();
+                    handshake = Some((request.uri().path().to_string(), headers));
+                    Ok(response)
+                },
+            )
+            .await
+            .unwrap();
+            headers_tx.send(handshake.unwrap()).unwrap();
+
+            let mut requests = Vec::new();
+            for turn in 1..=3 {
+                let message = socket.next().await.unwrap().unwrap();
+                let WebSocketMessage::Text(text) = message else {
+                    panic!("expected text request frame");
+                };
+                requests.push(serde_json::from_str::<Value>(&text).unwrap());
+                send_websocket_response(&mut socket, turn).await;
+            }
+            requests
+        });
+
+        let mut openai = model("openai-responses", &format!("http://{address}/v1"));
+        openai.provider = "openai".into();
+        let first_user = Message::User(crate::UserMessage {
+            content: UserContent::Text("hi".into()),
+            timestamp: 1,
+        });
+        let context = Context {
+            system_prompt: Some("be concise".into()),
+            openai_responses_input: None,
+            messages: vec![first_user.clone()],
+            tools: vec![],
+        };
+        let options = StreamOptions {
+            api_key: Some("sk-test".into()),
+            session_id: Some("openai-websocket-cache-fixture".into()),
+            transport: Transport::WebSocketCached,
+            ..Default::default()
+        };
+        let first = crate::stream_simple(&openai, &context, &options)
+            .result()
+            .await;
+        assert_eq!(first.text(), "hello");
+        assert_eq!(first.response_id.as_deref(), Some("resp-1"));
+
+        let second_context = Context {
+            system_prompt: Some("be concise".into()),
+            openai_responses_input: None,
+            messages: vec![
+                first_user,
+                Message::Assistant(first.clone()),
+                Message::User(crate::UserMessage {
+                    content: UserContent::Text("again".into()),
+                    timestamp: 2,
+                }),
+            ],
+            tools: vec![],
+        };
+        let second = crate::stream_simple(&openai, &second_context, &options)
+            .result()
+            .await;
+        assert_eq!(second.text(), "again");
+        assert_eq!(second.response_id.as_deref(), Some("resp-2"));
+
+        let mut third_messages = second_context.messages.clone();
+        third_messages.extend([
+            Message::Assistant(second.clone()),
+            Message::User(crate::UserMessage {
+                content: UserContent::Text("full context".into()),
+                timestamp: 3,
+            }),
+        ]);
+        let third = crate::stream_simple(
+            &openai,
+            &Context {
+                system_prompt: Some("be concise".into()),
+                openai_responses_input: None,
+                messages: third_messages,
+                tools: vec![],
+            },
+            &StreamOptions {
+                transport: Transport::WebSocket,
+                ..options.clone()
+            },
+        )
+        .result()
+        .await;
+        assert_eq!(third.text(), "again");
+        assert_eq!(third.response_id.as_deref(), Some("resp-3"));
+
+        let (path, headers) = headers_rx.await.unwrap();
+        assert_eq!(path, "/v1/responses");
+        assert_eq!(headers["authorization"], "Bearer sk-test");
+        assert!(!headers.contains_key("chatgpt-account-id"));
+        assert!(!headers.contains_key("originator"));
+        assert!(!headers.contains_key("openai-beta"));
+        assert!(!headers.contains_key("session-id"));
+
+        let requests = server.await.unwrap();
+        assert_eq!(requests.len(), 3);
+        assert_eq!(requests[0]["type"], "response.create");
+        assert!(requests[0].get("stream").is_none());
+        assert!(requests[0].get("background").is_none());
+        assert!(requests[0].get("previous_response_id").is_none());
+        assert_eq!(requests[0]["input"].as_array().unwrap().len(), 1);
+        assert_eq!(requests[1]["previous_response_id"], "resp-1");
+        assert_eq!(requests[1]["input"].as_array().unwrap().len(), 1);
+        assert_eq!(requests[1]["input"][0]["content"][0]["text"], "again");
+        assert!(requests[2].get("previous_response_id").is_none());
+        assert_eq!(requests[2]["input"].as_array().unwrap().len(), 5);
+        assert_eq!(
+            requests[2]["input"][4]["content"][0]["text"],
+            "full context"
+        );
     }
 
     #[allow(clippy::result_large_err)]

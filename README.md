@@ -236,6 +236,11 @@ kiss --model codex-lb/gpt-5.6-sol
 Use `--api-key-env CODEX_LB_API_KEY` when CodexLB needs its own key. Repeat
 `--header KEY=VALUE` when a gateway needs custom headers.
 
+The `auto`, `websocket`, and `websocket-cached` transport settings use the
+Responses WebSocket API for the built-in OpenAI and OpenAI Codex providers.
+`websocket-cached` reuses the connection and sends only new input after a
+successful response. Other providers keep their normal streaming transport.
+
 The TUI supports the same basic operations:
 
 ```text
@@ -441,7 +446,8 @@ options. Custom themes live in `~/.kiss/agent/settings.json`.
 
 KISS tracks [Pi v0.85.1](https://github.com/earendil-works/pi/releases/tag/v0.85.1).
 It keeps Pi-compatible session files, model data, core commands, compaction,
-and OpenAI Codex WebSocket transport. `Cargo.toml` records the tracked release.
+and OpenAI Responses WebSocket transport. `Cargo.toml` records the tracked
+release.
 
 ## Development
 

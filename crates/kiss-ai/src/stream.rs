@@ -69,7 +69,7 @@ pub struct StreamOptions {
     pub tool_choice: Option<ToolChoice>,
     /// Session identifier for providers that support session routing/caching.
     pub session_id: Option<String>,
-    /// Streaming transport. OpenAI Codex uses `Auto` by default.
+    /// Streaming transport. OpenAI and OpenAI Codex use `Auto` by default.
     pub transport: Transport,
     pub cancel: CancellationToken,
 }
