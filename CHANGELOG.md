@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.0.9 - 2026-09-12
+
+### Fixed
+
+- Limited `/model`, scoped model selection, model cycling, and `--list-models`
+  to providers with saved credentials, detected API keys, or manual entries in
+  `models.json`.
+- Added guidance in the `/model` selector explaining that `/login` connects
+  additional providers.
+
 ## 0.0.8 - 2026-09-12
 
 ### Added
