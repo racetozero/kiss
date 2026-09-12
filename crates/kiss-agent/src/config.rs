@@ -3,7 +3,8 @@
 use crate::message::AgentMessage;
 use crate::tool::{DynTool, ExecutionMode, ToolResult};
 use kiss_ai::{
-    ContentBlock, Message, Model, StreamOptions, ThinkingLevel, ToolChoice, Transport, Usage,
+    ContentBlock, Message, Model, ResolvedCredential, StreamOptions, ThinkingLevel, ToolChoice,
+    Transport, Usage,
 };
 use serde_json::Value;
 use std::future::Future;
@@ -71,7 +72,7 @@ type ConvertFn = Arc<dyn Fn(&[AgentMessage]) -> Vec<Message> + Send + Sync>;
 type StopFn = Arc<dyn for<'a> Fn(&'a TurnInfo<'a>) -> BoxFuture<bool> + Send + Sync>;
 type PrepareTurnFn =
     Arc<dyn for<'a> Fn(&'a TurnInfo<'a>) -> BoxFuture<Option<TurnUpdate>> + Send + Sync>;
-type ApiKeyFn = Arc<dyn Fn(String) -> BoxFuture<Option<String>> + Send + Sync>;
+type CredentialFn = Arc<dyn Fn(String) -> BoxFuture<Option<ResolvedCredential>> + Send + Sync>;
 /// The function the loop calls to reach a model provider.
 ///
 /// It is public so embedders and tests can substitute their own transport (for
@@ -93,7 +94,7 @@ pub struct AgentLoopConfig {
     /// Convert harness messages to provider messages at the call boundary.
     pub convert_to_llm: ConvertFn,
     pub transform_context: Option<TransformFn>,
-    pub get_api_key: Option<ApiKeyFn>,
+    pub get_credential: Option<CredentialFn>,
     pub get_steering_messages: Option<SteeringFn>,
     pub get_follow_up_messages: Option<SteeringFn>,
     pub before_tool_call: Option<BeforeToolFn>,
@@ -121,7 +122,7 @@ impl AgentLoopConfig {
             tool_execution: ExecutionMode::Parallel,
             convert_to_llm: Arc::new(crate::message::convert_to_llm),
             transform_context: None,
-            get_api_key: None,
+            get_credential: None,
             get_steering_messages: None,
             get_follow_up_messages: None,
             before_tool_call: None,

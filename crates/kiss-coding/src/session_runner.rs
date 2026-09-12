@@ -492,11 +492,11 @@ impl AgentSession {
 
         let summary = if summarize && !abandoned_messages.is_empty() {
             let model = self.model();
-            let api_key = self.resolve_api_key(&model.provider).await;
+            let credential = self.resolve_credential(&model.provider).await;
             let serialized = compaction::serialize_agent_messages(&abandoned_messages);
             let result = compaction::generate_summary(
                 &model,
-                api_key,
+                credential,
                 &serialized,
                 None,
                 custom_instructions.as_deref(),
@@ -611,14 +611,14 @@ impl AgentSession {
         });
     }
 
-    async fn resolve_api_key(&self, provider: &str) -> Option<String> {
+    async fn resolve_credential(&self, provider: &str) -> Option<kiss_ai::ResolvedCredential> {
         if let Some((override_provider, key)) = &self.api_key_override
             && override_provider == provider
         {
-            return Some(key.clone());
+            return Some(kiss_ai::ResolvedCredential::api_key(key));
         }
         let credential_provider = self.registry.credential_provider(provider);
-        kiss_ai::auth::resolve_api_key_async(credential_provider, &self.registry.declared_keys)
+        kiss_ai::auth::resolve_credential_async(credential_provider, &self.registry.declared_keys)
             .await
             .ok()
             .flatten()
@@ -637,7 +637,7 @@ impl AgentSession {
         let registry = self.registry.clone();
         let declared = self.registry.declared_keys.clone();
         let api_key_override = self.api_key_override.clone();
-        config.get_api_key = Some(Arc::new(move |provider| {
+        config.get_credential = Some(Arc::new(move |provider| {
             let registry = registry.clone();
             let declared = declared.clone();
             let api_key_override = api_key_override.clone();
@@ -645,10 +645,10 @@ impl AgentSession {
                 if let Some((override_provider, key)) = api_key_override
                     && override_provider == provider
                 {
-                    return Some(key);
+                    return Some(kiss_ai::ResolvedCredential::api_key(key));
                 }
                 let credential_provider = registry.credential_provider(&provider).to_string();
-                kiss_ai::auth::resolve_api_key_async(&credential_provider, &declared)
+                kiss_ai::auth::resolve_credential_async(&credential_provider, &declared)
                     .await
                     .ok()
                     .flatten()
@@ -1142,7 +1142,7 @@ impl AgentSession {
         }
 
         let model = self.model();
-        let api_key = self.resolve_api_key(&model.provider).await;
+        let credential = self.resolve_credential(&model.provider).await;
 
         let mut serialized = compaction::serialize_agent_messages(&plan.to_summarize);
         if plan.is_split_turn {
@@ -1164,7 +1164,7 @@ impl AgentSession {
                     tools: context.tools.iter().map(|tool| tool.to_def()).collect(),
                 },
                 kiss_ai::StreamOptions {
-                    api_key: api_key.clone(),
+                    credential: credential.clone(),
                     reasoning: self.thinking_level(),
                     session_id: Some(self.manager.lock().unwrap().session_id().to_string()),
                     cancel: summary_cancel.clone(),
@@ -1176,7 +1176,7 @@ impl AgentSession {
         };
         let local_future = compaction::generate_summary(
             &model,
-            api_key.clone(),
+            credential.clone(),
             &serialized,
             previous_summary.as_deref(),
             custom_instructions.as_deref(),

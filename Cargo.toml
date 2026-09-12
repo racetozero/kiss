@@ -46,6 +46,8 @@ catalog_package = "@earendil-works/pi-ai@0.85.1"
 [workspace.dependencies]
 anyhow = "1"
 async-trait = "0.1"
+azure_core = { version = "0.21", default-features = false, features = ["enable_reqwest_rustls"] }
+azure_identity = { version = "0.21", default-features = false, features = ["enable_reqwest_rustls"] }
 aws-config = { version = "1.10", features = ["behavior-version-latest"] }
 aws-sdk-bedrockruntime = { version = "1.139", features = ["behavior-version-latest"] }
 aws-smithy-types = "1.6"

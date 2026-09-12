@@ -50,7 +50,7 @@ fn detect_compat(model: &Model) -> Compat {
 
 pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, sink: EventSink) {
     let mut builder = PartialBuilder::new(model, sink);
-    let Some(api_key) = options.api_key.clone() else {
+    let Some(credential) = options.credential.as_ref() else {
         builder.fail(
             format!("no API key for provider {}", model.provider),
             false,
@@ -58,6 +58,7 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
         );
         return;
     };
+    let api_key = credential.value().to_string();
     let compat = detect_compat(model);
     let body = build_request(model, context, options, &compat);
     let base_url = provider_base_url(model, &api_key);

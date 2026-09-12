@@ -215,8 +215,13 @@ async fn build_request(
     if should_use_catalog_endpoint(model) {
         config = config.endpoint_url(&model.base_url);
     }
-    if let Some(token) = options.api_key.as_ref().filter(|token| !token.is_empty()) {
-        config = config.bearer_token(Token::new(token.clone(), None));
+    if let Some(token) = options
+        .credential
+        .as_ref()
+        .map(crate::ResolvedCredential::value)
+        .filter(|token| !token.is_empty())
+    {
+        config = config.bearer_token(Token::new(token, None));
     }
     let client = aws_sdk_bedrockruntime::Client::from_conf(config.build());
     let messages = convert_messages(context)?;

@@ -1,6 +1,7 @@
 //! Provider credentials. Stored credentials override environment variables,
 //! and custom catalog placeholders are the last fallback.
 
+use crate::ResolvedCredential;
 use anyhow::{Context as _, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -10,6 +11,7 @@ use std::sync::{Mutex, OnceLock};
 use std::time::SystemTime;
 
 pub mod anthropic;
+mod azure;
 mod device_code;
 pub mod external;
 pub mod github_copilot;
@@ -101,6 +103,7 @@ pub fn is_bearer_access_token(provider: &str, access_token: &str) -> bool {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StoredAuthKind {
     ApiKey,
+    AzureEntraId,
     OAuth,
 }
 
@@ -110,6 +113,7 @@ pub enum LoginMethod {
     DeviceOAuth,
     ManualOAuth,
     ApiKey,
+    AzureEntraId,
     GoogleApplicationDefault,
     AwsProfile,
     AwsAmbient,
@@ -122,6 +126,7 @@ impl LoginMethod {
             LoginMethod::DeviceOAuth => "Sign in with device code",
             LoginMethod::ManualOAuth => "Sign in and paste callback",
             LoginMethod::ApiKey => "Enter API key",
+            LoginMethod::AzureEntraId => "Microsoft Entra ID",
             LoginMethod::GoogleApplicationDefault => "Google Application Default Credentials",
             LoginMethod::AwsProfile => "AWS profile",
             LoginMethod::AwsAmbient => "AWS default credential chain",
@@ -138,6 +143,7 @@ pub fn login_methods(provider: &str) -> Vec<LoginMethod> {
         "github-copilot" | "kimi-coding" | "xai" => vec![DeviceOAuth, ApiKey],
         "openrouter" => vec![BrowserOAuth, ManualOAuth, ApiKey],
         "radius" => vec![BrowserOAuth, DeviceOAuth, ApiKey],
+        azure::PROVIDER => vec![ApiKey, AzureEntraId],
         "google-vertex" => vec![ApiKey, GoogleApplicationDefault],
         "amazon-bedrock" => vec![ApiKey, AwsProfile, AwsAmbient],
         _ => vec![ApiKey],
@@ -153,7 +159,7 @@ pub fn env_var_names(provider: &str) -> &'static [&'static str] {
             "ANTHROPIC_OAUTH_TOKEN",
             "ANTHROPIC_API_KEY",
         ],
-        "azure-openai-responses" => &["AZURE_OPENAI_API_KEY"],
+        azure::PROVIDER => azure::env_var_names(),
         "baseten" => &["BASETEN_API_KEY"],
         "cerebras" => &["CEREBRAS_API_KEY"],
         "cloudflare-ai-gateway" => &["CLOUDFLARE_AI_GATEWAY_API_KEY"],
@@ -324,19 +330,36 @@ pub fn resolve_api_key_local(
     provider: &str,
     declared: &BTreeMap<String, String>,
 ) -> Option<String> {
+    resolve_credential_local(provider, declared).map(ResolvedCredential::into_value)
+}
+
+pub fn resolve_credential_local(
+    provider: &str,
+    declared: &BTreeMap<String, String>,
+) -> Option<ResolvedCredential> {
+    if provider == azure::PROVIDER {
+        return azure::resolve_local(declared);
+    }
     let file = read_auth_file();
     if let Some(entry) = file.entries.get(provider) {
-        return Some(entry.access_token().to_string());
+        return Some(match entry {
+            AuthEntry::Key(key) | AuthEntry::Detailed { key, .. } => {
+                ResolvedCredential::api_key(key.clone())
+            }
+            AuthEntry::OAuth(credential) => ResolvedCredential::bearer(&credential.access),
+        });
     }
     for variable in env_var_names(provider) {
         if let Ok(value) = std::env::var(variable)
             && !value.is_empty()
         {
-            return Some(value);
+            return Some(ResolvedCredential::api_key(value));
         }
     }
     if provider == "google-vertex" && has_google_application_credentials() {
-        return Some("google-application-default-credentials".into());
+        return Some(ResolvedCredential::api_key(
+            "google-application-default-credentials",
+        ));
     }
     declared.get(provider).and_then(|value| {
         value
@@ -345,14 +368,17 @@ pub fn resolve_api_key_local(
                 std::env::var(variable)
                     .ok()
                     .filter(|value| !value.is_empty())
+                    .map(ResolvedCredential::api_key)
             })
-            .unwrap_or_else(|| Some(value.clone()))
+            .unwrap_or_else(|| Some(ResolvedCredential::api_key(value.clone())))
     })
 }
 
 /// Resolve a local credential, then try one automatic external import.
 pub fn resolve_api_key(provider: &str, declared: &BTreeMap<String, String>) -> Option<String> {
-    if let Some(key) = resolve_api_key_local(provider, declared) {
+    if let Some(key) =
+        resolve_credential_local(provider, declared).map(ResolvedCredential::into_value)
+    {
         return Some(key);
     }
     if external::auto_import_unique(provider)
@@ -366,7 +392,33 @@ pub fn resolve_api_key(provider: &str, declared: &BTreeMap<String, String>) -> O
 }
 
 /// Resolve a credential and refresh an expired provider OAuth token.
+pub async fn resolve_credential_async(
+    provider: &str,
+    declared: &BTreeMap<String, String>,
+) -> Result<Option<ResolvedCredential>> {
+    if provider == azure::PROVIDER {
+        return azure::resolve_async(declared).await;
+    }
+    let value = resolve_api_key_async_generic(provider, declared).await?;
+    Ok(value.map(|value| {
+        if is_bearer_access_token(provider, &value) {
+            ResolvedCredential::bearer(value)
+        } else {
+            ResolvedCredential::api_key(value)
+        }
+    }))
+}
+
 pub async fn resolve_api_key_async(
+    provider: &str,
+    declared: &BTreeMap<String, String>,
+) -> Result<Option<String>> {
+    Ok(resolve_credential_async(provider, declared)
+        .await?
+        .map(ResolvedCredential::into_value))
+}
+
+async fn resolve_api_key_async_generic(
     provider: &str,
     declared: &BTreeMap<String, String>,
 ) -> Result<Option<String>> {
@@ -483,6 +535,9 @@ async fn google_application_access_token() -> Result<String> {
 pub fn stored_auth_kind(provider: &str) -> Option<StoredAuthKind> {
     match read_auth_file().entries.get(provider) {
         Some(AuthEntry::OAuth(_)) => Some(StoredAuthKind::OAuth),
+        Some(entry) if provider == azure::PROVIDER && azure::is_entra_marker(entry) => {
+            Some(StoredAuthKind::AzureEntraId)
+        }
         Some(AuthEntry::Key(_) | AuthEntry::Detailed { .. }) => Some(StoredAuthKind::ApiKey),
         None => None,
     }
@@ -543,6 +598,10 @@ pub fn store_api_key(provider: &str, key: &str) -> Result<()> {
             .insert(provider.to_string(), AuthEntry::Key(key.to_string()));
         Ok(())
     })
+}
+
+pub fn store_azure_entra_id() -> Result<()> {
+    store_api_key_with_env(azure::PROVIDER, azure::ENTRA_MARKER, BTreeMap::new())
 }
 
 pub fn store_oauth(provider: &str, credential: OAuthCredential) -> Result<()> {
@@ -663,6 +722,18 @@ mod tests {
         assert_eq!(
             login_methods("radius")[..2],
             [LoginMethod::BrowserOAuth, LoginMethod::DeviceOAuth]
+        );
+        assert_eq!(
+            login_methods("azure-openai-responses"),
+            vec![LoginMethod::ApiKey, LoginMethod::AzureEntraId]
+        );
+    }
+
+    #[test]
+    fn azure_login_exposes_both_credential_sources() {
+        assert_eq!(
+            env_var_names("azure-openai-responses"),
+            &["AZURE_OPENAI_API_KEY", "AZURE_OPENAI_AUTH_TOKEN"]
         );
     }
 

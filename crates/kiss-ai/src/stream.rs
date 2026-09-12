@@ -29,6 +29,39 @@ pub enum Transport {
     WebSocketCached,
 }
 
+/// A provider credential plus the HTTP authentication scheme it requires.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ResolvedCredential {
+    ApiKey(String),
+    Bearer(String),
+}
+
+impl ResolvedCredential {
+    pub fn api_key(value: impl Into<String>) -> Self {
+        Self::ApiKey(value.into())
+    }
+
+    pub fn bearer(value: impl Into<String>) -> Self {
+        Self::Bearer(value.into())
+    }
+
+    pub fn value(&self) -> &str {
+        match self {
+            Self::ApiKey(value) | Self::Bearer(value) => value,
+        }
+    }
+
+    pub fn into_value(self) -> String {
+        match self {
+            Self::ApiKey(value) | Self::Bearer(value) => value,
+        }
+    }
+
+    pub fn is_bearer(&self) -> bool {
+        matches!(self, Self::Bearer(_))
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ToolChoice {
@@ -62,14 +95,15 @@ impl ToolChoice {
 
 #[derive(Debug, Clone, Default)]
 pub struct StreamOptions {
-    pub api_key: Option<String>,
+    pub credential: Option<ResolvedCredential>,
     pub temperature: Option<f64>,
     pub max_tokens: Option<u64>,
     pub reasoning: ThinkingLevel,
     pub tool_choice: Option<ToolChoice>,
     /// Session identifier for providers that support session routing/caching.
     pub session_id: Option<String>,
-    /// Streaming transport. OpenAI and OpenAI Codex use `Auto` by default.
+    /// Streaming transport. OpenAI, OpenAI Codex, and Azure OpenAI use `Auto`
+    /// by default.
     pub transport: Transport,
     pub cancel: CancellationToken,
 }

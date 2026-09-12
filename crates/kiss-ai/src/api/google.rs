@@ -11,7 +11,7 @@ use serde_json::{Value, json};
 
 pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, sink: EventSink) {
     let mut builder = PartialBuilder::new(model, sink);
-    let Some(api_key) = options.api_key.clone() else {
+    let Some(credential) = options.credential.as_ref() else {
         builder.fail(
             format!(
                 "no API key for provider {} (set GEMINI_API_KEY)",
@@ -22,6 +22,7 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
         );
         return;
     };
+    let api_key = credential.value().to_string();
     let body = build_request(model, context, options);
     let url = match google_url(model) {
         Ok(url) => url,

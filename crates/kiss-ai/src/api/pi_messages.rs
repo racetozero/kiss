@@ -11,7 +11,7 @@ use serde_json::{Value, json};
 
 pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, sink: EventSink) {
     let mut builder = PartialBuilder::new(model, sink);
-    let Some(api_key) = options.api_key.as_ref() else {
+    let Some(credential) = options.credential.as_ref() else {
         builder.fail(
             format!("no API key for provider {}", model.provider),
             false,
@@ -19,6 +19,7 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
         );
         return;
     };
+    let api_key = credential.value();
     let url = format!("{}/messages", model.base_url.trim_end_matches('/'));
     let body = json!({
         "model": model.id,
@@ -313,7 +314,7 @@ mod tests {
             &model,
             &context,
             &StreamOptions {
-                api_key: Some("radius-key".into()),
+                credential: Some(crate::ResolvedCredential::api_key("radius-key")),
                 ..Default::default()
             },
         )

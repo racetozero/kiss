@@ -76,8 +76,9 @@ pub async fn compact(
         anyhow::bail!("remote compaction is not supported for this model");
     }
     let api_key = options
-        .api_key
-        .as_deref()
+        .credential
+        .as_ref()
+        .map(crate::ResolvedCredential::value)
         .context("OpenAI remote compaction needs an API key")?;
     let mut endpoint_model = model.clone();
     endpoint_model.base_url = provider_base_url(model, api_key);
@@ -92,8 +93,9 @@ async fn compact_at_url(
     url: &str,
 ) -> Result<RemoteCompactionResult> {
     let api_key = options
-        .api_key
-        .as_deref()
+        .credential
+        .as_ref()
+        .map(crate::ResolvedCredential::value)
         .context("OpenAI remote compaction needs an API key")?;
     let body = build_remote_request(model, context, options);
 
@@ -615,7 +617,7 @@ mod tests {
             tools: vec![],
         };
         let options = StreamOptions {
-            api_key: Some("secret".into()),
+            credential: Some(crate::ResolvedCredential::api_key("secret")),
             session_id: Some("session-1".into()),
             ..Default::default()
         };

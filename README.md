@@ -237,9 +237,10 @@ Use `--api-key-env CODEX_LB_API_KEY` when CodexLB needs its own key. Repeat
 `--header KEY=VALUE` when a gateway needs custom headers.
 
 The `auto`, `websocket`, and `websocket-cached` transport settings use the
-Responses WebSocket API for the built-in OpenAI and OpenAI Codex providers.
-`websocket-cached` reuses the connection and sends only new input after a
-successful response. Other providers keep their normal streaming transport.
+Responses WebSocket API for the built-in OpenAI, OpenAI Codex, and Azure OpenAI
+providers. `websocket-cached` reuses the connection and sends only new input
+after a successful response. Other providers keep their normal streaming
+transport.
 
 The TUI supports the same basic operations:
 

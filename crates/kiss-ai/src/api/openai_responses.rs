@@ -27,6 +27,29 @@ const WEBSOCKET_MAX_AGE: Duration = Duration::from_secs(55 * 60);
 
 type ResponsesSocket = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ResponsesProvider {
+    OpenAi,
+    OpenAiCodex,
+    AzureOpenAi,
+    Other,
+}
+
+impl ResponsesProvider {
+    fn for_model(model: &Model) -> Self {
+        match (model.provider.as_str(), model.api.as_str()) {
+            (_, "openai-codex-responses") => Self::OpenAiCodex,
+            (_, "azure-openai-responses") => Self::AzureOpenAi,
+            ("openai", "openai-responses") => Self::OpenAi,
+            _ => Self::Other,
+        }
+    }
+
+    fn supports_websocket(self) -> bool {
+        self != Self::Other
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct SocketCacheKey {
     session_id: String,
@@ -73,7 +96,8 @@ fn socket_cache_key(session_id: &str, response_url: &str, api_key: &str) -> Sock
 
 pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, sink: EventSink) {
     let mut builder = PartialBuilder::new(model, sink);
-    let Some(api_key) = options.api_key.clone() else {
+    let provider = ResponsesProvider::for_model(model);
+    let Some(credential) = options.credential.as_ref() else {
         builder.fail(
             format!("no API key for provider {}", model.provider),
             false,
@@ -81,6 +105,7 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
         );
         return;
     };
+    let api_key = credential.value().to_string();
     let body = build_request(model, context, options);
     let mut endpoint_model = model.clone();
     endpoint_model.base_url = provider_base_url(model, &api_key);
@@ -91,7 +116,7 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
             return;
         }
     };
-    let codex_account_id = if model.api == "openai-codex-responses" {
+    let codex_account_id = if provider == ResponsesProvider::OpenAiCodex {
         let account_id = crate::auth::openai_codex::decode_jwt_account_id(&api_key);
         if model.provider == "openai-codex" && account_id.is_none() {
             builder.fail("OpenAI Codex access token has no account ID", false, model);
@@ -103,10 +128,7 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
     };
     let mut state = DecodeState::default();
 
-    if (model.api == "openai-codex-responses"
-        || (model.provider == "openai" && model.api == "openai-responses"))
-        && options.transport != Transport::Sse
-    {
+    if provider.supports_websocket() && options.transport != Transport::Sse {
         let fallback_active = if let Some(session_id) = options.session_id.as_deref() {
             websocket_fallback_sessions()
                 .lock()
@@ -164,8 +186,8 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
     for (key, value) in &model.headers {
         request = request.header(key, value);
     }
-    match model.api.as_str() {
-        "openai-codex-responses" => {
+    match provider {
+        ResponsesProvider::OpenAiCodex => {
             request = request
                 .bearer_auth(&api_key)
                 .header("originator", "kiss")
@@ -181,10 +203,14 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
                     .header("x-client-request-id", session_id);
             }
         }
-        "azure-openai-responses" => {
-            request = request.header("api-key", &api_key);
+        ResponsesProvider::AzureOpenAi => {
+            if credential.is_bearer() {
+                request = request.bearer_auth(&api_key);
+            } else {
+                request = request.header("api-key", &api_key);
+            }
         }
-        _ => {
+        ResponsesProvider::OpenAi | ResponsesProvider::Other => {
             request = request.bearer_auth(&api_key);
         }
     }
@@ -336,7 +362,7 @@ struct SocketLease {
     cache_key: Option<SocketCacheKey>,
 }
 
-fn websocket_url(response_url: &str) -> anyhow::Result<String> {
+fn websocket_url(model: &Model, response_url: &str) -> anyhow::Result<String> {
     let mut url = url::Url::parse(response_url)?;
     let scheme = match url.scheme() {
         "https" => "wss",
@@ -345,6 +371,9 @@ fn websocket_url(response_url: &str) -> anyhow::Result<String> {
     };
     url.set_scheme(scheme)
         .map_err(|_| anyhow::anyhow!("cannot make Responses WebSocket URL"))?;
+    if ResponsesProvider::for_model(model) == ResponsesProvider::AzureOpenAi {
+        url.set_query(None);
+    }
     Ok(url.to_string())
 }
 
@@ -369,7 +398,7 @@ async fn connect_websocket(
     request_id: &str,
     options: &StreamOptions,
 ) -> Result<ResponsesSocket, WebSocketFailure> {
-    let websocket_url = websocket_url(response_url)
+    let websocket_url = websocket_url(model, response_url)
         .map_err(|error| WebSocketFailure::protocol(error.to_string()))?;
     let mut request = websocket_url
         .as_str()
@@ -383,7 +412,7 @@ async fn connect_websocket(
         "authorization",
         &format!("Bearer {api_key}"),
     )?;
-    if model.api == "openai-codex-responses" {
+    if ResponsesProvider::for_model(model) == ResponsesProvider::OpenAiCodex {
         if !account_id.is_empty() {
             insert_websocket_header(request.headers_mut(), "chatgpt-account-id", account_id)?;
         }
@@ -1167,6 +1196,22 @@ mod request_tests {
     }
 
     #[test]
+    fn azure_websocket_uses_v1_endpoint_without_api_version_query() {
+        let azure = model(
+            "azure-openai-responses",
+            "https://resource.openai.azure.com/openai/v1",
+        );
+        assert_eq!(
+            websocket_url(
+                &azure,
+                "https://resource.openai.azure.com/openai/v1/responses?api-version=v1"
+            )
+            .unwrap(),
+            "wss://resource.openai.azure.com/openai/v1/responses"
+        );
+    }
+
+    #[test]
     fn request_enables_parallel_tools() {
         let body = build_request(
             &model("openai-responses", "https://api.openai.com/v1"),
@@ -1304,7 +1349,7 @@ mod request_tests {
             &codex,
             &context,
             &StreamOptions {
-                api_key: Some(access),
+                credential: Some(crate::ResolvedCredential::bearer(access)),
                 session_id: Some("session-one".into()),
                 transport: Transport::Sse,
                 ..Default::default()
@@ -1410,8 +1455,13 @@ mod request_tests {
     }
 
     #[allow(clippy::result_large_err)]
-    #[tokio::test]
-    async fn openai_websocket_modes_send_delta_or_full_input() {
+    async fn assert_standard_websocket_modes(
+        api: &str,
+        provider: &str,
+        base_path: &str,
+        expected_path: &str,
+        session_id: &str,
+    ) {
         let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
         let address = listener.local_addr().unwrap();
         let (headers_tx, headers_rx) = oneshot::channel();
@@ -1452,8 +1502,8 @@ mod request_tests {
             requests
         });
 
-        let mut openai = model("openai-responses", &format!("http://{address}/v1"));
-        openai.provider = "openai".into();
+        let mut responses_model = model(api, &format!("http://{address}/{base_path}"));
+        responses_model.provider = provider.into();
         let first_user = Message::User(crate::UserMessage {
             content: UserContent::Text("hi".into()),
             timestamp: 1,
@@ -1465,12 +1515,12 @@ mod request_tests {
             tools: vec![],
         };
         let options = StreamOptions {
-            api_key: Some("sk-test".into()),
-            session_id: Some("openai-websocket-cache-fixture".into()),
+            credential: Some(crate::ResolvedCredential::api_key("sk-test")),
+            session_id: Some(session_id.into()),
             transport: Transport::WebSocketCached,
             ..Default::default()
         };
-        let first = crate::stream_simple(&openai, &context, &options)
+        let first = crate::stream_simple(&responses_model, &context, &options)
             .result()
             .await;
         assert_eq!(first.text(), "hello");
@@ -1489,7 +1539,7 @@ mod request_tests {
             ],
             tools: vec![],
         };
-        let second = crate::stream_simple(&openai, &second_context, &options)
+        let second = crate::stream_simple(&responses_model, &second_context, &options)
             .result()
             .await;
         assert_eq!(second.text(), "again");
@@ -1504,7 +1554,7 @@ mod request_tests {
             }),
         ]);
         let third = crate::stream_simple(
-            &openai,
+            &responses_model,
             &Context {
                 system_prompt: Some("be concise".into()),
                 openai_responses_input: None,
@@ -1522,7 +1572,7 @@ mod request_tests {
         assert_eq!(third.response_id.as_deref(), Some("resp-3"));
 
         let (path, headers) = headers_rx.await.unwrap();
-        assert_eq!(path, "/v1/responses");
+        assert_eq!(path, expected_path);
         assert_eq!(headers["authorization"], "Bearer sk-test");
         assert!(!headers.contains_key("chatgpt-account-id"));
         assert!(!headers.contains_key("originator"));
@@ -1545,6 +1595,30 @@ mod request_tests {
             requests[2]["input"][4]["content"][0]["text"],
             "full context"
         );
+    }
+
+    #[tokio::test]
+    async fn openai_websocket_modes_send_delta_or_full_input() {
+        assert_standard_websocket_modes(
+            "openai-responses",
+            "openai",
+            "v1",
+            "/v1/responses",
+            "openai-websocket-cache-fixture",
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn azure_websocket_modes_send_delta_or_full_input() {
+        assert_standard_websocket_modes(
+            "azure-openai-responses",
+            "azure-openai-responses",
+            "openai/v1",
+            "/openai/v1/responses",
+            "azure-websocket-cache-fixture",
+        )
+        .await;
     }
 
     #[allow(clippy::result_large_err)]
@@ -1603,7 +1677,7 @@ mod request_tests {
             tools: vec![],
         };
         let options = StreamOptions {
-            api_key: Some(codex_access_token()),
+            credential: Some(crate::ResolvedCredential::bearer(codex_access_token())),
             session_id: Some("websocket-cache-fixture".into()),
             transport: Transport::WebSocketCached,
             ..Default::default()
@@ -1712,7 +1786,7 @@ mod request_tests {
             &codex,
             &Context::default(),
             &StreamOptions {
-                api_key: Some(codex_access_token()),
+                credential: Some(crate::ResolvedCredential::bearer(codex_access_token())),
                 session_id: Some("websocket-fallback-fixture".into()),
                 ..Default::default()
             },

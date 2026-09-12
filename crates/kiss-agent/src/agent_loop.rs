@@ -224,12 +224,12 @@ async fn stream_assistant(
         messages: llm_messages,
         tools: context.tools.iter().map(|t| t.to_def()).collect(),
     };
-    let api_key = match &config.get_api_key {
+    let credential = match &config.get_credential {
         Some(resolve) => resolve(config.model.provider.clone()).await,
         None => None,
     };
     let options = StreamOptions {
-        api_key,
+        credential,
         temperature: config.temperature,
         max_tokens: config.max_tokens,
         reasoning: config.thinking_level,

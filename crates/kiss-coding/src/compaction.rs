@@ -281,7 +281,7 @@ fn summary_failure(message: &kiss_ai::AssistantMessage) -> Option<String> {
 /// id and no cache writes wanted, so it's a plain request.
 pub async fn generate_summary(
     model: &Model,
-    api_key: Option<String>,
+    credential: Option<kiss_ai::ResolvedCredential>,
     conversation_text: &str,
     previous_summary: Option<&str>,
     custom_instructions: Option<&str>,
@@ -313,7 +313,7 @@ pub async fn generate_summary(
         tools: vec![],
     };
     let options = StreamOptions {
-        api_key,
+        credential,
         reasoning: ThinkingLevel::Off,
         cancel,
         ..Default::default()

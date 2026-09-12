@@ -27,7 +27,7 @@ pub use model::{Model, ModelCost, ModelCostTier, OpenAICompat};
 pub use registry::Registry;
 #[cfg(feature = "native")]
 pub use stream::stream_simple;
-pub use stream::{StreamOptions, ToolChoice, Transport};
+pub use stream::{ResolvedCredential, StreamOptions, ToolChoice, Transport};
 pub use types::{
     AssistantMessage, ContentBlock, Context, Cost, Message, StopReason, ThinkingLevel, TimestampMs,
     ToolCall, ToolDef, ToolResultMessage, Usage, UserContent, UserMessage, now_ms,

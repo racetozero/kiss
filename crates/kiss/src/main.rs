@@ -107,7 +107,16 @@ async fn run_command(command: &Command) -> anyhow::Result<i32> {
             device_auth,
             browser: _,
             api_key,
+            entra_id,
         } => {
+            if *entra_id && provider != "azure-openai-responses" {
+                anyhow::bail!("--entra-id is only supported for azure-openai-responses");
+            }
+            if *entra_id {
+                kiss_ai::auth::store_azure_entra_id()?;
+                println!("Saved Microsoft Entra ID credentials for {provider}.");
+                return Ok(0);
+            }
             if api_key.is_none()
                 && matches!(
                     provider.as_str(),
@@ -163,6 +172,7 @@ async fn run_command(command: &Command) -> anyhow::Result<i32> {
             for provider in providers {
                 let source = match kiss_ai::auth::stored_auth_kind(provider) {
                     Some(kiss_ai::auth::StoredAuthKind::OAuth) => "saved OAuth",
+                    Some(kiss_ai::auth::StoredAuthKind::AzureEntraId) => "saved Microsoft Entra ID",
                     Some(kiss_ai::auth::StoredAuthKind::ApiKey) => "saved API key",
                     None => {
                         let environment = kiss_ai::auth::env_var_names(provider)

@@ -236,6 +236,10 @@ pub enum Command {
         /// Store this API key without an interactive prompt.
         #[arg(long, value_name = "KEY")]
         api_key: Option<String>,
+
+        /// Use the Microsoft Entra default credential chain (Azure OpenAI).
+        #[arg(long = "entra-id", conflicts_with_all = ["api_key", "browser", "device_auth"])]
+        entra_id: bool,
     },
 
     /// Remove saved credentials for a provider.
