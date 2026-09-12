@@ -2,10 +2,18 @@ use anyhow::Result;
 use kiss_agent::AgentMessage;
 use kiss_ai::{AssistantMessage, ContentBlock, StopReason};
 use serde_json::Value;
+use std::fs::File;
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-type SessionMetadata = (String, String, PathBuf, usize);
+/// Metadata needed for the picker without loading the full session history.
+#[derive(Debug, Clone)]
+struct SessionMetadata {
+    id: String,
+    title: String,
+    cwd: PathBuf,
+}
 
 #[derive(Debug, Clone)]
 pub(crate) enum SessionSource {
@@ -40,6 +48,7 @@ pub(crate) struct SessionRecord {
     pub(crate) title: String,
     pub(crate) cwd: PathBuf,
     pub(crate) modified: SystemTime,
+    /// None for foreign sessions when counting would require a full scan.
     pub(crate) entry_count: Option<usize>,
 }
 
@@ -62,18 +71,21 @@ pub(crate) fn discover(cwd: &Path, kiss_dir: &Path, global: bool) -> Result<Vec<
         entry_count: Some(item.entry_count),
     }));
 
+    let project_cwd = (!global).then_some(cwd);
     add_pi_records(&mut records, &home.join(".pi/agent/sessions"))?;
     add_jsonl_records(
         &mut records,
         &home.join(".claude/projects"),
         SessionSource::Claude,
         claude_metadata,
+        project_cwd,
     );
     add_jsonl_records(
         &mut records,
         &home.join(".codex/sessions"),
         SessionSource::Codex,
         codex_metadata,
+        project_cwd,
     );
     for record in &mut records {
         record.title = compact_title(&record.title);
@@ -121,10 +133,11 @@ fn add_jsonl_records(
     records: &mut Vec<SessionRecord>,
     root: &Path,
     source: fn(PathBuf) -> SessionSource,
-    metadata: fn(&Path) -> Option<SessionMetadata>,
+    metadata: fn(&Path, Option<&Path>) -> Option<SessionMetadata>,
+    cwd: Option<&Path>,
 ) {
     for path in jsonl_files(root) {
-        let Some((id, title, cwd, entry_count)) = metadata(&path) else {
+        let Some(metadata) = metadata(&path, cwd) else {
             continue;
         };
         let modified = std::fs::metadata(&path)
@@ -132,11 +145,11 @@ fn add_jsonl_records(
             .unwrap_or(SystemTime::UNIX_EPOCH);
         records.push(SessionRecord {
             source: source(path),
-            id,
-            title,
-            cwd,
+            id: metadata.id,
+            title: metadata.title,
+            cwd: metadata.cwd,
             modified,
-            entry_count: Some(entry_count),
+            entry_count: None,
         });
     }
 }
@@ -164,45 +177,92 @@ fn parse_jsonl(
     path: &Path,
     convert: fn(&Value) -> Option<AgentMessage>,
 ) -> Result<Vec<AgentMessage>> {
-    Ok(std::fs::read_to_string(path)?
-        .lines()
-        .filter_map(|line| serde_json::from_str(line).ok())
-        .filter_map(|value| convert(&value))
-        .collect())
+    let mut reader = BufReader::new(File::open(path)?);
+    let mut line = String::new();
+    let mut messages = Vec::new();
+    loop {
+        line.clear();
+        if reader.read_line(&mut line)? == 0 {
+            break;
+        }
+        if let Ok(value) = serde_json::from_str(&line)
+            && let Some(message) = convert(&value)
+        {
+            messages.push(message);
+        }
+    }
+    Ok(messages)
 }
 
-fn claude_metadata(path: &Path) -> Option<SessionMetadata> {
-    let values = jsonl_values(path);
-    let metadata = values.iter().find(|value| {
-        value.get("sessionId").and_then(Value::as_str).is_some()
-            && value.get("cwd").and_then(Value::as_str).is_some()
-    })?;
-    let id = metadata.get("sessionId")?.as_str()?.to_string();
-    let cwd = PathBuf::from(metadata.get("cwd")?.as_str()?);
-    let messages = values.iter().filter_map(claude_message).collect::<Vec<_>>();
-    let title = first_user_text(&messages).unwrap_or_else(|| id.clone());
-    Some((id, title, cwd, messages.len()))
+fn claude_metadata(path: &Path, cwd_filter: Option<&Path>) -> Option<SessionMetadata> {
+    scan_jsonl_metadata(
+        path,
+        cwd_filter,
+        |value| {
+            Some((
+                value.get("sessionId")?.as_str()?.to_owned(),
+                PathBuf::from(value.get("cwd")?.as_str()?),
+            ))
+        },
+        claude_message,
+    )
 }
 
-fn codex_metadata(path: &Path) -> Option<SessionMetadata> {
-    let values = jsonl_values(path);
-    let meta = values
-        .iter()
-        .find(|value| value.get("type").and_then(Value::as_str) == Some("session_meta"))?
-        .get("payload")?;
-    let id = meta.get("id")?.as_str()?.to_string();
-    let cwd = PathBuf::from(meta.get("cwd")?.as_str()?);
-    let messages = values.iter().filter_map(codex_message).collect::<Vec<_>>();
-    let title = first_user_text(&messages).unwrap_or_else(|| id.clone());
-    Some((id, title, cwd, messages.len()))
+fn codex_metadata(path: &Path, cwd_filter: Option<&Path>) -> Option<SessionMetadata> {
+    scan_jsonl_metadata(
+        path,
+        cwd_filter,
+        |value| {
+            let meta = value
+                .get("payload")
+                .filter(|_| value.get("type").and_then(Value::as_str) == Some("session_meta"))?;
+            Some((
+                meta.get("id")?.as_str()?.to_owned(),
+                PathBuf::from(meta.get("cwd")?.as_str()?),
+            ))
+        },
+        codex_message,
+    )
 }
 
-fn jsonl_values(path: &Path) -> Vec<Value> {
-    std::fs::read_to_string(path)
-        .unwrap_or_default()
-        .lines()
-        .filter_map(|line| serde_json::from_str(line).ok())
-        .collect()
+fn scan_jsonl_metadata(
+    path: &Path,
+    cwd_filter: Option<&Path>,
+    metadata: fn(&Value) -> Option<(String, PathBuf)>,
+    convert: fn(&Value) -> Option<AgentMessage>,
+) -> Option<SessionMetadata> {
+    let file = File::open(path).ok()?;
+    let mut session = None;
+    let mut title = None;
+    for line in BufReader::new(file).lines().map_while(|line| line.ok()) {
+        let Ok(value) = serde_json::from_str::<Value>(&line) else {
+            continue;
+        };
+        if session.is_none()
+            && let Some((id, cwd)) = metadata(&value)
+        {
+            if let Some(filter) = cwd_filter
+                && cwd != filter
+            {
+                return None;
+            }
+            session = Some((id, cwd));
+        }
+        if title.is_none()
+            && let Some(AgentMessage::User(user)) = convert(&value)
+        {
+            title = Some(user.content.as_text().chars().take(120).collect());
+        }
+        if session.is_some() && title.is_some() {
+            break;
+        }
+    }
+    let (id, cwd) = session?;
+    Some(SessionMetadata {
+        title: title.unwrap_or_else(|| id.clone()),
+        id,
+        cwd,
+    })
 }
 
 fn claude_message(value: &Value) -> Option<AgentMessage> {
@@ -286,13 +346,6 @@ fn message(role: &str, text: String, source: &str) -> Option<AgentMessage> {
     }
 }
 
-fn first_user_text(messages: &[AgentMessage]) -> Option<String> {
-    messages.iter().find_map(|message| match message {
-        AgentMessage::User(user) => Some(user.content.as_text().chars().take(120).collect()),
-        _ => None,
-    })
-}
-
 fn compact_title(title: &str) -> String {
     title
         .split_whitespace()
@@ -345,7 +398,7 @@ mod tests {
     }
 
     #[test]
-    fn foreign_metadata_uses_stored_cwd_and_counts_text_messages() {
+    fn foreign_metadata_uses_stored_cwd_and_title() {
         let dir = tempfile::tempdir().unwrap();
         let claude = dir.path().join("claude.jsonl");
         std::fs::write(
@@ -357,11 +410,12 @@ mod tests {
             ),
         )
         .unwrap();
-        let metadata = claude_metadata(&claude).unwrap();
-        assert_eq!(metadata.0, "claude-id");
-        assert_eq!(metadata.1, "hello");
-        assert_eq!(metadata.2, Path::new("/project"));
-        assert_eq!(metadata.3, 2);
+        let metadata = claude_metadata(&claude, None).unwrap();
+        assert_eq!(metadata.id, "claude-id");
+        assert_eq!(metadata.title, "hello");
+        assert_eq!(metadata.cwd, Path::new("/project"));
+        assert!(claude_metadata(&claude, Some(Path::new("/project"))).is_some());
+        assert!(claude_metadata(&claude, Some(Path::new("/other"))).is_none());
 
         let codex = dir.path().join("codex.jsonl");
         std::fs::write(
@@ -372,10 +426,9 @@ mod tests {
             ),
         )
         .unwrap();
-        let metadata = codex_metadata(&codex).unwrap();
-        assert_eq!(metadata.0, "codex-id");
-        assert_eq!(metadata.1, "task");
-        assert_eq!(metadata.2, Path::new("/other"));
-        assert_eq!(metadata.3, 1);
+        let metadata = codex_metadata(&codex, None).unwrap();
+        assert_eq!(metadata.id, "codex-id");
+        assert_eq!(metadata.title, "task");
+        assert_eq!(metadata.cwd, Path::new("/other"));
     }
 }

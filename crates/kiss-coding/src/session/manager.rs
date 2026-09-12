@@ -251,7 +251,7 @@ impl SessionManager {
     /// Cheap listing: header + scan for name/first user message.
     fn peek(path: &Path) -> Option<SessionListing> {
         let text = std::fs::read_to_string(path).ok()?;
-        let mut lines = text.lines().filter(|l| !l.trim().is_empty());
+        let mut lines = text.lines().filter(|line| !line.trim().is_empty());
         let header: SessionHeader = serde_json::from_str(lines.next()?).ok()?;
         let mut name = None;
         let mut first_message = None;
@@ -322,6 +322,53 @@ impl SessionManager {
             message,
             extra: Map::new(),
         })
+    }
+
+    pub fn append_messages_with_session_info<I>(&mut self, messages: I, name: &str) -> Result<()>
+    where
+        I: IntoIterator<Item = AgentMessage>,
+    {
+        let mut parent_id = self.leaf_id.clone();
+        let mut entries = Vec::new();
+        for message in messages {
+            let entry = SessionEntry::Message {
+                base: EntryBase {
+                    id: new_entry_id(),
+                    parent_id: parent_id.clone(),
+                    timestamp: iso_now(),
+                },
+                message,
+                extra: Map::new(),
+            };
+            parent_id = Some(entry.id().to_string());
+            entries.push(entry);
+        }
+        entries.push(SessionEntry::SessionInfo {
+            base: EntryBase {
+                id: new_entry_id(),
+                parent_id,
+                timestamp: iso_now(),
+            },
+            name: Some(name.to_string()),
+            extra: Map::new(),
+        });
+        self.append_entries(entries)
+    }
+
+    fn append_entries(&mut self, entries: Vec<SessionEntry>) -> Result<()> {
+        let mut lines = String::new();
+        for entry in &entries {
+            lines.push_str(&serde_json::to_string(&entry)?);
+            lines.push('\n');
+        }
+        if !lines.is_empty() {
+            self.append_lines(&lines)?;
+        }
+        for entry in entries {
+            self.leaf_id = Some(entry.id().to_string());
+            self.insert_entry(entry);
+        }
+        Ok(())
     }
 
     pub fn append_model_change(&mut self, provider: &str, model_id: &str) -> Result<String> {
@@ -395,10 +442,7 @@ impl SessionManager {
     fn append_entry(&mut self, make: impl FnOnce(EntryBase) -> SessionEntry) -> Result<String> {
         let entry = make(self.make_base());
         let id = entry.id().to_string();
-        let line = serde_json::to_string(&entry)?;
-        self.insert_entry(entry);
-        self.leaf_id = Some(id.clone());
-        self.append_line(&line)?;
+        self.append_entries(vec![entry])?;
         Ok(id)
     }
 
@@ -409,7 +453,7 @@ impl SessionManager {
         self.context_revision = self.context_revision.wrapping_add(1);
     }
 
-    fn append_line(&mut self, line: &str) -> Result<()> {
+    fn append_lines(&mut self, lines: &str) -> Result<()> {
         if self.file.is_none() {
             return Ok(());
         }
@@ -432,7 +476,7 @@ impl SessionManager {
             .append_file
             .as_mut()
             .expect("a persisted session has an append file");
-        writeln!(file, "{line}")?;
+        file.write_all(lines.as_bytes())?;
         file.flush()?;
         file.sync_data()?;
         Ok(())
@@ -988,6 +1032,23 @@ mod tests {
         m.append_message(AgentMessage::user("two")).unwrap();
         let ctx = m.build_session_context();
         assert_eq!(ctx.messages.len(), 2);
+    }
+
+    #[test]
+    fn batched_messages_with_info_persist_as_one_branch() {
+        let dir = tempfile::tempdir().unwrap();
+        let cwd = dir.path().join("project");
+        let mut m = SessionManager::create(&cwd, Some(dir.path().join("sessions"))).unwrap();
+        m.append_messages_with_session_info(
+            [AgentMessage::user("one"), assistant("test", "test", "two")],
+            "imported",
+        )
+        .unwrap();
+
+        let reopened = SessionManager::open(m.session_file().unwrap()).unwrap();
+        assert_eq!(reopened.entries().len(), 3);
+        assert_eq!(reopened.branch_entries(None).len(), 3);
+        assert_eq!(reopened.session_name().as_deref(), Some("imported"));
     }
 
     #[test]

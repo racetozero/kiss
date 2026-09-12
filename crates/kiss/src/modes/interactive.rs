@@ -5627,10 +5627,7 @@ fn switch_session(app: &mut App, session: &Arc<kiss_coding::AgentSession>, recor
             }
             let session_dir = session.manager.lock().unwrap().session_dir().to_path_buf();
             let mut manager = kiss_coding::SessionManager::create(&record.cwd, Some(session_dir))?;
-            for message in messages {
-                manager.append_message(message)?;
-            }
-            manager.append_session_info(&record.title)?;
+            manager.append_messages_with_session_info(messages, &record.title)?;
             Ok(manager)
         }),
     };
