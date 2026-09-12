@@ -186,6 +186,27 @@ Only their child agents use KISS tools.
 
 ## Models and integrations
 
+### Diagnose installation and network access
+
+Run a full health report before you use a provider, or when a corporate
+firewall stops a connection:
+
+```bash
+kiss doctor
+kiss doctor --summary
+```
+
+The full report shows each provider connection type, host, port, HTTP result,
+and elapsed time. It lists separate SSE, WebSocket, AWS event-stream, and login
+destinations. You can send the failed rows to a network team as a firewall
+allowlist request. The summary report shows one row for each provider.
+
+Any HTTP status means that the destination is reachable. For example, `401`
+is normal when the probe does not send a credential. `SKIP` means that the
+provider needs local configuration, such as an Azure resource name or a Google
+Cloud location. The command does not send a prompt, use provider credentials,
+or create model cost. It checks reachability, not credential validity.
+
 ### Login and model selection
 
 KISS supports browser and headless OAuth, API keys, environment variables, and

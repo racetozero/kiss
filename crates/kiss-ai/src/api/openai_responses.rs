@@ -289,7 +289,7 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
     builder.fail("response stream ended before completion", false, model);
 }
 
-pub(crate) fn response_url(model: &Model) -> anyhow::Result<String> {
+pub fn response_url(model: &Model) -> anyhow::Result<String> {
     let base = model.base_url.trim_end_matches('/');
     match model.api.as_str() {
         "openai-codex-responses" if base.ends_with("/codex/responses") => Ok(base.into()),

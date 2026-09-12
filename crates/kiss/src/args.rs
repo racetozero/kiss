@@ -200,6 +200,13 @@ pub enum ProviderCommand {
 
 #[derive(Debug, Clone, Subcommand)]
 pub enum Command {
+    /// Diagnose local health and provider network access.
+    Doctor {
+        /// Show one connectivity row for each provider.
+        #[arg(long)]
+        summary: bool,
+    },
+
     /// Update KISS to the latest GitHub release.
     Update,
 
@@ -450,6 +457,15 @@ mod tests {
     fn parses_update_command() {
         let args = Args::try_parse_from(["kiss", "update"]).unwrap();
         assert!(matches!(args.command, Some(Command::Update)));
+    }
+
+    #[test]
+    fn parses_doctor_summary() {
+        let args = Args::try_parse_from(["kiss", "doctor", "--summary"]).unwrap();
+        assert!(matches!(
+            args.command,
+            Some(Command::Doctor { summary: true })
+        ));
     }
 
     #[test]

@@ -1,5 +1,6 @@
 mod args;
 mod auth_flow;
+mod doctor;
 mod export;
 mod file_search;
 mod job_ui;
@@ -99,6 +100,7 @@ async fn run(args: Args) -> anyhow::Result<i32> {
 
 async fn run_command(command: &Command) -> anyhow::Result<i32> {
     match command {
+        Command::Doctor { summary } => doctor::run(*summary).await,
         Command::Update => update::run().await,
         Command::Mcp { command } => mcp_cli::run(command).await,
         Command::Provider { command } => provider_cli::run(command),
