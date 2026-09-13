@@ -499,17 +499,25 @@ impl Component for Editor {
 
             let ranges = visual_ranges(line, inner, (row == cursor_row).then_some(cursor_col));
             let graphemes = line.graphemes(true).collect::<Vec<_>>();
+            let mut pasted = vec![false; graphemes.len()];
+            for paste in &self.state.pending_pastes {
+                if let Some(byte) = line.find(&paste.placeholder) {
+                    let start = grapheme_count(&line[..byte]);
+                    pasted[start..start + grapheme_count(&paste.placeholder)].fill(true);
+                }
+            }
             let range_count = ranges.len();
             for (range_index, (start, end)) in ranges.into_iter().enumerate() {
-                let segment = graphemes[start..end].concat();
-                let shown = if row == cursor_row
+                let cursor = (row == cursor_row
                     && cursor_col >= start
-                    && (cursor_col < end || (cursor_col == end && range_index + 1 == range_count))
-                {
-                    render_cursor_line(&segment, cursor_col - start)
-                } else {
-                    segment
-                };
+                    && (cursor_col < end || (cursor_col == end && range_index + 1 == range_count)))
+                    .then(|| cursor_col - start);
+                let shown = render_editor_segment(
+                    &graphemes[start..end],
+                    &pasted[start..end],
+                    cursor,
+                    &self.theme,
+                );
                 push_editor_row(&mut lines, &border, shown, inner);
             }
         }
@@ -559,16 +567,36 @@ fn visual_ranges(line: &str, width: usize, cursor_col: Option<usize>) -> Vec<(us
     ranges
 }
 
-fn render_cursor_line(line: &str, cursor_col: usize) -> String {
-    let graphemes: Vec<&str> = line.graphemes(true).collect();
-    let before: String = graphemes[..cursor_col.min(graphemes.len())].concat();
-    let at: &str = graphemes.get(cursor_col).copied().unwrap_or(" ");
-    let after: String = if cursor_col < graphemes.len() {
-        graphemes[cursor_col + 1..].concat()
-    } else {
-        String::new()
-    };
-    format!("{before}{}{at}{after}", crate::renderer::CURSOR_MARKER)
+fn render_editor_segment(
+    graphemes: &[&str],
+    pasted: &[bool],
+    cursor: Option<usize>,
+    theme: &Theme,
+) -> String {
+    let mut shown = String::new();
+    let mut colored = false;
+    for (index, grapheme) in graphemes.iter().enumerate() {
+        if cursor == Some(index) {
+            shown.push_str(crate::renderer::CURSOR_MARKER);
+        }
+        if pasted[index] != colored {
+            if pasted[index] {
+                shown.push_str(&theme.color("accent").fg_code());
+            } else {
+                shown.push_str("\x1b[39m");
+            }
+            colored = pasted[index];
+        }
+        shown.push_str(grapheme);
+    }
+    if colored {
+        shown.push_str("\x1b[39m");
+    }
+    if cursor == Some(graphemes.len()) {
+        shown.push_str(crate::renderer::CURSOR_MARKER);
+        shown.push(' ');
+    }
+    shown
 }
 
 fn grapheme_count(s: &str) -> usize {
@@ -826,6 +854,38 @@ mod tests {
         e.paste("small paste");
         assert_eq!(e.text(), "small paste");
         assert!(e.state.pending_pastes.is_empty());
+    }
+
+    #[test]
+    fn paste_reference_is_colored_across_wraps_but_surrounding_text_is_not() {
+        let mut e = editor();
+        e.insert("before ");
+        e.paste("one\ntwo");
+        e.insert(" after");
+        let color = e.theme.color("accent").fg_code();
+        let rendered = e.render(14);
+        let styled = rendered.join("\n");
+        assert!(styled.contains(&format!("{color}[Pa")));
+        assert!(styled.matches(&color).count() > 1); // The paste spans multiple rows.
+        assert!(styled.contains("]\u{1b}[39m after"));
+        assert!(rendered.iter().all(|line| display_width(line) == 14));
+        assert_eq!(styled.matches(crate::renderer::CURSOR_MARKER).count(), 1);
+
+        e.undo(); // Remove " after"; the paste remains colored.
+        assert!(e.render(80).join("\n").contains(&color));
+        e.undo(); // Remove the paste and its color.
+        assert!(!e.render(80).join("\n").contains(&color));
+    }
+
+    #[test]
+    fn ordinary_text_that_looks_like_a_paste_is_not_colored() {
+        let mut e = editor();
+        e.insert("[Pasted text #1 7 chars]");
+        assert!(
+            !e.render(80)
+                .join("\n")
+                .contains(&e.theme.color("accent").fg_code())
+        );
     }
 
     #[test]
