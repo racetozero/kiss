@@ -14,9 +14,9 @@ use aws_sdk_bedrockruntime::primitives::Blob;
 use aws_sdk_bedrockruntime::types::{
     ContentBlock as BedrockContent, ContentBlockDelta, ContentBlockStart, ConversationRole,
     ConverseStreamOutput, ImageBlock, ImageFormat, ImageSource, InferenceConfiguration, Message,
-    ReasoningContentBlock, ReasoningContentBlockDelta, ReasoningTextBlock, SystemContentBlock,
-    Tool, ToolConfiguration, ToolInputSchema, ToolResultBlock, ToolResultContentBlock,
-    ToolResultStatus, ToolSpecification, ToolUseBlock,
+    ReasoningContentBlock, ReasoningContentBlockDelta, ReasoningTextBlock, ServiceTier,
+    ServiceTierType, SystemContentBlock, Tool, ToolConfiguration, ToolInputSchema, ToolResultBlock,
+    ToolResultContentBlock, ToolResultStatus, ToolSpecification, ToolUseBlock,
 };
 use aws_smithy_types::{Document, Number};
 use base64::Engine as _;
@@ -249,8 +249,18 @@ async fn build_request(
         .set_messages(Some(messages))
         .set_system(system)
         .inference_config(inference)
+        .set_service_tier(bedrock_service_tier(options))
         .set_tool_config(tools)
         .set_additional_model_request_fields(additional))
+}
+
+fn bedrock_service_tier(options: &StreamOptions) -> Option<ServiceTier> {
+    options.fast_mode.then(|| {
+        ServiceTier::builder()
+            .r#type(ServiceTierType::Priority)
+            .build()
+            .expect("priority is a complete service tier")
+    })
 }
 
 fn bedrock_region(model: &Model) -> String {
@@ -530,6 +540,17 @@ mod tests {
             arn_region("arn:aws:bedrock:ca-central-1:123:inference-profile/x").as_deref(),
             Some("ca-central-1")
         );
+    }
+
+    #[test]
+    fn fast_mode_uses_priority_service_tier() {
+        assert!(bedrock_service_tier(&StreamOptions::default()).is_none());
+        let tier = bedrock_service_tier(&StreamOptions {
+            fast_mode: true,
+            ..Default::default()
+        })
+        .unwrap();
+        assert_eq!(tier.r#type(), &ServiceTierType::Priority);
     }
 
     #[test]

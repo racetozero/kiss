@@ -115,6 +115,7 @@ pub struct AgentSession {
     system_prompt: Mutex<String>,
     model: Mutex<Model>,
     thinking: Mutex<ThinkingLevel>,
+    fast_mode: Mutex<bool>,
     steering: Arc<Mutex<VecDeque<QueuedPrompt>>>,
     follow_up: Arc<Mutex<VecDeque<QueuedPrompt>>>,
     cancel: Mutex<CancellationToken>,
@@ -199,6 +200,7 @@ impl AgentSession {
             system_prompt: Mutex::new(system_prompt),
             model: Mutex::new(model),
             thinking: Mutex::new(thinking),
+            fast_mode: Mutex::new(false),
             steering: Default::default(),
             follow_up: Default::default(),
             cancel: Mutex::new(CancellationToken::new()),
@@ -241,6 +243,14 @@ impl AgentSession {
 
     pub fn thinking_level(&self) -> ThinkingLevel {
         *self.thinking.lock().unwrap()
+    }
+
+    pub fn fast_mode(&self) -> bool {
+        *self.fast_mode.lock().unwrap()
+    }
+
+    pub fn set_fast_mode(&self, enabled: bool) {
+        *self.fast_mode.lock().unwrap() = enabled;
     }
 
     pub fn totals(&self) -> Usage {
@@ -631,6 +641,7 @@ impl AgentSession {
     ) -> AgentLoopConfig {
         let mut config = AgentLoopConfig::new(self.model());
         config.thinking_level = self.thinking_level();
+        config.fast_mode = self.fast_mode();
         config.session_id = Some(self.manager.lock().unwrap().session_id().to_string());
         let settings = self.settings();
         config.transport = settings.transport;
@@ -724,8 +735,10 @@ impl AgentSession {
                     }
                 }
 
-                context_changed.then(|| TurnUpdate {
-                    context: Some(session.build_context_for(*active_prompt_mode.lock().unwrap())),
+                Some(TurnUpdate {
+                    context: context_changed
+                        .then(|| session.build_context_for(*active_prompt_mode.lock().unwrap())),
+                    fast_mode: Some(session.fast_mode()),
                     ..Default::default()
                 })
             })
@@ -1069,6 +1082,7 @@ impl AgentSession {
                 }
                 config.model = self.model();
                 config.thinking_level = self.thinking_level();
+                config.fast_mode = self.fast_mode();
                 continue;
             }
 
@@ -1166,6 +1180,7 @@ impl AgentSession {
                 kiss_ai::StreamOptions {
                     credential: credential.clone(),
                     reasoning: self.thinking_level(),
+                    fast_mode: self.fast_mode(),
                     session_id: Some(self.manager.lock().unwrap().session_id().to_string()),
                     cancel: summary_cancel.clone(),
                     ..Default::default()

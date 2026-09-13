@@ -62,7 +62,10 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
             .bearer_auth(&api_key)
             .header("accept", "application/json")
             .header("anthropic-dangerous-direct-browser-access", "true")
-            .header("anthropic-beta", beta_features(model, true).join(","))
+            .header(
+                "anthropic-beta",
+                beta_features(model, true, options.fast_mode).join(","),
+            )
             .header(
                 "user-agent",
                 format!(
@@ -79,7 +82,7 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
         }
     } else {
         request = request.json(&body);
-        let beta_features = beta_features(model, false);
+        let beta_features = beta_features(model, false, options.fast_mode);
         if !beta_features.is_empty() {
             request = request.header("anthropic-beta", beta_features.join(","));
         }
@@ -242,9 +245,7 @@ fn handle_event(event: &SseEvent, builder: &mut PartialBuilder, state: &mut Deco
                 }
                 "tool_use" => {
                     let id = block["id"].as_str().unwrap_or_default().to_string();
-                    let name = super::claude_code::local_tool_name(
-                        block["name"].as_str().unwrap_or_default(),
-                    );
+                    let name = block["name"].as_str().unwrap_or_default().to_string();
                     let idx = builder.begin_tool_call(id, name);
                     state
                         .index_map
@@ -326,6 +327,7 @@ fn handle_event(event: &SseEvent, builder: &mut PartialBuilder, state: &mut Deco
 
 const MID_CONVERSATION_OUTPUT_CONFIG_BETA: &str = "mid-conversation-output-config-2026-07-01";
 const THINKING_BINDING_CONTROLS_BETA: &str = "thinking-binding-controls-2026-08-01";
+const FAST_MODE_BETA: &str = "fast-mode-2026-02-01";
 
 fn supports_mid_convo_effort(model: &Model) -> bool {
     model
@@ -350,7 +352,7 @@ fn adaptive_effort(model: &Model, level: crate::ThinkingLevel) -> String {
     .into()
 }
 
-fn beta_features(model: &Model, oauth: bool) -> Vec<&'static str> {
+fn beta_features(model: &Model, oauth: bool, fast_mode: bool) -> Vec<&'static str> {
     let mut features = if oauth {
         vec!["claude-code-20250219", "oauth-2025-04-20"]
     } else {
@@ -362,6 +364,9 @@ fn beta_features(model: &Model, oauth: bool) -> Vec<&'static str> {
             THINKING_BINDING_CONTROLS_BETA,
         ]);
     }
+    if fast_mode && model.supports_fast_mode() {
+        features.push(FAST_MODE_BETA);
+    }
     features
 }
 
@@ -371,6 +376,9 @@ fn build_request(model: &Model, context: &Context, options: &StreamOptions) -> V
         "max_tokens": options.max_tokens.unwrap_or(model.max_tokens),
         "stream": true,
     });
+    if options.fast_mode && model.supports_fast_mode() {
+        body["speed"] = json!("fast");
+    }
 
     if let Some(system) = &context.system_prompt {
         // Cache breakpoint on the system prompt: stable prefix across turns.
@@ -615,8 +623,8 @@ mod tests {
         );
         assert_eq!(body["messages"][4]["role"], "system");
         assert_eq!(body["messages"][4]["output_config"]["effort"], "xhigh");
-        assert!(beta_features(&model, false).contains(&MID_CONVERSATION_OUTPUT_CONFIG_BETA));
-        assert!(beta_features(&model, false).contains(&THINKING_BINDING_CONTROLS_BETA));
+        assert!(beta_features(&model, false, false).contains(&MID_CONVERSATION_OUTPUT_CONFIG_BETA));
+        assert!(beta_features(&model, false, false).contains(&THINKING_BINDING_CONTROLS_BETA));
     }
 
     #[test]
@@ -640,5 +648,25 @@ mod tests {
         let body = build_request(&budget, &Context::default(), &options);
         assert_eq!(body["thinking"]["type"], "enabled");
         assert!(body["thinking"]["budget_tokens"].as_u64().is_some());
+    }
+
+    #[test]
+    fn fast_mode_adds_speed_and_beta_for_supported_models() {
+        let mut model = model(OpenAICompat::default());
+        model.id = "claude-opus-4-6".into();
+        let normal = build_request(&model, &Context::default(), &StreamOptions::default());
+        assert!(normal.get("speed").is_none());
+        assert!(!beta_features(&model, false, false).contains(&FAST_MODE_BETA));
+
+        let fast = build_request(
+            &model,
+            &Context::default(),
+            &StreamOptions {
+                fast_mode: true,
+                ..Default::default()
+            },
+        );
+        assert_eq!(fast["speed"], "fast");
+        assert!(beta_features(&model, false, true).contains(&FAST_MODE_BETA));
     }
 }

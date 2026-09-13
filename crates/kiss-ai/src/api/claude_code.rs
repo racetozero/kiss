@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 use sha2::{Digest as _, Sha256};
 use std::path::PathBuf;
 
-pub const VERSION: &str = "2.1.251";
+pub const VERSION: &str = "2.1.258";
 pub const ENTRYPOINT: &str = "sdk-cli";
 const CCH_PLACEHOLDER: &str = "cch=00000";
 const CCH_SEED: u64 = 0x4d65_9218_e32a_3268;
@@ -50,12 +50,9 @@ pub fn version_fingerprint(context: &Context) -> String {
     let prompt: Vec<u16> = first_user_prompt(context).encode_utf16().collect();
     let selected: String = [4, 7, 20]
         .into_iter()
-        .map(|index| {
-            prompt
-                .get(index)
-                .copied()
-                .and_then(|unit| char::from_u32(u32::from(unit)))
-                .unwrap_or('\u{fffd}')
+        .map(|index| match prompt.get(index) {
+            Some(unit) => char::from_u32(u32::from(*unit)).unwrap_or('\u{fffd}'),
+            None => '0',
         })
         .collect();
     let digest = Sha256::digest(format!("59cf53e54c78{selected}{VERSION}").as_bytes());
@@ -75,7 +72,17 @@ fn parse_identity(value: &Value) -> Option<Identity> {
     if device_id.len() != 64 || !device_id.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         return None;
     }
-    uuid::Uuid::parse_str(account_uuid).ok()?;
+    let uuid = account_uuid.as_bytes();
+    if uuid.len() != 36
+        || uuid.iter().enumerate().any(|(index, byte)| match index {
+            8 | 13 | 18 | 23 => *byte != b'-',
+            _ => !byte.is_ascii_hexdigit(),
+        })
+        || !matches!(uuid[14], b'1'..=b'5')
+        || !matches!(uuid[19], b'8' | b'9' | b'a' | b'A' | b'b' | b'B')
+    {
+        return None;
+    }
     Some(Identity {
         device_id: device_id.to_string(),
         account_uuid: account_uuid.to_string(),
@@ -98,50 +105,6 @@ pub fn discover_identity() -> Option<Identity> {
         .join(".claude.json");
     let value = serde_json::from_slice::<Value>(&std::fs::read(path).ok()?).ok()?;
     parse_identity(&value)
-}
-
-fn canonical_tool_name(name: &str) -> &str {
-    match name.to_ascii_lowercase().as_str() {
-        "read" => "Read",
-        "write" => "Write",
-        "edit" => "Edit",
-        "bash" => "Bash",
-        "grep" => "Grep",
-        "find" | "glob" => "Glob",
-        _ => name,
-    }
-}
-
-pub fn local_tool_name(name: &str) -> String {
-    match name {
-        "Read" | "Write" | "Edit" | "Bash" | "Grep" => name.to_ascii_lowercase(),
-        "Glob" => "find".into(),
-        _ => name.to_string(),
-    }
-}
-
-fn canonicalize_tools(body: &mut Value) {
-    if let Some(tools) = body["tools"].as_array_mut() {
-        for tool in tools {
-            if let Some(name) = tool["name"].as_str() {
-                tool["name"] = json!(canonical_tool_name(name));
-            }
-        }
-    }
-    if let Some(messages) = body["messages"].as_array_mut() {
-        for message in messages {
-            let Some(content) = message["content"].as_array_mut() else {
-                continue;
-            };
-            for block in content {
-                if block["type"] == "tool_use"
-                    && let Some(name) = block["name"].as_str()
-                {
-                    block["name"] = json!(canonical_tool_name(name));
-                }
-            }
-        }
-    }
 }
 
 pub fn transform_payload(
@@ -187,7 +150,6 @@ pub fn transform_payload(
             }),
         );
     }
-    canonicalize_tools(&mut body);
     Ok(body)
 }
 
@@ -269,7 +231,7 @@ mod tests {
     fn recovered_prompt_fingerprint_matches() {
         assert_eq!(
             version_fingerprint(&context("Reply with exactly: PROBE_OK")),
-            "3e7"
+            "01c"
         );
     }
 
@@ -277,32 +239,37 @@ mod tests {
     fn prompt_fingerprint_uses_javascript_utf16_indexes() {
         assert_eq!(
             version_fingerprint(&context("😀Reply with exactly: PROBE_OK")),
-            "77a"
+            "41a"
         );
         assert_eq!(
             version_fingerprint(&context("abcd😀efghijklmnopqrstuvw")),
-            "eab"
+            "493"
         );
     }
 
     #[test]
+    fn short_prompt_fingerprint_uses_zero_for_missing_indexes() {
+        assert_eq!(version_fingerprint(&context("short")), "587");
+    }
+
+    #[test]
     fn recovered_body_checksum_matches() {
-        let body = r#"{"model":"claude-opus-5","messages":[{"role":"user","content":"A"}],"max_tokens":64000,"stream":true,"system":[{"type":"text","text":"x-anthropic-billing-header: cc_version=2.1.251.000; cc_entrypoint=sdk-cli; cch=00000;"}]}"#;
-        let expected_normalized = r#"{"model":"","messages":[{"role":"user","content":"A"}],"stream":true,"system":[{"type":"text","text":"x-anthropic-billing-header: cc_version=2.1.251.000; cc_entrypoint=sdk-cli; cch=00000;"}]}"#;
+        let body = r#"{"model":"claude-opus-5","messages":[{"role":"user","content":"A"}],"max_tokens":64000,"stream":true,"system":[{"type":"text","text":"x-anthropic-billing-header: cc_version=2.1.258.000; cc_entrypoint=sdk-cli; cch=00000;"}]}"#;
+        let expected_normalized = r#"{"model":"","messages":[{"role":"user","content":"A"}],"stream":true,"system":[{"type":"text","text":"x-anthropic-billing-header: cc_version=2.1.258.000; cc_entrypoint=sdk-cli; cch=00000;"}]}"#;
         assert_eq!(
             xxhash64(expected_normalized.as_bytes(), CCH_SEED),
-            0x7508_c24c_94be_40b4
+            0xf471_4c4a_c5ff_c844
         );
         let mut parsed: Value = serde_json::from_str(body).unwrap();
         parsed["model"] = json!("");
         parsed.as_object_mut().unwrap().shift_remove("max_tokens");
         assert_eq!(serde_json::to_string(&parsed).unwrap(), expected_normalized);
         let patched = patch_cch(body).unwrap();
-        assert!(patched.contains("cch=e40b4"), "{patched}");
+        assert!(patched.contains("cch=fc844"), "{patched}");
     }
 
     #[test]
-    fn oauth_payload_adds_protocol_blocks_identity_and_tool_case() {
+    fn oauth_payload_adds_protocol_blocks_identity_and_preserves_tool_names() {
         let body = json!({
             "model": "claude-opus-5",
             "messages": [{"role":"user", "content":[]}],
@@ -330,12 +297,34 @@ mod tests {
         );
         assert_eq!(transformed["system"][1]["text"], AGENT_SDK_PROMPT);
         assert_eq!(transformed["system"][2]["text"], "Kiss system");
-        assert_eq!(transformed["tools"][0]["name"], "Read");
+        assert_eq!(transformed["tools"][0]["name"], "read");
         assert!(
             transformed["metadata"]["user_id"]
                 .as_str()
                 .unwrap()
                 .contains("session-one")
         );
+    }
+
+    #[test]
+    fn identity_requires_a_standard_versioned_uuid() {
+        let valid = json!({
+            "userID": "f".repeat(64),
+            "oauthAccount": {"accountUuid": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"}
+        });
+        assert!(parse_identity(&valid).is_some());
+
+        for account_uuid in [
+            "aaaaaaaa-bbbb-0ccc-8ddd-eeeeeeeeeeee",
+            "aaaaaaaa-bbbb-4ccc-7ddd-eeeeeeeeeeee",
+            "aaaaaaaa-bbbb-6ccc-8ddd-eeeeeeeeeeee",
+            "aaaaaaaabbbb4ccc8dddeeeeeeeeeeee",
+        ] {
+            let invalid = json!({
+                "userID": "f".repeat(64),
+                "oauthAccount": {"accountUuid": account_uuid}
+            });
+            assert!(parse_identity(&invalid).is_none(), "{account_uuid}");
+        }
     }
 }

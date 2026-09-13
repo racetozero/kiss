@@ -142,6 +142,27 @@ impl Model {
         }
     }
 
+    /// Whether KISS has a provider-native low-latency request for this model.
+    pub fn supports_fast_mode(&self) -> bool {
+        match (self.provider.as_str(), self.api.as_str()) {
+            ("anthropic", "anthropic-messages") => matches!(
+                self.id.as_str(),
+                id if id.starts_with("claude-opus-4-6")
+                    || id.starts_with("claude-opus-4-7")
+                    || id.starts_with("claude-opus-4-8")
+                    || id.starts_with("claude-opus-5")
+            ),
+            ("openai" | "openai-codex" | "openrouter" | "xai", api) => matches!(
+                api,
+                "openai-completions" | "openai-responses" | "openai-codex-responses"
+            ),
+            ("amazon-bedrock", "bedrock-converse-stream") | ("google-vertex", "google-vertex") => {
+                true
+            }
+            _ => false,
+        }
+    }
+
     pub fn supported_thinking_levels(&self) -> Vec<ThinkingLevel> {
         const LEVELS: [ThinkingLevel; 7] = [
             ThinkingLevel::Off,
@@ -217,6 +238,25 @@ mod tests {
             thinking_level_map: BTreeMap::new(),
             headers: BTreeMap::new(),
         }
+    }
+
+    #[test]
+    fn fast_mode_is_limited_to_implemented_provider_paths() {
+        let mut model = model();
+        model.provider = "openai".into();
+        model.api = "openai-responses".into();
+        assert!(model.supports_fast_mode());
+
+        model.provider = "anthropic".into();
+        model.api = "anthropic-messages".into();
+        model.id = "claude-opus-4-6".into();
+        assert!(model.supports_fast_mode());
+        model.id = "claude-sonnet-4-6".into();
+        assert!(!model.supports_fast_mode());
+
+        model.provider = "google".into();
+        model.api = "google-generative-ai".into();
+        assert!(!model.supports_fast_mode());
     }
 
     #[test]

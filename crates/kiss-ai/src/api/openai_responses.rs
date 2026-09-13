@@ -1095,6 +1095,9 @@ pub(crate) fn build_request(model: &Model, context: &Context, options: &StreamOp
         "store": false,
         "parallel_tool_calls": true,
     });
+    if options.fast_mode && model.supports_fast_mode() {
+        body["service_tier"] = json!("priority");
+    }
     if model.api != "openai-codex-responses"
         && model
             .compat
@@ -1221,6 +1224,24 @@ mod request_tests {
         assert_eq!(body["parallel_tool_calls"], true);
         assert_eq!(body["store"], false);
         assert_eq!(body["max_output_tokens"], 100);
+    }
+
+    #[test]
+    fn fast_mode_uses_priority_service_tier() {
+        let mut model = model("openai-responses", "https://api.openai.com/v1");
+        model.provider = "openai".into();
+        let normal = build_request(&model, &Context::default(), &StreamOptions::default());
+        assert!(normal.get("service_tier").is_none());
+
+        let fast = build_request(
+            &model,
+            &Context::default(),
+            &StreamOptions {
+                fast_mode: true,
+                ..Default::default()
+            },
+        );
+        assert_eq!(fast["service_tier"], "priority");
     }
 
     #[test]

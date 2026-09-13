@@ -278,6 +278,7 @@ enum CommandEvent {
     ShellOutput(String),
     ShellFinished(std::result::Result<ShellRunResult, String>),
     ShareFinished(std::result::Result<String, String>),
+    UpdateFinished(std::result::Result<i32, String>),
     TreeNavigationFinished(std::result::Result<kiss_coding::TreeNavigationOutcome, String>),
     BtwFinished {
         request_id: u64,
@@ -1745,6 +1746,17 @@ fn handle_command_event(
                     .cells
                     .push(Cell::Notice(format!("shared session: {url}"))),
                 Err(error) => app.cells.push(Cell::Error(error)),
+            }
+        }
+        CommandEvent::UpdateFinished(result) => {
+            app.command_status = None;
+            match result {
+                Ok(_) => app
+                    .cells
+                    .push(Cell::Notice("update finished; restart KISS".into())),
+                Err(error) => app
+                    .cells
+                    .push(Cell::Error(format!("update failed: {error}"))),
             }
         }
         CommandEvent::TreeNavigationFinished(result) => {
@@ -6195,6 +6207,35 @@ fn run_slash_command(
                 )));
             }
         }
+        "fast" => match rest.as_str() {
+            "" => {
+                let status = if session.fast_mode() { "on" } else { "off" };
+                let support = if session.model().supports_fast_mode() {
+                    ""
+                } else {
+                    "; the current model does not support it"
+                };
+                app.cells
+                    .push(Cell::Notice(format!("fast mode is {status}{support}")));
+            }
+            "on" if !session.model().supports_fast_mode() => app.cells.push(Cell::Error(format!(
+                "fast mode is not available for {}/{}",
+                session.model().provider,
+                session.model().id
+            ))),
+            "on" => {
+                session.set_fast_mode(true);
+                app.cells.push(Cell::Notice(
+                    "fast mode is on for this session; provider costs can increase".into(),
+                ));
+            }
+            "off" => {
+                session.set_fast_mode(false);
+                app.cells
+                    .push(Cell::Notice("fast mode is off for this session".into()));
+            }
+            _ => app.cells.push(Cell::Notice("usage: /fast [on|off]".into())),
+        },
         "scoped-models" => open_scoped_models_picker(app, session, resources),
         "settings" => open_settings_picker(app, session, resources),
         "mcp" => open_mcp_picker(app, session, args, command_tx),
@@ -6444,6 +6485,8 @@ fn run_slash_command(
             }
         }
         "share" => start_share_session(app, session, command_tx),
+        "update" if rest.is_empty() => start_update(app, command_tx),
+        "update" => app.cells.push(Cell::Notice("usage: /update".into())),
         "reload" => reload_interactive(app, session, args, resources),
         "llama" => start_llama_list(app, command_tx),
         other => {
@@ -6700,6 +6743,17 @@ fn start_share_session(
             .map_err(|error| format!("session share failed: {error:#}"));
         let _ = std::fs::remove_file(&target);
         let _ = tx.send(CommandEvent::ShareFinished(result));
+    });
+}
+
+fn start_update(app: &mut App, command_tx: &mpsc::UnboundedSender<CommandEvent>) {
+    app.command_status = Some("updating KISS".into());
+    let tx = command_tx.clone();
+    tokio::spawn(async move {
+        let result = crate::update::run()
+            .await
+            .map_err(|error| format!("{error:#}"));
+        let _ = tx.send(CommandEvent::UpdateFinished(result));
     });
 }
 
@@ -7415,6 +7469,75 @@ mod tests {
             app.cells.last(),
             Some(Cell::Notice(message)) if message == "session name: parity audit"
         ));
+    }
+
+    #[test]
+    fn fast_command_changes_session_state_for_supported_models() {
+        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
+            "/synthetic",
+        )));
+        let model = session
+            .registry
+            .all()
+            .iter()
+            .find(|model| model.supports_fast_mode())
+            .expect("fast-capable built-in model")
+            .clone();
+        session.set_model(model);
+        let mut app = test_app();
+        let mut resources = test_resources();
+
+        run_command_for_test(&mut app, &session, &mut resources, "fast on");
+        assert!(session.fast_mode());
+        run_command_for_test(&mut app, &session, &mut resources, "fast");
+        assert!(matches!(
+            app.cells.last(),
+            Some(Cell::Notice(message)) if message == "fast mode is on"
+        ));
+        run_command_for_test(&mut app, &session, &mut resources, "fast off");
+        assert!(!session.fast_mode());
+
+        let mut unsupported = session.model();
+        unsupported.provider = "unsupported".into();
+        session.set_model(unsupported);
+        run_command_for_test(&mut app, &session, &mut resources, "fast on");
+        assert!(!session.fast_mode());
+        assert!(matches!(app.cells.last(), Some(Cell::Error(_))));
+    }
+
+    #[tokio::test]
+    async fn update_command_uses_the_shared_updater() {
+        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
+            "/synthetic",
+        )));
+        let mut app = test_app();
+        let mut resources = test_resources();
+        let args = Args::parse_from(["kiss"]);
+        let mut task = None;
+        let (command_tx, mut command_rx) = mpsc::unbounded_channel();
+
+        run_slash_command(
+            &mut app,
+            &session,
+            "update",
+            &args,
+            &mut resources,
+            &mut task,
+            &command_tx,
+        );
+        assert_eq!(app.command_status.as_deref(), Some("updating KISS"));
+        let event = command_rx.recv().await.expect("update result");
+        assert!(
+            matches!(&event, CommandEvent::UpdateFinished(Err(error)) if error.contains("not available in debug builds"))
+        );
+
+        let (file_tx, _file_rx) = mpsc::unbounded_channel();
+        let mut file_search = FileSearchService::new(file_tx);
+        handle_command_event(&mut app, event, &mut resources, &mut file_search, &session);
+        assert!(app.command_status.is_none());
+        assert!(
+            matches!(app.cells.last(), Some(Cell::Error(error)) if error.starts_with("update failed:"))
+        );
     }
 
     #[test]

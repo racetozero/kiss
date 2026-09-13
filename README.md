@@ -3,9 +3,9 @@
 A fast terminal coding agent that keeps the interface simple and gives you
 control of the model, tools, sessions, and automation.
 
-KISS works with OpenAI Codex, Anthropic, Google, OpenRouter, Bedrock, GitHub
-Copilot, and OpenAI-compatible providers. It is built in Rust and based on
-[Pi](https://github.com/earendil-works/pi).
+KISS has 40 built-in providers, including OpenAI Codex, Anthropic, Google,
+OpenRouter, Bedrock, and GitHub Copilot. You can also add OpenAI-compatible
+providers. KISS is built in Rust and based on [Pi](https://github.com/earendil-works/pi).
 
 ## Why KISS
 
@@ -98,8 +98,13 @@ Send a new instruction while the agent works. Press `Enter` to steer the
 current task, or `Alt+Enter` to queue the instruction for later.
 
 Useful commands include `/login`, `/model`, `/mcp`, `/compact`, `/resume`,
-`/loop`, `/autoresearch`, `/jobs`, `/provider`, `/export`, `/settings`, and
-`/hotkeys`.
+`/loop`, `/autoresearch`, `/jobs`, `/provider`, `/export`, `/fast`, `/update`,
+`/settings`, and `/hotkeys`.
+
+Use `/fast on` to request the low-latency tier from a supported provider. This
+setting applies only to the current session, and provider costs can increase.
+Use `/fast off` to stop it, or `/fast` to see its state. Use `/update` to update
+the installed KISS binary.
 
 ## Continue work from another agent
 

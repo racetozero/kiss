@@ -35,6 +35,9 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
         .post(&url)
         .header("content-type", "application/json")
         .json(&body);
+    if priority_header(model, options).is_some() {
+        request = request.header("X-Vertex-AI-LLM-Shared-Request-Type", "priority");
+    }
     if model.api == "google-vertex" {
         if let Some(token) = api_key.strip_prefix("vertex-oauth:") {
             request = request.bearer_auth(token);
@@ -115,6 +118,10 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
         }
     };
     builder.finish(stop, model);
+}
+
+fn priority_header(model: &Model, options: &StreamOptions) -> Option<&'static str> {
+    (options.fast_mode && model.supports_fast_mode()).then_some("priority")
 }
 
 fn google_url(model: &Model) -> anyhow::Result<String> {
@@ -385,6 +392,17 @@ mod vertex_tests {
         assert_eq!(
             vertex_url(&model, "project-one", "us-central1"),
             "https://us-central1-aiplatform.googleapis.com/v1/projects/project-one/locations/us-central1/publishers/google/models/gemini-test:streamGenerateContent?alt=sse"
+        );
+        assert!(priority_header(&model, &StreamOptions::default()).is_none());
+        assert_eq!(
+            priority_header(
+                &model,
+                &StreamOptions {
+                    fast_mode: true,
+                    ..Default::default()
+                }
+            ),
+            Some("priority")
         );
     }
 }

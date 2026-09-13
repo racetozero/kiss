@@ -100,6 +100,8 @@ pub struct StreamOptions {
     pub max_tokens: Option<u64>,
     pub reasoning: ThinkingLevel,
     pub tool_choice: Option<ToolChoice>,
+    /// Ask a supported provider to use its higher-cost low-latency tier.
+    pub fast_mode: bool,
     /// Session identifier for providers that support session routing/caching.
     pub session_id: Option<String>,
     /// Streaming transport. OpenAI, OpenAI Codex, and Azure OpenAI use `Auto`

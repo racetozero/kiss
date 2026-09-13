@@ -473,6 +473,9 @@ fn build_request(
         "messages": messages,
         "stream": true,
     });
+    if options.fast_mode && model.supports_fast_mode() {
+        body["service_tier"] = json!("priority");
+    }
     if compat.usage_in_streaming {
         body["stream_options"] = json!({"include_usage": true});
     }
@@ -589,6 +592,30 @@ mod tests {
             &detect_compat(&model),
         );
         assert_eq!(body["priority"], 7);
+    }
+
+    #[test]
+    fn fast_mode_uses_priority_service_tier() {
+        let mut model = model_with_compat(OpenAICompat::default());
+        model.provider = "openai".into();
+        let normal = build_request(
+            &model,
+            &Context::default(),
+            &StreamOptions::default(),
+            &detect_compat(&model),
+        );
+        assert!(normal.get("service_tier").is_none());
+
+        let fast = build_request(
+            &model,
+            &Context::default(),
+            &StreamOptions {
+                fast_mode: true,
+                ..Default::default()
+            },
+            &detect_compat(&model),
+        );
+        assert_eq!(fast["service_tier"], "priority");
     }
 
     #[test]

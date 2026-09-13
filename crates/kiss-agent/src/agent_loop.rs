@@ -172,6 +172,9 @@ async fn run_loop(
                     if let Some(level) = update.thinking_level {
                         config.thinking_level = level;
                     }
+                    if let Some(fast_mode) = update.fast_mode {
+                        config.fast_mode = fast_mode;
+                    }
                 }
             }
 
@@ -234,6 +237,7 @@ async fn stream_assistant(
         max_tokens: config.max_tokens,
         reasoning: config.thinking_level,
         tool_choice: config.tool_choice.clone(),
+        fast_mode: config.fast_mode,
         session_id: config.session_id.clone(),
         transport: config.transport,
         cancel,

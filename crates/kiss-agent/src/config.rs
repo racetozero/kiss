@@ -53,6 +53,7 @@ pub struct TurnUpdate {
     pub context: Option<AgentContext>,
     pub model: Option<Model>,
     pub thinking_level: Option<ThinkingLevel>,
+    pub fast_mode: Option<bool>,
 }
 
 pub struct TurnInfo<'a> {
@@ -88,6 +89,7 @@ pub struct AgentLoopConfig {
     pub temperature: Option<f64>,
     pub max_tokens: Option<u64>,
     pub tool_choice: Option<ToolChoice>,
+    pub fast_mode: bool,
     pub session_id: Option<String>,
     pub transport: Transport,
     pub tool_execution: ExecutionMode,
@@ -117,6 +119,7 @@ impl AgentLoopConfig {
             temperature: None,
             max_tokens: None,
             tool_choice: None,
+            fast_mode: false,
             session_id: None,
             transport: Transport::Auto,
             tool_execution: ExecutionMode::Parallel,
