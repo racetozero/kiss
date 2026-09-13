@@ -101,10 +101,9 @@ Useful commands include `/login`, `/model`, `/mcp`, `/compact`, `/resume`,
 `/loop`, `/autoresearch`, `/jobs`, `/provider`, `/export`, `/fast`, `/update`,
 `/settings`, and `/hotkeys`.
 
-Use `/fast on` to request the low-latency tier from a supported provider. This
+Use `/fast` to toggle the low-latency tier for a supported provider. This
 setting applies only to the current session, and provider costs can increase.
-Use `/fast off` to stop it, or `/fast` to see its state. Use `/update` to update
-the installed KISS binary.
+Use `/update` to update the installed KISS binary.
 
 ## Continue work from another agent
 
