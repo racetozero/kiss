@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.0.10 - 2026-09-13
+
+### Added
+
+- Added `/update` to update the installed KISS binary from the interactive
+  terminal.
+- Added session-local `/fast` toggle support for provider low-latency tiers.
+  Supported paths include Anthropic, OpenAI, OpenAI Codex, OpenRouter, xAI,
+  Amazon Bedrock, and Google Vertex AI.
+- Documented the 40 built-in providers in the README.
+
+### Changed
+
+- Updated Anthropic OAuth compatibility to Claude Code protocol 2.1.258 and
+  the current Pi Black request format.
+
 ## 0.0.9 - 2026-09-12
 
 ### Fixed
