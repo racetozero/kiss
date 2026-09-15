@@ -273,6 +273,15 @@ pub async fn build_startup(
     if radius_selected {
         registry.refresh_radius().await;
     }
+    let cursor_selected = args.provider.as_deref() == Some("cursor")
+        || args
+            .model
+            .as_deref()
+            .is_some_and(|model| model.starts_with("cursor/"))
+        || settings.default_provider.as_deref() == Some("cursor");
+    if cursor_selected {
+        registry.refresh_cursor().await;
+    }
 
     let (model, cli_thinking) = resolve_model(args, &settings, &registry)?;
     let thinking = args

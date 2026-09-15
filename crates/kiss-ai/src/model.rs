@@ -93,8 +93,8 @@ pub struct Model {
     pub name: String,
     /// API dialect: "anthropic-messages", "openai-completions",
     /// "openai-responses", "openai-codex-responses",
-    /// "azure-openai-responses", "google-generative-ai", or
-    /// "google-vertex".
+    /// "azure-openai-responses", "cursor-agent",
+    /// "google-generative-ai", or "google-vertex".
     pub api: String,
     pub provider: String,
     pub base_url: String,

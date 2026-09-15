@@ -16,6 +16,9 @@ pub async fn login_browser(
         "anthropic" => {
             kiss_ai::auth::anthropic::login_browser(&Default::default(), cancel, show_url).await?
         }
+        "cursor" => {
+            kiss_ai::auth::cursor::login_browser(&Default::default(), cancel, show_url).await?
+        }
         "openrouter" => {
             kiss_ai::auth::openrouter::login_browser(&Default::default(), cancel, show_url).await?
         }

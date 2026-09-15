@@ -29,6 +29,9 @@ native = [
     "dep:dirs",
     "dep:fs2",
     "dep:futures",
+    "dep:http",
+    "dep:prost",
+    "dep:prost-types",
     "dep:rand",
     "dep:reqwest",
     "dep:rustls",
@@ -63,6 +66,9 @@ base64 = { workspace = true, optional = true }
 dirs = { workspace = true, optional = true }
 fs2 = { workspace = true, optional = true }
 futures = { workspace = true, optional = true }
+http = { workspace = true, optional = true }
+prost = { workspace = true, optional = true }
+prost-types = { workspace = true, optional = true }
 rand = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true }
 rustls = { workspace = true, optional = true }

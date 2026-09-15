@@ -5,6 +5,8 @@
 pub mod anthropic;
 pub mod bedrock;
 pub(crate) mod claude_code;
+pub mod cursor;
+mod cursor_protocol;
 pub mod google;
 pub mod openai_compaction;
 pub mod openai_completions;

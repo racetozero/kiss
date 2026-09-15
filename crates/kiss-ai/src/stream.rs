@@ -129,6 +129,7 @@ async fn dispatch(model: Model, context: Context, mut options: StreamOptions, si
     match model.api.as_str() {
         "anthropic-messages" => api::anthropic::stream(&model, &context, &options, sink).await,
         "bedrock-converse-stream" => api::bedrock::stream(&model, &context, &options, sink).await,
+        "cursor-agent" => api::cursor::stream(&model, &context, &options, sink).await,
         "openai-completions" => {
             api::openai_completions::stream(&model, &context, &options, sink).await
         }

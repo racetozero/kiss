@@ -12,6 +12,7 @@ use std::time::SystemTime;
 
 pub mod anthropic;
 mod azure;
+pub mod cursor;
 mod device_code;
 pub mod external;
 pub mod github_copilot;
@@ -88,9 +89,12 @@ pub fn is_oauth_access_token(provider: &str, access_token: &str) -> bool {
     ) {
         return true;
     }
-    provider == "anthropic"
-        && std::env::var("ANTHROPIC_OAUTH_TOKEN")
-            .is_ok_and(|value| !value.is_empty() && value == access_token)
+    (provider == "cursor"
+        && std::env::var("CURSOR_ACCESS_TOKEN")
+            .is_ok_and(|value| !value.is_empty() && value == access_token))
+        || provider == "anthropic"
+            && std::env::var("ANTHROPIC_OAUTH_TOKEN")
+                .is_ok_and(|value| !value.is_empty() && value == access_token)
 }
 
 pub fn is_bearer_access_token(provider: &str, access_token: &str) -> bool {
@@ -140,6 +144,7 @@ pub fn login_methods(provider: &str) -> Vec<LoginMethod> {
     match provider {
         "openai-codex" => vec![BrowserOAuth, DeviceOAuth],
         "anthropic" => vec![BrowserOAuth, ManualOAuth, ApiKey],
+        "cursor" => vec![BrowserOAuth, ApiKey],
         "github-copilot" | "kimi-coding" | "xai" => vec![DeviceOAuth, ApiKey],
         "openrouter" => vec![BrowserOAuth, ManualOAuth, ApiKey],
         "radius" => vec![BrowserOAuth, DeviceOAuth, ApiKey],
@@ -164,6 +169,7 @@ pub fn env_var_names(provider: &str) -> &'static [&'static str] {
         "cerebras" => &["CEREBRAS_API_KEY"],
         "cloudflare-ai-gateway" => &["CLOUDFLARE_AI_GATEWAY_API_KEY"],
         "cloudflare-workers-ai" => &["CLOUDFLARE_API_TOKEN"],
+        "cursor" => &["CURSOR_ACCESS_TOKEN"],
         "deepseek" => &["DEEPSEEK_API_KEY"],
         "fireworks" => &["FIREWORKS_API_KEY"],
         "github-copilot" => &["COPILOT_GITHUB_TOKEN"],
@@ -440,6 +446,7 @@ async fn resolve_api_key_async_generic(
                         | "kimi-coding"
                         | "xai"
                         | "radius"
+                        | "cursor"
                 ) && credential.is_expired() =>
             {
                 static REFRESH_LOCK: std::sync::OnceLock<tokio::sync::Mutex<()>> =
@@ -468,6 +475,7 @@ async fn resolve_api_key_async_generic(
                     "kimi-coding" => kimi_coding::refresh(&current, &Default::default()).await?,
                     "xai" => xai::refresh(&current, &Default::default()).await?,
                     "radius" => radius::refresh(&current, &Default::default()).await?,
+                    "cursor" => cursor::refresh(&current, &Default::default()).await?,
                     _ => unreachable!(),
                 };
                 let access = refreshed.access.clone();
@@ -719,6 +727,10 @@ mod tests {
         }
         assert!(login_methods("openrouter").contains(&LoginMethod::BrowserOAuth));
         assert!(login_methods("openrouter").contains(&LoginMethod::ManualOAuth));
+        assert_eq!(
+            login_methods("cursor"),
+            vec![LoginMethod::BrowserOAuth, LoginMethod::ApiKey]
+        );
         assert_eq!(
             login_methods("radius")[..2],
             [LoginMethod::BrowserOAuth, LoginMethod::DeviceOAuth]

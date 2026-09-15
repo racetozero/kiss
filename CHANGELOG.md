@@ -9,7 +9,9 @@
 - Added session-local `/fast` toggle support for provider low-latency tiers.
   Supported paths include Anthropic, OpenAI, OpenAI Codex, OpenRouter, xAI,
   Amazon Bedrock, and Google Vertex AI.
-- Documented the 40 built-in providers in the README.
+- Added a native Cursor provider with direct HTTP/2 transport, browser login,
+  live model discovery, image input, and KISS tool execution.
+- Documented the 41 built-in providers in the README.
 
 ### Changed
 

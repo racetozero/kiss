@@ -18,6 +18,7 @@ const BUILTIN_PROVIDER_CATALOGS: &[&str] = &[
     include_str!("../data/providers/cerebras.json"),
     include_str!("../data/providers/cloudflare-ai-gateway.json"),
     include_str!("../data/providers/cloudflare-workers-ai.json"),
+    include_str!("../data/providers/cursor.json"),
     include_str!("../data/providers/deepseek.json"),
     include_str!("../data/providers/fireworks.json"),
     include_str!("../data/providers/github-copilot.json"),
@@ -60,6 +61,7 @@ pub const BUILTIN_PROVIDER_IDS: &[&str] = &[
     "cerebras",
     "cloudflare-ai-gateway",
     "cloudflare-workers-ai",
+    "cursor",
     "deepseek",
     "fireworks",
     "github-copilot",
@@ -226,6 +228,25 @@ impl Registry {
             std::env::var("RADIUS_GATEWAY").unwrap_or_else(|_| "https://radius.pi.dev".into());
         if let Err(error) = self.refresh_radius_from(&gateway, &api_key).await {
             eprintln!("warning: could not refresh Radius models: {error:#}");
+        }
+    }
+
+    /// Load Cursor's authenticated account model catalog when Cursor is the
+    /// selected provider. The embedded fallback remains available if this
+    /// request fails.
+    pub async fn refresh_cursor(&mut self) {
+        let Ok(Some(access_token)) =
+            crate::auth::resolve_api_key_async("cursor", &self.declared_keys).await
+        else {
+            return;
+        };
+        match crate::api::cursor::discover_models(&access_token).await {
+            Ok(models) => {
+                for model in models {
+                    self.upsert(model);
+                }
+            }
+            Err(error) => eprintln!("warning: could not refresh Cursor models: {error:#}"),
         }
     }
 
@@ -542,6 +563,7 @@ mod tests {
                     *api,
                     "anthropic-messages"
                         | "bedrock-converse-stream"
+                        | "cursor-agent"
                         | "google-generative-ai"
                         | "google-vertex"
                         | "openai-completions"
@@ -755,5 +777,15 @@ mod tests {
         assert_eq!(model.api, "pi-messages");
         assert_eq!(model.base_url, "https://gateway.example/v1");
         assert!(model.supports_images());
+    }
+
+    #[test]
+    fn cursor_fallback_is_a_native_model() {
+        let registry = Registry::from_builtin();
+        let (model, _) = registry.resolve("cursor/auto", None).unwrap();
+        assert_eq!(model.provider, "cursor");
+        assert_eq!(model.api, "cursor-agent");
+        assert!(model.supports_images());
+        assert!(BUILTIN_PROVIDER_IDS.contains(&"cursor"));
     }
 }
