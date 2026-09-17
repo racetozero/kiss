@@ -359,21 +359,14 @@ when canceled.
 ### Agent Client Protocol
 
 KISS is a native [Agent Client Protocol](https://agentclientprotocol.com/)
-agent. It implements stable ACP v1 over JSON-RPC standard input and output,
-without an adapter or second KISS process. ACP clients start:
+agent. It implements stable ACP v1 directly over JSON-RPC standard input and
+output. ACP clients run:
 
 ```bash
 kiss acp
 ```
 
-The command waits for an ACP client and does not open the TUI. Configure a
-model provider first. For example:
-
-```bash
-kiss login openai-codex
-kiss auth
-kiss --list-models
-```
+The command waits for a client and does not open the TUI.
 
 Add KISS to the Zed settings file:
 
@@ -390,24 +383,22 @@ Add KISS to the Zed settings file:
 }
 ```
 
-Restart Zed and select KISS from the custom-agent list. If Zed cannot find
-`kiss`, use its full path in `command`.
+If Zed cannot find `kiss`, use its full path in `command`.
 
 Global KISS options must come before `acp`. In the example above, change
 `args` to `["--model", "sonnet:high", "acp"]` to select a model and thinking
 level, or to `["--no-session", "acp"]` to disable session history.
 
-Persistent sessions are the default. ACP clients can list, load, resume,
-close, and delete them, and can change the model and thinking level. KISS
-accepts text, images, resource links, and embedded resources. It streams
-answers, reasoning, usage, tool status, file locations, and file diffs.
-Cancellation stops active and queued work. Tools run in the working directory
-that the client supplies.
+Persistent sessions are the default. Clients can list, load, resume, close,
+and delete them, and can change the model and thinking level. KISS accepts
+text, images, resource links, and embedded resources. It streams answers,
+reasoning, tool status, usage, file locations, and diffs. Tools run in the
+working directory that the client supplies. Cancellation stops active and
+queued work.
 
-Client-provided stdio and streamable-HTTP MCP servers apply only to their ACP
-session and are not written to KISS configuration. Draft ACP v2, audio,
-legacy MCP SSE, and client filesystem or terminal delegation are not
-supported.
+Client-provided stdio and streamable-HTTP MCP servers apply only to the ACP
+session and are not saved. Draft ACP v2, audio, legacy MCP SSE, and client
+filesystem or terminal delegation are not supported.
 
 ## Build with KISS
 
