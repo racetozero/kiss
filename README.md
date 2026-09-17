@@ -342,8 +342,9 @@ WebMCP support is available in the interactive TUI:
 
 `/webmcp` and `/webmcp connect` connect to Chrome and add one `webmcp` agent
 tool to the current session. Tool discovery continues in the background.
-`/webmcp list` shows the active page origins and tool names. `/webmcp
-disconnect` closes the browser connection and removes the agent tool.
+`/webmcp list` shows the active page origins and tool names. The
+`/webmcp disconnect` command closes the browser connection and removes the
+agent tool.
 
 The `webmcp` agent tool has three actions:
 
@@ -375,9 +376,11 @@ the trusted project file `.kiss/settings.json`:
 ```
 
 `allowedOrigins` and `disallowedOrigins` accept a complete origin or a host
-name. The deny list always wins. `cdp` accepts a local remote-debugging port or
-a complete `ws://` or `wss://` browser WebSocket URL. Plain `ws://` connections
-must use a loopback address such as `127.0.0.1` or `localhost`.
+name. If `allowedOrigins` is absent, KISS permits all normal page origins after
+the user connects. The deny list always wins. `cdp` accepts a local
+remote-debugging port or a complete `ws://` or `wss://` browser WebSocket URL.
+Plain `ws://` connections must use a loopback address such as `127.0.0.1` or
+`localhost`.
 
 KISS makes no browser connection and adds no `webmcp` agent tool until the user
 runs `/webmcp`. Calls require the exact page origin and tool name. KISS ignores
