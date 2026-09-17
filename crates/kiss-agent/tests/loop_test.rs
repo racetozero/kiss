@@ -10,6 +10,7 @@ use kiss_ai::{
 use serde_json::{Value, json};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use tokio_util::sync::CancellationToken;
 
 fn fake_model() -> Model {
@@ -70,8 +71,78 @@ fn assistant_tool_call(name: &str, args: Value, stop: StopReason) -> AssistantMe
     m
 }
 
+fn assistant_tool_batch(name: &str, count: usize) -> AssistantMessage {
+    let mut message = AssistantMessage::empty("fake", "fake", "fake-model");
+    message.content.extend((0..count).map(|index| {
+        ContentBlock::ToolCall(ToolCall {
+            id: format!("call_{index}"),
+            name: name.to_string(),
+            arguments: json!({"value": index.to_string()}),
+            thought_signature: None,
+        })
+    }));
+    message.stop_reason = StopReason::ToolUse;
+    message
+}
+
 struct EchoTool {
     calls: Arc<AtomicUsize>,
+}
+
+struct MeasuredTool {
+    calls: AtomicUsize,
+    active: AtomicUsize,
+    peak: AtomicUsize,
+    delay: Duration,
+}
+
+impl MeasuredTool {
+    fn new(delay: Duration) -> Self {
+        Self {
+            calls: AtomicUsize::new(0),
+            active: AtomicUsize::new(0),
+            peak: AtomicUsize::new(0),
+            delay,
+        }
+    }
+
+    fn peak(&self) -> usize {
+        self.peak.load(Ordering::Relaxed)
+    }
+}
+
+#[async_trait::async_trait]
+impl AgentTool for MeasuredTool {
+    fn name(&self) -> &str {
+        "measured"
+    }
+
+    fn description(&self) -> String {
+        "measure parallel tool dispatch".into()
+    }
+
+    fn parameters(&self) -> Value {
+        json!({"type": "object", "properties": {"value": {"type": "string"}}, "required": ["value"]})
+    }
+
+    async fn execute(
+        &self,
+        _id: &str,
+        args: Value,
+        _cancel: CancellationToken,
+        _on_update: Option<ToolUpdateSink>,
+    ) -> anyhow::Result<ToolResult> {
+        self.calls.fetch_add(1, Ordering::Relaxed);
+        let active = self.active.fetch_add(1, Ordering::Relaxed) + 1;
+        self.peak.fetch_max(active, Ordering::Relaxed);
+        let index = args["value"]
+            .as_str()
+            .and_then(|value| value.parse::<usize>().ok())
+            .unwrap_or_default();
+        tokio::time::sleep(self.delay + Duration::from_millis(10 - index.min(10) as u64)).await;
+        self.active.fetch_sub(1, Ordering::Relaxed);
+        Ok(ToolResult::text(args["value"].as_str().unwrap_or_default()))
+    }
 }
 
 #[async_trait::async_trait]
@@ -471,4 +542,144 @@ async fn invalid_arguments_rejected_by_schema() {
         panic!()
     };
     assert!(tr.is_error);
+}
+
+#[tokio::test]
+async fn parallel_tool_limit_applies_backpressure_and_keeps_result_order() {
+    let tool = Arc::new(MeasuredTool::new(Duration::from_millis(1)));
+    let mut config = scripted_config(vec![
+        assistant_tool_batch("measured", 12),
+        assistant_text("done", StopReason::Stop),
+    ]);
+    config.max_concurrent_tools = 3;
+    let messages = run_agent_loop(
+        vec![AgentMessage::user("go")],
+        AgentContext {
+            tools: vec![tool.clone()],
+            ..Default::default()
+        },
+        config,
+        CancellationToken::new(),
+        Arc::new(|_| {}),
+    )
+    .await;
+
+    assert_eq!(tool.peak(), 3);
+    let ids = messages
+        .iter()
+        .filter_map(|message| match message {
+            AgentMessage::ToolResult(result) => Some(result.tool_call_id.as_str()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        ids,
+        (0..12)
+            .map(|index| format!("call_{index}"))
+            .collect::<Vec<_>>()
+    );
+}
+
+#[tokio::test]
+async fn zero_parallel_tool_limit_runs_one_call_at_a_time() {
+    let tool = Arc::new(MeasuredTool::new(Duration::ZERO));
+    let mut config = scripted_config(vec![
+        assistant_tool_batch("measured", 2),
+        assistant_text("done", StopReason::Stop),
+    ]);
+    config.max_concurrent_tools = 0;
+    run_agent_loop(
+        vec![AgentMessage::user("go")],
+        AgentContext {
+            tools: vec![tool.clone()],
+            ..Default::default()
+        },
+        config,
+        CancellationToken::new(),
+        Arc::new(|_| {}),
+    )
+    .await;
+
+    assert_eq!(tool.peak(), 1);
+    assert_eq!(tool.calls.load(Ordering::Relaxed), 2);
+}
+
+#[tokio::test]
+async fn cancellation_does_not_start_queued_parallel_tools() {
+    let tool = Arc::new(MeasuredTool::new(Duration::from_millis(20)));
+    let mut config = scripted_config(vec![assistant_tool_batch("measured", 12)]);
+    config.max_concurrent_tools = 3;
+    let cancel = CancellationToken::new();
+    let cancel_soon = cancel.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(2)).await;
+        cancel_soon.cancel();
+    });
+    let messages = run_agent_loop(
+        vec![AgentMessage::user("go")],
+        AgentContext {
+            tools: vec![tool.clone()],
+            ..Default::default()
+        },
+        config,
+        cancel,
+        Arc::new(|_| {}),
+    )
+    .await;
+
+    assert_eq!(tool.calls.load(Ordering::Relaxed), 3);
+    assert_eq!(
+        messages
+            .iter()
+            .filter(
+                |message| matches!(message, AgentMessage::ToolResult(result) if result.is_error)
+            )
+            .count(),
+        9
+    );
+}
+
+#[tokio::test]
+#[ignore = "release-mode performance benchmark"]
+async fn benchmark_performance_200_tool_calls() {
+    const CALLS: usize = 200;
+    for (name, limit) in [("unlimited", Some(usize::MAX)), ("bounded", None)] {
+        let tool = Arc::new(MeasuredTool::new(Duration::from_millis(10)));
+        let mut config = scripted_config(vec![
+            assistant_tool_batch("measured", CALLS),
+            assistant_text("done", StopReason::Stop),
+        ]);
+        if let Some(limit) = limit {
+            config.max_concurrent_tools = limit;
+        }
+        let context = AgentContext {
+            tools: vec![tool.clone()],
+            ..Default::default()
+        };
+
+        let started = Instant::now();
+        let messages = run_agent_loop(
+            vec![AgentMessage::user("go")],
+            context,
+            config,
+            CancellationToken::new(),
+            Arc::new(|_| {}),
+        )
+        .await;
+        let elapsed = started.elapsed();
+        let results = messages
+            .iter()
+            .filter(|message| matches!(message, AgentMessage::ToolResult(_)))
+            .count();
+        assert_eq!(results, CALLS);
+        assert_eq!(tool.calls.load(Ordering::Relaxed), CALLS);
+
+        let mut sample = [elapsed.as_nanos() / CALLS as u128];
+        kiss_bench::report(
+            &format!("agent_tool_batch_200_{name}"),
+            &mut sample,
+            CALLS,
+            &format!("10-20ms_tool_peak_active={}", tool.peak()),
+        );
+    }
 }

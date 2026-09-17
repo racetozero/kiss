@@ -9,6 +9,7 @@ members = [
     "crates/kiss-mcp",
     "crates/kiss-sdk",
     "crates/kiss-tui",
+    "crates/kiss-webmcp",
     "crates/kiss",
 ]
 
@@ -45,6 +46,7 @@ catalog_package = "@earendil-works/pi-ai@0.85.1"
 
 [workspace.dependencies]
 anyhow = "1"
+agent-client-protocol = "2.1.0"
 async-trait = "0.1"
 azure_core = { version = "0.21", default-features = false, features = ["enable_reqwest_rustls"] }
 azure_identity = { version = "0.21", default-features = false, features = ["enable_reqwest_rustls"] }
@@ -73,6 +75,7 @@ kiss-mcp = { path = "crates/kiss-mcp" }
 kiss-sdk = { path = "crates/kiss-sdk" }
 kiss-tui = { path = "crates/kiss-tui" }
 kiss-workflow = { path = "crates/kiss-workflow" }
+kiss-webmcp = { path = "crates/kiss-webmcp" }
 libc = "0.2"
 mdwright-latex = "0.1.3"
 mermaid-text = "0.57"

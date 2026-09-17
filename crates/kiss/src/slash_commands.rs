@@ -94,6 +94,11 @@ pub(crate) const KISS_SLASH_COMMANDS: &[SlashCommand] = &[
     SlashCommand::new("update", "Update the KISS binary", None),
     SlashCommand::new("mcp", "Manage MCP servers", None),
     SlashCommand::new(
+        "webmcp",
+        "Connect to Chrome WebMCP tools",
+        Some("[connect|list|disconnect]"),
+    ),
+    SlashCommand::new(
         "provider",
         "Manage custom OpenAI-compatible providers",
         Some("[list|add|remove]"),
@@ -257,6 +262,7 @@ mod tests {
                 "fast",
                 "update",
                 "mcp",
+                "webmcp",
                 "provider",
                 "providers",
                 "btw",

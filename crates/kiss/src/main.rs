@@ -5,6 +5,7 @@ mod export;
 mod file_search;
 mod job_ui;
 mod modes {
+    pub mod acp;
     pub mod interactive;
     pub mod json;
     pub mod print;
@@ -56,7 +57,7 @@ fn exit_code(code: i32) -> ExitCode {
 
 async fn run(args: Args) -> anyhow::Result<i32> {
     if let Some(command) = &args.command {
-        return run_command(command).await;
+        return run_command(&args, command).await;
     }
 
     // --list-models
@@ -98,8 +99,9 @@ async fn run(args: Args) -> anyhow::Result<i32> {
     }
 }
 
-async fn run_command(command: &Command) -> anyhow::Result<i32> {
+async fn run_command(args: &Args, command: &Command) -> anyhow::Result<i32> {
     match command {
+        Command::Acp => modes::acp::run(args).await,
         Command::Doctor { summary } => doctor::run(*summary).await,
         Command::Update => update::run().await,
         Command::Mcp { command } => mcp_cli::run(command).await,

@@ -15,6 +15,7 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow.workspace = true
+agent-client-protocol.workspace = true
 base64.workspace = true
 chrono.workspace = true
 clap.workspace = true
@@ -28,6 +29,7 @@ kiss-coding.workspace = true
 kiss-mcp.workspace = true
 kiss-sdk = { workspace = true, features = ["rpc"] }
 kiss-tui.workspace = true
+kiss-webmcp.workspace = true
 libc.workspace = true
 reqwest.workspace = true
 rpassword.workspace = true
@@ -43,4 +45,5 @@ url.workspace = true
 
 [dev-dependencies]
 kiss-bench.workspace = true
+kiss-sdk = { workspace = true, features = ["mock", "rpc"] }
 tempfile.workspace = true

@@ -94,6 +94,7 @@ struct App {
     mcp_manager: Option<kiss_mcp::McpManager>,
     mcp_servers: Vec<McpPanelServer>,
     mcp_config_paths: Option<kiss_mcp::config::ConfigPaths>,
+    webmcp_manager: kiss_webmcp::WebMcpManager,
     /// The open `/workflows` progress view, if any.
     workflow_view: Option<WorkflowView>,
     /// The open `/jobs` loop and autoresearch view, if any.
@@ -300,6 +301,7 @@ enum CommandEvent {
         action: String,
         result: std::result::Result<String, String>,
     },
+    WebMcpFinished(std::result::Result<WebMcpCommandResult, String>),
     /// A workflow is waiting for the user to approve it before it starts.
     WorkflowApproval {
         plan: Box<kiss_coding::workflows::WorkflowPlan>,
@@ -314,6 +316,12 @@ enum CommandEvent {
     WorkflowStarted(Arc<kiss_coding::workflows::RunRecord>),
     /// A saved workflow was cancelled before it made a run record.
     WorkflowCancelled,
+}
+
+enum WebMcpCommandResult {
+    Connected,
+    Listed(Vec<kiss_webmcp::WebMcpToolInfo>),
+    Disconnected,
 }
 
 #[derive(Debug)]
@@ -1239,6 +1247,7 @@ pub async fn run(args: &Args) -> Result<i32> {
         mcp_manager: None,
         mcp_servers: Vec::new(),
         mcp_config_paths: None,
+        webmcp_manager: webmcp_manager(&settings.webmcp),
         workflow_view: None,
         job_view: None,
         workflow_version: 0,
@@ -1855,6 +1864,42 @@ fn handle_command_event(
                 ))),
             }
         }
+        CommandEvent::WebMcpFinished(result) => {
+            app.command_status = None;
+            match result {
+                Ok(WebMcpCommandResult::Connected) => {
+                    session.install_session_tool(app.webmcp_manager.agent_tool());
+                    app.cells.push(Cell::Notice(
+                        "WebMCP connected to Chrome. Tool discovery continues in the background; run /webmcp list to see active tools. Page tool metadata and results are untrusted."
+                            .into(),
+                    ));
+                }
+                Ok(WebMcpCommandResult::Listed(tools)) if tools.is_empty() => {
+                    app.cells.push(Cell::Notice(
+                        "WebMCP is connected, but no allowed page tools are active".into(),
+                    ));
+                }
+                Ok(WebMcpCommandResult::Listed(tools)) => {
+                    let text = tools
+                        .into_iter()
+                        .map(|tool| format!("{}  {}  ({})", tool.origin, tool.name, tool.title))
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    app.cells.push(Cell::Notice(format!(
+                        "WebMCP tools (untrusted page metadata):\n{text}"
+                    )));
+                }
+                Ok(WebMcpCommandResult::Disconnected) => {
+                    session.remove_session_tool("webmcp");
+                    app.cells.push(Cell::Notice("WebMCP disconnected".into()));
+                }
+                Err(error) => {
+                    session.remove_session_tool("webmcp");
+                    app.cells
+                        .push(Cell::Error(format!("WebMCP failed: {error}")));
+                }
+            }
+        }
         CommandEvent::WorkflowApproval { plan, reply } => {
             // The progress view would hide the question, so close it first.
             app.workflow_view = None;
@@ -2019,6 +2064,21 @@ fn command_argument_items(
                 )
             })
             .collect(),
+        "webmcp" => [
+            ("connect", "Connect to Chrome"),
+            ("list", "Show active page tools"),
+            ("disconnect", "Disconnect from Chrome"),
+        ]
+        .into_iter()
+        .map(|(value, detail)| {
+            (
+                value.to_string(),
+                Some(detail.to_string()),
+                value.to_string(),
+                value.to_string(),
+            )
+        })
+        .collect(),
         _ => return None,
     };
 
@@ -6148,6 +6208,62 @@ fn provider_tui_usage() -> &'static str {
     "Usage:\n/provider add <id> <chat-completions|responses|codex> <base-url> <model> [KEY_ENV|auth:<provider>]\n/provider list\n/provider remove <id>"
 }
 
+fn webmcp_manager(settings: &kiss_coding::settings::WebMcpSettings) -> kiss_webmcp::WebMcpManager {
+    kiss_webmcp::WebMcpManager::new(kiss_webmcp::WebMcpConfig {
+        allowed_origins: settings.allowed_origins.clone(),
+        disallowed_origins: settings.disallowed_origins.clone(),
+        cdp: settings.cdp.clone(),
+    })
+}
+
+fn start_webmcp(
+    app: &mut App,
+    session: &Arc<kiss_coding::AgentSession>,
+    command: &str,
+    command_tx: &mpsc::UnboundedSender<CommandEvent>,
+) {
+    let manager = app.webmcp_manager.clone();
+    let tx = command_tx.clone();
+    match command {
+        "" | "connect" => {
+            session.remove_session_tool("webmcp");
+            app.command_status = Some("connecting to Chrome WebMCP".into());
+            tokio::spawn(async move {
+                let result = manager
+                    .connect()
+                    .await
+                    .map(|_| WebMcpCommandResult::Connected)
+                    .map_err(|error| format!("{error:#}"));
+                let _ = tx.send(CommandEvent::WebMcpFinished(result));
+            });
+        }
+        "list" => {
+            app.command_status = Some("reading Chrome WebMCP tools".into());
+            tokio::spawn(async move {
+                let result = if manager.is_connected().await {
+                    Ok(WebMcpCommandResult::Listed(manager.tools().await))
+                } else {
+                    Err("not connected; run /webmcp first".into())
+                };
+                let _ = tx.send(CommandEvent::WebMcpFinished(result));
+            });
+        }
+        "disconnect" => {
+            session.remove_session_tool("webmcp");
+            app.command_status = Some("disconnecting Chrome WebMCP".into());
+            tokio::spawn(async move {
+                manager.disconnect().await;
+                let _ = tx.send(CommandEvent::WebMcpFinished(Ok(
+                    WebMcpCommandResult::Disconnected,
+                )));
+            });
+        }
+        _ => app.cells.push(Cell::Notice(
+            "usage: /webmcp [connect|list|disconnect]".into(),
+        )),
+    }
+}
+
 fn run_slash_command(
     app: &mut App,
     session: &Arc<kiss_coding::AgentSession>,
@@ -6230,6 +6346,7 @@ fn run_slash_command(
         "scoped-models" => open_scoped_models_picker(app, session, resources),
         "settings" => open_settings_picker(app, session, resources),
         "mcp" => open_mcp_picker(app, session, args, command_tx),
+        "webmcp" => start_webmcp(app, session, &rest, command_tx),
         "provider" => run_provider_command(app, &rest),
         "providers" => run_provider_command(app, "list"),
         "btw" => {
@@ -6866,6 +6983,8 @@ fn reload_interactive(
     resources.skills = reloaded.skills;
     resources.prompt_templates = reloaded.prompt_templates;
     resources.context_file_paths = reloaded.context_file_paths;
+    session.remove_session_tool("webmcp");
+    app.webmcp_manager = webmcp_manager(&reloaded.settings.webmcp);
     resources.settings = reloaded.settings.clone();
     session.reload_runtime(reloaded.settings, reloaded.system_prompt, reloaded.tools);
     resources.saved_workflows = discover_saved_workflows(session);
@@ -6944,6 +7063,7 @@ mod tests {
             mcp_manager: None,
             mcp_servers: Vec::new(),
             mcp_config_paths: None,
+            webmcp_manager: webmcp_manager(&Default::default()),
             workflow_view: None,
             job_view: None,
             workflow_version: 0,

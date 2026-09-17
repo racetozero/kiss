@@ -17,6 +17,7 @@ use kiss_coding::session_runner::{AgentSession, SessionEventSink};
 use kiss_coding::settings::Settings;
 use kiss_coding::system_prompt::{SystemPromptOptions, build_system_prompt};
 use kiss_coding::{context_files, trust};
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -67,6 +68,8 @@ pub struct SessionOptions {
     pub no_tools: bool,
     /// Extra tools implemented by the caller.
     pub custom_tools: Vec<DynTool>,
+    /// MCP servers supplied by the embedding transport for this session only.
+    pub mcp_servers: BTreeMap<String, kiss_mcp::ServerEntry>,
     /// Replace the generated system prompt entirely.
     pub system_prompt: Option<String>,
     /// Append to the generated system prompt.
@@ -103,6 +106,7 @@ impl std::fmt::Debug for SessionOptions {
             .field("exclude_tools", &self.exclude_tools)
             .field("no_tools", &self.no_tools)
             .field("custom_tools", &self.custom_tools.len())
+            .field("mcp_servers", &self.mcp_servers.len())
             .field("session", &self.session)
             .field("session_dir", &self.session_dir)
             .field("session_name", &self.session_name)
@@ -127,6 +131,7 @@ impl Default for SessionOptions {
             exclude_tools: Vec::new(),
             no_tools: false,
             custom_tools: Vec::new(),
+            mcp_servers: BTreeMap::new(),
             system_prompt: None,
             append_system_prompt: None,
             session: SessionSource::default(),
@@ -186,9 +191,9 @@ impl SessionOptions {
         };
         let skills = kiss_coding::skills::discover(&cwd, trusted, &[]);
 
-        let tool_names =
+        let mut tool_names =
             select_tool_names(self.tools.as_deref(), &self.exclude_tools, self.no_tools);
-        let mcp = self.load_mcp(&cwd, trusted, &tool_names)?;
+        let mcp = self.load_mcp(&cwd, trusted, &mut tool_names)?;
         let files = context_files::system_prompt_files(&cwd);
         let custom = self.system_prompt.clone().or(files.replace);
         let append = match (&self.append_system_prompt, &files.append) {
@@ -260,13 +265,27 @@ impl SessionOptions {
         &self,
         cwd: &Path,
         trusted: bool,
-        tool_names: &[String],
+        tool_names: &mut Vec<String>,
     ) -> Result<Option<kiss_mcp::McpManager>> {
-        if !tool_names.iter().any(|name| name == "mcp") {
+        if self.no_tools {
             return Ok(None);
         }
-        let loaded = kiss_mcp::config::load(cwd, trusted)?;
+        let mut loaded = kiss_mcp::config::load(cwd, trusted)?;
+        for (name, server) in &self.mcp_servers {
+            server.validate(name)?;
+            loaded
+                .config
+                .mcp_servers
+                .insert(name.clone(), server.clone());
+        }
         if loaded.enabled_server_count() == 0 {
+            return Ok(None);
+        }
+        let explicitly_excluded = self.exclude_tools.iter().any(|name| name == "mcp");
+        if self.tools.is_none() && !explicitly_excluded {
+            tool_names.push("mcp".to_string());
+        }
+        if !tool_names.iter().any(|name| name == "mcp") {
             return Ok(None);
         }
         Ok(Some(kiss_mcp::McpManager::new(loaded)?))
@@ -355,5 +374,31 @@ mod tests {
             error.to_string().contains("definitely/not-a-model"),
             "{error}"
         );
+    }
+
+    #[test]
+    fn session_mcp_servers_enable_the_mcp_tool_without_writing_configuration() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut options = SessionOptions {
+            cwd: directory.path().to_path_buf(),
+            ..Default::default()
+        };
+        options.mcp_servers.insert(
+            "editor".into(),
+            kiss_mcp::ServerEntry {
+                command: Some("test-mcp".into()),
+                ..Default::default()
+            },
+        );
+
+        let mut names = select_tool_names(None, &[], false);
+        let manager = options
+            .load_mcp(directory.path(), false, &mut names)
+            .unwrap()
+            .expect("MCP manager");
+
+        assert!(names.iter().any(|name| name == "mcp"));
+        assert!(manager.config().config.mcp_servers.contains_key("editor"));
+        assert!(!directory.path().join(".mcp.json").exists());
     }
 }

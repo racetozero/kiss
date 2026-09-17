@@ -10,7 +10,7 @@ use kiss_ai::{Model, ThinkingLevel, Usage};
 use serde_json::{Map, Value};
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::Write;
+use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 
 pub struct SessionManager {
@@ -250,24 +250,40 @@ impl SessionManager {
 
     /// Cheap listing: header + scan for name/first user message.
     fn peek(path: &Path) -> Option<SessionListing> {
-        let text = std::fs::read_to_string(path).ok()?;
-        let mut lines = text.lines().filter(|line| !line.trim().is_empty());
-        let header: SessionHeader = serde_json::from_str(lines.next()?).ok()?;
+        let mut reader = BufReader::new(File::open(path).ok()?);
+        let mut line = String::new();
+        loop {
+            line.clear();
+            if reader.read_line(&mut line).ok()? == 0 {
+                return None;
+            }
+            if !line.trim().is_empty() {
+                break;
+            }
+        }
+        let header: SessionHeader = serde_json::from_str(&line).ok()?;
         let mut name = None;
         let mut first_message = None;
         let mut entry_count = 0usize;
-        for line in lines {
+        loop {
+            line.clear();
+            if reader.read_line(&mut line).ok()? == 0 {
+                break;
+            }
+            if line.trim().is_empty() {
+                continue;
+            }
             entry_count += 1;
             if name.is_none()
                 && line.contains("\"session_info\"")
-                && let Ok(v) = serde_json::from_str::<Value>(line)
+                && let Ok(v) = serde_json::from_str::<Value>(&line)
                 && v["type"] == "session_info"
             {
                 name = v["name"].as_str().map(String::from);
             }
             if first_message.is_none()
                 && line.contains("\"message\"")
-                && let Ok(v) = serde_json::from_str::<Value>(line)
+                && let Ok(v) = serde_json::from_str::<Value>(&line)
                 && v["type"] == "message"
                 && v["message"]["role"] == "user"
             {

@@ -155,6 +155,14 @@ pub struct MarkdownSettings {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase", default)]
+pub struct WebMcpSettings {
+    pub allowed_origins: Option<Vec<String>>,
+    pub disallowed_origins: Vec<String>,
+    pub cdp: Option<Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
 pub struct Settings {
     pub default_provider: Option<String>,
     pub default_model: Option<String>,
@@ -182,6 +190,7 @@ pub struct Settings {
     /// `None` preserves the default-on behavior for existing settings files.
     pub auto_recap: Option<bool>,
     pub markdown: MarkdownSettings,
+    pub webmcp: WebMcpSettings,
     /// Unknown keys survive load/save.
     #[serde(flatten)]
     pub extra: serde_json::Map<String, Value>,
@@ -305,6 +314,27 @@ mod tests {
         let value = serde_json::to_value(Settings::default()).unwrap();
         assert_eq!(value["markdown"]["mermaid"], "streaming");
         assert!(value.get("mermaidRendering").is_none());
+    }
+
+    #[test]
+    fn webmcp_settings_use_the_reference_wire_shape() {
+        let loaded: Settings = serde_json::from_value(json!({
+            "webmcp": {
+                "allowedOrigins": ["example.com"],
+                "disallowedOrigins": ["blocked.example"],
+                "cdp": 9333
+            }
+        }))
+        .unwrap();
+        assert_eq!(
+            loaded.webmcp.allowed_origins,
+            Some(vec!["example.com".to_string()])
+        );
+        assert_eq!(
+            loaded.webmcp.disallowed_origins,
+            vec!["blocked.example".to_string()]
+        );
+        assert_eq!(loaded.webmcp.cdp, Some(json!(9333)));
     }
 
     #[test]

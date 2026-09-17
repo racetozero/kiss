@@ -107,6 +107,8 @@ impl AgentTool for FindTool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures::{StreamExt as _, stream};
+    use std::time::Instant;
 
     #[tokio::test]
     async fn glob_find_respects_gitignore() {
@@ -131,5 +133,47 @@ mod tests {
         let text = r.output_text();
         assert!(text.contains("src/main.rs"));
         assert!(!text.contains("target/out.rs"));
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 8)]
+    #[ignore = "release-mode performance benchmark"]
+    async fn benchmark_performance_200_find_calls() {
+        const CALLS: usize = 200;
+        let dir = tempfile::tempdir().unwrap();
+        for directory in 0..10 {
+            let path = dir.path().join(format!("src/module_{directory:02}"));
+            std::fs::create_dir_all(&path).unwrap();
+            for file in 0..20 {
+                std::fs::write(path.join(format!("file_{file:03}.rs")), "fn item() {}\n").unwrap();
+            }
+        }
+        let tool = FindTool {
+            cwd: dir.path().to_path_buf(),
+        };
+
+        for (name, concurrency) in [("unlimited", usize::MAX), ("bounded", 32)] {
+            let started = Instant::now();
+            let results = stream::iter(0..CALLS)
+                .map(|index| {
+                    tool.execute(
+                        "bench",
+                        json!({"pattern": format!("file_{:03}.rs", index % 20)}),
+                        CancellationToken::new(),
+                        None,
+                    )
+                })
+                .buffer_unordered(concurrency)
+                .collect::<Vec<_>>()
+                .await;
+            assert!(results.into_iter().all(|result| result.is_ok()));
+
+            let mut sample = [started.elapsed().as_nanos() / CALLS as u128];
+            kiss_bench::report(
+                &format!("find_batch_200_{name}"),
+                &mut sample,
+                CALLS,
+                &format!("200_file_tree_max_active={concurrency}"),
+            );
+        }
     }
 }

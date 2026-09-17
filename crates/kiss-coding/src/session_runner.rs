@@ -110,6 +110,7 @@ pub struct AgentSession {
     pub manager: Mutex<SessionManager>,
     pub registry: Arc<Registry>,
     base_tools: Mutex<Vec<DynTool>>,
+    session_tools: Mutex<Vec<DynTool>>,
     tools: Mutex<Vec<DynTool>>,
     settings: Mutex<Settings>,
     system_prompt: Mutex<String>,
@@ -195,6 +196,7 @@ impl AgentSession {
             manager: Mutex::new(manager),
             registry: registry.into(),
             base_tools: Mutex::new(tools.clone()),
+            session_tools: Mutex::new(Vec::new()),
             tools: Mutex::new(tools),
             settings: Mutex::new(settings),
             system_prompt: Mutex::new(system_prompt),
@@ -298,6 +300,34 @@ impl AgentSession {
         self.rebuild_tools();
     }
 
+    /// Add or replace one tool for this process without changing saved tool configuration.
+    pub fn install_session_tool(&self, tool: DynTool) {
+        let mut tools = self.session_tools.lock().unwrap();
+        if let Some(existing) = tools
+            .iter_mut()
+            .find(|existing| existing.name() == tool.name())
+        {
+            *existing = tool;
+        } else {
+            tools.push(tool);
+        }
+        drop(tools);
+        self.rebuild_tools();
+    }
+
+    /// Remove one process-only tool. Return true when a tool was removed.
+    pub fn remove_session_tool(&self, name: &str) -> bool {
+        let mut tools = self.session_tools.lock().unwrap();
+        let previous_len = tools.len();
+        tools.retain(|tool| tool.name() != name);
+        let removed = tools.len() != previous_len;
+        drop(tools);
+        if removed {
+            self.rebuild_tools();
+        }
+        removed
+    }
+
     /// Stop every child agent and workflow run this session started.
     fn stop_child_work(&self) {
         if let Some(runtime) = self.subagents.get() {
@@ -358,6 +388,16 @@ impl AgentSession {
 
     fn rebuild_tools(&self) {
         let mut tools = self.base_tools.lock().unwrap().clone();
+        for session_tool in self.session_tools.lock().unwrap().iter().cloned() {
+            if let Some(existing) = tools
+                .iter_mut()
+                .find(|existing| existing.name() == session_tool.name())
+            {
+                *existing = session_tool;
+            } else {
+                tools.push(session_tool);
+            }
+        }
         if self.subagents_enabled()
             && let Some(runtime) = self.subagents.get()
         {
@@ -1462,6 +1502,42 @@ mod ephemeral_tests {
         assert!(is_transient("rate limit exceeded"));
         assert!(!is_transient("model has a 500 token limit"));
         assert!(!is_transient("connection settings are invalid"));
+    }
+
+    #[test]
+    fn session_tools_install_replace_and_remove_without_changing_base_tools() {
+        let registry = Registry::load(None);
+        let session = AgentSession::new(
+            SessionManager::in_memory(std::path::Path::new("/test")),
+            Vec::new(),
+            registry,
+            Settings::default(),
+            "test".into(),
+            openai_model(),
+            ThinkingLevel::Off,
+            None,
+            Arc::new(|_| {}),
+        );
+        let tool = || {
+            Arc::new(crate::tools::grep::GrepTool {
+                cwd: std::path::PathBuf::from("/test"),
+            }) as DynTool
+        };
+
+        assert!(!session.available_tool_names().contains(&"grep".into()));
+        session.install_session_tool(tool());
+        session.install_session_tool(tool());
+        assert_eq!(
+            session
+                .available_tool_names()
+                .iter()
+                .filter(|name| name.as_str() == "grep")
+                .count(),
+            1
+        );
+        assert!(session.remove_session_tool("grep"));
+        assert!(!session.remove_session_tool("grep"));
+        assert!(!session.available_tool_names().contains(&"grep".into()));
     }
 
     fn remote_result() -> kiss_ai::api::openai_compaction::RemoteCompactionResult {

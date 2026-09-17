@@ -13,6 +13,8 @@ use std::sync::Arc;
 
 pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
 
+pub const DEFAULT_MAX_CONCURRENT_TOOLS: usize = 32;
+
 /// Context snapshot passed into the loop.
 #[derive(Clone, Default)]
 pub struct AgentContext {
@@ -93,6 +95,8 @@ pub struct AgentLoopConfig {
     pub session_id: Option<String>,
     pub transport: Transport,
     pub tool_execution: ExecutionMode,
+    /// Maximum active calls in one parallel tool batch.
+    pub max_concurrent_tools: usize,
     /// Convert harness messages to provider messages at the call boundary.
     pub convert_to_llm: ConvertFn,
     pub transform_context: Option<TransformFn>,
@@ -123,6 +127,7 @@ impl AgentLoopConfig {
             session_id: None,
             transport: Transport::Auto,
             tool_execution: ExecutionMode::Parallel,
+            max_concurrent_tools: DEFAULT_MAX_CONCURRENT_TOOLS,
             convert_to_llm: Arc::new(crate::message::convert_to_llm),
             transform_context: None,
             get_credential: None,

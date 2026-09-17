@@ -200,6 +200,9 @@ pub enum ProviderCommand {
 
 #[derive(Debug, Clone, Subcommand)]
 pub enum Command {
+    /// Serve KISS as an Agent Client Protocol agent over standard I/O.
+    Acp,
+
     /// Diagnose local health and provider network access.
     Doctor {
         /// Show one connectivity row for each provider.

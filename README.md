@@ -308,6 +308,144 @@ Use `--scope project` to save a server in `.mcp.json`. Use `kiss mcp login
 remote --no-browser` for headless OAuth. Use `/mcp` to manage servers in the
 TUI.
 
+### WebMCP
+
+KISS can discover and call tools that open Chrome pages expose through the
+experimental [WebMCP API](https://webmachinelearning.github.io/webmcp/). WebMCP
+lets a page give the agent a structured tool instead of making the agent find
+and click page controls.
+
+#### Browser setup
+
+Use a recent Chrome or Chromium build. WebMCP and its Chrome protocol are
+experimental and can change.
+
+1. Open `chrome://flags/#enable-webmcp-testing` and enable **WebMCP testing**.
+2. If `chrome://flags/#devtools-webmcp-support` is present, enable it too.
+3. Restart Chrome.
+4. Open `chrome://inspect/#remote-debugging` and enable remote debugging.
+5. Open a page that registers WebMCP tools.
+
+See the [Chrome WebMCP guide](https://developer.chrome.com/docs/ai/webmcp) for
+the current browser requirements and demo pages.
+
+#### Use
+
+WebMCP support is available in the interactive TUI:
+
+```text
+/webmcp
+/webmcp connect
+/webmcp list
+/webmcp disconnect
+```
+
+`/webmcp` and `/webmcp connect` connect to Chrome and add one `webmcp` agent
+tool to the current session. Tool discovery continues in the background.
+`/webmcp list` shows the active page origins and tool names. `/webmcp
+disconnect` closes the browser connection and removes the agent tool.
+
+The `webmcp` agent tool has three actions:
+
+- `list` returns page origins, titles, URLs, and tool names. It does not return
+  descriptions.
+- `describe` returns the description and input schema for one exact origin and
+  tool name.
+- `call` calls one exact origin and tool name with JSON arguments and returns
+  the page result.
+
+KISS updates the tool list when a page adds or removes tools, navigates, opens,
+or closes. A call has a 60-second limit. KISS also sends a browser cancellation
+request when the user cancels a call or when the time limit ends.
+
+#### Settings and security
+
+Page tool metadata and results are untrusted content. Limit access to known
+sites when possible. Put WebMCP settings in `~/.kiss/agent/settings.json` or in
+the trusted project file `.kiss/settings.json`:
+
+```json
+{
+  "webmcp": {
+    "allowedOrigins": ["https://example.com"],
+    "disallowedOrigins": ["blocked.example"],
+    "cdp": 9222
+  }
+}
+```
+
+`allowedOrigins` and `disallowedOrigins` accept a complete origin or a host
+name. The deny list always wins. `cdp` accepts a local remote-debugging port or
+a complete `ws://` or `wss://` browser WebSocket URL. Plain `ws://` connections
+must use a loopback address such as `127.0.0.1` or `localhost`.
+
+KISS makes no browser connection and adds no `webmcp` agent tool until the user
+runs `/webmcp`. Calls require the exact page origin and tool name. KISS ignores
+internal `chrome:` and `devtools:` pages, validates tool names, marks page data
+as untrusted, and limits page output sent to the model to 100,000 bytes.
+
+### Agent Client Protocol
+
+KISS is a native [Agent Client Protocol](https://agentclientprotocol.com/)
+agent. It implements stable ACP v1 in Rust. It does not start an adapter or a
+second KISS process. The ACP client starts this command and exchanges JSON-RPC
+messages with it through standard input and output:
+
+```bash
+kiss acp
+```
+
+`kiss acp` is not an interactive terminal. It waits for an ACP client. Before
+you configure a client, sign in to a model provider and check the available
+models:
+
+```bash
+kiss login openai-codex
+kiss auth
+kiss --list-models
+```
+
+Add KISS as a custom agent in the Zed settings file:
+
+```json
+{
+  "agent_servers": {
+    "KISS": {
+      "type": "custom",
+      "command": "kiss",
+      "args": ["acp"],
+      "env": {}
+    }
+  }
+}
+```
+
+Restart Zed, select KISS from its custom-agent list, and start a thread. If
+`kiss` is not on the application PATH, set `command` to the full path of the
+KISS executable.
+
+Put global KISS options before `acp`. For example, select a model and thinking
+level in the Zed configuration with these arguments:
+
+```json
+"args": ["--model", "sonnet:high", "acp"]
+```
+
+Use `"args": ["--no-session", "acp"]` for conversations that must not write
+session history. Persistent sessions are the default. Clients can list, load,
+resume, close, and delete them. Clients that support ACP session controls can
+also change the model and thinking level during a session.
+
+KISS accepts text, images, resource links, and embedded resources. It streams
+answers, reasoning, usage, tool status, file locations, and file diffs. A
+cancel request stops active work and work that is waiting to start. Tools run
+locally in the working directory that the ACP client supplies.
+
+An ACP client can add stdio or streamable-HTTP MCP servers to one session.
+These server definitions stay in memory and do not change KISS MCP files.
+Draft ACP v2, audio prompts, legacy MCP SSE, and client-side filesystem or
+terminal delegation are not enabled.
+
 ## Build with KISS
 
 KISS provides SDKs for Rust, Python 3.11+, TypeScript on Node, Bun, and Deno,

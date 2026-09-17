@@ -28,8 +28,13 @@ async fn session_with(
         models_file: Some(provider.catalog_path()),
         thinking_level: Some(ThinkingLevel::Off),
         settings: Some(kiss_coding::Settings::default()),
+        tools: Some(
+            ["read", "write", "edit", "bash"]
+                .map(str::to_string)
+                .to_vec(),
+        ),
         // Project files in a temporary directory are ours, but leaving trust
-        // off keeps the test independent of the developer's global settings.
+        // off and selecting tools keeps the test independent of local files.
         trust_project_files: false,
         no_context_files: true,
         ..Default::default()

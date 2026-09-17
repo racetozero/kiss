@@ -445,59 +445,58 @@ async fn execute_parallel_tools(
     cancel: CancellationToken,
     emit: &EventSink,
 ) -> Vec<FinalizedCall> {
-    enum ParallelEntry {
-        Ready(Box<FinalizedCall>),
-        Pending(tokio::task::JoinHandle<FinalizedCall>),
-    }
+    use futures::{StreamExt as _, stream};
 
-    let mut entries = Vec::with_capacity(prepared.len());
-    for prepared in prepared {
-        match prepared {
-            PreparedToolCall::Immediate(finalized) => {
-                emit_execution_end(&finalized, emit);
-                entries.push(ParallelEntry::Ready(Box::new(finalized)));
-            }
-            PreparedToolCall::Run {
-                tool,
-                tool_call,
-                args,
-            } => {
-                let config = config.clone();
-                let cancel = cancel.clone();
-                let emit = emit.clone();
-                entries.push(ParallelEntry::Pending(tokio::spawn(async move {
-                    let finalized =
-                        run_and_finalize(tool, tool_call, args, &config, cancel, &emit).await;
-                    emit_execution_end(&finalized, &emit);
-                    finalized
-                })));
-            }
-        }
-    }
-
-    let mut finalized = Vec::with_capacity(entries.len());
-    for entry in entries {
-        match entry {
-            ParallelEntry::Ready(value) => finalized.push(*value),
-            ParallelEntry::Pending(handle) => match handle.await {
-                Ok(value) => finalized.push(value),
-                Err(join_error) => {
-                    // A panicking native tool task must not kill the loop.
-                    finalized.push(FinalizedCall {
-                        tool_call: ToolCall {
-                            id: String::new(),
-                            name: String::new(),
-                            arguments: Value::Null,
-                            thought_signature: None,
-                        },
-                        result: ToolResult::text(format!("tool task failed: {join_error}")),
-                        is_error: true,
-                    });
+    let limit = config.max_concurrent_tools.max(1);
+    let mut finalized = stream::iter(prepared.into_iter().enumerate().map(|(index, prepared)| {
+        let config = config.clone();
+        let cancel = cancel.clone();
+        let emit = emit.clone();
+        async move {
+            let value = match prepared {
+                PreparedToolCall::Immediate(finalized) => finalized,
+                PreparedToolCall::Run {
+                    tool,
+                    tool_call,
+                    args,
+                } => {
+                    if cancel.is_cancelled() {
+                        cancelled_tool_call(tool_call)
+                    } else {
+                        match tokio::spawn({
+                            let task_emit = emit.clone();
+                            async move {
+                                run_and_finalize(tool, tool_call, args, &config, cancel, &task_emit)
+                                    .await
+                            }
+                        })
+                        .await
+                        {
+                            Ok(value) => value,
+                            Err(join_error) => FinalizedCall {
+                                // A panicking native tool task must not kill the loop.
+                                tool_call: ToolCall {
+                                    id: String::new(),
+                                    name: String::new(),
+                                    arguments: Value::Null,
+                                    thought_signature: None,
+                                },
+                                result: ToolResult::text(format!("tool task failed: {join_error}")),
+                                is_error: true,
+                            },
+                        }
+                    }
                 }
-            },
+            };
+            emit_execution_end(&value, &emit);
+            (index, value)
         }
-    }
-    finalized
+    }))
+    .buffer_unordered(limit)
+    .collect::<Vec<_>>()
+    .await;
+    finalized.sort_unstable_by_key(|(index, _)| *index);
+    finalized.into_iter().map(|(_, value)| value).collect()
 }
 
 #[cfg(not(feature = "native-tools"))]
@@ -507,35 +506,45 @@ async fn execute_parallel_tools(
     cancel: CancellationToken,
     emit: &EventSink,
 ) -> Vec<FinalizedCall> {
-    use futures::future::{BoxFuture, join_all};
+    use futures::{StreamExt as _, stream};
 
-    let mut calls: Vec<BoxFuture<'static, FinalizedCall>> = Vec::with_capacity(prepared.len());
-    for prepared in prepared {
+    let calls = prepared.into_iter().enumerate().map(|(index, prepared)| {
         let emit = emit.clone();
-        match prepared {
-            PreparedToolCall::Immediate(finalized) => calls.push(Box::pin(async move {
-                emit_execution_end(&finalized, &emit);
-                finalized
-            })),
-            PreparedToolCall::Run {
-                tool,
-                tool_call,
-                args,
-            } => {
-                let config = config.clone();
-                let cancel = cancel.clone();
-                calls.push(Box::pin(async move {
-                    let finalized =
-                        run_and_finalize(tool, tool_call, args, &config, cancel, &emit).await;
-                    emit_execution_end(&finalized, &emit);
-                    finalized
-                }));
-            }
+        let config = config.clone();
+        let cancel = cancel.clone();
+        async move {
+            let finalized = match prepared {
+                PreparedToolCall::Immediate(finalized) => finalized,
+                PreparedToolCall::Run {
+                    tool,
+                    tool_call,
+                    args,
+                } => {
+                    if cancel.is_cancelled() {
+                        cancelled_tool_call(tool_call)
+                    } else {
+                        run_and_finalize(tool, tool_call, args, &config, cancel, &emit).await
+                    }
+                }
+            };
+            emit_execution_end(&finalized, &emit);
+            (index, finalized)
         }
+    });
+    let mut finalized = stream::iter(calls)
+        .buffer_unordered(config.max_concurrent_tools.max(1))
+        .collect::<Vec<_>>()
+        .await;
+    finalized.sort_unstable_by_key(|(index, _)| *index);
+    finalized.into_iter().map(|(_, value)| value).collect()
+}
+
+fn cancelled_tool_call(tool_call: ToolCall) -> FinalizedCall {
+    FinalizedCall {
+        tool_call,
+        result: ToolResult::text("Operation aborted"),
+        is_error: true,
     }
-    // `join_all` polls every tool concurrently without requiring a native
-    // thread or a Tokio runtime, while preserving source order in the result.
-    join_all(calls).await
 }
 
 async fn prepare_tool_call(
