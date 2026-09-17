@@ -1904,6 +1904,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a756c3fac73139e83f14c2d742155dd2b78d3ee56597b419a0579b7bdd6dd78"
 
 [[package]]
+name = "itertools"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285"
+dependencies = [
+ "either",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2007,7 +2016,7 @@ dependencies = [
 
 [[package]]
 name = "kiss-agent"
-version = "0.0.10"
+version = "0.0.11"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2027,7 +2036,7 @@ dependencies = [
 
 [[package]]
 name = "kiss-ai"
-version = "0.0.10"
+version = "0.0.11"
 dependencies = [
  "anyhow",
  "aws-config",
@@ -2040,6 +2049,9 @@ dependencies = [
  "dirs",
  "fs2",
  "futures",
+ "http 1.5.0",
+ "prost",
+ "prost-types",
  "rand 0.9.5",
  "reqwest 0.12.28",
  "rustls 0.23.43",
@@ -2057,7 +2069,7 @@ dependencies = [
 
 [[package]]
 name = "kiss-coding"
-version = "0.0.10"
+version = "0.0.11"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2087,7 +2099,7 @@ dependencies = [
 
 [[package]]
 name = "kiss-mcp"
-version = "0.0.10"
+version = "0.0.11"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2109,7 +2121,7 @@ dependencies = [
 
 [[package]]
 name = "kiss-node"
-version = "0.0.10"
+version = "0.0.11"
 dependencies = [
  "kiss-sdk",
  "napi",
@@ -2121,7 +2133,7 @@ dependencies = [
 
 [[package]]
 name = "kiss-sdk"
-version = "0.0.10"
+version = "0.0.11"
 dependencies = [
  "anyhow",
  "dirs",
@@ -2141,7 +2153,7 @@ dependencies = [
 
 [[package]]
 name = "kiss-workflow"
-version = "0.0.10"
+version = "0.0.11"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2620,6 +2632,38 @@ dependencies = [
  "tokio",
  "tracing",
  "windows",
+]
+
+[[package]]
+name = "prost"
+version = "0.14.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "528ac67416ff8646872a3c02cad9cc4ee5dc9f9540c9b10771855c95cb2e5ae1"
+dependencies = [
+ "bytes",
+ "prost-derive",
+]
+
+[[package]]
+name = "prost-derive"
+version = "0.14.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b570b25f7617e43d59005d0990ccb79e950a423952cea19671b7a876da390adf"
+dependencies = [
+ "anyhow",
+ "itertools",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
+name = "prost-types"
+version = "0.14.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f94967dc7688f3054c7fac87473ffae4cc4c3904800e2d9f5b857246d8963b0a"
+dependencies = [
+ "prost",
 ]
 
 [[package]]

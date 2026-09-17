@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.0.11 - 2026-09-16
+
+### Added
+
+- Added native stable ACP v1 support over standard input and output, including
+  persistent sessions, model and thinking controls, cancellation, streamed
+  tool updates and diffs, and session-local stdio or HTTP MCP servers.
+- Added WebMCP support for discovering and calling tools exposed by open
+  Chromium pages, with origin controls, bounded results, and cancellation.
+
 ## 0.0.10 - 2026-09-13
 
 ### Added
