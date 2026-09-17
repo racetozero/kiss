@@ -74,7 +74,7 @@ impl Harness {
     }
 
     /// Read lines until one matches `predicate`, collecting the rest.
-    async fn read_until(&mut self, predicate: impl Fn(&Value) -> bool) -> Vec<Value> {
+    async fn read_until(&mut self, mut predicate: impl FnMut(&Value) -> bool) -> Vec<Value> {
         let mut seen = Vec::new();
         loop {
             let value = self.next_line().await;
@@ -242,8 +242,14 @@ async fn direct_bash_updates_carry_the_request_id() {
     harness
         .send(json!({"id": "shell-7", "type": "bash", "command": "printf streamed"}))
         .await;
+    let mut saw_update = false;
+    let mut saw_response = false;
     let lines = harness
-        .read_until(|value| value["type"] == "response" && value["command"] == "bash")
+        .read_until(|value| {
+            saw_update |= value["type"] == "bash_execution_update";
+            saw_response |= value["type"] == "response" && value["command"] == "bash";
+            saw_update && saw_response
+        })
         .await;
     let update = lines
         .iter()
@@ -251,7 +257,10 @@ async fn direct_bash_updates_carry_the_request_id() {
         .expect("a streaming shell update");
     assert_eq!(update["id"], "shell-7");
     assert_eq!(update["delta"], "streamed");
-    let response = lines.last().unwrap();
+    let response = lines
+        .iter()
+        .find(|value| value["type"] == "response" && value["command"] == "bash")
+        .unwrap();
     assert_eq!(response["id"], "shell-7");
     assert_eq!(response["data"]["exitCode"], 0);
 }
