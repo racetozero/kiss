@@ -758,6 +758,22 @@ mod tests {
     use tokio::net::TcpListener;
     use tokio_tungstenite::tungstenite::Message;
 
+    async fn wait_for_tool_count(manager: &WebMcpManager, expected: usize) {
+        if tokio::time::timeout(Duration::from_secs(1), async {
+            while manager.tools().await.len() != expected {
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            }
+        })
+        .await
+        .is_err()
+        {
+            panic!(
+                "WebMCP registry did not reach {expected} tools; found {}",
+                manager.tools().await.len()
+            );
+        }
+    }
+
     #[test]
     fn origin_policy_applies_allow_then_deny() {
         let url = Url::parse("https://example.com/page").unwrap();
@@ -919,12 +935,7 @@ mod tests {
             ..Default::default()
         });
         manager.connect().await.unwrap();
-        for _ in 0..20 {
-            if !manager.tools().await.is_empty() {
-                break;
-            }
-            tokio::task::yield_now().await;
-        }
+        wait_for_tool_count(&manager, 2).await;
         let tools = manager.tools().await;
         assert_eq!(tools.len(), 2);
         let search = tools
@@ -974,13 +985,7 @@ mod tests {
         assert!(error.to_string().contains("cancelled"));
         cancel_seen_rx.await.unwrap();
 
-        for _ in 0..20 {
-            if manager.tools().await.is_empty() {
-                break;
-            }
-            tokio::task::yield_now().await;
-        }
-        assert!(manager.tools().await.is_empty());
+        wait_for_tool_count(&manager, 0).await;
         manager.disconnect().await;
         fixture.abort();
     }
