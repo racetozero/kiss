@@ -310,28 +310,15 @@ TUI.
 
 ### WebMCP
 
-KISS can discover and call tools that open Chrome pages expose through the
-experimental [WebMCP API](https://webmachinelearning.github.io/webmcp/). WebMCP
-lets a page give the agent a structured tool instead of making the agent find
-and click page controls.
+KISS can discover and call tools that Chrome pages expose through the
+experimental [WebMCP API](https://webmachinelearning.github.io/webmcp/). Enable
+`chrome://flags/#enable-webmcp-testing` and, when present,
+`chrome://flags/#devtools-webmcp-support`. Restart Chrome, enable remote
+debugging at `chrome://inspect/#remote-debugging`, and open a WebMCP page. See
+the [Chrome guide](https://developer.chrome.com/docs/ai/webmcp) for current
+browser requirements and demos.
 
-#### Browser setup
-
-Use a recent Chrome or Chromium build. WebMCP and its Chrome protocol are
-experimental and can change.
-
-1. Open `chrome://flags/#enable-webmcp-testing` and enable **WebMCP testing**.
-2. If `chrome://flags/#devtools-webmcp-support` is present, enable it too.
-3. Restart Chrome.
-4. Open `chrome://inspect/#remote-debugging` and enable remote debugging.
-5. Open a page that registers WebMCP tools.
-
-See the [Chrome WebMCP guide](https://developer.chrome.com/docs/ai/webmcp) for
-the current browser requirements and demo pages.
-
-#### Use
-
-WebMCP support is available in the interactive TUI:
+Use WebMCP in the interactive TUI:
 
 ```text
 /webmcp
@@ -340,30 +327,13 @@ WebMCP support is available in the interactive TUI:
 /webmcp disconnect
 ```
 
-`/webmcp` and `/webmcp connect` connect to Chrome and add one `webmcp` agent
-tool to the current session. Tool discovery continues in the background.
-`/webmcp list` shows the active page origins and tool names. The
-`/webmcp disconnect` command closes the browser connection and removes the
-agent tool.
+`/webmcp` and `/webmcp connect` add one session-only agent tool. It can list,
+describe, and call page tools. The list omits descriptions. KISS follows page
+tool changes, navigation, and tab changes. `/webmcp disconnect` closes the
+connection and removes the agent tool.
 
-The `webmcp` agent tool has three actions:
-
-- `list` returns page origins, titles, URLs, and tool names. It does not return
-  descriptions.
-- `describe` returns the description and input schema for one exact origin and
-  tool name.
-- `call` calls one exact origin and tool name with JSON arguments and returns
-  the page result.
-
-KISS updates the tool list when a page adds or removes tools, navigates, opens,
-or closes. A call has a 60-second limit. KISS also sends a browser cancellation
-request when the user cancels a call or when the time limit ends.
-
-#### Settings and security
-
-Page tool metadata and results are untrusted content. Limit access to known
-sites when possible. Put WebMCP settings in `~/.kiss/agent/settings.json` or in
-the trusted project file `.kiss/settings.json`:
+Limit access to known sites in `~/.kiss/agent/settings.json` or a trusted
+project's `.kiss/settings.json`:
 
 ```json
 {
@@ -376,31 +346,28 @@ the trusted project file `.kiss/settings.json`:
 ```
 
 `allowedOrigins` and `disallowedOrigins` accept a complete origin or a host
-name. If `allowedOrigins` is absent, KISS permits all normal page origins after
-the user connects. The deny list always wins. `cdp` accepts a local
-remote-debugging port or a complete `ws://` or `wss://` browser WebSocket URL.
-Plain `ws://` connections must use a loopback address such as `127.0.0.1` or
-`localhost`.
+name. Without an allow list, KISS permits normal page origins after the user
+connects. The deny list always wins. `cdp` accepts a local debugging port or a
+complete `ws://` loopback or `wss://` browser WebSocket URL.
 
-KISS makes no browser connection and adds no `webmcp` agent tool until the user
-runs `/webmcp`. Calls require the exact page origin and tool name. KISS ignores
-internal `chrome:` and `devtools:` pages, validates tool names, marks page data
-as untrusted, and limits page output sent to the model to 100,000 bytes.
+KISS does not connect until the user runs `/webmcp`. Calls require the exact
+origin and tool name. KISS ignores internal browser pages, treats page metadata
+and results as untrusted, and limits page output sent to the model to 100,000
+bytes. Calls time out after 60 seconds and send a browser cancellation request
+when canceled.
 
 ### Agent Client Protocol
 
 KISS is a native [Agent Client Protocol](https://agentclientprotocol.com/)
-agent. It implements stable ACP v1 in Rust. It does not start an adapter or a
-second KISS process. The ACP client starts this command and exchanges JSON-RPC
-messages with it through standard input and output:
+agent. It implements stable ACP v1 over JSON-RPC standard input and output,
+without an adapter or second KISS process. ACP clients start:
 
 ```bash
 kiss acp
 ```
 
-`kiss acp` is not an interactive terminal. It waits for an ACP client. Before
-you configure a client, sign in to a model provider and check the available
-models:
+The command waits for an ACP client and does not open the TUI. Configure a
+model provider first. For example:
 
 ```bash
 kiss login openai-codex
@@ -408,7 +375,7 @@ kiss auth
 kiss --list-models
 ```
 
-Add KISS as a custom agent in the Zed settings file:
+Add KISS to the Zed settings file:
 
 ```json
 {
@@ -423,31 +390,24 @@ Add KISS as a custom agent in the Zed settings file:
 }
 ```
 
-Restart Zed, select KISS from its custom-agent list, and start a thread. If
-`kiss` is not on the application PATH, set `command` to the full path of the
-KISS executable.
+Restart Zed and select KISS from the custom-agent list. If Zed cannot find
+`kiss`, use its full path in `command`.
 
-Put global KISS options before `acp`. For example, select a model and thinking
-level in the Zed configuration with these arguments:
+Global KISS options must come before `acp`. In the example above, change
+`args` to `["--model", "sonnet:high", "acp"]` to select a model and thinking
+level, or to `["--no-session", "acp"]` to disable session history.
 
-```json
-"args": ["--model", "sonnet:high", "acp"]
-```
+Persistent sessions are the default. ACP clients can list, load, resume,
+close, and delete them, and can change the model and thinking level. KISS
+accepts text, images, resource links, and embedded resources. It streams
+answers, reasoning, usage, tool status, file locations, and file diffs.
+Cancellation stops active and queued work. Tools run in the working directory
+that the client supplies.
 
-Use `"args": ["--no-session", "acp"]` for conversations that must not write
-session history. Persistent sessions are the default. Clients can list, load,
-resume, close, and delete them. Clients that support ACP session controls can
-also change the model and thinking level during a session.
-
-KISS accepts text, images, resource links, and embedded resources. It streams
-answers, reasoning, usage, tool status, file locations, and file diffs. A
-cancel request stops active work and work that is waiting to start. Tools run
-locally in the working directory that the ACP client supplies.
-
-An ACP client can add stdio or streamable-HTTP MCP servers to one session.
-These server definitions stay in memory and do not change KISS MCP files.
-Draft ACP v2, audio prompts, legacy MCP SSE, and client-side filesystem or
-terminal delegation are not enabled.
+Client-provided stdio and streamable-HTTP MCP servers apply only to their ACP
+session and are not written to KISS configuration. Draft ACP v2, audio,
+legacy MCP SSE, and client filesystem or terminal delegation are not
+supported.
 
 ## Build with KISS
 
