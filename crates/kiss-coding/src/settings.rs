@@ -6,10 +6,19 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum CompactionMode {
+    #[default]
+    Summary,
+    Jev,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct CompactionSettings {
     pub enabled: bool,
+    pub mode: CompactionMode,
     pub reserve_tokens: u64,
     pub keep_recent_tokens: u64,
 }
@@ -18,6 +27,7 @@ impl Default for CompactionSettings {
     fn default() -> Self {
         CompactionSettings {
             enabled: true,
+            mode: CompactionMode::Summary,
             reserve_tokens: 16_384,
             keep_recent_tokens: 20_000,
         }
@@ -292,6 +302,7 @@ mod tests {
     #[test]
     fn defaults_match_pi() {
         let s = Settings::default();
+        assert_eq!(s.compaction.mode, CompactionMode::Summary);
         assert_eq!(s.compaction.reserve_tokens, 16_384);
         assert_eq!(s.compaction.keep_recent_tokens, 20_000);
         assert_eq!(s.retry.max_retries, 3);
@@ -299,6 +310,19 @@ mod tests {
         assert_eq!(s.steering_mode, QueueMode::OneAtATime);
         assert!(s.auto_recap_enabled());
         assert_eq!(s.markdown.mermaid, MermaidRendering::Streaming);
+    }
+
+    #[test]
+    fn old_compaction_settings_default_to_summary_mode() {
+        let settings: Settings = serde_json::from_value(json!({
+            "compaction": {"enabled": true, "reserveTokens": 1, "keepRecentTokens": 2}
+        }))
+        .unwrap();
+        assert_eq!(settings.compaction.mode, CompactionMode::Summary);
+        assert_eq!(
+            serde_json::to_value(settings).unwrap()["compaction"]["mode"],
+            "summary"
+        );
     }
 
     #[test]

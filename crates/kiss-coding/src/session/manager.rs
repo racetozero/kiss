@@ -778,13 +778,15 @@ impl SessionManager {
                     base,
                     ..
                 } => {
-                    messages.push(AgentMessage::CompactionSummary(CompactionSummaryMessage {
-                        summary: summary.clone(),
-                        tokens_before: *tokens_before,
-                        timestamp: chrono::DateTime::parse_from_rfc3339(&base.timestamp)
-                            .map(|t| t.timestamp_millis())
-                            .unwrap_or_else(|_| kiss_ai::now_ms()),
-                    }));
+                    if !summary.is_empty() {
+                        messages.push(AgentMessage::CompactionSummary(CompactionSummaryMessage {
+                            summary: summary.clone(),
+                            tokens_before: *tokens_before,
+                            timestamp: chrono::DateTime::parse_from_rfc3339(&base.timestamp)
+                                .map(|t| t.timestamp_millis())
+                                .unwrap_or_else(|_| kiss_ai::now_ms()),
+                        }));
+                    }
                     if let Some(tail) = retained_tail {
                         messages.extend(tail.iter().cloned());
                     }
@@ -1126,6 +1128,20 @@ mod tests {
             })
             .collect();
         assert_eq!(texts, vec!["summary:summary of old", "kept", "new"]);
+    }
+
+    #[test]
+    fn empty_summary_checkpoint_replays_only_verbatim_history() {
+        let mut manager = manager();
+        manager
+            .append_message(AgentMessage::user("discarded"))
+            .unwrap();
+        let retained = vec![AgentMessage::user("verbatim")];
+        manager
+            .append_compaction(String::new(), 100, retained.clone(), None, None)
+            .unwrap();
+
+        assert_eq!(manager.build_session_context().messages, retained);
     }
 
     #[test]

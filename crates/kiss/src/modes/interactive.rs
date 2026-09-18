@@ -12,7 +12,7 @@ use anyhow::{Context as _, Result};
 use kiss_agent::{AgentEvent, AgentMessage};
 use kiss_ai::{AssistantEvent, ContentBlock, StopReason, ThinkingLevel, Transport};
 use kiss_coding::session_runner::{PromptMode, SessionEvent};
-use kiss_coding::settings::{MermaidRendering, QueueMode};
+use kiss_coding::settings::{CompactionMode, MermaidRendering, QueueMode};
 use kiss_coding::workflows::workflow_trigger;
 use kiss_tui::{
     Action, Component, DiffRenderer, Editor, EditorSubmission, InputDecoder, InputEvent, Key,
@@ -2054,7 +2054,7 @@ fn command_argument_items(
         "login" => kiss_ai::registry::BUILTIN_PROVIDER_IDS
             .iter()
             .copied()
-            .chain(std::iter::once("llama.cpp"))
+            .chain(["typesafe", "llama.cpp"])
             .map(|provider| {
                 (
                     provider.to_string(),
@@ -3798,7 +3798,7 @@ fn open_login_picker_with_filter(app: &mut App, filter: Option<&str>) {
         .iter()
         .map(|provider| (*provider).to_string())
         .collect();
-    providers.push("llama.cpp".into());
+    providers.extend(["typesafe".into(), "llama.cpp".into()]);
     let items = providers
         .iter()
         .enumerate()
@@ -3939,6 +3939,21 @@ fn open_settings_picker(
     app.picker = Some(settings_picker(app, session, resources));
 }
 
+fn typesafe_available(session: &kiss_coding::AgentSession) -> bool {
+    kiss_ai::auth::resolve_credential_local("typesafe", &session.registry.declared_keys).is_some()
+}
+
+fn next_compaction_mode(
+    current: CompactionMode,
+    typesafe_available: bool,
+) -> Option<CompactionMode> {
+    if current == CompactionMode::Jev {
+        Some(CompactionMode::Summary)
+    } else {
+        typesafe_available.then_some(CompactionMode::Jev)
+    }
+}
+
 fn settings_picker(
     app: &App,
     session: &Arc<kiss_coding::AgentSession>,
@@ -4073,6 +4088,15 @@ fn settings_picker(
                 "off".into()
             }),
             value: 14,
+        },
+        SelectItem {
+            label: "Compaction method".into(),
+            detail: Some(match settings.compaction.mode {
+                CompactionMode::Summary => "summary".into(),
+                CompactionMode::Jev if typesafe_available(session) => "Jev (experimental)".into(),
+                CompactionMode::Jev => "Jev unavailable · /login typesafe".into(),
+            }),
+            value: 15,
         },
     ];
     Picker {
@@ -5694,6 +5718,19 @@ fn apply_settings_selection(
                 return;
             }
             resources.settings.workflows.enabled = !resources.settings.workflows.enabled;
+        }
+        15 => {
+            let Some(mode) = next_compaction_mode(
+                resources.settings.compaction.mode,
+                typesafe_available(session),
+            ) else {
+                app.cells.push(Cell::Notice(
+                    "Jev compaction needs TypeSafe credentials; run /login typesafe or set TYPESAFE_API_KEY"
+                        .into(),
+                ));
+                return;
+            };
+            resources.settings.compaction.mode = mode;
         }
         _ => return,
     }
@@ -7679,6 +7716,19 @@ mod tests {
     }
 
     #[test]
+    fn jev_compaction_requires_typesafe_credentials_to_enable() {
+        assert_eq!(next_compaction_mode(CompactionMode::Summary, false), None);
+        assert_eq!(
+            next_compaction_mode(CompactionMode::Summary, true),
+            Some(CompactionMode::Jev)
+        );
+        assert_eq!(
+            next_compaction_mode(CompactionMode::Jev, false),
+            Some(CompactionMode::Summary)
+        );
+    }
+
+    #[test]
     fn settings_picker_shows_the_opt_in_subagent_toggle() {
         let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
             "/synthetic",
@@ -8403,6 +8453,7 @@ mod tests {
         };
         assert!(providers.contains(&"openai-codex".to_string()));
         assert!(providers.contains(&"anthropic".to_string()));
+        assert!(providers.contains(&"typesafe".to_string()));
         assert!(providers.contains(&"llama.cpp".to_string()));
     }
 

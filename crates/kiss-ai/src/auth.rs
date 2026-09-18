@@ -194,6 +194,7 @@ pub fn env_var_names(provider: &str) -> &'static [&'static str] {
         "qwen-token-plan-individual" => &["QWEN_TOKEN_PLAN_API_KEY"],
         "radius" => &["RADIUS_API_KEY"],
         "together" => &["TOGETHER_API_KEY"],
+        "typesafe" => &["TYPESAFE_API_KEY"],
         "vercel-ai-gateway" => &["AI_GATEWAY_API_KEY"],
         "xai" => &["XAI_API_KEY"],
         "xiaomi" => &["XIAOMI_API_KEY"],
@@ -629,6 +630,12 @@ pub fn remove_api_key(provider: &str) -> Result<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn typesafe_uses_its_standard_environment_variable() {
+        assert_eq!(env_var_names("typesafe"), &["TYPESAFE_API_KEY"]);
+        assert_eq!(login_methods("typesafe"), vec![LoginMethod::ApiKey]);
+    }
 
     #[test]
     fn reads_old_and_new_credentials() {

@@ -7,7 +7,7 @@ use crate::compaction::{
 };
 use crate::iterative::IterativeRuntime;
 use crate::session::manager::SessionManager;
-use crate::settings::{QueueMode, Settings};
+use crate::settings::{CompactionMode, QueueMode, Settings};
 use crate::subagents::{ForkTurns, SUBAGENT_SYSTEM_PROMPT, SubagentRuntime, fork_messages};
 use crate::workflows::{WorkflowApprover, WorkflowRuntime};
 use anyhow::Context as _;
@@ -1184,8 +1184,8 @@ impl AgentSession {
             AgentMessage::CompactionSummary(c) => Some(c.summary.clone()),
             _ => None,
         });
-        let keep_recent_tokens = self.settings().compaction.keep_recent_tokens;
-        let plan = plan_compaction(&ctx.messages, keep_recent_tokens);
+        let settings = self.settings();
+        let plan = plan_compaction(&ctx.messages, settings.compaction.keep_recent_tokens);
         if plan.to_summarize.is_empty() && plan.turn_prefix.is_empty() {
             (self.sink)(SessionEvent::CompactionEnd {
                 summary: String::new(),
@@ -1193,6 +1193,73 @@ impl AgentSession {
                 error: Some("Nothing to compact".into()),
             });
             return;
+        }
+
+        if settings.compaction.mode == CompactionMode::Jev
+            && let Ok(Some(api_key)) =
+                kiss_ai::auth::resolve_api_key_async("typesafe", &self.registry.declared_keys).await
+        {
+            let cancel = self.cancel.lock().unwrap().clone();
+            let pinned_start = ctx.messages.len().saturating_sub(plan.kept.len());
+            if let Ok(result) =
+                crate::jev::compact(&ctx.messages, pinned_start, &api_key, cancel).await
+            {
+                let estimated_before: u64 = ctx
+                    .messages
+                    .iter()
+                    .map(compaction::estimate_message_tokens)
+                    .sum();
+                let estimated_after: u64 = result
+                    .messages
+                    .iter()
+                    .map(compaction::estimate_message_tokens)
+                    .sum();
+                let removed = estimated_before.saturating_sub(estimated_after);
+                let tokens_after = plan.tokens_before.saturating_sub(removed);
+                let useful =
+                    estimated_after.saturating_mul(4) <= estimated_before.saturating_mul(3);
+                let resolved_auto_threshold = !auto
+                    || !should_compact(
+                        tokens_after,
+                        self.model().context_window,
+                        settings.compaction.reserve_tokens,
+                    );
+                if useful && resolved_auto_threshold {
+                    let summary = format!(
+                        "Jev kept {}, truncated {}, and removed {} of {} older tool interactions",
+                        result.stats.kept,
+                        result.stats.truncated,
+                        result.stats.dropped,
+                        result.stats.eligible,
+                    );
+                    let details = serde_json::json!({
+                        "mode": "jev",
+                        "stats": result.stats,
+                        "estimatedTokensBefore": plan.tokens_before,
+                        "estimatedTokensAfter": tokens_after,
+                    });
+                    let mut manager = self.manager.lock().unwrap();
+                    let append = manager.append_compaction(
+                        String::new(),
+                        plan.tokens_before,
+                        result.messages,
+                        None,
+                        Some(details),
+                    );
+                    drop(manager);
+                    let error = append.err().map(|error| format!("{error:#}"));
+                    (self.sink)(SessionEvent::CompactionEnd {
+                        summary: if error.is_none() {
+                            summary
+                        } else {
+                            String::new()
+                        },
+                        tokens_before: plan.tokens_before,
+                        error,
+                    });
+                    return;
+                }
+            }
         }
 
         let model = self.model();

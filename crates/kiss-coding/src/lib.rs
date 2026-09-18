@@ -6,6 +6,7 @@ mod child_turn;
 pub mod compaction;
 pub mod context_files;
 pub mod iterative;
+mod jev;
 pub mod prompts;
 pub mod session;
 pub mod session_runner;
