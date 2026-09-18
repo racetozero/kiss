@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.0.12 - 2026-09-18
+
+### Added
+
+- Added experimental TypeSafe Jev compaction, with TypeSafe API-key login,
+  credential-gated opt-in settings, verbatim tool-history filtering, and safe
+  fallback to summary compaction.
+
 ## 0.0.11 - 2026-09-16
 
 ### Added
