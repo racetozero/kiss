@@ -285,9 +285,8 @@ fn parse_usage(model: &Model, value: &Value) -> Usage {
     let cached = value["input_tokens_details"]["cached_tokens"]
         .as_u64()
         .unwrap_or(0);
-    let cache_write = value["input_tokens_details"]["cache_creation_tokens"]
+    let cache_write = value["input_tokens_details"]["cache_write_tokens"]
         .as_u64()
-        .or_else(|| value["input_tokens_details"]["cache_write_tokens"].as_u64())
         .unwrap_or(0);
     let mut usage = Usage {
         input: input_tokens
@@ -296,6 +295,10 @@ fn parse_usage(model: &Model, value: &Value) -> Usage {
         output: value["output_tokens"].as_u64().unwrap_or(0),
         cache_read: cached,
         cache_write,
+        cache_read_available: value["input_tokens_details"]
+            .get("cached_tokens")
+            .or_else(|| value["input_tokens_details"].get("cache_write_tokens"))
+            .is_some(),
         reasoning: value["output_tokens_details"]["reasoning_tokens"].as_u64(),
         ..Default::default()
     };
@@ -591,7 +594,7 @@ mod tests {
                 "response": {
                     "usage": {
                         "input_tokens": 20,
-                        "input_tokens_details": {"cached_tokens": 5},
+                        "input_tokens_details": {"cached_tokens": 5, "cache_write_tokens": 2},
                         "output_tokens": 3,
                         "output_tokens_details": {"reasoning_tokens": 2}
                     }
@@ -649,8 +652,10 @@ mod tests {
             "compaction"
         );
         let usage = result.usage.unwrap();
-        assert_eq!(usage.input, 15);
+        assert_eq!(usage.input, 13);
         assert_eq!(usage.cache_read, 5);
+        assert_eq!(usage.cache_write, 2);
+        assert!(usage.cache_read_available);
         assert_eq!(usage.output, 3);
         assert_eq!(usage.reasoning, Some(2));
     }

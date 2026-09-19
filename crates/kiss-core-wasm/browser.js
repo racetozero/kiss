@@ -346,17 +346,22 @@ async function readBoundedText(response, limit, signal) {
 }
 
 function normalizeUsage(usage = {}) {
-  const input = usage.prompt_tokens ?? usage.input_tokens ?? 0;
+  const inputTotal = usage.prompt_tokens ?? usage.input_tokens ?? 0;
   const output = usage.completion_tokens ?? usage.output_tokens ?? 0;
-  const cacheRead = usage.prompt_tokens_details?.cached_tokens ?? 0;
+  const details = usage.prompt_tokens_details ?? usage.input_tokens_details;
+  const cacheRead = details?.cached_tokens ?? 0;
+  const cacheWrite = details?.cache_write_tokens ?? 0;
+  const input = Math.max(0, inputTotal - cacheRead - cacheWrite);
   const reasoning = usage.completion_tokens_details?.reasoning_tokens;
   return {
     input,
     output,
     cacheRead,
-    cacheWrite: 0,
+    cacheWrite,
+    cacheReadAvailable: details != null &&
+      ("cached_tokens" in details || "cache_write_tokens" in details),
     ...(reasoning === undefined ? {} : { reasoning }),
-    totalTokens: usage.total_tokens ?? input + output,
+    totalTokens: usage.total_tokens ?? inputTotal + output,
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
   };
 }

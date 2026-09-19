@@ -77,6 +77,8 @@ pub struct Usage {
     pub output: u64,
     pub cache_read: u64,
     pub cache_write: u64,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub cache_read_available: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reasoning: Option<u64>,
     pub total_tokens: u64,
@@ -89,6 +91,7 @@ impl Usage {
         self.output += other.output;
         self.cache_read += other.cache_read;
         self.cache_write += other.cache_write;
+        self.cache_read_available |= other.cache_read_available;
         if let Some(r) = other.reasoning {
             *self.reasoning.get_or_insert(0) += r;
         }
@@ -328,6 +331,23 @@ mod tests {
         assert_eq!(
             serde_json::to_value(StopReason::ToolUse).unwrap(),
             "toolUse"
+        );
+    }
+
+    #[test]
+    fn cache_metric_availability_is_optional_and_accumulates() {
+        let missing = serde_json::to_value(Usage::default()).unwrap();
+        assert!(missing.get("cacheReadAvailable").is_none());
+
+        let mut total = Usage::default();
+        total.add(&Usage {
+            cache_read_available: true,
+            ..Default::default()
+        });
+        assert!(total.cache_read_available);
+        assert_eq!(
+            serde_json::to_value(total).unwrap()["cacheReadAvailable"],
+            true
         );
     }
 }

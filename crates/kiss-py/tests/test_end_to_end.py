@@ -16,6 +16,8 @@ async def make_session(tmp_path: Path, script: list[list[dict[str, Any]]]) -> tu
         cwd=str(tmp_path),
         model="mock/mock-1",
         models_file=provider.catalog_path,
+        thinking_level=kiss_sdk.ThinkingLevel.OFF,
+        tools=["read", "write", "edit", "bash"],
         no_context_files=True,
     )
     return provider, session
@@ -63,6 +65,10 @@ async def test_prompt_streams_and_writes_a_real_file(tmp_path: Path) -> None:
     assert streamed == "Done."
     assert await session.last_assistant_text() == "Done."
     assert len(provider.requests()) == 2
+    stats = await session.session_stats()
+    assert stats["tokens"]["cacheRead"] == 8
+    assert stats["tokens"]["cacheWrite"] == 0
+    assert stats["tokens"]["cacheReadAvailable"] is True
     await session.aclose()
 
 

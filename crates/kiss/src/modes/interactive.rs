@@ -781,11 +781,14 @@ impl App {
         );
         drop(manager);
         let left = format!(
-            "↑{} ↓{} R{} W{} · {pct:.1}% ctx · ${:.3}",
+            "↑{} ↓{} R{} W{} · {pct:.1}% ctx · {} · ${:.3}",
             format_tokens(totals.input),
             format_tokens(totals.output),
             format_tokens(totals.cache_read),
             format_tokens(totals.cache_write),
+            crate::cache::usage_rate(&totals)
+                .map(|rate| format!("{rate:.1}% cache"))
+                .unwrap_or_else(|| "n/a cache".into()),
             totals.cost.total,
         );
         let right = format!("({}) {}{thinking}", model.provider, model.id);
@@ -6380,6 +6383,38 @@ fn run_slash_command(
             app.cells.push(Cell::Notice(message.into()));
         }
         "fast" => app.cells.push(Cell::Notice("usage: /fast".into())),
+        "cache-usage" => {
+            let values = rest.split_whitespace().collect::<Vec<_>>();
+            let report = match values.as_slice() {
+                [] => Ok(crate::cache::render_manager(
+                    &session.manager.lock().unwrap(),
+                    None,
+                )),
+                ["all"] => {
+                    let session_dir = session.manager.lock().unwrap().session_dir().to_path_buf();
+                    crate::cache::render_saved(&session_dir, None, None)
+                }
+                [provider] => Ok(crate::cache::render_manager(
+                    &session.manager.lock().unwrap(),
+                    Some(provider),
+                )),
+                ["all", provider] => {
+                    let session_dir = session.manager.lock().unwrap().session_dir().to_path_buf();
+                    crate::cache::render_saved(&session_dir, None, Some(provider))
+                }
+                _ => {
+                    app.cells
+                        .push(Cell::Notice("usage: /cache-usage [all] [provider]".into()));
+                    return Flow::Continue;
+                }
+            };
+            match report {
+                Ok(report) => app.cells.push(Cell::Notice(report)),
+                Err(error) => app.cells.push(Cell::Error(format!(
+                    "could not read cache history: {error:#}"
+                ))),
+            }
+        }
         "scoped-models" => open_scoped_models_picker(app, session, resources),
         "settings" => open_settings_picker(app, session, resources),
         "mcp" => open_mcp_picker(app, session, args, command_tx),
@@ -7182,6 +7217,47 @@ mod tests {
         let mut task = None;
         let (tx, _rx) = mpsc::unbounded_channel();
         run_slash_command(app, session, command, &args, resources, &mut task, &tx)
+    }
+
+    fn session_with_cache_usage() -> Arc<kiss_coding::AgentSession> {
+        let mut manager = kiss_coding::SessionManager::in_memory(Path::new("/synthetic"));
+        let mut answer = kiss_ai::AssistantMessage::empty("openai-responses", "openai", "gpt-5");
+        answer.usage = kiss_ai::Usage {
+            input: 25,
+            cache_read: 75,
+            cache_read_available: true,
+            ..Default::default()
+        };
+        manager
+            .append_message(AgentMessage::Assistant(answer))
+            .unwrap();
+        test_session(manager)
+    }
+
+    #[test]
+    fn footer_shows_cache_rate_before_cost() {
+        let app = test_app();
+        let footer =
+            kiss_tui::text::strip_ansi(&app.footer(160, &session_with_cache_usage()).join("\n"));
+        let cache = footer.find("75.0% cache").unwrap();
+        let cost = footer.find('$').unwrap();
+        assert!(cache < cost);
+    }
+
+    #[test]
+    fn cache_usage_slash_command_shows_current_session_history() {
+        let mut app = test_app();
+        let session = session_with_cache_usage();
+        let mut resources = test_resources();
+        run_command_for_test(&mut app, &session, &mut resources, "cache-usage");
+
+        assert!(matches!(
+            app.cells.last(),
+            Some(Cell::Notice(report))
+                if report.contains("Cache rate — session")
+                    && report.contains("75.0%")
+                    && report.contains("Provider history")
+        ));
     }
 
     #[test]

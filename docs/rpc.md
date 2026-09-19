@@ -68,7 +68,7 @@ An image is `{"type":"image","data":"<base64>","mimeType":"image/png"}`.
 - `get_entries`, optionally `since` — append-only entries after a durable entry-id cursor and current `leafId`.
 - `get_tree` — recursive `{entry, children, label}` nodes and `leafId`.
 - `get_last_assistant_text` — nullable `data.text`.
-- `get_session_stats` — message/tool counts, tokens, cost, and context use.
+- `get_session_stats` — message/tool counts, cost, context use, and `tokens` with `input`, `output`, `cacheRead`, `cacheWrite`, `cacheReadAvailable`, and `total`.
 - `set_session_name` with `name`.
 - `new_session` — replace active history with an empty in-memory session.
 - `switch_session` with `sessionPath`.

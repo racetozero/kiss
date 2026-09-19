@@ -203,6 +203,17 @@ pub enum Command {
     /// Serve KISS as an Agent Client Protocol agent over standard I/O.
     Acp,
 
+    /// Show historical provider KV-cache rates.
+    CacheUsage {
+        /// Limit the report to a session ID prefix or JSONL file path.
+        #[arg(long, value_name = "ID_OR_FILE")]
+        session: Option<String>,
+
+        /// Limit the report to one provider ID.
+        #[arg(long)]
+        provider: Option<String>,
+    },
+
     /// Diagnose local health and provider network access.
     Doctor {
         /// Show one connectivity row for each provider.
@@ -460,6 +471,26 @@ mod tests {
     fn parses_update_command() {
         let args = Args::try_parse_from(["kiss", "update"]).unwrap();
         assert!(matches!(args.command, Some(Command::Update)));
+    }
+
+    #[test]
+    fn parses_cache_usage_filters() {
+        let args = Args::try_parse_from([
+            "kiss",
+            "cache-usage",
+            "--session",
+            "abc123",
+            "--provider",
+            "anthropic",
+        ])
+        .unwrap();
+        assert!(matches!(
+            args.command,
+            Some(Command::CacheUsage {
+                session: Some(session),
+                provider: Some(provider),
+            }) if session == "abc123" && provider == "anthropic"
+        ));
     }
 
     #[test]

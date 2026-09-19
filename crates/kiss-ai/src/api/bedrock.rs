@@ -143,6 +143,10 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
                 if let Some(usage) = event.usage() {
                     builder.message.usage.input = positive(usage.input_tokens());
                     builder.message.usage.output = positive(usage.output_tokens());
+                    builder.message.usage.cache_read_available = usage
+                        .cache_read_input_tokens()
+                        .or_else(|| usage.cache_write_input_tokens())
+                        .is_some();
                     builder.message.usage.cache_read =
                         positive(usage.cache_read_input_tokens().unwrap_or_default());
                     builder.message.usage.cache_write =

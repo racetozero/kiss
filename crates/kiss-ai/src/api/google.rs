@@ -174,6 +174,7 @@ fn handle_chunk(
         let prompt = usage["promptTokenCount"].as_u64().unwrap_or(0);
         builder.message.usage.input = prompt.saturating_sub(cached);
         builder.message.usage.cache_read = cached;
+        builder.message.usage.cache_read_available = usage.get("cachedContentTokenCount").is_some();
         let thoughts = usage["thoughtsTokenCount"].as_u64().unwrap_or(0);
         builder.message.usage.output =
             usage["candidatesTokenCount"].as_u64().unwrap_or(0) + thoughts;

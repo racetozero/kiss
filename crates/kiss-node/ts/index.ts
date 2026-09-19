@@ -34,6 +34,16 @@ export interface BashResult {
   output: string; exitCode: number | null; cancelled: boolean; truncated: boolean;
   fullOutputPath: string | null;
 }
+export interface TokenUsage {
+  input: number; output: number; cacheRead: number; cacheWrite: number;
+  cacheReadAvailable: boolean; total: number;
+}
+export interface SessionStats {
+  sessionFile: string | null; sessionId: string; userMessages: number;
+  assistantMessages: number; toolCalls: number; toolResults: number;
+  totalMessages: number; tokens: TokenUsage; cost: number;
+  contextUsage: { tokens: number; contextWindow: number; percent: number };
+}
 export interface AssistantDelta {
   type: "start" | "text_start" | "text_delta" | "text_end" |
     "thinking_start" | "thinking_delta" | "thinking_end" |
@@ -134,7 +144,7 @@ export class Session {
   async lastAssistantText(): Promise<string | null> {
     return (await this.#require<{ text: string | null }>({ type: "get_last_assistant_text" })).text;
   }
-  async sessionStats(): Promise<Record<string, unknown>> { return this.#require({ type: "get_session_stats" }); }
+  async sessionStats(): Promise<SessionStats> { return this.#require({ type: "get_session_stats" }); }
   async tools(): Promise<string[]> {
     const data = await this.#require<{ tools: { name: string }[] }>({ type: "get_tools" });
     return data.tools.map((tool) => tool.name);

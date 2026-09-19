@@ -102,12 +102,27 @@ Send a new instruction while the agent works. Press `Enter` to steer the
 current task, or `Alt+Enter` to queue the instruction for later.
 
 Useful commands include `/login`, `/model`, `/mcp`, `/compact`, `/resume`,
-`/loop`, `/autoresearch`, `/jobs`, `/provider`, `/export`, `/fast`, `/update`,
+`/loop`, `/autoresearch`, `/jobs`, `/provider`, `/export`, `/cache-usage`, `/fast`, `/update`,
 `/settings`, and `/hotkeys`.
 
 Use `/fast` to toggle the low-latency tier for a supported provider. This
 setting applies only to the current session, and provider costs can increase.
 Use `/update` to update the installed KISS binary.
+
+### Inspect prompt caching
+
+The footer shows the current session cache rate before its dollar cost. Run
+`/cache-usage` for the current session, `/cache-usage <provider>` for one provider, or
+`/cache-usage all` for all saved sessions. The report shows fixed-scale historical
+charts, provider totals, and session totals.
+
+The same report is available without the TUI:
+
+```bash
+kiss cache-usage
+kiss cache-usage --provider anthropic
+kiss cache-usage --session <session-id-or-jsonl-file>
+```
 
 ## Continue work from another agent
 
@@ -417,16 +432,24 @@ session.prompt("What files are here?").await?;
 ```python
 async with await kiss_sdk.Session.create(tools=[kiss_sdk.ToolName.READ]) as session:
     await session.prompt("What files are here?")
+    stats = await session.session_stats()
+    print(stats["tokens"]["cacheRead"], stats["tokens"]["cacheWrite"])
 ```
 
 ```typescript
 const session = await Session.create({ tools: ["read", "bash"] });
 await session.prompt("What files are here?");
+const stats = await session.sessionStats();
+console.log(stats.tokens.cacheRead, stats.tokens.cacheWrite);
 ```
 
 `@kiss-sdk/core-wasm` runs the full agent and model/tool loop in a browser. It
 does not need a KISS server. `@kiss-sdk/wasm` is the remote client for
 applications that need native filesystem and shell tools.
+
+Python, Node, and RPC WASM return cumulative cached-token totals through
+session statistics. Core WASM returns `cacheRead`, `cacheWrite`, and
+`cacheReadAvailable` in `PromptResult.usage`.
 
 ### JSONL RPC
 

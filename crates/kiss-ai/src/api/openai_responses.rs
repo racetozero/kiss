@@ -930,11 +930,20 @@ fn handle_event(event: &SseEvent, builder: &mut PartialBuilder, state: &mut Deco
             let cached = usage["input_tokens_details"]["cached_tokens"]
                 .as_u64()
                 .unwrap_or(0);
+            let cache_write = usage["input_tokens_details"]["cache_write_tokens"]
+                .as_u64()
+                .unwrap_or(0);
             builder.message.usage.input = usage["input_tokens"]
                 .as_u64()
                 .unwrap_or(0)
-                .saturating_sub(cached);
+                .saturating_sub(cached)
+                .saturating_sub(cache_write);
             builder.message.usage.cache_read = cached;
+            builder.message.usage.cache_write = cache_write;
+            builder.message.usage.cache_read_available = usage["input_tokens_details"]
+                .get("cached_tokens")
+                .or_else(|| usage["input_tokens_details"].get("cache_write_tokens"))
+                .is_some();
             builder.message.usage.output = usage["output_tokens"].as_u64().unwrap_or(0);
             if let Some(r) = usage["output_tokens_details"]["reasoning_tokens"].as_u64() {
                 builder.message.usage.reasoning = Some(r);
@@ -1227,6 +1236,36 @@ mod request_tests {
     }
 
     #[test]
+    fn usage_tracks_reported_cache_reads_and_writes() {
+        let model = model("openai-responses", "https://api.openai.com/v1");
+        let (sink, _stream) = crate::EventStream::channel();
+        let mut builder = PartialBuilder::new(&model, sink);
+        let event = SseEvent {
+            event: Some("response.completed".into()),
+            data: json!({
+                "response": {
+                    "status": "completed",
+                    "usage": {
+                        "input_tokens": 100,
+                        "input_tokens_details": {
+                            "cached_tokens": 40,
+                            "cache_write_tokens": 10
+                        },
+                        "output_tokens": 5
+                    }
+                }
+            })
+            .to_string(),
+        };
+        handle_event(&event, &mut builder, &mut DecodeState::default());
+
+        assert_eq!(builder.message.usage.input, 50);
+        assert_eq!(builder.message.usage.cache_read, 40);
+        assert_eq!(builder.message.usage.cache_write, 10);
+        assert!(builder.message.usage.cache_read_available);
+    }
+
+    #[test]
     fn fast_mode_uses_priority_service_tier() {
         let mut model = model("openai-responses", "https://api.openai.com/v1");
         model.provider = "openai".into();
@@ -1465,7 +1504,7 @@ mod request_tests {
                     "status":"completed",
                     "usage":{
                         "input_tokens":12,
-                        "input_tokens_details":{"cached_tokens":2},
+                        "input_tokens_details":{"cached_tokens":2,"cache_write_tokens":1},
                         "output_tokens":3,
                         "output_tokens_details":{"reasoning_tokens":1}
                     }
@@ -1546,6 +1585,10 @@ mod request_tests {
             .await;
         assert_eq!(first.text(), "hello");
         assert_eq!(first.response_id.as_deref(), Some("resp-1"));
+        assert_eq!(first.usage.input, 9);
+        assert_eq!(first.usage.cache_read, 2);
+        assert_eq!(first.usage.cache_write, 1);
+        assert!(first.usage.cache_read_available);
 
         let second_context = Context {
             system_prompt: Some("be concise".into()),

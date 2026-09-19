@@ -124,6 +124,14 @@ impl KissClient {
         self.execute(command)
     }
 
+    /// Return message counts, token usage, cache reads and writes, cost, and context use.
+    #[wasm_bindgen(js_name = sessionStats)]
+    pub fn session_stats(&self) -> Promise {
+        let command = serde_wasm_bindgen::to_value(&Command::GetSessionStats {})
+            .expect("a session statistics command serializes");
+        self.execute(command)
+    }
+
     /// Receive event objects. The callback is invoked once per event and never
     /// for command responses.
     #[wasm_bindgen(js_name = onEvent)]

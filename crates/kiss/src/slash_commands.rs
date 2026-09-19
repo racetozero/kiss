@@ -91,6 +91,11 @@ pub(crate) const LLAMA_SLASH_COMMAND: SlashCommand =
 /// KISS-local commands that preserve Pi's core command inventory.
 pub(crate) const KISS_SLASH_COMMANDS: &[SlashCommand] = &[
     SlashCommand::new("fast", "Toggle provider fast mode", None),
+    SlashCommand::new(
+        "cache-usage",
+        "Show historical provider cache rates",
+        Some("[all] [provider]"),
+    ),
     SlashCommand::new("update", "Update the KISS binary", None),
     SlashCommand::new("mcp", "Manage MCP servers", None),
     SlashCommand::new(
@@ -260,6 +265,7 @@ mod tests {
             [
                 "llama",
                 "fast",
+                "cache-usage",
                 "update",
                 "mcp",
                 "webmcp",

@@ -12,6 +12,8 @@ async function fixture(script) {
     cwd: directory,
     model: "mock/mock-1",
     modelsFile: provider.catalogPath,
+    thinkingLevel: "off",
+    tools: ["read", "write", "edit", "bash"],
     noContextFiles: true,
   });
   return { directory, provider, session };
@@ -43,6 +45,10 @@ test("a prompt streams and writes a real file", async () => {
   assert.equal(text, "Done.");
   assert.equal(await session.lastAssistantText(), "Done.");
   assert.equal(provider.requests().length, 2);
+  const stats = await session.sessionStats();
+  assert.equal(stats.tokens.cacheRead, 8);
+  assert.equal(stats.tokens.cacheWrite, 0);
+  assert.equal(stats.tokens.cacheReadAvailable, true);
   session.close();
 });
 

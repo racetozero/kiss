@@ -157,6 +157,15 @@ class TreeData(TypedDict):
     leafId: str | None
 
 
+class TokenUsageData(TypedDict):
+    input: int
+    output: int
+    cacheRead: int
+    cacheWrite: int
+    cacheReadAvailable: bool
+    total: int
+
+
 class SessionStatsData(TypedDict, total=False):
     sessionFile: str | None
     sessionId: str
@@ -165,6 +174,6 @@ class SessionStatsData(TypedDict, total=False):
     toolCalls: int
     toolResults: int
     totalMessages: int
-    tokens: dict[str, int]
+    tokens: TokenUsageData
     cost: float
     contextUsage: dict[str, int]

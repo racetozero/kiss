@@ -299,6 +299,10 @@ async fn session_statistics_count_the_conversation() {
     assert_eq!(stats["userMessages"], 1);
     assert_eq!(stats["assistantMessages"], 1);
     assert_eq!(stats["totalMessages"], 2);
+    assert_eq!(stats["tokens"]["input"], 6);
+    assert_eq!(stats["tokens"]["cacheRead"], 4);
+    assert_eq!(stats["tokens"]["cacheWrite"], 0);
+    assert_eq!(stats["tokens"]["cacheReadAvailable"], true);
     assert!(stats["contextUsage"]["contextWindow"].as_u64().unwrap() > 0);
 }
 

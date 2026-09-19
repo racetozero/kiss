@@ -926,6 +926,27 @@ impl SessionManager {
         self.file.is_some()
     }
 
+    /// Sum every provider operation recorded in this append-only session.
+    pub fn usage_totals(&self) -> Usage {
+        let mut totals = Usage::default();
+        for entry in &self.entries {
+            match entry {
+                SessionEntry::Message {
+                    message: AgentMessage::Assistant(assistant),
+                    ..
+                } => totals.add(&assistant.usage),
+                SessionEntry::Compaction {
+                    usage: Some(usage), ..
+                }
+                | SessionEntry::BranchSummary {
+                    usage: Some(usage), ..
+                } => totals.add(usage),
+                _ => {}
+            }
+        }
+        totals
+    }
+
     /// Serialize the full append-only session file format.
     pub fn to_jsonl(&self) -> Result<String> {
         let mut output = serde_json::to_string(&self.header)?;
@@ -1050,6 +1071,38 @@ mod tests {
         m.append_message(AgentMessage::user("two")).unwrap();
         let ctx = m.build_session_context();
         assert_eq!(ctx.messages.len(), 2);
+    }
+
+    #[test]
+    fn usage_totals_include_saved_provider_operations() {
+        let mut manager = manager();
+        let mut answer = AssistantMessage::empty("openai-responses", "openai", "gpt-test");
+        answer.usage = Usage {
+            input: 20,
+            cache_read: 80,
+            cache_read_available: true,
+            ..Default::default()
+        };
+        manager
+            .append_message(AgentMessage::Assistant(answer))
+            .unwrap();
+        manager
+            .append_compaction(
+                "summary".into(),
+                100,
+                Vec::new(),
+                Some(Usage {
+                    input: 10,
+                    ..Default::default()
+                }),
+                None,
+            )
+            .unwrap();
+
+        let totals = manager.usage_totals();
+        assert_eq!(totals.input, 30);
+        assert_eq!(totals.cache_read, 80);
+        assert!(totals.cache_read_available);
     }
 
     #[test]

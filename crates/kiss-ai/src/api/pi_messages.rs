@@ -202,7 +202,9 @@ fn finish_terminal(terminal: Terminal, builder: PartialBuilder, model: &Model) {
 }
 
 fn apply_terminal_fields(data: &Value, builder: &mut PartialBuilder) {
-    if let Ok(usage) = serde_json::from_value::<Usage>(data["usage"].clone()) {
+    if let Ok(mut usage) = serde_json::from_value::<Usage>(data["usage"].clone()) {
+        usage.cache_read_available |=
+            data["usage"].get("cacheRead").is_some() || data["usage"].get("cacheWrite").is_some();
         builder.message.usage = usage;
     }
     if let Some(response_id) = data["responseId"].as_str() {

@@ -272,7 +272,12 @@ async fn serve_one(
         "id": "mock",
         "object": "chat.completion.chunk",
         "choices": [{"index": 0, "delta": {}, "finish_reason": finish}],
-        "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+        "usage": {
+            "prompt_tokens": 10,
+            "prompt_tokens_details": {"cached_tokens": 4},
+            "completion_tokens": 5,
+            "total_tokens": 15
+        },
     });
     write_event(&mut stream, &final_frame).await?;
     stream.write_all(b"data: [DONE]\n\n").await?;

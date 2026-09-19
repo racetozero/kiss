@@ -23,10 +23,12 @@ export type {
   Model,
   QueueMode,
   Response,
+  SessionStats,
   SessionOptions,
   SessionState,
   StreamingBehavior,
   ThinkingLevel,
+  TokenUsage,
   ToolEvent,
   ToolName,
 } from "./index.js";

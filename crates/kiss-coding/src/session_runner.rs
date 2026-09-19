@@ -192,6 +192,7 @@ impl AgentSession {
         sink: SessionEventSink,
         subagents_allowed: bool,
     ) -> Arc<Self> {
+        let totals = manager.usage_totals();
         let session = Arc::new(AgentSession {
             manager: Mutex::new(manager),
             registry: registry.into(),
@@ -207,7 +208,7 @@ impl AgentSession {
             follow_up: Default::default(),
             cancel: Mutex::new(CancellationToken::new()),
             running: Mutex::new(false),
-            totals: Default::default(),
+            totals: Mutex::new(totals),
             context_usage_cache: Default::default(),
             api_key_override,
             sink,
@@ -445,6 +446,7 @@ impl AgentSession {
         if let Some(runtime) = self.iterative.get() {
             runtime.stop_all();
         }
+        let totals = manager.usage_totals();
         let context = manager.build_session_context();
         if let Some((provider, model_id)) = context.model
             && let Some((model, _)) = self.registry.resolve(&model_id, Some(&provider))
@@ -456,7 +458,7 @@ impl AgentSession {
         }
         *self.manager.lock().unwrap() = manager;
         *self.context_usage_cache.lock().unwrap() = None;
-        *self.totals.lock().unwrap() = Usage::default();
+        *self.totals.lock().unwrap() = totals;
     }
 
     pub fn set_model(&self, model: Model) {

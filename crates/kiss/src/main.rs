@@ -1,5 +1,6 @@
 mod args;
 mod auth_flow;
+mod cache;
 mod doctor;
 mod export;
 mod file_search;
@@ -102,6 +103,16 @@ async fn run(args: Args) -> anyhow::Result<i32> {
 async fn run_command(args: &Args, command: &Command) -> anyhow::Result<i32> {
     match command {
         Command::Acp => modes::acp::run(args).await,
+        Command::CacheUsage { session, provider } => {
+            let cwd = std::env::current_dir()?;
+            let settings = kiss_coding::Settings::load(&cwd, false);
+            let session_dir = setup::session_dir(args, &settings);
+            println!(
+                "{}",
+                cache::render_saved(&session_dir, session.as_deref(), provider.as_deref())?
+            );
+            Ok(0)
+        }
         Command::Doctor { summary } => doctor::run(*summary).await,
         Command::Update => update::run().await,
         Command::Mcp { command } => mcp_cli::run(command).await,

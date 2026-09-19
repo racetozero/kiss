@@ -37,6 +37,7 @@ export interface Usage {
   output: number;
   cacheRead: number;
   cacheWrite: number;
+  cacheReadAvailable?: boolean;
   reasoning?: number;
   totalTokens: number;
   cost: {

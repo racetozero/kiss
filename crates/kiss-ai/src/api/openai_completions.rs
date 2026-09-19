@@ -273,9 +273,17 @@ fn handle_chunk(
         let cached = usage["prompt_tokens_details"]["cached_tokens"]
             .as_u64()
             .unwrap_or(0);
+        let cache_write = usage["prompt_tokens_details"]["cache_write_tokens"]
+            .as_u64()
+            .unwrap_or(0);
         let prompt = usage["prompt_tokens"].as_u64().unwrap_or(0);
-        builder.message.usage.input = prompt.saturating_sub(cached);
+        builder.message.usage.input = prompt.saturating_sub(cached).saturating_sub(cache_write);
         builder.message.usage.cache_read = cached;
+        builder.message.usage.cache_write = cache_write;
+        builder.message.usage.cache_read_available = usage["prompt_tokens_details"]
+            .get("cached_tokens")
+            .or_else(|| usage["prompt_tokens_details"].get("cache_write_tokens"))
+            .is_some();
         builder.message.usage.output = usage["completion_tokens"].as_u64().unwrap_or(0);
         if let Some(r) = usage["completion_tokens_details"]["reasoning_tokens"].as_u64() {
             builder.message.usage.reasoning = Some(r);
@@ -616,6 +624,35 @@ mod tests {
             &detect_compat(&model),
         );
         assert_eq!(fast["service_tier"], "priority");
+    }
+
+    #[test]
+    fn usage_tracks_reported_cache_reads_and_writes() {
+        let model = model_with_compat(OpenAICompat::default());
+        let (sink, _stream) = crate::EventStream::channel();
+        let mut builder = PartialBuilder::new(&model, sink);
+        handle_chunk(
+            &json!({
+                "usage": {
+                    "prompt_tokens": 100,
+                    "prompt_tokens_details": {
+                        "cached_tokens": 40,
+                        "cache_write_tokens": 10
+                    },
+                    "completion_tokens": 5
+                },
+                "choices": []
+            })
+            .to_string(),
+            &mut builder,
+            &mut DecodeState::default(),
+        )
+        .unwrap();
+
+        assert_eq!(builder.message.usage.input, 50);
+        assert_eq!(builder.message.usage.cache_read, 40);
+        assert_eq!(builder.message.usage.cache_write, 10);
+        assert!(builder.message.usage.cache_read_available);
     }
 
     #[test]

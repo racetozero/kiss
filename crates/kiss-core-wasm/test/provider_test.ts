@@ -19,7 +19,7 @@ Deno.test("the OpenAI-compatible fetch adapter streams through the WASM tool loo
       ]
       : [
         { id: "r2", model: "fixture", choices: [{ delta: { content: "answer: " } }] },
-        { choices: [{ delta: { content: "6" }, finish_reason: "stop" }], usage: { prompt_tokens: 5, completion_tokens: 2, total_tokens: 7 } },
+        { choices: [{ delta: { content: "6" }, finish_reason: "stop" }], usage: { prompt_tokens: 5, prompt_tokens_details: { cached_tokens: 3 }, completion_tokens: 2, total_tokens: 7 } },
       ];
     const stream = new ReadableStream({
       start(controller) {
@@ -58,6 +58,9 @@ Deno.test("the OpenAI-compatible fetch adapter streams through the WASM tool loo
       }
     });
     assert(result.text === "answer: 6", "streamed text should become authoritative final content");
+    assert(result.usage.input === 2, "uncached input tokens should be available");
+    assert(result.usage.cacheRead === 3, "cached input tokens should be available");
+    assert(result.usage.cacheReadAvailable === true, "cache availability should be available");
     assert(deltas.join("") === "answer: 6", "stream deltas should reach KISS events");
     assert(requestCount === 2, "tool use should trigger another HTTP model request");
     const secondMessages = bodies[1].messages as Array<Record<string, unknown>>;

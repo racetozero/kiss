@@ -42,6 +42,7 @@ from .types import (
     SessionStatsData,
     StreamingBehavior,
     ThinkingLevel,
+    TokenUsageData,
     ToolName,
 )
 
@@ -62,6 +63,7 @@ __all__ = [
     "SessionStatsData",
     "StreamingBehavior",
     "ThinkingLevel",
+    "TokenUsageData",
     "ToolName",
     "__version__",
 ]

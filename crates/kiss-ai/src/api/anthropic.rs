@@ -205,6 +205,10 @@ fn handle_event(event: &SseEvent, builder: &mut PartialBuilder, state: &mut Deco
                 usage["cache_read_input_tokens"].as_u64().unwrap_or(0);
             builder.message.usage.cache_write =
                 usage["cache_creation_input_tokens"].as_u64().unwrap_or(0);
+            builder.message.usage.cache_read_available = usage
+                .get("cache_read_input_tokens")
+                .or_else(|| usage.get("cache_creation_input_tokens"))
+                .is_some();
             if let Some(id) = data["message"]["id"].as_str() {
                 builder.message.response_id = Some(id.to_string());
             }
@@ -310,6 +314,17 @@ fn handle_event(event: &SseEvent, builder: &mut PartialBuilder, state: &mut Deco
             }
             if let Some(out) = data["usage"]["output_tokens"].as_u64() {
                 builder.message.usage.output = out;
+            }
+            if let Some(input) = data["usage"]["input_tokens"].as_u64() {
+                builder.message.usage.input = input;
+            }
+            if let Some(cache_read) = data["usage"]["cache_read_input_tokens"].as_u64() {
+                builder.message.usage.cache_read = cache_read;
+                builder.message.usage.cache_read_available = true;
+            }
+            if let Some(cache_write) = data["usage"]["cache_creation_input_tokens"].as_u64() {
+                builder.message.usage.cache_write = cache_write;
+                builder.message.usage.cache_read_available = true;
             }
             Flow::Continue
         }
@@ -577,6 +592,54 @@ mod tests {
             thinking_level_map: BTreeMap::new(),
             headers: BTreeMap::new(),
         }
+    }
+
+    #[test]
+    fn message_delta_updates_final_cache_usage() {
+        let model = model(OpenAICompat::default());
+        let (sink, _stream) = crate::EventStream::channel();
+        let mut builder = PartialBuilder::new(&model, sink);
+        let mut state = DecodeState::default();
+
+        handle_event(
+            &SseEvent {
+                event: Some("message_start".into()),
+                data: json!({
+                    "message": {
+                        "usage": {
+                            "input_tokens": 10,
+                            "cache_read_input_tokens": 20,
+                            "cache_creation_input_tokens": 30
+                        }
+                    }
+                })
+                .to_string(),
+            },
+            &mut builder,
+            &mut state,
+        );
+        handle_event(
+            &SseEvent {
+                event: Some("message_delta".into()),
+                data: json!({
+                    "usage": {
+                        "input_tokens": 12,
+                        "cache_read_input_tokens": 40,
+                        "cache_creation_input_tokens": 5,
+                        "output_tokens": 7
+                    }
+                })
+                .to_string(),
+            },
+            &mut builder,
+            &mut state,
+        );
+
+        assert_eq!(builder.message.usage.input, 12);
+        assert_eq!(builder.message.usage.cache_read, 40);
+        assert_eq!(builder.message.usage.cache_write, 5);
+        assert_eq!(builder.message.usage.output, 7);
+        assert!(builder.message.usage.cache_read_available);
     }
 
     #[test]
