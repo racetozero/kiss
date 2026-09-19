@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.0.13 - 2026-09-19
+
+### Added
+
+- Added historical cache-usage reports to `kiss cache-usage` and
+  `/cache-usage`, with session and provider filters, fixed-scale charts,
+  current TUI cache rates, and cached-token data in the Python, Node, and
+  WebAssembly SDKs.
+
+### Fixed
+
+- Made the doctor WebSocket probe use a valid 16-byte handshake key so strict
+  servers do not reject a valid endpoint.
+
 ## 0.0.12 - 2026-09-18
 
 ### Added

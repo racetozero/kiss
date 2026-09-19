@@ -102,21 +102,24 @@ Send a new instruction while the agent works. Press `Enter` to steer the
 current task, or `Alt+Enter` to queue the instruction for later.
 
 Useful commands include `/login`, `/model`, `/mcp`, `/compact`, `/resume`,
-`/loop`, `/autoresearch`, `/jobs`, `/provider`, `/export`, `/cache-usage`, `/fast`, `/update`,
-`/settings`, and `/hotkeys`.
+`/loop`, `/autoresearch`, `/jobs`, `/provider`, `/export`, `/cache-usage`,
+`/fast`, `/update`, `/settings`, and `/hotkeys`.
 
 Use `/fast` to toggle the low-latency tier for a supported provider. This
 setting applies only to the current session, and provider costs can increase.
 Use `/update` to update the installed KISS binary.
 
-### Inspect prompt caching
+### Track cache efficiency
 
-The footer shows the current session cache rate before its dollar cost. Run
-`/cache-usage` for the current session, `/cache-usage <provider>` for one provider, or
-`/cache-usage all` for all saved sessions. The report shows fixed-scale historical
-charts, provider totals, and session totals.
+Prompt caching can reduce the cost of repeated context. KISS shows the current
+cache rate beside the session cost, so you can see when a workload benefits.
 
-The same report is available without the TUI:
+Run `/cache-usage` to see the current session trend. Use `/cache-usage all` to
+check whether cache efficiency improves across saved sessions, or
+`/cache-usage <provider>` to compare one provider. Every chart uses the same
+scale, so changes are easy to compare.
+
+Use the same report in scripts and CI:
 
 ```bash
 kiss cache-usage
@@ -447,9 +450,10 @@ console.log(stats.tokens.cacheRead, stats.tokens.cacheWrite);
 does not need a KISS server. `@kiss-sdk/wasm` is the remote client for
 applications that need native filesystem and shell tools.
 
-Python, Node, and RPC WASM return cumulative cached-token totals through
-session statistics. Core WASM returns `cacheRead`, `cacheWrite`, and
-`cacheReadAvailable` in `PromptResult.usage`.
+Use cached-token totals in product analytics, cost dashboards, or alerts.
+Python, Node, and RPC WASM return cumulative totals through session statistics.
+Core WASM returns `cacheRead`, `cacheWrite`, and `cacheReadAvailable` in
+`PromptResult.usage`.
 
 ### JSONL RPC
 
