@@ -20,7 +20,7 @@ members = [
 exclude = ["crates/kiss-py", "crates/kiss-node", "crates/kiss-wasm", "crates/kiss-core-wasm"]
 
 [workspace.package]
-version = "0.0.13"
+version = "0.0.14"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/racetozero/kiss"
