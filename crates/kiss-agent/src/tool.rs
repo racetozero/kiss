@@ -63,7 +63,7 @@ pub trait AgentTool: Send + Sync {
     fn prepare_arguments(&self, args: Value) -> Value {
         args
     }
-    /// Execute. Return Err on failure; the loop converts it into an error
+    /// Execute. Return Err on failure. The loop converts it into an error
     /// tool result visible to the model.
     async fn execute(
         &self,

@@ -230,7 +230,7 @@ case "$target" in
                 target="${target%-gnu}-musl"
                 archive_name="kiss-$target.tar.gz"
                 checksum_name="$archive_name.sha256"
-                say "The glibc runtime is too old; using the musl release for $target"
+                say "The glibc runtime is too old. Using the musl release for $target"
                 download_release
                 verify_archive
             else

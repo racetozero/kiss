@@ -4,7 +4,7 @@
 //! A workflow is built on the same child sessions `spawn_agent` uses, so it is
 //! available only when subagents are on. The difference is where the plan
 //! lives: with `spawn_agent` the model decides what to start next on every
-//! turn, and every result lands in its context; with a workflow the plan is a
+//! turn, and every result lands in its context. With a workflow the plan is a
 //! script, and only the final answer comes back.
 
 mod prompt;
@@ -142,7 +142,7 @@ impl WorkflowPlan {
     }
 }
 
-/// Asks the user to approve a run. Interactive mode installs one; other modes
+/// Asks the user to approve a run. Interactive mode installs one. Other modes
 /// leave it unset and runs start without asking, since nothing can answer.
 pub type WorkflowApprover = Arc<
     dyn Fn(WorkflowPlan) -> futures::future::BoxFuture<'static, ApprovalDecision> + Send + Sync,

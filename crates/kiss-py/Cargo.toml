@@ -18,7 +18,7 @@ crate-type = ["cdylib"]
 
 [features]
 # The scripted offline provider. On by default so `python -m kiss_sdk.demo`
-# works with no API key; turn it off for a slimmer wheel.
+# works with no API key. Turn it off for a slimmer wheel.
 default = ["mock"]
 mock = ["kiss-sdk/mock"]
 

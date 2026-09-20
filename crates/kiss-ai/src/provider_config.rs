@@ -83,7 +83,7 @@ pub fn catalog_path() -> Result<PathBuf> {
     std::env::var_os("KISS_MODELS_FILE")
         .map(PathBuf::from)
         .or_else(|| dirs::home_dir().map(|home| home.join(".kiss/agent/models.json")))
-        .context("no home directory; set KISS_MODELS_FILE")
+        .context("no home directory. Set KISS_MODELS_FILE")
 }
 
 pub fn add(request: &AddProvider) -> Result<PathBuf> {

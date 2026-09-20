@@ -1,4 +1,4 @@
-//! Component model: components render to lines; only the renderer writes to
+//! Component model: components render to lines. Only the renderer writes to
 //! the terminal.
 
 /// A UI component. `render` must return lines whose display width does not

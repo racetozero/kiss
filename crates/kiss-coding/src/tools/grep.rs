@@ -80,7 +80,7 @@ impl AgentTool for GrepTool {
             .unwrap_or(DEFAULT_LIMIT);
         let cwd = self.cwd.clone();
 
-        // File walking + searching is sync CPU/IO work; run it off the async
+        // File walking + searching is sync CPU/IO work. Run it off the async
         // executor so long searches never stall the event loop.
         let result = tokio::task::spawn_blocking(move || {
             run_grep(

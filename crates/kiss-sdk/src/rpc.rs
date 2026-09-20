@@ -5,8 +5,8 @@
 //! Records are separated by a line feed (`\n`) and nothing else. One optional
 //! carriage return immediately before it is stripped. In particular `U+2028`
 //! (line separator) and `U+2029` (paragraph separator) are **not** separators,
-//! because both are legal inside a JSON string; several languages' convenience
-//! line readers — notably Node's `readline` — split on them and will corrupt a
+//! because both are legal inside a JSON string. Several languages' convenience
+//! line readers, notably Node's `readline`, split on them and will corrupt a
 //! reply that contains one. Split on `\n` yourself.
 //!
 //! # Concurrency

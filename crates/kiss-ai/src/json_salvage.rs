@@ -1,6 +1,6 @@
 //! Best-effort JSON repair for streamed tool-call arguments.
 //!
-//! Providers stream tool arguments as raw text; a truncated stream can leave
+//! Providers stream tool arguments as raw text. A truncated stream can leave
 //! an incomplete JSON document. This parser closes unterminated strings,
 //! arrays, and objects so the agent still gets a structured value (the loop
 //! separately refuses to execute tool calls from length-truncated messages).
@@ -81,7 +81,7 @@ fn repair(input: &str) -> Option<String> {
         } else if t.ends_with(':') {
             let cut = t.len() - 1;
             out.truncate(cut);
-            // The value never arrived; drop the key string too.
+            // The value never arrived. Drop the key string too.
             if let Some(stripped) = strip_trailing_string(out.trim_end()) {
                 out = stripped;
             }

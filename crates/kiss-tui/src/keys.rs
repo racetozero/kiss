@@ -153,7 +153,7 @@ impl InputDecoder {
     }
 
     /// Try to decode one event from the buffer head. Returns (event, bytes
-    /// consumed); None means incomplete input, wait for more bytes.
+    /// consumed). None means incomplete input, wait for more bytes.
     fn try_decode(&self) -> Option<(Option<InputEvent>, usize)> {
         let buf = &self.buffer;
         if buf.is_empty() {

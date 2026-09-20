@@ -1,4 +1,4 @@
-# Browser-only binding crate; deliberately outside the native root workspace.
+# Browser-only binding crate. Deliberately outside the native root workspace.
 [workspace]
 
 [package]

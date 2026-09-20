@@ -143,7 +143,7 @@ struct AgentRecord {
     error: Option<String>,
     cancel: CancellationToken,
     /// Set when the user asks the active call to start again. Cancelling alone
-    /// means that the call returns null; this flag tells the interpreter to
+    /// means that the call returns null. This flag tells the interpreter to
     /// replace the cancellation token and issue the same request again.
     restart: bool,
 }

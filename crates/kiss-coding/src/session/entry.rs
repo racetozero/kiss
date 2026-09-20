@@ -107,7 +107,7 @@ pub enum SessionEntry {
         #[serde(flatten)]
         extra: Map<String, Value>,
     },
-    /// Harness/extension state; never part of LLM context.
+    /// Harness/extension state. Never part of LLM context.
     #[serde(rename_all = "camelCase")]
     Custom {
         #[serde(flatten)]

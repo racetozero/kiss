@@ -631,7 +631,7 @@ pub fn store_api_key_with_env(
 pub fn store_gateway_credential(provider: &str, key: &str, base_url: &str) -> Result<()> {
     if key.trim().is_empty() {
         anyhow::bail!(
-            "the {provider} token is empty; enter a non-empty bearer token and retry login"
+            "the {provider} token is empty. Enter a non-empty bearer token and retry login"
         );
     }
     let (variable, normalized) = normalize_gateway_base_url(provider, base_url)?;
@@ -645,12 +645,12 @@ pub fn store_gateway_credential(provider: &str, key: &str, base_url: &str) -> Re
 fn normalize_gateway_base_url(provider: &str, base_url: &str) -> Result<(&'static str, String)> {
     let mut url = url::Url::parse(base_url.trim()).with_context(|| {
         format!(
-            "the {provider} base URL '{base_url}' is not an absolute URL; use an HTTP or HTTPS URL with a host"
+            "the {provider} base URL '{base_url}' is not an absolute URL. Use an HTTP or HTTPS URL with a host"
         )
     })?;
     if !matches!(url.scheme(), "http" | "https") || url.host_str().is_none() {
         anyhow::bail!(
-            "the {provider} base URL '{base_url}' is not valid; use an HTTP or HTTPS URL with a host"
+            "the {provider} base URL '{base_url}' is not valid. Use an HTTP or HTTPS URL with a host"
         );
     }
     if !url.username().is_empty()
@@ -659,7 +659,7 @@ fn normalize_gateway_base_url(provider: &str, base_url: &str) -> Result<(&'stati
         || url.fragment().is_some()
     {
         anyhow::bail!(
-            "the {provider} base URL '{base_url}' contains credentials, a query, or a fragment; remove those parts and retry login"
+            "the {provider} base URL '{base_url}' contains credentials, a query, or a fragment. Remove those parts and retry login"
         );
     }
 
@@ -667,7 +667,7 @@ fn normalize_gateway_base_url(provider: &str, base_url: &str) -> Result<(&'stati
         "databricks-unity-gateway" => {
             if url.path() != "/" && !url.path().is_empty() {
                 anyhow::bail!(
-                    "the Databricks workspace URL '{base_url}' contains a path; use only the workspace root, such as https://workspace.cloud.databricks.com, and retry login"
+                    "the Databricks workspace URL '{base_url}' contains a path. Use only the workspace root, such as https://workspace.cloud.databricks.com, and retry login"
                 );
             }
             url.set_path("");
@@ -686,7 +686,7 @@ fn normalize_gateway_base_url(provider: &str, base_url: &str) -> Result<(&'stati
                 url.set_path("/api/v2/aigateways/SNOWFLAKE");
             } else {
                 anyhow::bail!(
-                    "the Snowflake URL '{base_url}' has an unsupported path; use the account root, /api/v2/cortex, or /api/v2/aigateways/SNOWFLAKE, and retry login"
+                    "the Snowflake URL '{base_url}' has an unsupported path. Use the account root, /api/v2/cortex, or /api/v2/aigateways/SNOWFLAKE, and retry login"
                 );
             }
             (
@@ -695,12 +695,12 @@ fn normalize_gateway_base_url(provider: &str, base_url: &str) -> Result<(&'stati
             )
         }
         _ => anyhow::bail!(
-            "provider '{provider}' does not use gateway URL login; omit --base-url and use its supported login method"
+            "provider '{provider}' does not use gateway URL login. Omit --base-url and use its supported login method"
         ),
     };
     let normalized = url.as_str().trim_end_matches('/').to_string();
     if normalized.is_empty() {
-        anyhow::bail!("the {provider} base URL is empty; enter {accepted} and retry login");
+        anyhow::bail!("the {provider} base URL is empty. Enter {accepted} and retry login");
     }
     Ok((variable, normalized))
 }

@@ -93,7 +93,9 @@ pub fn authoring_prompt(size: WorkflowSize, max_agents: u32, max_fanout: usize) 
             "Aim for fewer than {target} agents unless the task clearly needs more. \
              This is guidance, not a limit."
         ),
-        None => "Size the workflow to the task; no agent-count guideline is set.".to_string(),
+        None => {
+            "Size the workflow to the task because no agent-count guideline is set.".to_string()
+        }
     };
 
     format!(
@@ -162,7 +164,7 @@ pub fn authoring_prompt(size: WorkflowSize, max_agents: u32, max_fanout: usize) 
          agent result without knowing it is not null.\n\
          \n\
          Second, `agent()` returns **text** unless you pass a `schema`. Pass a schema whenever the \
-         script needs to read fields or iterate a list out of the answer; without one you get a \
+         script needs to read fields or iterate a list out of the answer. Without one you get a \
          string and `.files` on it is an error.\n\
          \n\
          ## Limits\n\

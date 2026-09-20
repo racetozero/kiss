@@ -59,7 +59,7 @@ impl AgentOptions {
                     return Err(RunError::at(
                         pos,
                         format!(
-                            "`{other}` is not an option for `agent`; the options are \
+                            "`{other}` is not an option for `agent`. The options are \
                              label, phase, model, effort, schema, timeoutMs, and retries"
                         ),
                     ));
@@ -440,7 +440,7 @@ impl Interp {
                 Value::Null => Err(RunError::at(
                     pos,
                     format!(
-                        "cannot call `{name}` on null; an agent that failed returns null, \
+                        "cannot call `{name}` on null because an agent that failed returns null, \
                          so test the value first"
                     ),
                 )),
@@ -608,7 +608,7 @@ impl Interp {
                 if !matches!(first, Value::Null) {
                     return Err(RunError::at(
                         pos,
-                        "`sort` does not take a comparison function here; sort by a text key \
+                        "`sort` does not take a comparison function here. Sort by a text key \
                          with plain `sort()`, or ask an agent to rank the items",
                     ));
                 }

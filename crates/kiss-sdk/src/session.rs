@@ -35,7 +35,7 @@ pub enum SdkError {
 ///
 /// Events are buffered per subscriber. If you consume them more slowly than the
 /// agent produces them the oldest are dropped and you receive a single
-/// `event_lag` event naming how many you missed; re-read state rather than
+/// `event_lag` event naming how many you missed. Re-read state rather than
 /// assume you saw everything.
 pub struct EventStream {
     receiver: broadcast::Receiver<Event>,
@@ -46,7 +46,7 @@ impl EventStream {
     pub async fn recv(&mut self) -> Option<Event> {
         match self.receiver.recv().await {
             Ok(event) => Some(event),
-            // Report the gap rather than hide it; the next `recv` resumes.
+            // Report the gap rather than hide it. The next `recv` resumes.
             Err(broadcast::error::RecvError::Lagged(skipped)) => Some(Event(event_lag(skipped))),
             Err(broadcast::error::RecvError::Closed) => None,
         }
@@ -329,7 +329,7 @@ impl Session {
     }
 
     /// Send a prompt and return as soon as it has been accepted or queued. The
-    /// run continues in the background; wait for the `agent_settled` event or
+    /// run continues in the background. Wait for the `agent_settled` event or
     /// call [`Session::wait_idle`].
     pub fn prompt_detached(self: &Arc<Self>, args: PromptArgs) -> Result<(), SdkError> {
         let queued = self.accept_prompt(&args)?;
@@ -622,7 +622,7 @@ impl Session {
                     .iter()
                     .map(message_text)
                     .collect();
-                // The harness returns one flat list; report it under both keys
+                // The harness returns one flat list. Report it under both keys
                 // so a client can restore the text without guessing.
                 Ok(Some(json!({"messages": reclaimed})))
             }

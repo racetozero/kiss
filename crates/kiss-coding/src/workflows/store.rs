@@ -110,7 +110,7 @@ pub fn save(
         .directory(cwd)
         .ok_or_else(|| anyhow::anyhow!("no home directory"))?;
 
-    // The project location has two directories of its own to check; the
+    // The project location has two directories of its own to check. The
     // personal one is often managed by a dotfiles tool, so only the file itself
     // is checked there.
     if location == SaveLocation::Project {
@@ -138,7 +138,7 @@ pub fn save(
 fn refuse_symlink(path: &Path) -> anyhow::Result<()> {
     if std::fs::symlink_metadata(path).is_ok_and(|data| data.file_type().is_symlink()) {
         anyhow::bail!(
-            "{} is a symbolic link; saving there would write outside the location you chose",
+            "{} is a symbolic link. Saving there would write outside the location you chose",
             path.display()
         );
     }

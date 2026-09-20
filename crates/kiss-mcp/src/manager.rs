@@ -660,7 +660,7 @@ async fn connect(
             oauth::new_manager(server_name, &url, &oauth_config, credential_path).await?;
         if !manager.initialize_from_store().await? {
             bail!(
-                "MCP server `{server_name}` needs OAuth login; run `kiss mcp login {server_name}`"
+                "MCP server `{server_name}` needs OAuth login. Run `kiss mcp login {server_name}`"
             )
         }
         let client = AuthClient::new(reqwest_mcp::Client::default(), manager);

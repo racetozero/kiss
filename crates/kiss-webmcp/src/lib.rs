@@ -135,7 +135,7 @@ impl WebMcpManager {
             }
             if page_count > 0 && enabled_count == 0 {
                 bail!(
-                    "Chrome has page tabs, but WebMCP could not be enabled; check the WebMCP Chrome flags"
+                    "Chrome has page tabs, but WebMCP could not be enabled. Check the WebMCP Chrome flags"
                 );
             }
             tokio::task::yield_now().await;
@@ -202,7 +202,7 @@ impl WebMcpManager {
             .read()
             .await
             .clone()
-            .context("WebMCP is not connected; ask the user to run /webmcp")?;
+            .context("WebMCP is not connected. Ask the user to run /webmcp")?;
         let mut events = client.subscribe();
         let result = client
             .send(
@@ -293,7 +293,7 @@ impl WebMcpManager {
             .collect::<Vec<_>>();
         match matches.as_slice() {
             [tool] => Ok(tool.clone()),
-            [] => bail!("WebMCP tool not found: {name} at {origin}; run webmcp list"),
+            [] => bail!("WebMCP tool not found: {name} at {origin}. Run webmcp list"),
             _ => bail!("WebMCP tool is ambiguous: {name} at {origin}"),
         }
     }
@@ -768,7 +768,7 @@ mod tests {
         .is_err()
         {
             panic!(
-                "WebMCP registry did not reach {expected} tools; found {}",
+                "WebMCP registry did not reach {expected} tools. Found {}",
                 manager.tools().await.len()
             );
         }

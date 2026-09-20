@@ -74,7 +74,7 @@ async fn wait_for(
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
     panic!(
-        "timed out waiting for a `{event_type}` event; saw {:?}",
+        "timed out waiting for a `{event_type}` event. Saw {:?}",
         collected
             .lock()
             .unwrap()

@@ -1,4 +1,4 @@
-//! Shared truncation for tool outputs. Two independent limits — whichever is
+//! Shared truncation for tool outputs. Two independent limits: whichever is
 //! hit first wins: 2000 lines or 50 KiB. Never splits a line except in the
 //! bash tail edge case where a single line exceeds the byte limit.
 

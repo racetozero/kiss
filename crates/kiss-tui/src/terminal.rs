@@ -1,5 +1,5 @@
 //! Raw-mode terminal control. The only module that touches the real
-//! terminal; everything else renders to strings.
+//! terminal. Everything else renders to strings.
 
 use crossterm::terminal;
 use std::io::Write;

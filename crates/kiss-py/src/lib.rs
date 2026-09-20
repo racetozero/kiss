@@ -192,7 +192,7 @@ impl Session {
 
 /// Start the scripted offline provider used by the tests and the demo.
 ///
-/// `directory` receives a `models.json` naming the provider; the returned
+/// `directory` receives a `models.json` naming the provider. The returned
 /// object keeps the server alive until it is dropped, and exposes that path.
 #[cfg(feature = "mock")]
 #[pyclass(module = "kiss_sdk._kiss")]
@@ -248,7 +248,7 @@ impl MockProvider {
 
 /// Translate the JSON script description into the Rust script type.
 ///
-/// The description is a list of turns; each turn is a list of pieces, and each
+/// The description is a list of turns. Each turn is a list of pieces, and each
 /// piece is either `{"text": "..."}` or
 /// `{"toolCall": {"id": ..., "name": ..., "arguments": {...}}}`.
 #[cfg(feature = "mock")]

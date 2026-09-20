@@ -89,10 +89,10 @@ pub(crate) fn render_saved(
             match matches.as_slice() {
                 [listing] => vec![listing.path.clone()],
                 [] => anyhow::bail!(
-                    "session '{reference}' was not found; use an existing session ID prefix or a JSONL session file path"
+                    "session '{reference}' was not found. Use an existing session ID prefix or a JSONL session file path"
                 ),
                 _ => anyhow::bail!(
-                    "session prefix '{reference}' matched more than one session; use more ID characters or a JSONL session file path"
+                    "session prefix '{reference}' matched more than one session. Use more ID characters or a JSONL session file path"
                 ),
             }
         }
@@ -208,7 +208,7 @@ fn render(title: &str, mut sessions: Vec<SessionHistory>, provider: Option<&str>
         .collect::<Vec<_>>();
     all.sort_by_key(|sample| sample.timestamp);
 
-    let mut lines = vec![format!("Cache rate — {title}")];
+    let mut lines = vec![format!("Cache rate: {title}")];
     lines.push("cache-read input / all input".into());
     if all.is_empty() {
         let suffix = provider.map_or(String::new(), |value| format!(" for provider {value}"));

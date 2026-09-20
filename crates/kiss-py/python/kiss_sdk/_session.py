@@ -39,7 +39,7 @@ SessionSource = str
 class Event:
     """One notification from the agent.
 
-    Behaves like the underlying dictionary — ``event["toolName"]`` works — with
+    Behaves like the underlying dictionary, so ``event["toolName"]`` works, with
     a convenience ``type`` property so ``match event.type:`` reads naturally.
     The payload shape is identical to the RPC protocol documented in
     ``docs/rpc.md``.
@@ -252,7 +252,7 @@ class Session:
         *,
         streaming_behavior: StreamingBehavior | None = None,
     ) -> None:
-        """Send a prompt and return once it is accepted; do not wait for it."""
+        """Send a prompt and return once it is accepted. Do not wait for it."""
         self._native.prompt_detached(message, streaming_behavior)
 
     def steer(self, message: str) -> None:

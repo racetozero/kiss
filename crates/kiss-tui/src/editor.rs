@@ -871,7 +871,7 @@ mod tests {
         assert!(rendered.iter().all(|line| display_width(line) == 14));
         assert_eq!(styled.matches(crate::renderer::CURSOR_MARKER).count(), 1);
 
-        e.undo(); // Remove " after"; the paste remains colored.
+        e.undo(); // Remove " after". The paste remains colored.
         assert!(e.render(80).join("\n").contains(&color));
         e.undo(); // Remove the paste and its color.
         assert!(!e.render(80).join("\n").contains(&color));

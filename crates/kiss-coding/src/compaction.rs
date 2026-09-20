@@ -71,7 +71,7 @@ pub fn estimate_context_tokens(messages: &[AgentMessage]) -> u64 {
     }
 }
 
-/// Serialize a conversation to labeled text for the summary prompt; tool
+/// Serialize a conversation to labeled text for the summary prompt. Tool
 /// results are capped so summarization stays cheap.
 pub fn serialize_conversation(messages: &[Message]) -> String {
     let mut out = String::new();
@@ -224,7 +224,7 @@ pub fn plan_compaction(messages: &[AgentMessage], keep_recent_tokens: u64) -> Co
         }
     }
 
-    // Snap to a turn start when possible; otherwise this is a split turn.
+    // Snap to a turn start when possible. Otherwise this is a split turn.
     let turn_start = messages[..cut].iter().rposition(is_turn_start);
     match turn_start {
         Some(_) if is_turn_start(&messages[cut]) => CompactionPlan {
@@ -288,12 +288,12 @@ pub async fn generate_summary(
     cancel: tokio_util::sync::CancellationToken,
 ) -> anyhow::Result<SummaryOutcome> {
     let mut prompt = String::from(
-        "Summarize the conversation below so a coding agent can seamlessly continue the work. Use exactly this structure:\n\n",
+        "Summarize the conversation below so a coding agent can pick up where it left off. Use exactly this structure:\n\n",
     );
     prompt.push_str(SUMMARY_FORMAT);
     prompt.push_str("\n\nAlso include, at the end, a <read-files> block listing files that were read and a <modified-files> block listing files that were changed, one path per line, when known.");
     if let Some(prev) = previous_summary {
-        prompt.push_str("\n\nA previous summary of earlier context exists; fold it in:\n\n");
+        prompt.push_str("\n\nA previous summary of earlier context exists. Fold it in:\n\n");
         prompt.push_str(prev);
     }
     if let Some(custom) = custom_instructions {
@@ -370,7 +370,7 @@ mod tests {
 
     #[test]
     fn cut_at_turn_boundary_never_tool_result() {
-        // Two turns; small keep budget keeps only the last turn.
+        // Two turns. Small keep budget keeps only the last turn.
         let messages = vec![
             user(&"a".repeat(400)),
             assistant(&"b".repeat(400)),

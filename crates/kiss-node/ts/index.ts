@@ -314,7 +314,7 @@ export class Session {
   }
 }
 
-/** Test-only scripted provider; present in development builds and omitted from slim wheels. */
+/** Test-only scripted provider. Present in development builds and omitted from slim wheels. */
 export class MockProvider {
   readonly #native: NativeMockProvider
   private constructor(native: NativeMockProvider) {

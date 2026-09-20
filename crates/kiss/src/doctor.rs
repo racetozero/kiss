@@ -496,7 +496,7 @@ async fn probe(target: Target) -> CheckResult {
             .header("connection", "Upgrade")
             .header("upgrade", "websocket")
             .header("sec-websocket-version", "13")
-            // A valid handshake key is 16 random bytes in base64; strict servers reject other lengths.
+            // A valid handshake key is 16 random bytes in base64. Strict servers reject other lengths.
             .header("sec-websocket-key", "a2lzcy1kb2N0b3ItcHJvYg==")
     } else {
         client.head(url)

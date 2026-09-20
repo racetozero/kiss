@@ -2,7 +2,7 @@
 //!
 //! Contract (identical to pi's): a stream emits `Start` first, then partial
 //! update events, and terminates with exactly one `Done` or `Error` event.
-//! Failures are data — the streaming entry points never return `Err` for
+//! Failures are data: the streaming entry points never return `Err` for
 //! request/model/runtime problems.
 
 use crate::types::{AssistantMessage, StopReason, ToolCall};
@@ -76,7 +76,7 @@ impl AssistantEvent {
 }
 
 /// Receiving half of an assistant event stream. `next()` yields events until
-/// the terminal one; `result()` drains the stream and returns the final
+/// the terminal one. `result()` drains the stream and returns the final
 /// message.
 pub struct EventStream {
     rx: mpsc::UnboundedReceiver<AssistantEvent>,

@@ -307,7 +307,7 @@ impl Registry {
             ))
             .with_context(|| {
                 format!(
-                    "the Databricks workspace URL '{workspace}' is invalid; use an HTTP or HTTPS workspace root and retry login"
+                    "the Databricks workspace URL '{workspace}' is invalid. Use an HTTP or HTTPS workspace root and retry login"
                 )
             })?;
             url.query_pairs_mut()
@@ -327,7 +327,7 @@ impl Registry {
             if !status.is_success() {
                 let body = response.text().await.unwrap_or_default();
                 anyhow::bail!(
-                    "Databricks model discovery returned HTTP {status}: {}; verify the token has USE CATALOG on system plus USE SCHEMA and EXECUTE on system.ai, then retry",
+                    "Databricks model discovery returned HTTP {status}: {}. Verify the token has USE CATALOG on system plus USE SCHEMA and EXECUTE on system.ai, then retry",
                     crate::truncate_err(&body)
                 );
             }
@@ -348,7 +348,7 @@ impl Registry {
             page_token = page.next_page_token.filter(|value| !value.is_empty());
             match page_token.as_ref() {
                 Some(token) if !seen_page_tokens.insert(token.clone()) => anyhow::bail!(
-                    "Databricks model discovery repeated page token '{token}'; retry after the workspace model catalog is stable"
+                    "Databricks model discovery repeated page token '{token}'. Retry after the workspace model catalog is stable"
                 ),
                 Some(_) => {}
                 None => break,
@@ -356,12 +356,12 @@ impl Registry {
         }
         if page_token.is_some() {
             anyhow::bail!(
-                "Databricks model discovery returned more than 100 pages; reduce the visible system.ai model services or use a custom model entry"
+                "Databricks model discovery returned more than 100 pages. Reduce the visible system.ai model services or use a custom model entry"
             );
         }
         if model_ids.is_empty() {
             anyhow::bail!(
-                "Databricks model discovery returned no system.ai model services; grant USE CATALOG on system plus USE SCHEMA and EXECUTE on system.ai, then retry"
+                "Databricks model discovery returned no system.ai model services. Grant USE CATALOG on system plus USE SCHEMA and EXECUTE on system.ai, then retry"
             );
         }
 

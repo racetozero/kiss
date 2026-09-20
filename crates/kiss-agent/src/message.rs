@@ -141,7 +141,7 @@ pub fn convert_to_llm(messages: &[AgentMessage]) -> Vec<Message> {
             })),
         }
     }
-    // Providers reject empty-content user turns; drop them defensively.
+    // Providers reject empty-content user turns. Drop them defensively.
     out.retain(|m| match m {
         Message::User(u) => !u.content.as_text().trim().is_empty() || matches!(&u.content, UserContent::Blocks(b) if b.iter().any(|c| matches!(c, ContentBlock::Image { .. }))),
         _ => true,

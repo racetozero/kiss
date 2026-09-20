@@ -143,7 +143,7 @@ fn parse_skill(path: &Path) -> Option<Skill> {
     })
 }
 
-/// Recursively find `SKILL.md` files under `dir`; when `include_root_md` is
+/// Recursively find `SKILL.md` files under `dir`. When `include_root_md` is
 /// set, direct `.md` children of `dir` also count as single-file skills.
 fn scan_dir(dir: &Path, include_root_md: bool, out: &mut Vec<Skill>) {
     let Ok(entries) = std::fs::read_dir(dir) else {

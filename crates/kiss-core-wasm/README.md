@@ -90,7 +90,7 @@ capabilities the application can safely provide:
 - host-owned MCP, database, or application tools;
 - browser `fetch` with short-lived credentials.
 
-Callbacks receive an `AbortSignal`; they must pass it to their underlying work.
+Callbacks receive an `AbortSignal`. They must pass it to their underlying work.
 Model stream callbacks must not retain and invoke `emit` after their provider
 Promise settles. Tool callbacks follow the same rule for `onUpdate`.
 
@@ -99,7 +99,7 @@ turn and `followUp()` inserts one after the run would otherwise stop. Model and
 thinking settings, retained messages, and history clearing are available while
 idle. The portable schema validator covers `type`, `required`, `properties`,
 `items`, `enum`, and `additionalProperties`, which is the vocabulary used by
-KISS tool inputs; hosts needing additional JSON Schema keywords should validate
+KISS tool inputs. Hosts needing additional JSON Schema keywords should validate
 those in their tool callback as well.
 
 Use `@kiss-sdk/wasm` instead when the browser must control the full native KISS
@@ -128,4 +128,4 @@ to predict inference speed.
 
 Run `deno test --allow-read --allow-net test/*.ts` after `wasm-pack build` to
 exercise the actual generated module. The only listener is a hermetic fake
-OpenAI-compatible endpoint; the core agent tests use no server or WebSocket.
+OpenAI-compatible endpoint. The core agent tests use no server or WebSocket.

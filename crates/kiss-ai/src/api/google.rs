@@ -281,7 +281,7 @@ fn build_request(model: &Model, context: &Context, options: &StreamOptions) -> V
                             }
                             parts.push(part);
                         }
-                        // Thinking text is not replayed; signatures ride on tool calls.
+                        // Thinking text is not replayed. Signatures ride on tool calls.
                         ContentBlock::Thinking { .. } | ContentBlock::Image { .. } => {}
                     }
                 }
@@ -367,7 +367,7 @@ fn build_request(model: &Model, context: &Context, options: &StreamOptions) -> V
     body
 }
 
-/// Gemini rejects some JSON-schema keywords; strip the unsupported ones.
+/// Gemini rejects some JSON-schema keywords. Strip the unsupported ones.
 fn sanitize_schema(schema: &Value) -> Value {
     match schema {
         Value::Object(map) => {

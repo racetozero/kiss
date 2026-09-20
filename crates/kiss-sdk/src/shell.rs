@@ -99,7 +99,7 @@ pub async fn run(
             .unwrap_or(text.len());
         let tail = text[start..].to_string();
         let notice = match &path {
-            Some(path) => format!("\n\n[output truncated; full output: {path}]"),
+            Some(path) => format!("\n\n[output truncated. Full output: {path}]"),
             None => "\n\n[output truncated]".to_string(),
         };
         (format!("{tail}{notice}"), true, path)

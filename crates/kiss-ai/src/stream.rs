@@ -1,5 +1,5 @@
 //! The streaming front door: pick the adapter for `model.api`, spawn it, and
-//! return the unified event stream. Never returns `Err` — every failure is a
+//! return the unified event stream. Never returns `Err`: every failure is a
 //! terminal `Error` event.
 
 #[cfg(feature = "native")]
@@ -129,7 +129,7 @@ async fn dispatch(model: Model, context: Context, mut options: StreamOptions, si
     if model.base_url.contains("{DATABRICKS_HOST}") {
         let builder = api::PartialBuilder::new(&model, sink);
         builder.fail(
-            "the selected Databricks model has no workspace URL; set DATABRICKS_HOST to an HTTP or HTTPS workspace root, or run `kiss login databricks-unity-gateway --base-url URL`",
+            "the selected Databricks model has no workspace URL. Set DATABRICKS_HOST to an HTTP or HTTPS workspace root, or run `kiss login databricks-unity-gateway --base-url URL`",
             false,
             &model,
         );
@@ -138,7 +138,7 @@ async fn dispatch(model: Model, context: Context, mut options: StreamOptions, si
     if model.base_url.contains("{SNOWFLAKE_CORTEX_BASE_URL}") {
         let builder = api::PartialBuilder::new(&model, sink);
         builder.fail(
-            "the selected Snowflake model has no account URL; set SNOWFLAKE_CORTEX_BASE_URL to an HTTP or HTTPS Cortex or AI Gateway root, or run `kiss login snowflake-cortex --base-url URL`",
+            "the selected Snowflake model has no account URL. Set SNOWFLAKE_CORTEX_BASE_URL to an HTTP or HTTPS Cortex or AI Gateway root, or run `kiss login snowflake-cortex --base-url URL`",
             false,
             &model,
         );

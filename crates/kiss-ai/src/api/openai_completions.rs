@@ -249,7 +249,7 @@ fn finish(
         Some("length") => StopReason::Length,
         Some("tool_calls") => StopReason::ToolUse,
         Some(_) => StopReason::Stop,
-        // Some servers omit finish_reason; infer from content.
+        // Some servers omit finish_reason. Infer from content.
         None if has_tools => StopReason::ToolUse,
         None => StopReason::Stop,
     };

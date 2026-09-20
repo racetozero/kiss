@@ -65,7 +65,7 @@ try {
                 $Release = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repository/releases/latest"
                 $Version = $Release.tag_name
             } catch {
-                Fail "could not find the latest release; authenticate gh for a private repository"
+                Fail "could not find the latest release. Authenticate gh for a private repository"
             }
         }
     }
@@ -84,7 +84,7 @@ try {
 
     if (-not $InstallDirectory) {
         if (-not $HOME) {
-            Fail "HOME is not set; set KISS_INSTALL_DIR"
+            Fail "HOME is not set. Set KISS_INSTALL_DIR"
         }
         $InstallDirectory = Join-Path $HOME ".local\bin"
     }

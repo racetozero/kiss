@@ -242,7 +242,7 @@ pub enum Command {
         #[arg(default_value = "openai-codex")]
         provider: String,
 
-        /// Use a headless flow. OpenAI uses a device code; Anthropic accepts a pasted callback.
+        /// Use a headless flow. OpenAI uses a device code. Anthropic accepts a pasted callback.
         #[arg(
             long = "device-auth",
             alias = "device-code",
@@ -306,7 +306,7 @@ pub struct Args {
     #[arg(short = 'p', long)]
     pub print: bool,
 
-    /// Output mode: `json` emits one event per line; `rpc` also accepts
+    /// Output mode: `json` emits one event per line. `rpc` also accepts
     /// commands as JSON lines on stdin (see docs/rpc.md).
     #[arg(long, value_name = "MODE")]
     pub mode: Option<String>,
@@ -325,7 +325,7 @@ pub struct Args {
     #[arg(long)]
     pub provider: Option<String>,
 
-    /// Model pattern or id; supports provider/id and :<thinking> suffix.
+    /// Model pattern or id. Supports provider/id and :<thinking> suffix.
     #[arg(long)]
     pub model: Option<String>,
 
@@ -366,7 +366,7 @@ pub struct Args {
     #[arg(long)]
     pub session_dir: Option<String>,
 
-    /// Ephemeral mode; do not save the session.
+    /// Ephemeral mode. Do not save the session.
     #[arg(long)]
     pub no_session: bool,
 

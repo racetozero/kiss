@@ -296,7 +296,7 @@ impl Parser<'_> {
     }
 
     fn for_of(&mut self, interner: &mut Interner, pos: Pos) -> Result<StmtId, Diagnostic> {
-        const HELP: &str = "counted loops are not available; to run one agent per item use \
+        const HELP: &str = "counted loops are not available. To run one agent per item, use \
                             `pipeline(list, item => agent(...))`";
         self.position += 1;
         self.expect(Tok::LParen, "after `for`")?;
@@ -799,19 +799,19 @@ fn unsupported_keyword(pos: Pos, word: &str) -> Diagnostic {
         "function" => "use an arrow function, for example `file => agent(...)`",
         "class" => "workflow scripts hold data in objects and arrays only",
         "try" | "catch" | "finally" | "throw" => {
-            "an agent that fails returns null; test for it, for example `results.filter(Boolean)`"
+            "an agent that fails returns null. Test for it, for example `results.filter(Boolean)`"
         }
         "switch" | "case" => "use `if` and `else if`",
         "do" => "use `while (condition) { ... }`",
         "import" | "require" => {
-            "a workflow script loads no modules; put work that needs a library into an agent's task"
+            "a workflow script loads no modules. Put work that needs a library into an agent's task"
         }
         "typeof" | "instanceof" => {
             "test the shape directly, for example `Array.isArray(value)` or `value === null`"
         }
         "in" => "use `Object.keys(value).includes(name)`",
         "delete" => "build a new object with the fields you want",
-        "async" => "the whole script is already asynchronous; use `await` directly",
+        "async" => "the whole script is already asynchronous. Use `await` directly",
         "undefined" => "use `null`, which is the only empty value in a workflow script",
         _ => "this keyword is not part of the workflow script subset",
     };

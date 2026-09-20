@@ -107,7 +107,7 @@ pub struct AgentLoopConfig {
     pub after_tool_call: Option<AfterToolFn>,
     pub should_stop_after_turn: Option<StopFn>,
     pub prepare_next_turn: Option<PrepareTurnFn>,
-    /// Provider streaming function; overridable for tests (faux provider).
+    /// Provider streaming function. Overridable for tests (faux provider).
     pub stream_fn: StreamFn,
 }
 

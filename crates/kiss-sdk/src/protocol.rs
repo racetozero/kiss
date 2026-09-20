@@ -58,7 +58,7 @@ pub enum QueueMode {
 
 /// Every operation a client can request.
 ///
-/// The `type` tag is snake_case; payload fields are camelCase.
+/// The `type` tag is snake_case. Payload fields are camelCase.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Command {
@@ -363,7 +363,7 @@ pub fn decode_request(line: &str) -> Result<Request, ProtocolError> {
         .ok_or(ProtocolError::MissingType)?
         .to_string();
     serde_json::from_value(value).map_err(|error| {
-        // serde's "unknown variant" message is noisy; give the caller the name.
+        // serde's "unknown variant" message is noisy. Give the caller the name.
         if error.to_string().contains("unknown variant") {
             ProtocolError::UnknownCommand(kind)
         } else {

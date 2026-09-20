@@ -50,7 +50,7 @@ impl NativeSession {
         self.inner.prompt(message).await.map_err(napi_error)
     }
 
-    /// Send a prompt and return once accepted; events continue in the background.
+    /// Send a prompt and return once accepted. Events continue in the background.
     #[napi]
     pub fn prompt_detached(&self, message: String) -> Result<()> {
         self.inner

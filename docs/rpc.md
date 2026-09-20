@@ -23,11 +23,11 @@ authenticated proxy and operating-system sandbox protect the process.
 A line feed (`\n`) is the only record separator. Strip one optional `\r` before
 it. Do not use a generic reader that also splits on Unicode `U+2028` or `U+2029`:
 those characters are valid inside JSON strings. Node's `readline` is not
-protocol-safe; buffer bytes and split on `\n`.
+protocol-safe. Buffer bytes and split on `\n`.
 
-Every command may include `id`; its response echoes it. Events normally have no
+Every command may include `id`. Its response echoes it. Events normally have no
 id. A `bash_execution_update` event echoes the id of its direct `bash` command.
-A successful `prompt` response means accepted, not finished; wait for
+A successful `prompt` response means accepted, not finished. Wait for
 `agent_settled`.
 
 ```json
@@ -57,35 +57,35 @@ All payload fields use camelCase.
 
 ### Prompt and lifecycle
 
-- `{"type":"prompt","message":"...","images":[],"streamingBehavior":"steer"}` — accept a prompt. `streamingBehavior` is optional only while idle; use `steer` or `followUp` while busy.
-- `{"type":"steer","message":"...","images":[]}` — deliver after current-turn tools.
-- `{"type":"follow_up","message":"...","images":[]}` — deliver once the agent stops.
-- `{"type":"abort"}` — cancel and respond once idle.
-- `{"type":"clear_queue"}` — returns `data.messages`.
-- `{"type":"ping"}` — returns `data.pong: true`.
+- `{"type":"prompt","message":"...","images":[],"streamingBehavior":"steer"}`: accept a prompt. `streamingBehavior` is optional only while idle. Use `steer` or `followUp` while busy.
+- `{"type":"steer","message":"...","images":[]}`: deliver after current-turn tools.
+- `{"type":"follow_up","message":"...","images":[]}`: deliver once the agent stops.
+- `{"type":"abort"}`: cancel and respond once idle.
+- `{"type":"clear_queue"}`: returns `data.messages`.
+- `{"type":"ping"}`: returns `data.pong: true`.
 
 An image is `{"type":"image","data":"<base64>","mimeType":"image/png"}`.
 
 ### State and sessions
 
-- `get_state` — model, thinking level, streaming state, session id/file/name, message count, tool names, queue modes, retry and compaction state.
-- `get_messages` — active conversation after branching/compaction.
-- `get_entries`, optionally `since` — append-only entries after a durable entry-id cursor and current `leafId`.
-- `get_tree` — recursive `{entry, children, label}` nodes and `leafId`.
-- `get_last_assistant_text` — nullable `data.text`.
-- `get_session_stats` — message/tool counts, cost, context use, and `tokens` with `input`, `output`, `cacheRead`, `cacheWrite`, `cacheReadAvailable`, and `total`.
+- `get_state`: model, thinking level, streaming state, session id/file/name, message count, tool names, queue modes, retry and compaction state.
+- `get_messages`: active conversation after branching/compaction.
+- `get_entries`, optionally `since`: append-only entries after a durable entry-id cursor and current `leafId`.
+- `get_tree`: recursive `{entry, children, label}` nodes and `leafId`.
+- `get_last_assistant_text`: nullable `data.text`.
+- `get_session_stats`: message/tool counts, cost, context use, and `tokens` with `input`, `output`, `cacheRead`, `cacheWrite`, `cacheReadAvailable`, and `total`.
 - `set_session_name` with `name`.
-- `new_session` — replace active history with an empty in-memory session.
+- `new_session`: replace active history with an empty in-memory session.
 - `switch_session` with `sessionPath`.
-- `fork` with `entryId` — move to the selected point and return editable user text.
-- `get_fork_messages` — user entries available for branching.
-- `export_html`, optional `outputPath` — writes an HTML transcript and returns its path.
+- `fork` with `entryId`: move to the selected point and return editable user text.
+- `get_fork_messages`: user entries available for branching.
+- `export_html`, optional `outputPath`: writes an HTML transcript and returns its path.
 
 ### Models and thinking
 
 - `set_model` with `provider` and `modelId`.
 - `get_available_models`, optional `search` substring.
-- `set_thinking_level` with one of `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`; unsupported levels fail rather than silently downgrade.
+- `set_thinking_level` with one of `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`. Unsupported levels fail rather than silently downgrade.
 - `get_available_thinking_levels`.
 
 ### Queue, retry, and compaction
@@ -96,8 +96,8 @@ An image is `{"type":"image","data":"<base64>","mimeType":"image/png"}`.
 
 ### Tools and shell
 
-- `get_tools` — enabled tool names.
-- `bash` with `command` — runs immediately, streams `bash_execution_update`, returns output/exitCode/cancelled/truncated/fullOutputPath, and records a `bashExecution` message for the next model request.
+- `get_tools`: enabled tool names.
+- `bash` with `command`: runs immediately, streams `bash_execution_update`, returns output/exitCode/cancelled/truncated/fullOutputPath, and records a `bashExecution` message for the next model request.
 - `abort_bash`.
 
 ## Events
@@ -114,7 +114,7 @@ Session: `queue_update`, `compaction_start`, `compaction_end`, `retry`,
 `message_update.assistantMessageEvent` types are `start`, `text_start`,
 `text_delta`, `text_end`, `thinking_start`, `thinking_delta`, `thinking_end`,
 `toolcall_start`, `toolcall_delta`, `toolcall_end`, `done`, and `error`. Assemble
-live output by `contentIndex`; `message_end.message` is authoritative.
+live output by `contentIndex`. `message_end.message` is authoritative.
 
 ## Minimal Python subprocess client
 

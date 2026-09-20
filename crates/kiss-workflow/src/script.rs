@@ -570,7 +570,7 @@ return audits.filter(Boolean)
     #[test]
     fn a_data_dependent_fan_out_reports_an_unknown_agent_count() {
         let script = Script::parse(AUDIT).expect("audit script parses");
-        // One agent is certain; the pipeline over a list fetched at run time is
+        // One agent is certain. The pipeline over a list fetched at run time is
         // not, so the total is deliberately not guessed.
         assert_eq!(script.estimated_agents(), None);
     }

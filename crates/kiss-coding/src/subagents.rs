@@ -184,7 +184,7 @@ impl SubagentRuntime {
             }
             if records.iter().any(|record| record.task_name == task_name) {
                 anyhow::bail!(
-                    "task name '{task_name}' already exists; use followup_task for that child"
+                    "task name '{task_name}' already exists. Use followup_task for that child"
                 );
             }
         }
@@ -266,7 +266,7 @@ impl SubagentRuntime {
         let status = record.state.lock().unwrap().status;
         if !matches!(status, AgentStatus::Queued | AgentStatus::Running) {
             anyhow::bail!(
-                "subagent '{}' is {}; use followup_task to start another turn",
+                "subagent '{}' is {}. Use followup_task to start another turn",
                 record.task_name,
                 status_name(status)
             );

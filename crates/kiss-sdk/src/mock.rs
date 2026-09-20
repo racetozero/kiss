@@ -14,9 +14,8 @@
 //! naming itself, so a session started with `models_file` pointing at that file
 //! and `model("mock/mock-1")` will talk to it and nothing else.
 //!
-//! Every surface — Rust, RPC, Python, TypeScript — uses this same server, so
-//! their end-to-end tests are comparing themselves against identical provider
-//! behavior.
+//! Rust, RPC, Python, and TypeScript all use this server, so their end-to-end
+//! tests run against identical provider behavior.
 
 use serde_json::{Value, json};
 use std::io;
@@ -74,7 +73,7 @@ pub struct MockProvider {
 impl MockProvider {
     /// Start the server and write its catalog into `directory`.
     ///
-    /// `directory` must already exist; a test normally passes a `TempDir` path.
+    /// `directory` must already exist. A test normally passes a `TempDir` path.
     pub async fn start(directory: impl AsRef<Path>, script: MockScript) -> io::Result<Self> {
         let directory = directory.as_ref().to_path_buf();
         std::fs::create_dir_all(&directory)?;

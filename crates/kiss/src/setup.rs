@@ -257,7 +257,7 @@ pub async fn build_startup(
         None
     };
     // Interactive trust prompting is handled by the caller before this via
-    // saved decisions; default flow matches non-interactive resolution.
+    // saved decisions. Default flow matches non-interactive resolution.
     let bootstrap_settings = Settings::load(&cwd, false);
     let trusted =
         trust::resolve_non_interactive(&cwd, cli_trust, bootstrap_settings.default_project_trust);

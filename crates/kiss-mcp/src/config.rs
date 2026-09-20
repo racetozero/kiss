@@ -191,7 +191,7 @@ impl ServerEntry {
             _ => bail!("MCP server `{name}` must define command or url"),
         }
         if matches!(self.auth, Some(AuthSetting::Disabled(true))) {
-            bail!("MCP server `{name}` uses invalid auth value true; use false to disable auth")
+            bail!("MCP server `{name}` uses invalid auth value true. Use false to disable auth")
         }
         if self.command.is_some()
             && (self.auth.is_some()
@@ -337,7 +337,7 @@ pub fn add_server(
     server.validate(name)?;
     let mut config = read_scope(paths, scope)?;
     if config.mcp_servers.contains_key(name) {
-        bail!("MCP server `{name}` already exists in this scope; use update")
+        bail!("MCP server `{name}` already exists in this scope. Use update")
     }
     config.mcp_servers.insert(name.to_string(), server);
     write_scope(paths, scope, &config)

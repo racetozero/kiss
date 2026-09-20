@@ -1738,7 +1738,7 @@ mod tests {
             "acp_text_delta_translation",
             20,
             100_000,
-            "one delta; no prior-delta copy",
+            "one delta. No prior-delta copy",
             || {
                 SessionUpdate::AgentMessageChunk(ContentChunk::new(ContentBlock::Text(
                     TextContent::new("delta"),

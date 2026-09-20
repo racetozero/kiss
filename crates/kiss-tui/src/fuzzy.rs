@@ -20,7 +20,7 @@ impl PreparedFuzzyQuery {
         }
     }
 
-    /// Score one candidate. Higher is better; None means no match.
+    /// Score one candidate. Higher is better. None means no match.
     /// Candidate case folding is streamed, so this does not allocate.
     pub fn score(&self, candidate: &str) -> Option<i64> {
         if let Some(query) = self.ascii.as_deref()
@@ -118,7 +118,7 @@ fn ascii_mask(bytes: &[u8]) -> u64 {
     })
 }
 
-/// Score `candidate` against `query`. Higher is better; None means no match.
+/// Score `candidate` against `query`. Higher is better. None means no match.
 /// Simple subsequence scoring with bonuses for prefix, word-boundary, and
 /// consecutive matches.
 pub fn fuzzy_score(query: &str, candidate: &str) -> Option<i64> {

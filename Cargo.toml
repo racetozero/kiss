@@ -15,7 +15,7 @@ members = [
 
 # Language-binding crates are deliberately outside the workspace. Building a
 # PyO3 test harness links libpython, napi needs a Node toolchain, and web-sys
-# is only meaningful on a wasm32 target; none of those belong in the plain
+# is only meaningful on a wasm32 target. None of those belong in the plain
 # `cargo test --workspace` this repository's CI runs.
 exclude = ["crates/kiss-py", "crates/kiss-node", "crates/kiss-wasm", "crates/kiss-core-wasm"]
 

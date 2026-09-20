@@ -700,7 +700,7 @@ impl App {
                 SecretPromptKind::BranchSummary(_) => "Custom branch summary instructions".into(),
                 SecretPromptKind::SessionRename(_) => "New session name".into(),
                 SecretPromptKind::WorkflowName(_, location) => format!(
-                    "Save the workflow as (lower-case, dashes) — {}",
+                    "Save the workflow as (lower-case, dashes): {}",
                     match location {
                         kiss_coding::workflows::SaveLocation::Project => ".kiss/workflows/",
                         kiss_coding::workflows::SaveLocation::Personal =>
@@ -1467,7 +1467,7 @@ fn handle_session_event(
             }
             AgentEvent::MessageStart { message } => match &message {
                 AgentMessage::User(u) => {
-                    // Steering/follow-up injections appear mid-run; the
+                    // Steering/follow-up injections appear mid-run. The
                     // initial prompt cell is pushed by the submitter.
                     let text = u.content.as_text();
                     let display = visible_user_text(&text);
@@ -1657,7 +1657,7 @@ fn handle_session_event(
         SessionEvent::WorkflowOutcome { run, name, status } => {
             let run = run.map(|id| format!(" run {id}")).unwrap_or_default();
             let result = match status {
-                kiss_coding::WorkflowTurnStatus::Cancelled => "was cancelled; no agents ran",
+                kiss_coding::WorkflowTurnStatus::Cancelled => "was cancelled. No agents ran",
                 kiss_coding::WorkflowTurnStatus::Completed => "completed",
                 kiss_coding::WorkflowTurnStatus::Failed => "failed",
                 kiss_coding::WorkflowTurnStatus::Stopped => "was stopped",
@@ -1681,7 +1681,7 @@ fn handle_command_event(
             let message = if opened {
                 "finish authentication in the browser".to_string()
             } else {
-                format!("the browser did not open; open this URL: {url}")
+                format!("the browser did not open. Open this URL: {url}")
             };
             app.cells.push(Cell::Notice(message));
         }
@@ -1787,7 +1787,7 @@ fn handle_command_event(
             match result {
                 Ok(_) => app
                     .cells
-                    .push(Cell::Notice("update finished; restart KISS".into())),
+                    .push(Cell::Notice("update finished. Restart KISS".into())),
                 Err(error) => app
                     .cells
                     .push(Cell::Error(format!("update failed: {error}"))),
@@ -1886,7 +1886,7 @@ fn handle_command_event(
             app.cells.push(Cell::Notice(if opened {
                 format!("finish authentication for MCP server {name} in the browser")
             } else {
-                format!("the browser did not open; open this URL for MCP server {name}: {url}")
+                format!("the browser did not open. Open this URL for MCP server {name}: {url}")
             }));
         }
         CommandEvent::McpActionFinished {
@@ -1909,7 +1909,7 @@ fn handle_command_event(
                 Ok(WebMcpCommandResult::Connected) => {
                     session.install_session_tool(app.webmcp_manager.agent_tool());
                     app.cells.push(Cell::Notice(
-                        "WebMCP connected to Chrome. Tool discovery continues in the background; run /webmcp list to see active tools. Page tool metadata and results are untrusted."
+                        "WebMCP connected to Chrome. Tool discovery continues in the background. Run /webmcp list to see active tools. Page tool metadata and results are untrusted."
                             .into(),
                     ));
                 }
@@ -3005,16 +3005,16 @@ fn handle_secret_prompt(
                                     )
                                 }
                                 "databricks-unity-gateway" => Err(anyhow::anyhow!(
-                                    "Databricks login needs TOKEN|WORKSPACE_URL; enter a non-empty bearer token and an HTTP or HTTPS workspace root"
+                                    "Databricks login needs TOKEN|WORKSPACE_URL. Enter a non-empty bearer token and an HTTP or HTTPS workspace root"
                                 )),
                                 "snowflake-cortex" => Err(anyhow::anyhow!(
-                                    "Snowflake login needs PAT|ACCOUNT_OR_GATEWAY_URL; enter a non-empty PAT and an HTTP or HTTPS account, Cortex, or AI Gateway URL"
+                                    "Snowflake login needs PAT|ACCOUNT_OR_GATEWAY_URL. Enter a non-empty PAT and an HTTP or HTTPS account, Cortex, or AI Gateway URL"
                                 )),
                                 _ => Err(anyhow::anyhow!("invalid value format for {provider}")),
                             };
                             match configured {
                                 Ok(()) => app.cells.push(Cell::Notice(format!(
-                                    "saved authentication for {provider}; run /reload to apply endpoint settings"
+                                    "saved authentication for {provider}. Run /reload to apply endpoint settings"
                                 ))),
                                 Err(error) => app.cells.push(Cell::Error(format!(
                                     "could not save authentication: {error:#}"
@@ -4038,7 +4038,7 @@ fn open_logout_picker(app: &mut App) {
     let providers = kiss_ai::auth::stored_provider_ids();
     if providers.is_empty() {
         app.cells.push(Cell::Notice(
-            "no stored credentials; environment variables are unchanged".into(),
+            "no stored credentials. Environment variables are unchanged".into(),
         ));
         return;
     }
@@ -4262,7 +4262,7 @@ fn start_saved_workflow(
 ) {
     let Some(runtime) = session.workflows().filter(|_| session.workflows_enabled()) else {
         app.cells.push(Cell::Notice(
-            "dynamic workflows need subagents; open /settings and turn Subagents on".into(),
+            "dynamic workflows need subagents. Open /settings and turn Subagents on".into(),
         ));
         return;
     };
@@ -4365,13 +4365,13 @@ fn open_workflow_view(
 ) {
     let Some(runtime) = session.workflows() else {
         app.cells.push(Cell::Notice(
-            "workflows need subagents; turn them on in /settings".into(),
+            "workflows need subagents. Turn them on in /settings".into(),
         ));
         return;
     };
     let record = match run {
         Some(id) => runtime.get(id),
-        // Prefer a run still working; otherwise show the most recent one.
+        // Prefer a run still working. Otherwise show the most recent one.
         None => runtime.active().or_else(|| runtime.latest()),
     };
     match record {
@@ -4571,7 +4571,7 @@ fn open_job_view(app: &mut App, session: &Arc<kiss_coding::AgentSession>) {
 fn open_workflow_runs_picker(app: &mut App, session: &Arc<kiss_coding::AgentSession>) {
     let Some(runtime) = session.workflows() else {
         app.cells.push(Cell::Notice(
-            "workflows need subagents; turn them on in /settings".into(),
+            "workflows need subagents. Turn them on in /settings".into(),
         ));
         return;
     };
@@ -4609,12 +4609,12 @@ fn open_workflow_save_picker(app: &mut App, run: kiss_coding::workflows::RunId) 
     let items = vec![
         SelectItem {
             label: "Save in this project".into(),
-            detail: Some(".kiss/workflows/ — shared with everyone who clones it".into()),
+            detail: Some(".kiss/workflows/ is shared with everyone who clones it".into()),
             value: 0,
         },
         SelectItem {
             label: "Save for me".into(),
-            detail: Some("~/.kiss/agent/workflows/ — available in every project".into()),
+            detail: Some("~/.kiss/agent/workflows/ is available in every project".into()),
             value: 1,
         },
     ];
@@ -4958,7 +4958,7 @@ fn open_mcp_picker(
     };
     if loaded.config.mcp_servers.is_empty() {
         app.cells.push(Cell::Notice(
-            "no MCP servers are configured; use `kiss mcp add --help` to add one".into(),
+            "no MCP servers are configured. Use `kiss mcp add --help` to add one".into(),
         ));
         return;
     }
@@ -5142,7 +5142,7 @@ fn start_mcp_authentication(
             let pending = kiss_mcp::begin_login(&name, &url, &oauth, challenge.as_deref()).await?;
             let listener = crate::mcp_cli::callback_listener(&pending.redirect_uri)
                 .await?
-                .context("MCP OAuth redirect is not local; use `kiss mcp login --no-browser`")?;
+                .context("MCP OAuth redirect is not local. Use `kiss mcp login --no-browser`")?;
             let opened = crate::auth_flow::open_browser(&pending.authorization_url);
             let _ = tx.send(CommandEvent::McpLoginUrl {
                 name: name.clone(),
@@ -5226,7 +5226,7 @@ fn toggle_mcp_server(app: &mut App, name: &str) {
                 McpPanelState::Checking
             };
             app.cells.push(Cell::Notice(format!(
-                "{} MCP server {}; run /reload to apply the tool change",
+                "{} MCP server {}. Run /reload to apply the tool change",
                 if disabled { "disabled" } else { "enabled" },
                 server.name
             )));
@@ -5607,7 +5607,7 @@ fn apply_picker_selection(
             let trusted = value == 0;
             match kiss_coding::trust::save_decision(&cwd, trusted) {
                 Ok(()) => app.cells.push(Cell::Notice(format!(
-                    "saved project trust as {}; run /reload to apply it",
+                    "saved project trust as {}. Run /reload to apply it",
                     if trusted { "trusted" } else { "untrusted" }
                 ))),
                 Err(error) => app.cells.push(Cell::Error(format!(
@@ -5840,7 +5840,7 @@ fn apply_settings_selection(
                 // Workflows are built on child agents, so this row cannot be
                 // turned on by itself.
                 app.cells.push(Cell::Notice(
-                    "turn Subagents on first; dynamic workflows are built on them".into(),
+                    "turn Subagents on first. Dynamic workflows are built on them".into(),
                 ));
                 return;
             }
@@ -5852,7 +5852,7 @@ fn apply_settings_selection(
                 typesafe_available(session),
             ) else {
                 app.cells.push(Cell::Notice(
-                    "Jev compaction needs TypeSafe credentials; run /login typesafe or set TYPESAFE_API_KEY"
+                    "Jev compaction needs TypeSafe credentials. Run /login typesafe or set TYPESAFE_API_KEY"
                         .into(),
                 ));
                 return;
@@ -6412,7 +6412,7 @@ fn start_webmcp(
                 let result = if manager.is_connected().await {
                     Ok(WebMcpCommandResult::Listed(manager.tools().await))
                 } else {
-                    Err("not connected; run /webmcp first".into())
+                    Err("not connected. Run /webmcp first".into())
                 };
                 let _ = tx.send(CommandEvent::WebMcpFinished(result));
             });
@@ -6488,7 +6488,7 @@ fn run_slash_command(
                 )));
             } else {
                 app.cells.push(Cell::Error(format!(
-                    "invalid thinking level: {rest}; use off, minimal, low, medium, high, xhigh, or max"
+                    "invalid thinking level: {rest}. Use off, minimal, low, medium, high, xhigh, or max"
                 )));
             }
         }
@@ -6505,7 +6505,7 @@ fn run_slash_command(
             let enabled = !session.fast_mode();
             session.set_fast_mode(enabled);
             let message = if enabled {
-                "fast mode is on for this session; provider costs can increase"
+                "fast mode is on for this session. Provider costs can increase"
             } else {
                 "fast mode is off for this session"
             };
@@ -6551,7 +6551,7 @@ fn run_slash_command(
                     .push(Cell::Notice("opened the KISS bug report page".into()));
             } else {
                 app.cells.push(Cell::Notice(format!(
-                    "a browser is not available; open a bug report here: {URL}"
+                    "a browser is not available. Open a bug report here: {URL}"
                 )));
             }
         }
@@ -6600,7 +6600,7 @@ fn run_slash_command(
         "workflow" => {
             if !session.workflows_enabled() {
                 app.cells.push(Cell::Notice(
-                    "dynamic workflows need subagents; open /settings and turn Subagents on".into(),
+                    "dynamic workflows need subagents. Open /settings and turn Subagents on".into(),
                 ));
             } else if rest.is_empty() {
                 app.cells
@@ -7023,7 +7023,7 @@ fn import_session(
         .filter(|path| path.is_dir());
     let cwd = imported_cwd.unwrap_or_else(|| {
         app.cells.push(Cell::Notice(
-            "the imported working directory is unavailable; using the current project".into(),
+            "the imported working directory is unavailable. Using the current project".into(),
         ));
         fallback_cwd
     });
@@ -7419,7 +7419,7 @@ mod tests {
         assert!(matches!(
             app.cells.last(),
             Some(Cell::Notice(report))
-                if report.contains("Cache rate — session")
+                if report.contains("Cache rate: session")
                     && report.contains("75.0%")
                     && report.contains("Provider history")
         ));
@@ -8468,7 +8468,7 @@ mod tests {
         assert!(matches!(
             app.cells.last(),
             Some(Cell::Notice(text))
-                if text == "verified workflow `audit` was cancelled; no agents ran"
+                if text == "verified workflow `audit` was cancelled. No agents ran"
         ));
     }
 

@@ -30,7 +30,7 @@ struct VersionCache {
 pub async fn run() -> Result<i32> {
     if cfg!(debug_assertions) {
         anyhow::bail!(
-            "`kiss update` is not available in debug builds; install a KISS release to use this command"
+            "`kiss update` is not available in debug builds. Install a KISS release to use this command"
         );
     }
     run_release_update().await?;

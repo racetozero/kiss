@@ -36,7 +36,7 @@ pub async fn run(args: &Args) -> Result<i32> {
             SessionEvent::WorkflowOutcome { run, name, status } => {
                 let run = run.map(|id| format!(" run {id}")).unwrap_or_default();
                 let result = match status {
-                    WorkflowTurnStatus::Cancelled => "was cancelled; no agents ran",
+                    WorkflowTurnStatus::Cancelled => "was cancelled. No agents ran",
                     WorkflowTurnStatus::Completed => "completed",
                     WorkflowTurnStatus::Failed => "failed",
                     WorkflowTurnStatus::Stopped => "was stopped",

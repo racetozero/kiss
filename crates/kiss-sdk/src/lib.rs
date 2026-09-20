@@ -6,7 +6,7 @@
 //! model, its tools, and its streaming events. You build one, subscribe to its
 //! events, and send it prompts.
 //!
-//! (This snippet is checked as a compiled example on [`Session`]; it is shown
+//! (This snippet is checked as a compiled example on [`Session`]. It is shown
 //! here without compilation because the crate can also be built without the
 //! `native` feature, where `Session` does not exist.)
 //!
@@ -37,9 +37,9 @@
 //!
 //! # Feature flags
 //!
-//! * `native` (default) — the in-process agent. Needs a filesystem.
-//! * `rpc` — the JSON-line server over stdin/stdout, TCP, or WebSocket.
-//! * `mock` — a scripted HTTP mock model provider for hermetic tests.
+//! * `native` (default): the in-process agent. Needs a filesystem.
+//! * `rpc`: the JSON-line server over stdin/stdout, TCP, or WebSocket.
+//! * `mock`: a scripted HTTP mock model provider for hermetic tests.
 //!
 //! With `--no-default-features` only [`protocol`] and [`client`] are compiled,
 //! which is what the WebAssembly binding uses.

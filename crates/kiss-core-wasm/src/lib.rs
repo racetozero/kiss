@@ -162,7 +162,7 @@ impl KissAgent {
         self.queue_message(input, false)
     }
 
-    /// Replace the selected model while idle; the host provider is unchanged.
+    /// Replace the selected model while idle. The host provider is unchanged.
     #[wasm_bindgen(js_name = setModel)]
     pub fn set_model(&self, model: JsValue) -> Result<(), JsValue> {
         let model: ModelInput = serde_wasm_bindgen::from_value(model)

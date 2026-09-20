@@ -1,7 +1,7 @@
 //! A transport-free ("sans-io") client for the KISS RPC protocol.
 //!
 //! This type does no I/O at all. You give it a [`Command`] and it hands back
-//! the correlation id plus the exact line to send; you give it a line you read
+//! the correlation id plus the exact line to send. You give it a line you read
 //! and it hands back a decoded [`Incoming`]. That makes it usable from a tokio
 //! task, from a browser `WebSocket` compiled to WebAssembly, or from a test
 //! that never opens a socket, without any of those concerns leaking in here.
@@ -24,7 +24,7 @@ impl Client {
 
     /// Turn a command into `(id, line)`.
     ///
-    /// The line has no trailing newline; the transport adds one for stream
+    /// The line has no trailing newline. The transport adds one for stream
     /// protocols and sends it as a whole message for WebSocket.
     pub fn encode(&mut self, command: Command) -> (String, String) {
         let id = format!("c{}", self.next_id);
@@ -46,7 +46,7 @@ impl Client {
 ///
 /// The RPC protocol uses strict JSON Lines: `\n` is the only record separator,
 /// and one optional `\r` immediately before it is stripped. Nothing else counts
-/// as a separator — in particular `U+2028` and `U+2029` do not, because they are
+/// as a separator: in particular `U+2028` and `U+2029` do not, because they are
 /// legal inside JSON strings and generic "line readers" in several languages
 /// wrongly split on them.
 #[derive(Debug, Default)]

@@ -204,28 +204,28 @@ as development-only even on loopback until handshake authentication lands.
 | all commands       | `execute`                   | `execute`                   | `execute`                   | command object               |
 
 Python uses snake_case and TypeScript uses camelCase by each language's normal
-convention; wire fields are always camelCase.
+convention. Wire fields are always camelCase.
 
 ## Prompting and events
 
 `prompt()` waits for completion in in-process SDKs. The RPC command and
 `promptDetached()` return at acceptance so clients can send `abort` while work
 continues. If a prompt arrives while streaming, pass `streamingBehavior:
-"steer"` or `"followUp"`; omitting it is an error.
+"steer"` or `"followUp"`. Omitting it is an error.
 
 Subscribe before sending a prompt. Important event types are `agent_start`,
 `turn_start`, `message_start`, `message_update`, `tool_execution_start`,
 `tool_execution_update`, `tool_execution_end`, `message_end`, `turn_end`,
 `agent_end`, and SDK-level `agent_settled`. `message_update` contains deltas,
 not a repeatedly growing snapshot. A bounded event channel prevents an idle
-consumer from growing memory without limit; `event_lag` says how many events a
+consumer from growing memory without limit. `event_lag` says how many events a
 slow subscriber missed.
 
 ## Tools and safety
 
-Defaults are `read`, `write`, `edit`, and `bash`; optional built-ins are `grep`,
+Defaults are `read`, `write`, `edit`, and `bash`. Optional built-ins are `grep`,
 `find`, `ls`, and `mcp`. Set a read-only allowlist for untrusted prompts. Project
-resource loading is off by default in SDK sessions; explicitly enable
+resource loading is off by default in SDK sessions. Explicitly enable
 `trust_project_files` only for a trusted directory.
 
 Rust callers can implement `kiss_agent::AgentTool` and pass `custom_tools`.

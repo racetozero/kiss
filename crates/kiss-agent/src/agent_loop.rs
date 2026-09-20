@@ -14,7 +14,7 @@ use serde_json::Value;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
-/// Async event sink; awaited so persistence keeps ordering guarantees.
+/// Async event sink. Awaited so persistence keeps ordering guarantees.
 pub type EventSink = Arc<dyn Fn(AgentEvent) + Send + Sync>;
 
 /// Run the loop with new prompt messages appended to the context.
@@ -311,7 +311,7 @@ struct FinalizedCall {
     is_error: bool,
 }
 
-/// A `length` stop means arguments may be silently truncated; fail them all.
+/// A `length` stop means arguments may be silently truncated. Fail them all.
 fn fail_truncated_batch(tool_calls: &[ToolCall], emit: &EventSink) -> ExecutedBatch {
     let mut messages = Vec::new();
     for tc in tool_calls {

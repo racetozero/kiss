@@ -47,7 +47,7 @@ pub enum SessionEvent {
         model_id: String,
     },
     /// A dynamic workflow changed. The terminal redraws from the shared
-    /// snapshot; the event carries only the cheap version marker.
+    /// snapshot. The event carries only the cheap version marker.
     Workflow {
         run: crate::workflows::RunId,
         version: u64,
@@ -1244,7 +1244,7 @@ impl AgentSession {
                     _ => false,
                 };
                 if persist {
-                    // User prompts were persisted in prompt(); avoid double
+                    // User prompts were persisted in prompt(). Avoid double
                     // writes by checking the current leaf message identity.
                     let mut manager = self.manager.lock().unwrap();
                     let duplicate = matches!(
@@ -1634,7 +1634,7 @@ fn select_compaction_outcome(
             ),
         }),
         (Err(local), Some(Err(remote))) => anyhow::bail!(
-            "local compaction failed: {local:#}; OpenAI remote compaction failed: {remote:#}"
+            "local compaction failed: {local:#}. OpenAI remote compaction failed: {remote:#}"
         ),
         (Err(error), None) => Err(error),
     }
@@ -2150,7 +2150,7 @@ mod ephemeral_tests {
     #[ignore = "release-mode performance benchmark"]
     fn benchmark_performance_workflow_tool_exposure() {
         // An ordinary coding turn must pay nothing for dynamic workflows. The
-        // disarmed session is the baseline; the armed one carries the extra
+        // disarmed session is the baseline. The armed one carries the extra
         // tool and the authoring instructions.
         let registry = Registry::from_builtin();
         let model = registry.all().first().expect("built-in model").clone();

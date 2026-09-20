@@ -140,7 +140,7 @@ async fn run_command(args: &Args, command: &Command) -> anyhow::Result<i32> {
             );
             if base_url.is_some() && !gateway_provider {
                 anyhow::bail!(
-                    "provider '{provider}' does not accept --base-url; omit it and use the provider's normal login command"
+                    "provider '{provider}' does not accept --base-url. Omit it and use the provider's normal login command"
                 );
             }
             if api_key.is_none()
@@ -164,7 +164,7 @@ async fn run_command(args: &Args, command: &Command) -> anyhow::Result<i32> {
                 };
                 if key.trim().is_empty() {
                     anyhow::bail!(
-                        "the credential for provider '{provider}' is empty; enter a non-empty API key or bearer token and retry login"
+                        "the credential for provider '{provider}' is empty. Enter a non-empty API key or bearer token and retry login"
                     );
                 }
                 if gateway_provider {
@@ -183,7 +183,7 @@ async fn run_command(args: &Args, command: &Command) -> anyhow::Result<i32> {
                             value.trim().to_string()
                         }
                         None => anyhow::bail!(
-                            "provider '{provider}' needs an account URL; pass --base-url with an HTTP or HTTPS workspace, Cortex, or AI Gateway URL"
+                            "provider '{provider}' needs an account URL. Pass --base-url with an HTTP or HTTPS workspace, Cortex, or AI Gateway URL"
                         ),
                     };
                     kiss_ai::auth::store_gateway_credential(provider, key.trim(), &gateway_url)?;

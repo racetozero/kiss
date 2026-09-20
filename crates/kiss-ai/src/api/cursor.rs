@@ -63,7 +63,7 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
 
     let Some(token) = options.credential.as_ref().map(|value| value.value()) else {
         PartialBuilder::new(model, sink).fail(
-            "Cursor authentication is required; run `kiss login cursor` or set CURSOR_ACCESS_TOKEN",
+            "Cursor authentication is required. Run `kiss login cursor` or set CURSOR_ACCESS_TOKEN",
             false,
             model,
         );

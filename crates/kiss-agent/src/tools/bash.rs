@@ -17,7 +17,7 @@ const UPDATE_THROTTLE: Duration = Duration::from_millis(100);
 
 pub struct BashTool {
     pub cwd: PathBuf,
-    /// Shell binary; defaults to $SHELL-agnostic "bash".
+    /// Shell binary. Defaults to $SHELL-agnostic "bash".
     pub shell_path: Option<String>,
     /// Prefix prepended to every command (settings shellCommandPrefix).
     pub command_prefix: Option<String>,

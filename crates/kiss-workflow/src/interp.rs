@@ -25,7 +25,7 @@ use tokio::sync::Semaphore;
 /// The deepest chain of function calls a running script may make.
 const MAX_CALL_DEPTH: u32 = 64;
 
-/// A workflow run that failed. A failure ends the run; an agent that fails
+/// A workflow run that failed. A failure ends the run. An agent that fails
 /// merely returns null.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RunError {
@@ -489,7 +489,7 @@ impl Interp {
                     }
                     Err(RunError::at(
                         pos,
-                        "`new` is not supported; a workflow script builds plain objects and arrays",
+                        "`new` is not supported. A workflow script builds plain objects and arrays",
                     ))
                 }
             }
@@ -556,7 +556,7 @@ impl Interp {
             Value::Null => Err(RunError::at(
                 pos,
                 format!(
-                    "cannot read `{name}` from null; an agent that failed returns null, \
+                    "cannot read `{name}` from null because an agent that failed returns null, \
                      so test the value first"
                 ),
             )),
@@ -601,7 +601,7 @@ impl Interp {
             }
             Value::Null => Err(RunError::at(
                 pos,
-                "cannot index null; an agent that failed returns null, so test the value first",
+                "cannot index null because an agent that failed returns null, so test the value first",
             )),
             _ => Err(RunError::at(pos, format!("cannot index {}", object.kind()))),
         }

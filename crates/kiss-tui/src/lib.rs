@@ -1,6 +1,6 @@
 //! kiss-tui: differential-rendering terminal UI library.
 //!
-//! Components render to `Vec<String>`; the `DiffRenderer` compares frames
+//! Components render to `Vec<String>`. The `DiffRenderer` compares frames
 //! and repaints only changed rows on the terminal main screen. Nothing else
 //! writes escape sequences.
 

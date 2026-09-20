@@ -1,4 +1,4 @@
-//! kiss-coding: the coding harness — sessions, compaction, settings,
+//! kiss-coding harness: sessions, compaction, settings,
 //! project context, skills, prompt templates, search tools, and the
 //! AgentSession facade.
 

@@ -13,7 +13,7 @@ fn registry() -> &'static Registry {
     REGISTRY.get_or_init(Default::default)
 }
 
-/// Acquire the mutation lock for `path`; the guard releases on drop.
+/// Acquire the mutation lock for `path`. The guard releases on drop.
 pub async fn lock_path(path: &Path) -> tokio::sync::OwnedMutexGuard<()> {
     let lock = {
         let mut map = registry().lock().expect("mutation registry poisoned");

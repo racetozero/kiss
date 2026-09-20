@@ -59,7 +59,7 @@
           ) {
             output.textContent += event.assistantMessageEvent.delta ?? ""
           }
-          if (event.type === "agent_settled") status.textContent = "Connected — idle"
+          if (event.type === "agent_settled") status.textContent = "Connected: idle"
         })
         document.querySelector("#form").addEventListener("submit", async (event) => {
           event.preventDefault()

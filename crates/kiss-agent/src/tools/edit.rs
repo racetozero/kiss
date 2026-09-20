@@ -151,7 +151,7 @@ impl AgentTool for EditTool {
     }
 
     fn prepare_arguments(&self, mut args: Value) -> Value {
-        // Some models stringify the edits array; unwrap it.
+        // Some models stringify the edits array. Unwrap it.
         if let Some(edits_str) = args["edits"].as_str()
             && let Ok(parsed) = serde_json::from_str::<Value>(edits_str)
             && parsed.is_array()

@@ -630,7 +630,7 @@ impl SessionManager {
             .collect()
     }
 
-    /// Walk leaf -> root; returns entries in root-first order.
+    /// Walk leaf -> root. Returns entries in root-first order.
     pub fn branch_entries(&self, from: Option<&str>) -> Vec<&SessionEntry> {
         let mut out = Vec::new();
         let mut cursor = from.or(self.leaf_id.as_deref()).map(String::from);
@@ -713,7 +713,7 @@ impl SessionManager {
     }
 
     pub fn label_of(&self, target: &str) -> Option<String> {
-        // Labels apply tree-wide; last write wins.
+        // Labels apply tree-wide. Last write wins.
         self.entries
             .iter()
             .rev()

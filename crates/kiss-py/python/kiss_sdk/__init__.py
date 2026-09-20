@@ -23,7 +23,7 @@ Quick start::
 Everything here funnels into the same Rust dispatcher that the Rust SDK, the
 TypeScript SDK, and ``kiss --mode rpc`` use, so the four surfaces cannot behave
 differently. If a method you need is missing, build the command yourself and
-call :meth:`Session.execute`; the command names and payloads are documented in
+call :meth:`Session.execute`. The command names and payloads are documented in
 ``docs/rpc.md``.
 """
 
