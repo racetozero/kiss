@@ -22,7 +22,7 @@ const WORKING_TITLE_SEQUENCES: [&str; 10] = [
 ];
 const PROGRESS_IDLE_SEQUENCE: &[u8] = b"\x1b]9;4;0;0\x1b\\";
 const PROGRESS_WORKING_SEQUENCE: &[u8] = b"\x1b]9;4;3;0\x1b\\";
-const TITLE_TICKS_PER_FRAME: usize = 4;
+const TITLE_TICKS_PER_FRAME: usize = 1;
 
 fn write_control_sequence(out: &mut impl Write, sequence: &[u8]) -> std::io::Result<()> {
     out.write_all(sequence)?;
@@ -164,13 +164,10 @@ mod tests {
 
         output.clear();
         terminal.write_activity(&mut output, true, 1).unwrap();
-        assert!(output.is_empty());
-
-        terminal.write_activity(&mut output, true, 4).unwrap();
         assert_eq!(output, WORKING_TITLE_SEQUENCES[1].as_bytes());
 
         output.clear();
-        terminal.write_activity(&mut output, true, 40).unwrap();
+        terminal.write_activity(&mut output, true, 10).unwrap();
         assert_eq!(
             output,
             b"\x1b]9;4;3;0\x1b\\\x1b]0;\xf0\x9f\x92\x8b \xe2\xa0\x8b kiss\x07"
