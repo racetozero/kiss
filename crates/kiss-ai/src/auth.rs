@@ -98,9 +98,10 @@ pub fn is_oauth_access_token(provider: &str, access_token: &str) -> bool {
 }
 
 pub fn is_bearer_access_token(provider: &str, access_token: &str) -> bool {
-    (provider == "anthropic"
-        && std::env::var("ANTHROPIC_AUTH_TOKEN")
-            .is_ok_and(|value| !value.is_empty() && value == access_token))
+    matches!(provider, "databricks-unity-gateway" | "snowflake-cortex")
+        || (provider == "anthropic"
+            && std::env::var("ANTHROPIC_AUTH_TOKEN")
+                .is_ok_and(|value| !value.is_empty() && value == access_token))
         || (provider != "anthropic" && is_oauth_access_token(provider, access_token))
 }
 
@@ -170,6 +171,7 @@ pub fn env_var_names(provider: &str) -> &'static [&'static str] {
         "cloudflare-ai-gateway" => &["CLOUDFLARE_AI_GATEWAY_API_KEY"],
         "cloudflare-workers-ai" => &["CLOUDFLARE_API_TOKEN"],
         "cursor" => &["CURSOR_ACCESS_TOKEN"],
+        "databricks-unity-gateway" => &["DATABRICKS_TOKEN"],
         "deepseek" => &["DEEPSEEK_API_KEY"],
         "fireworks" => &["FIREWORKS_API_KEY"],
         "github-copilot" => &["COPILOT_GITHUB_TOKEN"],
@@ -193,6 +195,7 @@ pub fn env_var_names(provider: &str) -> &'static [&'static str] {
         "qwen-token-plan-cn" => &["QWEN_TOKEN_PLAN_CN_API_KEY"],
         "qwen-token-plan-individual" => &["QWEN_TOKEN_PLAN_API_KEY"],
         "radius" => &["RADIUS_API_KEY"],
+        "snowflake-cortex" => &["SNOWFLAKE_PAT", "SNOWFLAKE_TOKEN"],
         "together" => &["TOGETHER_API_KEY"],
         "typesafe" => &["TYPESAFE_API_KEY"],
         "vercel-ai-gateway" => &["AI_GATEWAY_API_KEY"],
@@ -351,7 +354,11 @@ pub fn resolve_credential_local(
     if let Some(entry) = file.entries.get(provider) {
         return Some(match entry {
             AuthEntry::Key(key) | AuthEntry::Detailed { key, .. } => {
-                ResolvedCredential::api_key(key.clone())
+                if matches!(provider, "databricks-unity-gateway" | "snowflake-cortex") {
+                    ResolvedCredential::bearer(key.clone())
+                } else {
+                    ResolvedCredential::api_key(key.clone())
+                }
             }
             AuthEntry::OAuth(credential) => ResolvedCredential::bearer(&credential.access),
         });
@@ -360,7 +367,13 @@ pub fn resolve_credential_local(
         if let Ok(value) = std::env::var(variable)
             && !value.is_empty()
         {
-            return Some(ResolvedCredential::api_key(value));
+            return Some(
+                if matches!(provider, "databricks-unity-gateway" | "snowflake-cortex") {
+                    ResolvedCredential::bearer(value)
+                } else {
+                    ResolvedCredential::api_key(value)
+                },
+            );
         }
     }
     if provider == "google-vertex" && has_google_application_credentials() {
@@ -375,9 +388,23 @@ pub fn resolve_credential_local(
                 std::env::var(variable)
                     .ok()
                     .filter(|value| !value.is_empty())
-                    .map(ResolvedCredential::api_key)
+                    .map(|value| {
+                        if matches!(provider, "databricks-unity-gateway" | "snowflake-cortex") {
+                            ResolvedCredential::bearer(value)
+                        } else {
+                            ResolvedCredential::api_key(value)
+                        }
+                    })
             })
-            .unwrap_or_else(|| Some(ResolvedCredential::api_key(value.clone())))
+            .unwrap_or_else(|| {
+                Some(
+                    if matches!(provider, "databricks-unity-gateway" | "snowflake-cortex") {
+                        ResolvedCredential::bearer(value.clone())
+                    } else {
+                        ResolvedCredential::api_key(value.clone())
+                    },
+                )
+            })
     })
 }
 
@@ -601,6 +628,83 @@ pub fn store_api_key_with_env(
     })
 }
 
+pub fn store_gateway_credential(provider: &str, key: &str, base_url: &str) -> Result<()> {
+    if key.trim().is_empty() {
+        anyhow::bail!(
+            "the {provider} token is empty; enter a non-empty bearer token and retry login"
+        );
+    }
+    let (variable, normalized) = normalize_gateway_base_url(provider, base_url)?;
+    store_api_key_with_env(
+        provider,
+        key.trim(),
+        BTreeMap::from([(variable.to_string(), normalized)]),
+    )
+}
+
+fn normalize_gateway_base_url(provider: &str, base_url: &str) -> Result<(&'static str, String)> {
+    let mut url = url::Url::parse(base_url.trim()).with_context(|| {
+        format!(
+            "the {provider} base URL '{base_url}' is not an absolute URL; use an HTTP or HTTPS URL with a host"
+        )
+    })?;
+    if !matches!(url.scheme(), "http" | "https") || url.host_str().is_none() {
+        anyhow::bail!(
+            "the {provider} base URL '{base_url}' is not valid; use an HTTP or HTTPS URL with a host"
+        );
+    }
+    if !url.username().is_empty()
+        || url.password().is_some()
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
+        anyhow::bail!(
+            "the {provider} base URL '{base_url}' contains credentials, a query, or a fragment; remove those parts and retry login"
+        );
+    }
+
+    let (variable, accepted) = match provider {
+        "databricks-unity-gateway" => {
+            if url.path() != "/" && !url.path().is_empty() {
+                anyhow::bail!(
+                    "the Databricks workspace URL '{base_url}' contains a path; use only the workspace root, such as https://workspace.cloud.databricks.com, and retry login"
+                );
+            }
+            url.set_path("");
+            (
+                "DATABRICKS_HOST",
+                "an HTTP or HTTPS Databricks workspace root",
+            )
+        }
+        "snowflake-cortex" => {
+            let path = url.path().trim_end_matches('/').to_string();
+            if path.is_empty() {
+                url.set_path("/api/v2/cortex");
+            } else if path == "/api/v2/cortex" {
+                url.set_path(&path);
+            } else if path.eq_ignore_ascii_case("/api/v2/aigateways/SNOWFLAKE") {
+                url.set_path("/api/v2/aigateways/SNOWFLAKE");
+            } else {
+                anyhow::bail!(
+                    "the Snowflake URL '{base_url}' has an unsupported path; use the account root, /api/v2/cortex, or /api/v2/aigateways/SNOWFLAKE, and retry login"
+                );
+            }
+            (
+                "SNOWFLAKE_CORTEX_BASE_URL",
+                "a Snowflake account root, Cortex root, or AI Gateway root",
+            )
+        }
+        _ => anyhow::bail!(
+            "provider '{provider}' does not use gateway URL login; omit --base-url and use its supported login method"
+        ),
+    };
+    let normalized = url.as_str().trim_end_matches('/').to_string();
+    if normalized.is_empty() {
+        anyhow::bail!("the {provider} base URL is empty; enter {accepted} and retry login");
+    }
+    Ok((variable, normalized))
+}
+
 pub fn store_api_key(provider: &str, key: &str) -> Result<()> {
     update_auth_file(|file| {
         file.entries
@@ -753,6 +857,53 @@ mod tests {
         assert_eq!(
             env_var_names("azure-openai-responses"),
             &["AZURE_OPENAI_API_KEY", "AZURE_OPENAI_AUTH_TOKEN"]
+        );
+    }
+
+    #[test]
+    fn gateway_providers_use_bearer_tokens_and_standard_environment_variables() {
+        assert_eq!(
+            env_var_names("databricks-unity-gateway"),
+            &["DATABRICKS_TOKEN"]
+        );
+        assert_eq!(
+            env_var_names("snowflake-cortex"),
+            &["SNOWFLAKE_PAT", "SNOWFLAKE_TOKEN"]
+        );
+        assert!(is_bearer_access_token("databricks-unity-gateway", "token"));
+        assert!(is_bearer_access_token("snowflake-cortex", "pat"));
+    }
+
+    #[test]
+    fn azure_databricks_workspace_uses_the_cloud_neutral_host_setting() {
+        let (variable, url) = normalize_gateway_base_url(
+            "databricks-unity-gateway",
+            "https://adb-1234567890123456.7.azuredatabricks.net/",
+        )
+        .unwrap();
+        assert_eq!(variable, "DATABRICKS_HOST");
+        assert_eq!(url, "https://adb-1234567890123456.7.azuredatabricks.net");
+    }
+
+    #[test]
+    fn snowflake_account_and_gateway_urls_use_documented_roots() {
+        assert_eq!(
+            normalize_gateway_base_url(
+                "snowflake-cortex",
+                "https://account.snowflakecomputing.com"
+            )
+            .unwrap()
+            .1,
+            "https://account.snowflakecomputing.com/api/v2/cortex"
+        );
+        assert_eq!(
+            normalize_gateway_base_url(
+                "snowflake-cortex",
+                "https://account.snowflakecomputing.com/api/v2/aigateways/snowflake/"
+            )
+            .unwrap()
+            .1,
+            "https://account.snowflakecomputing.com/api/v2/aigateways/SNOWFLAKE"
         );
     }
 

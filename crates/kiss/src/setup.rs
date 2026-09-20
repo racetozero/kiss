@@ -282,6 +282,15 @@ pub async fn build_startup(
     if cursor_selected {
         registry.refresh_cursor().await;
     }
+    let databricks_selected = args.provider.as_deref() == Some("databricks-unity-gateway")
+        || args
+            .model
+            .as_deref()
+            .is_some_and(|model| model.starts_with("databricks-unity-gateway/"))
+        || settings.default_provider.as_deref() == Some("databricks-unity-gateway");
+    if databricks_selected {
+        registry.refresh_databricks_unity_gateway().await;
+    }
 
     let (model, cli_thinking) = resolve_model(args, &settings, &registry)?;
     let thinking = args

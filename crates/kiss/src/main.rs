@@ -63,7 +63,8 @@ async fn run(args: Args) -> anyhow::Result<i32> {
 
     // --list-models
     if let Some(search) = &args.list_models {
-        let registry = kiss_ai::Registry::load(None);
+        let mut registry = kiss_ai::Registry::load(None);
+        registry.refresh_databricks_unity_gateway().await;
         let needle = search.to_lowercase();
         for (_, model) in registry.available_models() {
             let label = format!("{}/{}", model.provider, model.id);
@@ -122,6 +123,7 @@ async fn run_command(args: &Args, command: &Command) -> anyhow::Result<i32> {
             device_auth,
             browser: _,
             api_key,
+            base_url,
             entra_id,
         } => {
             if *entra_id && provider != "azure-openai-responses" {
@@ -131,6 +133,15 @@ async fn run_command(args: &Args, command: &Command) -> anyhow::Result<i32> {
                 kiss_ai::auth::store_azure_entra_id()?;
                 println!("Saved Microsoft Entra ID credentials for {provider}.");
                 return Ok(0);
+            }
+            let gateway_provider = matches!(
+                provider.as_str(),
+                "databricks-unity-gateway" | "snowflake-cortex"
+            );
+            if base_url.is_some() && !gateway_provider {
+                anyhow::bail!(
+                    "provider '{provider}' does not accept --base-url; omit it and use the provider's normal login command"
+                );
             }
             if api_key.is_none()
                 && matches!(
@@ -152,10 +163,35 @@ async fn run_command(args: &Args, command: &Command) -> anyhow::Result<i32> {
                     None => rpassword::prompt_password(format!("API key for {provider}: "))?,
                 };
                 if key.trim().is_empty() {
-                    anyhow::bail!("API key cannot be empty");
+                    anyhow::bail!(
+                        "the credential for provider '{provider}' is empty; enter a non-empty API key or bearer token and retry login"
+                    );
                 }
-                kiss_ai::auth::store_api_key(provider, key.trim())?;
-                println!("Saved API key for {provider}.");
+                if gateway_provider {
+                    let gateway_url = match base_url.as_deref() {
+                        Some(url) => url.to_string(),
+                        None if std::io::stdin().is_terminal() => {
+                            let label = if provider == "databricks-unity-gateway" {
+                                "Databricks workspace URL"
+                            } else {
+                                "Snowflake account, Cortex, or AI Gateway URL"
+                            };
+                            print!("{label}: ");
+                            std::io::stdout().flush()?;
+                            let mut value = String::new();
+                            std::io::stdin().read_line(&mut value)?;
+                            value.trim().to_string()
+                        }
+                        None => anyhow::bail!(
+                            "provider '{provider}' needs an account URL; pass --base-url with an HTTP or HTTPS workspace, Cortex, or AI Gateway URL"
+                        ),
+                    };
+                    kiss_ai::auth::store_gateway_credential(provider, key.trim(), &gateway_url)?;
+                    println!("Saved bearer token and base URL for {provider}.");
+                } else {
+                    kiss_ai::auth::store_api_key(provider, key.trim())?;
+                    println!("Saved API key for {provider}.");
+                }
             }
             Ok(0)
         }

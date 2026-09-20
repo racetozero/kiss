@@ -6,8 +6,8 @@ control of the model, tools, sessions, and automation.
 KISS takes its name and product philosophy from [Keep It Simple, Stupid](https://en.wikipedia.org/wiki/KISS_principle).
 Why? Because I am stupid :)
 
-KISS has 41 built-in providers, including OpenAI Codex, Cursor, Anthropic,
-Google, OpenRouter, Bedrock, and GitHub Copilot. You can also add
+KISS has 43 built-in providers, including OpenAI Codex, Cursor, Anthropic,
+Google, OpenRouter, Bedrock, Databricks, Snowflake, and GitHub Copilot. You can also add
 OpenAI-compatible providers. KISS is built in Rust and based on
 [Pi](https://github.com/earendil-works/pi).
 
@@ -271,6 +271,38 @@ KISS talks directly to Cursor's Agent service. It does not start Cursor's
 set `CURSOR_ACCESS_TOKEN` instead of saving a login. When Cursor is selected,
 KISS refreshes the model list for the signed-in account and keeps a built-in
 fallback list if discovery is not available.
+
+Use Databricks Unity Gateway with a workspace token and URL:
+
+```bash
+kiss login databricks-unity-gateway \
+  --api-key YOUR_TOKEN \
+  --base-url https://your-workspace.cloud.databricks.com
+kiss --list-models databricks-unity-gateway
+kiss --model databricks-unity-gateway/system.ai.claude-sonnet-4-6
+```
+
+Azure Databricks uses the same provider. Supply the Azure workspace URL, such
+as `https://adb-1234567890123456.7.azuredatabricks.net`. You can set
+`DATABRICKS_TOKEN` and `DATABRICKS_HOST` instead of saving a login. KISS gets
+the complete `system.ai` model-service list from the selected workspace. The
+list can differ by workspace and can change after KISS is released.
+
+Use Snowflake Cortex with a programmatic access token and an account URL:
+
+```bash
+kiss login snowflake-cortex \
+  --api-key YOUR_PAT \
+  --base-url https://account.snowflakecomputing.com
+kiss --model snowflake-cortex/claude-sonnet-4-6
+```
+
+KISS also accepts a URL that ends in `/api/v2/cortex` or
+`/api/v2/aigateways/SNOWFLAKE`. You can set `SNOWFLAKE_PAT` and
+`SNOWFLAKE_CORTEX_BASE_URL` instead of saving a login. The built-in catalog
+contains all 34 text-generation models in the current Cortex REST API model
+availability table. Account and region rules can reduce the models that you
+can use.
 
 ### Your own OpenAI-compatible provider
 

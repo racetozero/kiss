@@ -38,7 +38,9 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
     if priority_header(model, options).is_some() {
         request = request.header("X-Vertex-AI-LLM-Shared-Request-Type", "priority");
     }
-    if model.api == "google-vertex" {
+    if credential.is_bearer() {
+        request = request.bearer_auth(&api_key);
+    } else if model.api == "google-vertex" {
         if let Some(token) = api_key.strip_prefix("vertex-oauth:") {
             request = request.bearer_auth(token);
         } else {

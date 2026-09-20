@@ -1,0 +1,70 @@
+{
+  "anthropic-messages": {
+    "system.ai.claude-fable-5": {
+      "id": "system.ai.claude-fable-5",
+      "name": "Databricks Claude Fable 5",
+      "api": "anthropic-messages",
+      "provider": "databricks-unity-gateway",
+      "baseUrl": "{DATABRICKS_HOST}/ai-gateway/anthropic",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 200000,
+      "maxTokens": 16384,
+      "headers": { "x-databricks-use-coding-agent-mode": "true" }
+    },
+    "system.ai.claude-opus-4-6": {
+      "id": "system.ai.claude-opus-4-6",
+      "name": "Databricks Claude Opus 4.6",
+      "api": "anthropic-messages",
+      "provider": "databricks-unity-gateway",
+      "baseUrl": "{DATABRICKS_HOST}/ai-gateway/anthropic",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 200000,
+      "maxTokens": 16384,
+      "headers": { "x-databricks-use-coding-agent-mode": "true" }
+    },
+    "system.ai.claude-sonnet-4-6": {
+      "id": "system.ai.claude-sonnet-4-6",
+      "name": "Databricks Claude Sonnet 4.6",
+      "api": "anthropic-messages",
+      "provider": "databricks-unity-gateway",
+      "baseUrl": "{DATABRICKS_HOST}/ai-gateway/anthropic",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 200000,
+      "maxTokens": 16384,
+      "headers": { "x-databricks-use-coding-agent-mode": "true" }
+    }
+  },
+  "openai-responses": {
+    "system.ai.glm-5-2": {
+      "id": "system.ai.glm-5-2",
+      "name": "Databricks GLM 5.2",
+      "api": "openai-responses",
+      "provider": "databricks-unity-gateway",
+      "baseUrl": "{DATABRICKS_HOST}/ai-gateway/codex/v1",
+      "reasoning": true,
+      "input": ["text"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 1048576,
+      "maxTokens": 32768,
+      "thinkingLevelMap": { "off": null, "minimal": null, "low": null, "medium": null, "high": "high", "xhigh": null, "max": "max" }
+    },
+    "system.ai.gpt-5-2": {
+      "id": "system.ai.gpt-5-2",
+      "name": "Databricks GPT-5.2",
+      "api": "openai-responses",
+      "provider": "databricks-unity-gateway",
+      "baseUrl": "{DATABRICKS_HOST}/ai-gateway/codex/v1",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 400000,
+      "maxTokens": 16384
+    }
+  }
+}

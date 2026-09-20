@@ -271,6 +271,17 @@ fn model_endpoint(registry: &Registry, model: &Model) -> Result<String, String> 
     if model.base_url.contains("{location}") {
         return Err("set GOOGLE_CLOUD_LOCATION".into());
     }
+    if model.base_url.contains("{DATABRICKS_HOST}") {
+        return Err(
+            "set DATABRICKS_HOST or run kiss login databricks-unity-gateway --base-url URL".into(),
+        );
+    }
+    if model.base_url.contains("{SNOWFLAKE_CORTEX_BASE_URL}") {
+        return Err(
+            "set SNOWFLAKE_CORTEX_BASE_URL or run kiss login snowflake-cortex --base-url URL"
+                .into(),
+        );
+    }
     if model.base_url.trim().is_empty() && model.api != "azure-openai-responses" {
         return Err("set the provider base URL".into());
     }
@@ -378,6 +389,10 @@ fn raw_authority(value: &str) -> String {
 fn unresolved_host(model: &Model) -> String {
     if model.provider == "azure-openai-responses" {
         "<AZURE_OPENAI_BASE_URL>:443".into()
+    } else if model.provider == "databricks-unity-gateway" {
+        "<DATABRICKS_HOST>:443".into()
+    } else if model.provider == "snowflake-cortex" {
+        "<SNOWFLAKE_CORTEX_BASE_URL>:443".into()
     } else {
         raw_authority(&model.base_url)
     }
@@ -652,6 +667,20 @@ mod tests {
                 target.provider == "radius" && target.connection == Connection::Sse
             })
         );
+        assert!(targets.iter().any(|target| {
+            target.provider == "databricks-unity-gateway"
+                && target
+                    .skip_reason
+                    .as_deref()
+                    .is_some_and(|reason| reason.contains("DATABRICKS_HOST"))
+        }));
+        assert!(targets.iter().any(|target| {
+            target.provider == "snowflake-cortex"
+                && target
+                    .skip_reason
+                    .as_deref()
+                    .is_some_and(|reason| reason.contains("SNOWFLAKE_CORTEX_BASE_URL"))
+        }));
     }
 
     #[test]

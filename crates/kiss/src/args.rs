@@ -258,6 +258,10 @@ pub enum Command {
         #[arg(long, value_name = "KEY")]
         api_key: Option<String>,
 
+        /// Account or workspace URL for a gateway provider.
+        #[arg(long, value_name = "URL", conflicts_with_all = ["browser", "device_auth", "entra_id"])]
+        base_url: Option<String>,
+
         /// Use the Microsoft Entra default credential chain (Azure OpenAI).
         #[arg(long = "entra-id", conflicts_with_all = ["api_key", "browser", "device_auth"])]
         entra_id: bool,
@@ -464,6 +468,31 @@ mod tests {
                 device_auth: true,
                 ..
             }) if provider == "openai-codex"
+        ));
+    }
+
+    #[test]
+    fn parses_gateway_login_url() {
+        let args = Args::try_parse_from([
+            "kiss",
+            "login",
+            "snowflake-cortex",
+            "--api-key",
+            "pat",
+            "--base-url",
+            "https://account.snowflakecomputing.com",
+        ])
+        .unwrap();
+        assert!(matches!(
+            args.command,
+            Some(Command::Login {
+                provider,
+                api_key: Some(key),
+                base_url: Some(url),
+                ..
+            }) if provider == "snowflake-cortex"
+                && key == "pat"
+                && url == "https://account.snowflakecomputing.com"
         ));
     }
 

@@ -4,6 +4,8 @@
 
 ### Added
 
+- Added Databricks Unity Gateway, Azure Databricks, and Snowflake Cortex
+  providers with bearer-token login, account URLs, and complete model catalogs.
 - Added KISS-branded idle and working terminal-tab titles, plus native terminal
   progress signals for supported terminal emulators.
 - Updated Pi compatibility to v0.86.0 with the current provider catalog,

@@ -19,6 +19,7 @@ const BUILTIN_PROVIDER_CATALOGS: &[&str] = &[
     include_str!("../data/providers/cloudflare-ai-gateway.json"),
     include_str!("../data/providers/cloudflare-workers-ai.json"),
     include_str!("../data/providers/cursor.json"),
+    include_str!("../data/providers/databricks-unity-gateway.json"),
     include_str!("../data/providers/deepseek.json"),
     include_str!("../data/providers/fireworks.json"),
     include_str!("../data/providers/github-copilot.json"),
@@ -42,6 +43,7 @@ const BUILTIN_PROVIDER_CATALOGS: &[&str] = &[
     include_str!("../data/providers/qwen-token-plan-individual.json"),
     include_str!("../data/providers/qwen-token-plan.json"),
     include_str!("../data/providers/radius.json"),
+    include_str!("../data/providers/snowflake-cortex.json"),
     include_str!("../data/providers/together.json"),
     include_str!("../data/providers/vercel-ai-gateway.json"),
     include_str!("../data/providers/xai.json"),
@@ -63,6 +65,7 @@ pub const BUILTIN_PROVIDER_IDS: &[&str] = &[
     "cloudflare-ai-gateway",
     "cloudflare-workers-ai",
     "cursor",
+    "databricks-unity-gateway",
     "deepseek",
     "fireworks",
     "github-copilot",
@@ -86,6 +89,7 @@ pub const BUILTIN_PROVIDER_IDS: &[&str] = &[
     "qwen-token-plan-cn",
     "qwen-token-plan-individual",
     "radius",
+    "snowflake-cortex",
     "together",
     "vercel-ai-gateway",
     "xai",
@@ -170,6 +174,19 @@ struct RadiusGatewayModel {
     max_tokens: u64,
 }
 
+#[derive(Debug, Deserialize)]
+struct DatabricksModelServicesPage {
+    #[serde(default)]
+    model_services: Vec<DatabricksModelService>,
+    #[serde(default)]
+    next_page_token: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct DatabricksModelService {
+    name: String,
+}
+
 #[derive(Debug, Clone)]
 pub struct Registry {
     models: Vec<Model>,
@@ -251,6 +268,154 @@ impl Registry {
             }
             Err(error) => eprintln!("warning: could not refresh Cursor models: {error:#}"),
         }
+    }
+
+    /// Load all built-in model services visible in a Databricks workspace.
+    /// The embedded models remain available when discovery cannot run.
+    pub async fn refresh_databricks_unity_gateway(&mut self) {
+        let Some(workspace) =
+            crate::auth::provider_env("databricks-unity-gateway", "DATABRICKS_HOST")
+        else {
+            return;
+        };
+        let Ok(Some(token)) =
+            crate::auth::resolve_api_key_async("databricks-unity-gateway", &self.declared_keys)
+                .await
+        else {
+            return;
+        };
+        if let Err(error) = self
+            .refresh_databricks_unity_gateway_from(&workspace, &token)
+            .await
+        {
+            eprintln!("warning: could not refresh Databricks Unity Gateway models: {error:#}");
+        }
+    }
+
+    async fn refresh_databricks_unity_gateway_from(
+        &mut self,
+        workspace: &str,
+        token: &str,
+    ) -> Result<()> {
+        let workspace = workspace.trim_end_matches('/');
+        let mut page_token: Option<String> = None;
+        let mut seen_page_tokens = BTreeSet::new();
+        let mut model_ids = BTreeSet::new();
+        for _ in 0..100 {
+            let mut url = url::Url::parse(&format!(
+                "{workspace}/api/2.1/unity-catalog/model-services"
+            ))
+            .with_context(|| {
+                format!(
+                    "the Databricks workspace URL '{workspace}' is invalid; use an HTTP or HTTPS workspace root and retry login"
+                )
+            })?;
+            url.query_pairs_mut()
+                .append_pair("parent", "schemas/system.ai")
+                .append_pair("page_size", "100");
+            if let Some(token) = page_token.as_deref() {
+                url.query_pairs_mut().append_pair("page_token", token);
+            }
+            let response = crate::stream::http_client()
+                .get(url.clone())
+                .bearer_auth(token)
+                .header("accept", "application/json")
+                .send()
+                .await
+                .with_context(|| format!("request Databricks model services from {url}"))?;
+            let status = response.status();
+            if !status.is_success() {
+                let body = response.text().await.unwrap_or_default();
+                anyhow::bail!(
+                    "Databricks model discovery returned HTTP {status}: {}; verify the token has USE CATALOG on system plus USE SCHEMA and EXECUTE on system.ai, then retry",
+                    crate::truncate_err(&body)
+                );
+            }
+            let page: DatabricksModelServicesPage = response
+                .json()
+                .await
+                .context("parse the Databricks model-services response")?;
+            for service in page.model_services {
+                let id = service
+                    .name
+                    .trim()
+                    .strip_prefix("model-services/")
+                    .unwrap_or(service.name.trim());
+                if id.starts_with("system.ai.") {
+                    model_ids.insert(id.to_string());
+                }
+            }
+            page_token = page.next_page_token.filter(|value| !value.is_empty());
+            match page_token.as_ref() {
+                Some(token) if !seen_page_tokens.insert(token.clone()) => anyhow::bail!(
+                    "Databricks model discovery repeated page token '{token}'; retry after the workspace model catalog is stable"
+                ),
+                Some(_) => {}
+                None => break,
+            }
+        }
+        if page_token.is_some() {
+            anyhow::bail!(
+                "Databricks model discovery returned more than 100 pages; reduce the visible system.ai model services or use a custom model entry"
+            );
+        }
+        if model_ids.is_empty() {
+            anyhow::bail!(
+                "Databricks model discovery returned no system.ai model services; grant USE CATALOG on system plus USE SCHEMA and EXECUTE on system.ai, then retry"
+            );
+        }
+
+        let model_ids = model_ids.into_iter().collect::<Vec<_>>();
+        self.retain_provider_models("databricks-unity-gateway", &model_ids);
+        for id in model_ids {
+            let lower = id.to_ascii_lowercase();
+            let (api, base_url, input, context_window, headers) = if lower.contains("claude-") {
+                (
+                    "anthropic-messages",
+                    format!("{workspace}/ai-gateway/anthropic"),
+                    vec!["text".into(), "image".into()],
+                    200_000,
+                    BTreeMap::from([("x-databricks-use-coding-agent-mode".into(), "true".into())]),
+                )
+            } else if lower.contains("gemini-") {
+                (
+                    "google-generative-ai",
+                    format!("{workspace}/ai-gateway/gemini/v1beta"),
+                    vec!["text".into(), "image".into()],
+                    1_000_000,
+                    BTreeMap::new(),
+                )
+            } else {
+                (
+                    "openai-responses",
+                    format!("{workspace}/ai-gateway/codex/v1"),
+                    if lower.contains("gpt-") {
+                        vec!["text".into(), "image".into()]
+                    } else {
+                        vec!["text".into()]
+                    },
+                    128_000,
+                    BTreeMap::new(),
+                )
+            };
+            self.upsert(Model {
+                name: format!("Databricks {id}"),
+                id,
+                api: api.into(),
+                provider: "databricks-unity-gateway".into(),
+                base_url,
+                reasoning: true,
+                input,
+                cost: ModelCost::default(),
+                prompt_cache: None,
+                context_window,
+                max_tokens: 16_384,
+                compat: None,
+                thinking_level_map: BTreeMap::new(),
+                headers,
+            });
+        }
+        Ok(())
     }
 
     async fn refresh_radius_from(&mut self, gateway: &str, api_key: &str) -> Result<()> {
@@ -492,12 +657,14 @@ fn expand_environment_placeholders(provider: &str, value: &mut String) {
     for (placeholder, variable) in [
         ("{CLOUDFLARE_ACCOUNT_ID}", "CLOUDFLARE_ACCOUNT_ID"),
         ("{CLOUDFLARE_GATEWAY_ID}", "CLOUDFLARE_GATEWAY_ID"),
+        ("{DATABRICKS_HOST}", "DATABRICKS_HOST"),
+        ("{SNOWFLAKE_CORTEX_BASE_URL}", "SNOWFLAKE_CORTEX_BASE_URL"),
         ("{location}", "GOOGLE_CLOUD_LOCATION"),
     ] {
         if value.contains(placeholder)
             && let Some(replacement) = crate::auth::provider_env(provider, variable)
         {
-            *value = value.replace(placeholder, &replacement);
+            *value = value.replace(placeholder, replacement.trim_end_matches('/'));
         }
     }
 }
@@ -546,6 +713,8 @@ fn pattern_matches(pattern: &str, value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+    use tokio::net::TcpListener;
 
     #[test]
     fn builtin_catalog_loads() {
@@ -803,5 +972,142 @@ mod tests {
         assert_eq!(model.api, "cursor-agent");
         assert!(model.supports_images());
         assert!(BUILTIN_PROVIDER_IDS.contains(&"cursor"));
+    }
+
+    #[test]
+    fn databricks_gateway_uses_responses_and_anthropic_routes() {
+        let registry = Registry::from_builtin();
+        let (open, _) = registry
+            .resolve("databricks-unity-gateway/system.ai.glm-5-2", None)
+            .unwrap();
+        assert_eq!(open.api, "openai-responses");
+        assert!(open.base_url.ends_with("/ai-gateway/codex/v1"));
+
+        let (claude, _) = registry
+            .resolve("databricks-unity-gateway/system.ai.claude-sonnet-4-6", None)
+            .unwrap();
+        assert_eq!(claude.api, "anthropic-messages");
+        assert!(claude.base_url.ends_with("/ai-gateway/anthropic"));
+        assert_eq!(claude.headers["x-databricks-use-coding-agent-mode"], "true");
+    }
+
+    #[tokio::test]
+    async fn databricks_discovery_loads_every_page_and_api_family() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            for (page, body) in [
+                (
+                    None,
+                    r#"{"model_services":[{"name":"model-services/system.ai.claude-opus-5"},{"name":"model-services/system.ai.gpt-6-astra"}],"next_page_token":"next"}"#,
+                ),
+                (
+                    Some("next"),
+                    r#"{"model_services":[{"name":"model-services/system.ai.gemini-3-pro"},{"name":"model-services/main.private.model"}]}"#,
+                ),
+            ] {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                let mut request = Vec::new();
+                let mut chunk = [0_u8; 4096];
+                loop {
+                    let count = socket.read(&mut chunk).await.unwrap();
+                    request.extend_from_slice(&chunk[..count]);
+                    if request.windows(4).any(|part| part == b"\r\n\r\n") {
+                        break;
+                    }
+                }
+                let request = String::from_utf8(request).unwrap();
+                assert!(request.contains("authorization: Bearer test-token"));
+                assert!(request.contains("parent=schemas%2Fsystem.ai"));
+                assert_eq!(request.contains("page_token=next"), page.is_some());
+                socket
+                    .write_all(
+                        format!(
+                            "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                            body.len()
+                        )
+                        .as_bytes(),
+                    )
+                    .await
+                    .unwrap();
+            }
+        });
+
+        let mut registry = Registry::from_builtin();
+        registry
+            .refresh_databricks_unity_gateway_from(&format!("http://{address}"), "test-token")
+            .await
+            .unwrap();
+        server.await.unwrap();
+
+        let models = registry
+            .all()
+            .iter()
+            .filter(|model| model.provider == "databricks-unity-gateway")
+            .collect::<Vec<_>>();
+        assert_eq!(models.len(), 3);
+        assert_eq!(
+            registry
+                .resolve("databricks-unity-gateway/system.ai.claude-opus-5", None)
+                .unwrap()
+                .0
+                .api,
+            "anthropic-messages"
+        );
+        assert_eq!(
+            registry
+                .resolve("databricks-unity-gateway/system.ai.gemini-3-pro", None)
+                .unwrap()
+                .0
+                .api,
+            "google-generative-ai"
+        );
+        assert_eq!(
+            registry
+                .resolve("databricks-unity-gateway/system.ai.gpt-6-astra", None)
+                .unwrap()
+                .0
+                .api,
+            "openai-responses"
+        );
+    }
+
+    #[test]
+    fn snowflake_cortex_uses_chat_and_anthropic_routes() {
+        let registry = Registry::from_builtin();
+        assert_eq!(
+            registry
+                .all()
+                .iter()
+                .filter(|model| model.provider == "snowflake-cortex")
+                .count(),
+            34
+        );
+        let (open, _) = registry
+            .resolve("snowflake-cortex/openai-gpt-5", None)
+            .unwrap();
+        assert_eq!(open.api, "openai-completions");
+        assert!(open.base_url.ends_with("/v1"));
+
+        let (claude, _) = registry
+            .resolve("snowflake-cortex/claude-sonnet-4-5", None)
+            .unwrap();
+        assert_eq!(claude.api, "anthropic-messages");
+        assert!(!claude.base_url.ends_with("/v1"));
+        assert_eq!(claude.headers["snow-agent-name"], "kiss");
+        for id in [
+            "claude-opus-5",
+            "claude-fable-5-1",
+            "openai-gpt-6-astra",
+            "deepseek-v4-flash",
+            "snowflake-llama-3.3-70b",
+        ] {
+            assert!(
+                registry
+                    .resolve(&format!("snowflake-cortex/{id}"), None)
+                    .is_some(),
+                "missing Snowflake model {id}"
+            );
+        }
     }
 }

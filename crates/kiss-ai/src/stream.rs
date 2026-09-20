@@ -126,6 +126,24 @@ pub fn stream_simple(model: &Model, context: &Context, options: &StreamOptions) 
 #[cfg(feature = "native")]
 async fn dispatch(model: Model, context: Context, mut options: StreamOptions, sink: EventSink) {
     options.reasoning = model.map_thinking_level(options.reasoning);
+    if model.base_url.contains("{DATABRICKS_HOST}") {
+        let builder = api::PartialBuilder::new(&model, sink);
+        builder.fail(
+            "the selected Databricks model has no workspace URL; set DATABRICKS_HOST to an HTTP or HTTPS workspace root, or run `kiss login databricks-unity-gateway --base-url URL`",
+            false,
+            &model,
+        );
+        return;
+    }
+    if model.base_url.contains("{SNOWFLAKE_CORTEX_BASE_URL}") {
+        let builder = api::PartialBuilder::new(&model, sink);
+        builder.fail(
+            "the selected Snowflake model has no account URL; set SNOWFLAKE_CORTEX_BASE_URL to an HTTP or HTTPS Cortex or AI Gateway root, or run `kiss login snowflake-cortex --base-url URL`",
+            false,
+            &model,
+        );
+        return;
+    }
     match model.api.as_str() {
         "anthropic-messages" => api::anthropic::stream(&model, &context, &options, sink).await,
         "bedrock-converse-stream" => api::bedrock::stream(&model, &context, &options, sink).await,

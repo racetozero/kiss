@@ -671,6 +671,8 @@ impl App {
                     "google-vertex" => "Google API_KEY|PROJECT|LOCATION".into(),
                     "cloudflare-workers-ai" => "Cloudflare API_TOKEN|ACCOUNT_ID".into(),
                     "cloudflare-ai-gateway" => "Cloudflare API_KEY|ACCOUNT_ID|GATEWAY_ID".into(),
+                    "databricks-unity-gateway" => "Databricks TOKEN|WORKSPACE_URL".into(),
+                    "snowflake-cortex" => "Snowflake PAT|ACCOUNT_OR_GATEWAY_URL".into(),
                     _ => format!("Authentication values for {provider}"),
                 },
                 SecretPromptKind::Llama => "llama.cpp router URL, or URL|API_KEY".into(),
@@ -2948,6 +2950,19 @@ fn handle_secret_prompt(
                                     env.insert("CLOUDFLARE_GATEWAY_ID".into(), parts[2].into());
                                     kiss_ai::auth::store_api_key_with_env(&provider, parts[0], env)
                                 }
+                                "databricks-unity-gateway" | "snowflake-cortex"
+                                    if parts.len() == 2 =>
+                                {
+                                    kiss_ai::auth::store_gateway_credential(
+                                        &provider, parts[0], parts[1],
+                                    )
+                                }
+                                "databricks-unity-gateway" => Err(anyhow::anyhow!(
+                                    "Databricks login needs TOKEN|WORKSPACE_URL; enter a non-empty bearer token and an HTTP or HTTPS workspace root"
+                                )),
+                                "snowflake-cortex" => Err(anyhow::anyhow!(
+                                    "Snowflake login needs PAT|ACCOUNT_OR_GATEWAY_URL; enter a non-empty PAT and an HTTP or HTTPS account, Cortex, or AI Gateway URL"
+                                )),
                                 _ => Err(anyhow::anyhow!("invalid value format for {provider}")),
                             };
                             match configured {
@@ -5821,7 +5836,11 @@ fn start_login_method(
             app.secret_prompt = Some(SecretPrompt {
                 kind: if matches!(
                     provider,
-                    "google-vertex" | "cloudflare-workers-ai" | "cloudflare-ai-gateway"
+                    "google-vertex"
+                        | "cloudflare-workers-ai"
+                        | "cloudflare-ai-gateway"
+                        | "databricks-unity-gateway"
+                        | "snowflake-cortex"
                 ) {
                     SecretPromptKind::ProviderConfig(provider.into())
                 } else {
