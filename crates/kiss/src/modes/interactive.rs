@@ -6416,19 +6416,14 @@ fn run_slash_command(
             }
         }
         "bug" => {
-            if rest.is_empty() {
-                app.cells.push(Cell::Notice(
-                    "usage: /bug <description>; describe what failed and what you expected".into(),
-                ));
+            const URL: &str = "https://github.com/racetozero/kiss/issues/new";
+            if crate::auth_flow::open_browser(URL) {
+                app.cells
+                    .push(Cell::Notice("opened the KISS bug report page".into()));
             } else {
-                let manager = session.manager.lock().unwrap();
-                match crate::bug_report::export(&rest, &resources.settings, &session.model(), &manager) {
-                    Ok(path) => app.cells.push(Cell::Notice(format!(
-                        "bug report saved locally to {}; no transcript was included and nothing was uploaded",
-                        path.display()
-                    ))),
-                    Err(error) => app.cells.push(Cell::Error(format!("{error:#}"))),
-                }
+                app.cells.push(Cell::Notice(format!(
+                    "a browser is not available; open a bug report here: {URL}"
+                )));
             }
         }
         "scoped-models" => open_scoped_models_picker(app, session, resources),

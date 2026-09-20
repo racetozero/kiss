@@ -34,7 +34,12 @@ pub fn open_browser(url: &str) -> bool {
     #[cfg(target_os = "macos")]
     let mut command = std::process::Command::new("open");
     #[cfg(target_os = "linux")]
-    let mut command = std::process::Command::new("xdg-open");
+    let mut command = {
+        if std::env::var_os("DISPLAY").is_none() && std::env::var_os("WAYLAND_DISPLAY").is_none() {
+            return false;
+        }
+        std::process::Command::new("xdg-open")
+    };
     #[cfg(target_os = "windows")]
     let mut command = {
         let mut command = std::process::Command::new("cmd");

@@ -1,6 +1,5 @@
 mod args;
 mod auth_flow;
-mod bug_report;
 mod cache;
 mod doctor;
 mod export;

@@ -127,29 +127,11 @@ kiss cache-usage --provider anthropic
 kiss cache-usage --session <session-id-or-jsonl-file>
 ```
 
-KISS keeps valuable Anthropic prompt caches active during long tool runs when
-the expected saving is at least $0.05. The default `streaming` mode stops when
-the agent run stops. Set `cacheWarming` to `off` to disable this cost, or to
-`idle` to keep a cost-effective cache active for up to 30 minutes while you
-decide what to do next.
-
-Use exact `provider/model-id` keys when one model needs different compaction
-headroom:
-
-```json
-{
-  "cacheWarming": "streaming",
-  "compaction": {
-    "modelOverrides": {
-      "anthropic/claude-opus-4-8": {
-        "reserveTokens": 32768,
-        "keepRecentTokens": 24000
-      }
-    }
-  },
-  "retry": { "maxAgentDelayMs": 60000 }
-}
-```
+KISS also protects valuable prompt caches during long-running work when a
+refresh is expected to save money. This is automatic. Set `cacheWarming` to
+`off` to disable refreshes, or to `idle` to protect the cache while you decide
+what to do next. Model-aware context management and bounded retry delays keep
+long sessions responsive without routine tuning.
 
 ## Continue work from another agent
 
@@ -157,9 +139,9 @@ Run `/resume` to continue a KISS, Pi, Claude Code, or OpenAI Codex session.
 The picker starts with sessions from the current working directory. Press
 `Ctrl+G` to switch between project and global results.
 
-If KISS fails, run `/bug <description>`. KISS writes a redacted JSON report to
-`~/.kiss/agent/bug-reports`. It includes version, platform, model, session, and
-settings data. It does not include the transcript and does not upload data.
+If KISS fails, run `/bug` to open the GitHub issue form. In a headless
+environment, KISS prints
+`https://github.com/racetozero/kiss/issues/new` instead.
 
 ## Automate long tasks
 

@@ -6,7 +6,7 @@
 
 - Updated Pi compatibility to v0.86.0 with the current provider catalog,
   offline Radius models, prompt-cache lifetime data and cost-aware warming,
-  per-model compaction budgets, and local redacted `/bug` reports.
+  per-model compaction budgets, and a `/bug` shortcut to the GitHub issue form.
 
 ### Fixed
 

@@ -47,11 +47,7 @@ pub(crate) const PI_CORE_SLASH_COMMANDS: &[SlashCommand] = &[
         None,
     ),
     SlashCommand::new("share", "Share session as a secret GitHub gist", None),
-    SlashCommand::new(
-        "bug",
-        "Export a local redacted bug report",
-        Some("<description>"),
-    ),
+    SlashCommand::new("bug", "Open the KISS bug report page", None),
     SlashCommand::new("copy", "Copy last agent message to clipboard", None),
     SlashCommand::new("name", "Set session display name", None),
     SlashCommand::new("session", "Show session info and stats", None),
@@ -224,11 +220,7 @@ mod tests {
                     None
                 ),
                 ("share", "Share session as a secret GitHub gist", None),
-                (
-                    "bug",
-                    "Export a local redacted bug report",
-                    Some("<description>")
-                ),
+                ("bug", "Open the KISS bug report page", None),
                 ("copy", "Copy last agent message to clipboard", None),
                 ("name", "Set session display name", None),
                 ("session", "Show session info and stats", None),
