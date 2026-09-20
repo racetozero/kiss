@@ -1029,6 +1029,7 @@ pub async fn run(args: &Args) -> Result<i32> {
     };
     Terminal::install_panic_hook();
     let mut terminal = Terminal::new()?;
+    terminal.set_activity(true, 0)?;
     let mut renderer = DiffRenderer::new();
     let mut decoder = InputDecoder::default();
     let provisional_theme = Theme::dark();
@@ -1304,6 +1305,7 @@ pub async fn run(args: &Args) -> Result<i32> {
             || app.command_status.is_some()
             || app.btw_panel.is_some()
             || app.recap_loading;
+        terminal.set_activity(render_is_active, app.spinner_frame)?;
         if dirty
             && !resize_state.pending()
             && (!render_is_active || Instant::now() >= next_render_at)
