@@ -8,7 +8,9 @@ Why? Because I am stupid :)
 
 KISS has 43 built-in providers, including OpenAI Codex, Cursor, Anthropic,
 Google, OpenRouter, Bedrock, Databricks, Snowflake, and GitHub Copilot. You can also add
-OpenAI-compatible providers. KISS is built in Rust and based on
+OpenAI-compatible providers. 
+
+KISS is built in Rust and based on
 [Pi](https://github.com/earendil-works/pi).
 
 ## Why KISS
