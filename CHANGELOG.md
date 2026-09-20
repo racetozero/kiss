@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.0.15 - 2026-09-20
+
+### Added
+
+- Added short, automatically generated session descriptions to terminal tabs
+  while preserving explicit session names.
+
+### Changed
+
+- Polished project wording across user messages, documentation, and release
+  configuration.
+
 ## 0.0.14 - 2026-09-20
 
 ### Added
@@ -7,8 +19,7 @@
 - Added Databricks Unity Gateway, Azure Databricks, and Snowflake Cortex
   providers with bearer-token login, account URLs, and complete model catalogs.
 - Added KISS-branded idle and working terminal-tab titles, plus native terminal
-  progress signals for supported terminal emulators. Tabs now include a short,
-  automatically generated session description while preserving explicit names.
+  progress signals for supported terminal emulators.
 - Updated Pi compatibility to v0.86.0 with the current provider catalog,
   offline Radius models, prompt-cache lifetime data and cost-aware warming,
   per-model compaction budgets, and a `/bug` shortcut to the GitHub issue form.
