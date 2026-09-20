@@ -4,19 +4,18 @@ A native N-API TypeScript SDK for the KISS coding agent. It runs on Node.js,
 Bun, and Deno's Node-compatibility layer.
 
 ```ts
-import { Session } from "@kiss-sdk/node";
+import { Session } from "@kiss-sdk/node"
 
-const session = await Session.create({ tools: ["read", "bash"] });
-const events = session.events();
-session.promptDetached("List the files here");
+const session = await Session.create({ tools: ["read", "bash"] })
+const events = session.events()
+session.promptDetached("List the files here")
 for await (const event of events) {
-  if (event.type === "message_update" &&
-      event.assistantMessageEvent.type === "text_delta") {
-    process.stdout.write(event.assistantMessageEvent.delta ?? "");
+  if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
+    process.stdout.write(event.assistantMessageEvent.delta ?? "")
   }
-  if (event.type === "agent_settled") break;
+  if (event.type === "agent_settled") break
 }
-session.close();
+session.close()
 ```
 
 Bun loads the same package directly. Deno requires permissions for the native

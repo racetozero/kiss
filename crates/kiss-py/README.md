@@ -7,17 +7,19 @@ stable `abi3-py311` ABI, so one wheel works on Python 3.11 and newer.
 import asyncio
 from kiss_sdk import Session
 
+
 async def main() -> None:
-    async with await Session.create(tools=["read", "bash"]) as session:
+    async with await Session.create(tools=['read', 'bash']) as session:
         events = session.events()
-        session.prompt_detached("List the files here")
+        session.prompt_detached('List the files here')
         async for event in events:
-            if event.type == "message_update":
-                update = event["assistantMessageEvent"]
-                if update["type"] == "text_delta":
-                    print(update["delta"], end="", flush=True)
-            if event.type == "agent_settled":
+            if event.type == 'message_update':
+                update = event['assistantMessageEvent']
+                if update['type'] == 'text_delta':
+                    print(update['delta'], end='', flush=True)
+            if event.type == 'agent_settled':
                 break
+
 
 asyncio.run(main())
 ```

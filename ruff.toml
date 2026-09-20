@@ -1,0 +1,14 @@
+[lint]
+# Enable Pyflakes (`F`) and a subset of the pycodestyle (`E`)  codes by default.
+# Unlike Flake8, Ruff doesn't enable pycodestyle warnings (`W`) or
+# McCabe complexity (`C901`) by default.
+ignore = ["E722", "FURB171"]
+
+# 4. Ignore `E402` (import violations) in all `__init__.py` files, and in select subdirectories.
+[lint.per-file-ignores]
+"__init__.py" = ["E402", "F401", "F403"]
+"**/{tests,docs,tools}/*" = ["E402", "F401", "F403"]
+
+[format]
+# 5. Use single quotes for non-triple-quoted strings.
+quote-style = "single"

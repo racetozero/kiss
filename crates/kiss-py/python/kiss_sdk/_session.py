@@ -9,8 +9,9 @@ Rust dispatcher is immediately visible in Python without touching this file.
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator, Iterable
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, Iterable, Self, cast
+from typing import Any, Self, cast
 
 from ._kiss import KissError
 from ._kiss import Session as _NativeSession
@@ -44,14 +45,14 @@ class Event:
     ``docs/rpc.md``.
     """
 
-    __slots__ = ("_data",)
+    __slots__ = ('_data',)
 
     def __init__(self, data: EventData) -> None:
         self._data = data
 
     @property
     def type(self) -> str:
-        return self._data.get("type", "")
+        return self._data.get('type', '')
 
     @property
     def data(self) -> EventData:
@@ -67,7 +68,7 @@ class Event:
         return key in self._data
 
     def __repr__(self) -> str:
-        return f"Event({self._data!r})"
+        return f'Event({self._data!r})'
 
     def __eq__(self, other: object) -> bool:
         if isinstance(other, Event):
@@ -83,7 +84,7 @@ class EventStream:
     missed. Re-read state rather than assume you saw everything.
     """
 
-    __slots__ = ("_native",)
+    __slots__ = ('_native',)
 
     def __init__(self, native: Any) -> None:
         self._native = native
@@ -115,18 +116,18 @@ class SessionState:
     @classmethod
     def _from_json(cls, data: SessionStateData) -> SessionState:
         return cls(
-            model=data.get("model"),
-            thinking_level=ThinkingLevel(data.get("thinkingLevel", ThinkingLevel.OFF)),
-            is_streaming=data.get("isStreaming", False),
-            session_file=data.get("sessionFile"),
-            session_id=data.get("sessionId", ""),
-            session_name=data.get("sessionName"),
-            message_count=data.get("messageCount", 0),
-            tools=list(data.get("tools", [])),
-            steering_mode=QueueMode(data.get("steeringMode", QueueMode.ONE_AT_A_TIME)),
-            follow_up_mode=QueueMode(data.get("followUpMode", QueueMode.ONE_AT_A_TIME)),
-            auto_compaction_enabled=data.get("autoCompactionEnabled", True),
-            auto_retry_enabled=data.get("autoRetryEnabled", True),
+            model=data.get('model'),
+            thinking_level=ThinkingLevel(data.get('thinkingLevel', ThinkingLevel.OFF)),
+            is_streaming=data.get('isStreaming', False),
+            session_file=data.get('sessionFile'),
+            session_id=data.get('sessionId', ''),
+            session_name=data.get('sessionName'),
+            message_count=data.get('messageCount', 0),
+            tools=list(data.get('tools', [])),
+            steering_mode=QueueMode(data.get('steeringMode', QueueMode.ONE_AT_A_TIME)),
+            follow_up_mode=QueueMode(data.get('followUpMode', QueueMode.ONE_AT_A_TIME)),
+            auto_compaction_enabled=data.get('autoCompactionEnabled', True),
+            auto_retry_enabled=data.get('autoRetryEnabled', True),
         )
 
 
@@ -143,18 +144,18 @@ class BashResult:
     @classmethod
     def _from_json(cls, data: BashResultData) -> BashResult:
         return cls(
-            output=data.get("output", ""),
-            exit_code=data.get("exitCode"),
-            cancelled=data.get("cancelled", False),
-            truncated=data.get("truncated", False),
-            full_output_path=data.get("fullOutputPath"),
+            output=data.get('output', ''),
+            exit_code=data.get('exitCode'),
+            cancelled=data.get('cancelled', False),
+            truncated=data.get('truncated', False),
+            full_output_path=data.get('fullOutputPath'),
         )
 
 
 class Session:
     """One embeddable conversation with the agent."""
 
-    __slots__ = ("_native",)
+    __slots__ = ('_native',)
 
     def __init__(self, native: _NativeSession) -> None:
         self._native = native
@@ -176,7 +177,7 @@ class Session:
         no_tools: bool = False,
         system_prompt: str | None = None,
         append_system_prompt: str | None = None,
-        session: SessionSource = "in-memory",
+        session: SessionSource = 'in-memory',
         session_dir: str | None = None,
         session_name: str | None = None,
         trust_project_files: bool = False,
@@ -193,23 +194,23 @@ class Session:
         is how the tests and the offline demo reach a local fake provider.
         """
         options: dict[str, object] = {
-            "cwd": cwd,
-            "model": model,
-            "provider": provider,
-            "api_key": api_key,
-            "models_file": models_file,
-            "thinking_level": thinking_level,
-            "tools": list(tools) if tools is not None else None,
-            "exclude_tools": list(exclude_tools) if exclude_tools is not None else None,
-            "no_tools": no_tools,
-            "system_prompt": system_prompt,
-            "append_system_prompt": append_system_prompt,
-            "session": session,
-            "session_dir": session_dir,
-            "session_name": session_name,
-            "trust_project_files": trust_project_files,
-            "no_context_files": no_context_files,
-            "event_capacity": event_capacity,
+            'cwd': cwd,
+            'model': model,
+            'provider': provider,
+            'api_key': api_key,
+            'models_file': models_file,
+            'thinking_level': thinking_level,
+            'tools': list(tools) if tools is not None else None,
+            'exclude_tools': list(exclude_tools) if exclude_tools is not None else None,
+            'no_tools': no_tools,
+            'system_prompt': system_prompt,
+            'append_system_prompt': append_system_prompt,
+            'session': session,
+            'session_dir': session_dir,
+            'session_name': session_name,
+            'trust_project_files': trust_project_files,
+            'no_context_files': no_context_files,
+            'event_capacity': event_capacity,
         }
         return cls(await _NativeSession.create(options))
 
@@ -225,9 +226,9 @@ class Session:
     async def _require(self, command: CommandData) -> Any:
         """Run a command and raise :class:`KissError` unless it succeeded."""
         response = await self.execute(command)
-        if not response.get("success", False):
-            raise KissError(response.get("error") or f"{command['type']} failed")
-        return response.get("data") or {}
+        if not response.get('success', False):
+            raise KissError(response.get('error') or f'{command["type"]} failed')
+        return response.get('data') or {}
 
     # -- prompting ----------------------------------------------------
 
@@ -279,73 +280,81 @@ class Session:
     # -- state --------------------------------------------------------
 
     async def state(self) -> SessionState:
-        return SessionState._from_json(await self._require({"type": "get_state"}))
+        return SessionState._from_json(await self._require({'type': 'get_state'}))
 
     async def messages(self) -> list[MessageData]:
-        data: dict[str, list[MessageData]] = await self._require({"type": "get_messages"})
-        return list(data["messages"])
+        data: dict[str, list[MessageData]] = await self._require(
+            {'type': 'get_messages'}
+        )
+        return list(data['messages'])
 
     async def entries(self, since: str | None = None) -> EntriesData:
-        return cast(EntriesData, await self._require({"type": "get_entries", "since": since}))
+        return cast(
+            EntriesData, await self._require({'type': 'get_entries', 'since': since})
+        )
 
     async def tree(self) -> TreeData:
-        return cast(TreeData, await self._require({"type": "get_tree"}))
+        return cast(TreeData, await self._require({'type': 'get_tree'}))
 
     async def last_assistant_text(self) -> str | None:
-        return (await self._require({"type": "get_last_assistant_text"}))["text"]
+        return (await self._require({'type': 'get_last_assistant_text'}))['text']
 
     async def session_stats(self) -> SessionStatsData:
-        return cast(SessionStatsData, await self._require({"type": "get_session_stats"}))
+        return cast(
+            SessionStatsData, await self._require({'type': 'get_session_stats'})
+        )
 
     async def set_session_name(self, name: str) -> None:
-        await self._require({"type": "set_session_name", "name": name})
+        await self._require({'type': 'set_session_name', 'name': name})
 
     async def tools(self) -> list[str]:
-        data = await self._require({"type": "get_tools"})
-        return [tool["name"] for tool in data["tools"]]
+        data = await self._require({'type': 'get_tools'})
+        return [tool['name'] for tool in data['tools']]
 
     # -- model --------------------------------------------------------
 
     async def set_model(self, provider: str, model_id: str) -> ModelData:
         return await self._require(
-            {"type": "set_model", "provider": provider, "modelId": model_id}
+            {'type': 'set_model', 'provider': provider, 'modelId': model_id}
         )
 
     async def available_models(self, search: str | None = None) -> list[ModelData]:
         data: dict[str, list[ModelData]] = await self._require(
-            {"type": "get_available_models", "search": search}
+            {'type': 'get_available_models', 'search': search}
         )
-        return list(data["models"])
+        return list(data['models'])
 
     async def set_thinking_level(self, level: ThinkingLevel) -> None:
-        await self._require({"type": "set_thinking_level", "level": level})
+        await self._require({'type': 'set_thinking_level', 'level': level})
 
     async def available_thinking_levels(self) -> list[str]:
-        return list((await self._require({"type": "get_available_thinking_levels"}))["levels"])
+        return list(
+            (await self._require({'type': 'get_available_thinking_levels'}))['levels']
+        )
 
     # -- queues -------------------------------------------------------
 
     async def set_steering_mode(self, mode: QueueMode) -> None:
-        await self._require({"type": "set_steering_mode", "mode": mode})
+        await self._require({'type': 'set_steering_mode', 'mode': mode})
 
     async def set_follow_up_mode(self, mode: QueueMode) -> None:
-        await self._require({"type": "set_follow_up_mode", "mode": mode})
+        await self._require({'type': 'set_follow_up_mode', 'mode': mode})
 
     async def clear_queue(self) -> list[str]:
-        return list((await self._require({"type": "clear_queue"}))["messages"])
+        return list((await self._require({'type': 'clear_queue'}))['messages'])
 
     # -- context management -------------------------------------------
 
     async def compact(self, custom_instructions: str | None = None) -> dict[str, int]:
         return await self._require(
-            {"type": "compact", "customInstructions": custom_instructions}
+            {'type': 'compact', 'customInstructions': custom_instructions}
         )
 
     async def set_auto_compaction(self, enabled: bool) -> None:
-        await self._require({"type": "set_auto_compaction", "enabled": enabled})
+        await self._require({'type': 'set_auto_compaction', 'enabled': enabled})
 
     async def set_auto_retry(self, enabled: bool) -> None:
-        await self._require({"type": "set_auto_retry", "enabled": enabled})
+        await self._require({'type': 'set_auto_retry', 'enabled': enabled})
 
     # -- shell --------------------------------------------------------
 
@@ -354,27 +363,29 @@ class Session:
 
         The output reaches the model with the *next* prompt, not immediately.
         """
-        return BashResult._from_json(await self._require({"type": "bash", "command": command}))
+        return BashResult._from_json(
+            await self._require({'type': 'bash', 'command': command})
+        )
 
     async def abort_bash(self) -> None:
-        await self._require({"type": "abort_bash"})
+        await self._require({'type': 'abort_bash'})
 
     # -- sessions -----------------------------------------------------
 
     async def new_session(self) -> None:
-        await self._require({"type": "new_session"})
+        await self._require({'type': 'new_session'})
 
     async def switch_session(self, session_path: str) -> None:
-        await self._require({"type": "switch_session", "sessionPath": session_path})
+        await self._require({'type': 'switch_session', 'sessionPath': session_path})
 
     async def fork(self, entry_id: str) -> dict[str, Any]:
-        return await self._require({"type": "fork", "entryId": entry_id})
+        return await self._require({'type': 'fork', 'entryId': entry_id})
 
     async def fork_messages(self) -> list[MessageData]:
-        return list((await self._require({"type": "get_fork_messages"}))["messages"])
+        return list((await self._require({'type': 'get_fork_messages'}))['messages'])
 
     async def ping(self) -> bool:
-        return bool((await self._require({"type": "ping"}))["pong"])
+        return bool((await self._require({'type': 'ping'}))['pong'])
 
     # -- lifecycle ----------------------------------------------------
 

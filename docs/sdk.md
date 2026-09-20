@@ -57,19 +57,23 @@ pip install kiss-sdk
 import asyncio
 from kiss_sdk import Event, Session, ToolName
 
+
 async def main() -> None:
     async with await Session.create(tools=[ToolName.READ, ToolName.BASH]) as session:
+
         async def print_events() -> None:
             async for event in session.events():
-                if event.type == "message_update":
-                    update = event["assistantMessageEvent"]
-                    if update["type"] == "text_delta":
-                        print(update["delta"], end="", flush=True)
-                if event.type == "agent_settled":
+                if event.type == 'message_update':
+                    update = event['assistantMessageEvent']
+                    if update['type'] == 'text_delta':
+                        print(update['delta'], end='', flush=True)
+                if event.type == 'agent_settled':
                     return
+
         printer = asyncio.create_task(print_events())
-        await session.prompt("What files are here?")
+        await session.prompt('What files are here?')
         await printer
+
 
 asyncio.run(main())
 ```
@@ -87,19 +91,18 @@ npm install @kiss-sdk/node
 ```
 
 ```ts
-import { Session } from "@kiss-sdk/node";
+import { Session } from "@kiss-sdk/node"
 
-const session = await Session.create({ tools: ["read", "bash"] });
-const events = session.events();
-session.promptDetached("What files are here?");
+const session = await Session.create({ tools: ["read", "bash"] })
+const events = session.events()
+session.promptDetached("What files are here?")
 for await (const event of events) {
-  if (event.type === "message_update" &&
-      event.assistantMessageEvent.type === "text_delta") {
-    process.stdout.write(event.assistantMessageEvent.delta ?? "");
+  if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
+    process.stdout.write(event.assistantMessageEvent.delta ?? "")
   }
-  if (event.type === "agent_settled") break;
+  if (event.type === "agent_settled") break
 }
-session.close();
+session.close()
 ```
 
 The native addon uses N-API rather than V8-specific APIs, so the same package
@@ -122,28 +125,31 @@ wasm-pack build crates/kiss-core-wasm --target web --release
 ```
 
 ```ts
-import init, {
-  KissAgent,
-  createOpenAICompatibleProvider,
-} from "@kiss-sdk/core-wasm";
-await init();
+import init, { KissAgent, createOpenAICompatibleProvider } from "@kiss-sdk/core-wasm"
+await init()
 
 const provider = createOpenAICompatibleProvider({
   url: "https://gateway.example/v1/chat/completions",
   apiKey: shortLivedBrowserToken,
-});
-const agent = KissAgent.create({
-  model: { id: "my-model", provider: "openai", api: "openai-completions" },
-}, provider);
+})
+const agent = KissAgent.create(
+  {
+    model: { id: "my-model", provider: "openai", api: "openai-completions" },
+  },
+  provider,
+)
 
-agent.registerTool({
-  name: "lookup",
-  description: "Look up a value",
-  parameters: { type: "object", properties: { key: { type: "string" } }, required: ["key"] },
-}, async (args, { signal }) => lookup(args, { signal }));
+agent.registerTool(
+  {
+    name: "lookup",
+    description: "Look up a value",
+    parameters: { type: "object", properties: { key: { type: "string" } }, required: ["key"] },
+  },
+  async (args, { signal }) => lookup(args, { signal }),
+)
 
-const result = await agent.prompt("Look up alpha", console.log);
-console.log(result.text);
+const result = await agent.prompt("Look up alpha", console.log)
+console.log(result.text)
 ```
 
 If a model returns tool-call content, the WASM loop validates and executes the
@@ -169,11 +175,11 @@ wasm-pack build crates/kiss-wasm --target web
 ```
 
 ```ts
-import init, { KissClient } from "@kiss-sdk/wasm";
-await init();
-const client = await KissClient.connect("ws://127.0.0.1:9944");
-client.onEvent((event) => console.log(event));
-await client.prompt("What files are here?");
+import init, { KissClient } from "@kiss-sdk/wasm"
+await init()
+const client = await KissClient.connect("ws://127.0.0.1:9944")
+client.onEvent((event) => console.log(event))
+await client.prompt("What files are here?")
 ```
 
 The current RPC WebSocket has no authentication or Origin enforcement. Treat it
@@ -181,21 +187,21 @@ as development-only even on loopback until handshake authentication lands.
 
 ## Consistent operations
 
-| Operation | Rust | Python | TypeScript | RPC `type` |
-|---|---|---|---|---|
-| create | `Session::create` / builder | `Session.create` | `Session.create` | process startup |
-| prompt and wait | `prompt` | `prompt` | `prompt` | `prompt` + wait for event |
-| accept immediately | `prompt_detached` | `prompt_detached` | `promptDetached` | `prompt` |
-| events | `events().recv()` | `async for ... in events()` | `for await ... of events()` | stdout/WebSocket lines |
-| steer | `steer` | `steer` | `steer` | `steer` |
-| follow up | `follow_up` | `follow_up` | `followUp` | `follow_up` |
-| abort / wait | `abort` / `wait_idle` | `abort` / `wait_idle` | `abort` / `waitIdle` | `abort` |
-| state/messages | `state` / `messages` | `state` / `messages` | `state` / `messages` | `get_state` / `get_messages` |
-| model | `set_model` | `set_model` | `setModel` | `set_model` |
-| thinking | `set_thinking_level` | `set_thinking_level` | `setThinkingLevel` | `set_thinking_level` |
-| compact | `compact` | `compact` | `compact` | `compact` |
-| shell | `bash` | `bash` | `bash` | `bash` |
-| all commands | `execute` | `execute` | `execute` | command object |
+| Operation          | Rust                        | Python                      | TypeScript                  | RPC `type`                   |
+| ------------------ | --------------------------- | --------------------------- | --------------------------- | ---------------------------- |
+| create             | `Session::create` / builder | `Session.create`            | `Session.create`            | process startup              |
+| prompt and wait    | `prompt`                    | `prompt`                    | `prompt`                    | `prompt` + wait for event    |
+| accept immediately | `prompt_detached`           | `prompt_detached`           | `promptDetached`            | `prompt`                     |
+| events             | `events().recv()`           | `async for ... in events()` | `for await ... of events()` | stdout/WebSocket lines       |
+| steer              | `steer`                     | `steer`                     | `steer`                     | `steer`                      |
+| follow up          | `follow_up`                 | `follow_up`                 | `followUp`                  | `follow_up`                  |
+| abort / wait       | `abort` / `wait_idle`       | `abort` / `wait_idle`       | `abort` / `waitIdle`        | `abort`                      |
+| state/messages     | `state` / `messages`        | `state` / `messages`        | `state` / `messages`        | `get_state` / `get_messages` |
+| model              | `set_model`                 | `set_model`                 | `setModel`                  | `set_model`                  |
+| thinking           | `set_thinking_level`        | `set_thinking_level`        | `setThinkingLevel`          | `set_thinking_level`         |
+| compact            | `compact`                   | `compact`                   | `compact`                   | `compact`                    |
+| shell              | `bash`                      | `bash`                      | `bash`                      | `bash`                       |
+| all commands       | `execute`                   | `execute`                   | `execute`                   | command object               |
 
 Python uses snake_case and TypeScript uses camelCase by each language's normal
 convention; wire fields are always camelCase.

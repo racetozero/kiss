@@ -1,0 +1,14 @@
+{
+  "singleQuote": false,
+  "jsxSingleQuote": false,
+  "trailingComma": "all",
+  "semi": false,
+  "overrides": [
+    {
+      "files": ["**/*.yaml", "**/*.yml"],
+      "options": {
+        "singleQuote": true
+      }
+    }
+  ]
+}

@@ -1,1 +1,82 @@
-{"cursor-agent":{"auto":{"id":"auto","name":"Auto","api":"cursor-agent","provider":"cursor","baseUrl":"https://agentn.us.api5.cursor.sh","reasoning":true,"input":["text","image"],"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0},"contextWindow":200000,"maxTokens":128000,"thinkingLevelMap":{"minimal":"low"}},"composer-2":{"id":"composer-2","name":"Composer 2","api":"cursor-agent","provider":"cursor","baseUrl":"https://agentn.us.api5.cursor.sh","reasoning":true,"input":["text","image"],"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0},"contextWindow":200000,"maxTokens":128000,"thinkingLevelMap":{"minimal":"low"}},"composer-1.5":{"id":"composer-1.5","name":"Composer 1.5","api":"cursor-agent","provider":"cursor","baseUrl":"https://agentn.us.api5.cursor.sh","reasoning":true,"input":["text","image"],"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0},"contextWindow":200000,"maxTokens":128000,"thinkingLevelMap":{"minimal":"low"}},"claude-sonnet-5":{"id":"claude-sonnet-5","name":"Claude Sonnet 5","api":"cursor-agent","provider":"cursor","baseUrl":"https://agentn.us.api5.cursor.sh","reasoning":true,"input":["text","image"],"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0},"contextWindow":200000,"maxTokens":128000,"thinkingLevelMap":{"minimal":"low"}},"gpt-5.5":{"id":"gpt-5.5","name":"GPT-5.5","api":"cursor-agent","provider":"cursor","baseUrl":"https://agentn.us.api5.cursor.sh","reasoning":true,"input":["text","image"],"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0},"contextWindow":272000,"maxTokens":128000,"thinkingLevelMap":{"minimal":"low"}},"grok-4.5":{"id":"grok-4.5","name":"Grok 4.5","api":"cursor-agent","provider":"cursor","baseUrl":"https://agentn.us.api5.cursor.sh","reasoning":true,"input":["text","image"],"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0},"contextWindow":200000,"maxTokens":128000,"thinkingLevelMap":{"minimal":"low"}}}}
+{
+  "cursor-agent": {
+    "auto": {
+      "id": "auto",
+      "name": "Auto",
+      "api": "cursor-agent",
+      "provider": "cursor",
+      "baseUrl": "https://agentn.us.api5.cursor.sh",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 200000,
+      "maxTokens": 128000,
+      "thinkingLevelMap": { "minimal": "low" }
+    },
+    "composer-2": {
+      "id": "composer-2",
+      "name": "Composer 2",
+      "api": "cursor-agent",
+      "provider": "cursor",
+      "baseUrl": "https://agentn.us.api5.cursor.sh",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 200000,
+      "maxTokens": 128000,
+      "thinkingLevelMap": { "minimal": "low" }
+    },
+    "composer-1.5": {
+      "id": "composer-1.5",
+      "name": "Composer 1.5",
+      "api": "cursor-agent",
+      "provider": "cursor",
+      "baseUrl": "https://agentn.us.api5.cursor.sh",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 200000,
+      "maxTokens": 128000,
+      "thinkingLevelMap": { "minimal": "low" }
+    },
+    "claude-sonnet-5": {
+      "id": "claude-sonnet-5",
+      "name": "Claude Sonnet 5",
+      "api": "cursor-agent",
+      "provider": "cursor",
+      "baseUrl": "https://agentn.us.api5.cursor.sh",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 200000,
+      "maxTokens": 128000,
+      "thinkingLevelMap": { "minimal": "low" }
+    },
+    "gpt-5.5": {
+      "id": "gpt-5.5",
+      "name": "GPT-5.5",
+      "api": "cursor-agent",
+      "provider": "cursor",
+      "baseUrl": "https://agentn.us.api5.cursor.sh",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 272000,
+      "maxTokens": 128000,
+      "thinkingLevelMap": { "minimal": "low" }
+    },
+    "grok-4.5": {
+      "id": "grok-4.5",
+      "name": "Grok 4.5",
+      "api": "cursor-agent",
+      "provider": "cursor",
+      "baseUrl": "https://agentn.us.api5.cursor.sh",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 200000,
+      "maxTokens": 128000,
+      "thinkingLevelMap": { "minimal": "low" }
+    }
+  }
+}

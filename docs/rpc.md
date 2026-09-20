@@ -41,7 +41,12 @@ A successful `prompt` response means accepted, not finished; wait for
 Failures are responses and do not close the connection:
 
 ```json
-{"type":"response","command":"set_model","success":false,"error":"model not found: bad/model"}
+{
+  "type": "response",
+  "command": "set_model",
+  "success": false,
+  "error": "model not found: bad/model"
+}
 ```
 
 Malformed input uses command `parse`.
@@ -117,17 +122,23 @@ live output by `contentIndex`; `message_end.message` is authoritative.
 import json, subprocess
 
 process = subprocess.Popen(
-    ["kiss", "--mode", "rpc", "--no-session"],
-    stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,
+    ['kiss', '--mode', 'rpc', '--no-session'],
+    stdin=subprocess.PIPE,
+    stdout=subprocess.PIPE,
+    text=True,
 )
-process.stdin.write(json.dumps({"id": "1", "type": "prompt", "message": "Hello"}) + "\n")
+process.stdin.write(
+    json.dumps({'id': '1', 'type': 'prompt', 'message': 'Hello'}) + '\n'
+)
 process.stdin.flush()
 for raw_line in process.stdout:
-    value = json.loads(raw_line.removesuffix("\n").removesuffix("\r"))
-    if value.get("type") == "message_update":
-        update = value["assistantMessageEvent"]
-        if update["type"] == "text_delta": print(update["delta"], end="", flush=True)
-    if value.get("type") == "agent_settled": break
+    value = json.loads(raw_line.removesuffix('\n').removesuffix('\r'))
+    if value.get('type') == 'message_update':
+        update = value['assistantMessageEvent']
+        if update['type'] == 'text_delta':
+            print(update['delta'], end='', flush=True)
+    if value.get('type') == 'agent_settled':
+        break
 ```
 
 ## Minimal Go subprocess client

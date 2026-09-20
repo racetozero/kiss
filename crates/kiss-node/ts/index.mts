@@ -1,14 +1,14 @@
 // ESM facade for Deno and ESM Node/Bun applications. The native implementation
 // remains CommonJS because `require()` is the most consistently implemented
 // N-API loading path across all three runtimes.
-import { createRequire } from "node:module";
-import type * as Api from "./index.js";
+import { createRequire } from "node:module"
+import type * as Api from "./index.js"
 
-const require = createRequire(import.meta.url);
-const sdk = require("./index.js") as typeof Api;
+const require = createRequire(import.meta.url)
+const sdk = require("./index.js") as typeof Api
 
-export const Session = sdk.Session;
-export const MockProvider = sdk.MockProvider;
+export const Session = sdk.Session
+export const MockProvider = sdk.MockProvider
 
 export type {
   AgentSettledEvent,
@@ -31,4 +31,4 @@ export type {
   TokenUsage,
   ToolEvent,
   ToolName,
-} from "./index.js";
+} from "./index.js"

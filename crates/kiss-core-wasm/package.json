@@ -2,14 +2,11 @@
   "name": "@kiss-sdk/core-wasm",
   "version": "0.0.13",
   "description": "Full KISS agent kernel running inside browser WebAssembly",
-  "type": "module",
-  "module": "./browser.js",
-  "types": "./browser.d.ts",
-  "exports": {
-    ".": {
-      "types": "./browser.d.ts",
-      "import": "./browser.js"
-    }
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/racetozero/kiss.git",
+    "directory": "crates/kiss-core-wasm"
   },
   "files": [
     "browser.js",
@@ -19,19 +16,24 @@
     "README.md",
     "LICENSE"
   ],
+  "type": "module",
+  "sideEffects": [
+    "./pkg/kiss_core_wasm.js"
+  ],
+  "module": "./browser.js",
+  "types": "./browser.d.ts",
+  "exports": {
+    ".": {
+      "types": "./browser.d.ts",
+      "import": "./browser.js"
+    }
+  },
   "scripts": {
     "build": "wasm-pack build --target web --release",
     "test": "deno test --allow-read --allow-net test/*.ts",
     "test:size": "node test/size.mjs && node test/wasm_memory.mjs"
   },
-  "sideEffects": ["./pkg/kiss_core_wasm.js"],
   "engines": {
     "node": ">=20"
-  },
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/racetozero/kiss.git",
-    "directory": "crates/kiss-core-wasm"
   }
 }

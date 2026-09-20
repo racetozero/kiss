@@ -13,16 +13,16 @@ workspace = true
 default = ["native"]
 # The full in-process agent. Requires a filesystem and a process spawner.
 native = [
-    "dep:kiss-agent",
-    "dep:kiss-ai",
-    "kiss-ai/native",
-    "dep:kiss-coding",
-    "dep:kiss-mcp",
-    "dep:tokio",
-    "dep:tokio-util",
-    "dep:futures",
-    "dep:dirs",
-    "dep:uuid",
+  "dep:kiss-agent",
+  "dep:kiss-ai",
+  "kiss-ai/native",
+  "dep:kiss-coding",
+  "dep:kiss-mcp",
+  "dep:tokio",
+  "dep:tokio-util",
+  "dep:futures",
+  "dep:dirs",
+  "dep:uuid",
 ]
 # The JSONL server (stdin/stdout, TCP, WebSocket).
 rpc = ["native", "dep:tokio-tungstenite"]

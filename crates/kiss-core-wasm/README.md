@@ -14,22 +14,25 @@ import init, {
   KissAgent,
   createOpenAICompatibleProvider,
   type ModelProvider,
-} from "@kiss-sdk/core-wasm";
+} from "@kiss-sdk/core-wasm"
 
-await init();
+await init()
 
 const provider: ModelProvider = async (request, emit, signal) => {
   // Use fetch(), an AI SDK, or a worker here. Translate its response into KISS
   // content blocks. emit() can publish normalized deltas while it streams.
-  const answer = await myModel(request, { signal, onDelta(delta) {
-    emit({ type: "text_delta", contentIndex: 0, delta });
-  }});
+  const answer = await myModel(request, {
+    signal,
+    onDelta(delta) {
+      emit({ type: "text_delta", contentIndex: 0, delta })
+    },
+  })
   return {
     content: [{ type: "text", text: answer.text }],
     usage: answer.usage,
     stopReason: "stop",
-  };
-};
+  }
+}
 
 // A bundled adapter is also available for OpenAI-compatible Chat Completions:
 // const provider = createOpenAICompatibleProvider({
@@ -37,31 +40,37 @@ const provider: ModelProvider = async (request, emit, signal) => {
 //   apiKey: shortLivedBrowserToken,
 // });
 
-const agent = KissAgent.create({
-  model: { id: "my-model", provider: "host", api: "host" },
-  systemPrompt: "Use available tools when useful.",
-}, provider);
-
-agent.registerTool({
-  name: "lookup",
-  description: "Look up a value",
-  parameters: {
-    type: "object",
-    properties: { key: { type: "string" } },
-    required: ["key"],
+const agent = KissAgent.create(
+  {
+    model: { id: "my-model", provider: "host", api: "host" },
+    systemPrompt: "Use available tools when useful.",
   },
-}, async (args, { signal, onUpdate }) => {
-  onUpdate("Looking up the value…");
-  return database.get(args.key, { signal });
-});
+  provider,
+)
+
+agent.registerTool(
+  {
+    name: "lookup",
+    description: "Look up a value",
+    parameters: {
+      type: "object",
+      properties: { key: { type: "string" } },
+      required: ["key"],
+    },
+  },
+  async (args, { signal, onUpdate }) => {
+    onUpdate("Looking up the value…")
+    return database.get(args.key, { signal })
+  },
+)
 
 const result = await agent.prompt("Look up alpha", (event) => {
-  if (event.type === "message_update") console.log(event);
-});
-console.log(result.text);
+  if (event.type === "message_update") console.log(event)
+})
+console.log(result.text)
 
-const checkpoint = agent.checkpoint();
-agent.close();
+const checkpoint = agent.checkpoint()
+agent.close()
 ```
 
 The model provider receives the complete provider-neutral KISS context and tool

@@ -12,16 +12,15 @@ kiss --mode rpc --rpc-listen 127.0.0.1:9944 --no-session
 ```
 
 ```ts
-import init, { KissClient } from "@kiss-sdk/wasm";
-await init();
-const client = await KissClient.connect("ws://127.0.0.1:9944");
+import init, { KissClient } from "@kiss-sdk/wasm"
+await init()
+const client = await KissClient.connect("ws://127.0.0.1:9944")
 client.onEvent((event) => {
-  if (event.type === "message_update" &&
-      event.assistantMessageEvent.type === "text_delta") {
-    console.log(event.assistantMessageEvent.delta);
+  if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
+    console.log(event.assistantMessageEvent.delta)
   }
-});
-await client.prompt("List the files here");
+})
+await client.prompt("List the files here")
 ```
 
 Build with `wasm-pack build --target web --out-dir pkg`. See `demo/index.html`

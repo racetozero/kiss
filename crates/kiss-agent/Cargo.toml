@@ -16,19 +16,19 @@ default = ["native-tools"]
 portable = ["kiss-ai/portable"]
 # Existing native read/write/edit/bash implementations.
 native-tools = [
-    "portable",
-    "kiss-ai/native",
-    "dep:base64",
-    "dep:dirs",
-    "dep:libc",
-    "dep:jsonschema",
-    "dep:similar",
-    "dep:tempfile",
-    "tokio/rt",
-    "tokio/process",
-    "tokio/io-util",
-    "tokio/fs",
-    "tokio/time",
+  "portable",
+  "kiss-ai/native",
+  "dep:base64",
+  "dep:dirs",
+  "dep:libc",
+  "dep:jsonschema",
+  "dep:similar",
+  "dep:tempfile",
+  "tokio/rt",
+  "tokio/process",
+  "tokio/io-util",
+  "tokio/fs",
+  "tokio/time",
 ]
 
 [dependencies]

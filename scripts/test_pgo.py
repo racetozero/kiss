@@ -8,9 +8,9 @@ from argparse import Namespace
 from pathlib import Path
 from unittest.mock import patch
 
-import build_kiss_pgo
 import benchmark_kiss_harness
 import benchmark_kiss_pgo
+import build_kiss_pgo
 from pgo_common import geometric_mean, prepare_fixture
 
 
@@ -18,75 +18,75 @@ class BuildPgoTests(unittest.TestCase):
     def test_native_and_linux_musl_targets_can_run(self) -> None:
         self.assertTrue(
             build_kiss_pgo.target_runs_on_host(
-                "aarch64-apple-darwin", "aarch64-apple-darwin"
+                'aarch64-apple-darwin', 'aarch64-apple-darwin'
             )
         )
         self.assertTrue(
             build_kiss_pgo.target_runs_on_host(
-                "x86_64-unknown-linux-musl", "x86_64-unknown-linux-gnu"
+                'x86_64-unknown-linux-musl', 'x86_64-unknown-linux-gnu'
             )
         )
         self.assertFalse(
             build_kiss_pgo.target_runs_on_host(
-                "aarch64-unknown-linux-gnu", "x86_64-unknown-linux-gnu"
+                'aarch64-unknown-linux-gnu', 'x86_64-unknown-linux-gnu'
             )
         )
 
     def test_hot_count_parser_requires_positive_95th_percentile(self) -> None:
-        summary = "123 functions with count >= 41 account for 95% of the total counts."
+        summary = '123 functions with count >= 41 account for 95% of the total counts.'
         self.assertEqual(build_kiss_pgo.parse_hot_count(summary), 41)
         with self.assertRaises(RuntimeError):
-            build_kiss_pgo.parse_hot_count("no detailed summary")
+            build_kiss_pgo.parse_hot_count('no detailed summary')
         with self.assertRaises(RuntimeError):
             build_kiss_pgo.parse_hot_count(
-                "1 functions with count >= 0 account for 95% of the total counts."
+                '1 functions with count >= 0 account for 95% of the total counts.'
             )
 
     def test_optimized_flags_keep_existing_linker_flags(self) -> None:
-        profile = Path("profiles") / "kiss.profdata"
-        flags = build_kiss_pgo.optimized_rustflags(
-            "-C linker=rust-lld", profile, 27
-        )
-        self.assertIn("-C linker=rust-lld", flags)
-        self.assertIn(f"-Cprofile-use={profile}", flags)
-        self.assertIn("--profile-summary-hot-count=27", flags)
+        profile = Path('profiles') / 'kiss.profdata'
+        flags = build_kiss_pgo.optimized_rustflags('-C linker=rust-lld', profile, 27)
+        self.assertIn('-C linker=rust-lld', flags)
+        self.assertIn(f'-Cprofile-use={profile}', flags)
+        self.assertIn('--profile-summary-hot-count=27', flags)
 
     def test_github_environment_is_appended(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            path = Path(temporary) / "github-env"
-            path.write_text("EXISTING=1\n", encoding="utf-8")
-            build_kiss_pgo.write_github_environment(path, "-Cprofile-use=profile")
+            path = Path(temporary) / 'github-env'
+            path.write_text('EXISTING=1\n', encoding='utf-8')
+            build_kiss_pgo.write_github_environment(path, '-Cprofile-use=profile')
             self.assertEqual(
-                path.read_text(encoding="utf-8"),
-                "EXISTING=1\nRUSTFLAGS=-Cprofile-use=profile\n",
+                path.read_text(encoding='utf-8'),
+                'EXISTING=1\nRUSTFLAGS=-Cprofile-use=profile\n',
             )
 
 
 class BenchmarkTests(unittest.TestCase):
     def test_linux_pss_parser_reads_smaps_rollup(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            smaps = Path(temporary) / "smaps_rollup"
-            smaps.write_text("Rss: 42 kB\nPss: 17 kB\n", encoding="utf-8")
-            with patch.object(benchmark_kiss_harness, "Path", return_value=smaps):
+            smaps = Path(temporary) / 'smaps_rollup'
+            smaps.write_text('Rss: 42 kB\nPss: 17 kB\n', encoding='utf-8')
+            with patch.object(benchmark_kiss_harness, 'Path', return_value=smaps):
                 self.assertEqual(benchmark_kiss_harness.linux_pss_kib(123), 17)
 
     def test_fixture_does_not_forward_credentials(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            with patch.dict(
-                "os.environ",
+        with (
+            tempfile.TemporaryDirectory() as temporary,
+            patch.dict(
+                'os.environ',
                 {
-                    "OPENAI_API_KEY": "private",
-                    "GH_TOKEN": "private",
-                    "PATH": "/usr/bin",
+                    'OPENAI_API_KEY': 'private',
+                    'GH_TOKEN': 'private',
+                    'PATH': '/usr/bin',
                 },
                 clear=True,
-            ):
-                _, environment = prepare_fixture(
-                    Path(temporary), "http://127.0.0.1:1234/v1"
-                )
-        self.assertNotIn("OPENAI_API_KEY", environment)
-        self.assertNotIn("GH_TOKEN", environment)
-        self.assertEqual(environment["PATH"], "/usr/bin")
+            ),
+        ):
+            _, environment = prepare_fixture(
+                Path(temporary), 'http://127.0.0.1:1234/v1'
+            )
+        self.assertNotIn('OPENAI_API_KEY', environment)
+        self.assertNotIn('GH_TOKEN', environment)
+        self.assertEqual(environment['PATH'], '/usr/bin')
 
     def test_summary_and_change(self) -> None:
         summary = benchmark_kiss_pgo.summarize([1, 2, 3, 4, 5])
@@ -96,8 +96,8 @@ class BenchmarkTests(unittest.TestCase):
 
     def test_target_directory_resolves_matched_binaries(self) -> None:
         arguments = Namespace(
-            target_dir=Path("target/pgo"),
-            target="x86_64-pc-windows-msvc",
+            target_dir=Path('target/pgo'),
+            target='x86_64-pc-windows-msvc',
             baseline=None,
             pgo=None,
         )
@@ -106,11 +106,11 @@ class BenchmarkTests(unittest.TestCase):
         target = arguments.target
         self.assertEqual(
             baseline,
-            root / "baseline" / target / "dist" / "kiss.exe",
+            root / 'baseline' / target / 'dist' / 'kiss.exe',
         )
         self.assertEqual(
             pgo,
-            root / "optimized" / target / "dist" / "kiss.exe",
+            root / 'optimized' / target / 'dist' / 'kiss.exe',
         )
 
     def test_geometric_mean(self) -> None:
@@ -119,5 +119,5 @@ class BenchmarkTests(unittest.TestCase):
             geometric_mean([])
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     unittest.main()

@@ -3,38 +3,38 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Any, NotRequired, Required, TypedDict
+from typing import Any, Required, TypedDict
 
 
 class ThinkingLevel(StrEnum):
-    OFF = "off"
-    MINIMAL = "minimal"
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    XHIGH = "xhigh"
-    MAX = "max"
+    OFF = 'off'
+    MINIMAL = 'minimal'
+    LOW = 'low'
+    MEDIUM = 'medium'
+    HIGH = 'high'
+    XHIGH = 'xhigh'
+    MAX = 'max'
 
 
 class StreamingBehavior(StrEnum):
-    STEER = "steer"
-    FOLLOW_UP = "followUp"
+    STEER = 'steer'
+    FOLLOW_UP = 'followUp'
 
 
 class ToolName(StrEnum):
-    READ = "read"
-    WRITE = "write"
-    EDIT = "edit"
-    BASH = "bash"
-    GREP = "grep"
-    FIND = "find"
-    LS = "ls"
-    MCP = "mcp"
+    READ = 'read'
+    WRITE = 'write'
+    EDIT = 'edit'
+    BASH = 'bash'
+    GREP = 'grep'
+    FIND = 'find'
+    LS = 'ls'
+    MCP = 'mcp'
 
 
 class QueueMode(StrEnum):
-    ALL = "all"
-    ONE_AT_A_TIME = "one-at-a-time"
+    ALL = 'all'
+    ONE_AT_A_TIME = 'one-at-a-time'
 
 
 class ImageInput(TypedDict):

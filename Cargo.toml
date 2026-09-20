@@ -1,28 +1,23 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/kiss-bench",
-    "crates/kiss-ai",
-    "crates/kiss-workflow",
-    "crates/kiss-agent",
-    "crates/kiss-coding",
-    "crates/kiss-mcp",
-    "crates/kiss-sdk",
-    "crates/kiss-tui",
-    "crates/kiss-webmcp",
-    "crates/kiss",
+  "crates/kiss-bench",
+  "crates/kiss-ai",
+  "crates/kiss-workflow",
+  "crates/kiss-agent",
+  "crates/kiss-coding",
+  "crates/kiss-mcp",
+  "crates/kiss-sdk",
+  "crates/kiss-tui",
+  "crates/kiss-webmcp",
+  "crates/kiss",
 ]
 
 # Language-binding crates are deliberately outside the workspace. Building a
 # PyO3 test harness links libpython, napi needs a Node toolchain, and web-sys
 # is only meaningful on a wasm32 target; none of those belong in the plain
 # `cargo test --workspace` this repository's CI runs.
-exclude = [
-    "crates/kiss-py",
-    "crates/kiss-node",
-    "crates/kiss-wasm",
-    "crates/kiss-core-wasm",
-]
+exclude = ["crates/kiss-py", "crates/kiss-node", "crates/kiss-wasm", "crates/kiss-core-wasm"]
 
 [workspace.package]
 version = "0.0.13"
@@ -49,7 +44,9 @@ anyhow = "1"
 agent-client-protocol = "2.1.0"
 async-trait = "0.1"
 azure_core = { version = "0.21", default-features = false, features = ["enable_reqwest_rustls"] }
-azure_identity = { version = "0.21", default-features = false, features = ["enable_reqwest_rustls"] }
+azure_identity = { version = "0.21", default-features = false, features = [
+  "enable_reqwest_rustls",
+] }
 aws-config = { version = "1.10", features = ["behavior-version-latest"] }
 aws-sdk-bedrockruntime = { version = "1.139", features = ["behavior-version-latest"] }
 aws-smithy-types = "1.6"
@@ -84,9 +81,27 @@ prost = "0.14"
 prost-types = "0.14"
 rand = "0.9"
 regex = "1"
-reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "charset", "http2", "rustls-tls-native-roots-no-provider", "system-proxy"] }
-reqwest-mcp = { package = "reqwest", version = "0.13.2", default-features = false, features = ["json", "stream", "rustls-no-provider", "system-proxy"] }
-rmcp = { version = "3.1.4", default-features = false, features = ["client", "auth", "transport-child-process", "transport-streamable-http-client-reqwest", "reqwest-tls-no-provider"] }
+reqwest = { version = "0.12", default-features = false, features = [
+  "json",
+  "stream",
+  "charset",
+  "http2",
+  "rustls-tls-native-roots-no-provider",
+  "system-proxy",
+] }
+reqwest-mcp = { package = "reqwest", version = "0.13.2", default-features = false, features = [
+  "json",
+  "stream",
+  "rustls-no-provider",
+  "system-proxy",
+] }
+rmcp = { version = "3.1.4", default-features = false, features = [
+  "client",
+  "auth",
+  "transport-child-process",
+  "transport-streamable-http-client-reqwest",
+  "reqwest-tls-no-provider",
+] }
 rpassword = "7"
 rustls = { version = "0.23", default-features = false, features = ["aws_lc_rs"] }
 semver = { version = "1", features = ["serde"] }
@@ -99,7 +114,18 @@ similar = "2"
 syntect = { version = "5", default-features = false }
 tempfile = "3"
 thiserror = "2"
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "io-util", "io-std", "sync", "time", "signal", "fs", "net"] }
+tokio = { version = "1", features = [
+  "rt-multi-thread",
+  "macros",
+  "process",
+  "io-util",
+  "io-std",
+  "sync",
+  "time",
+  "signal",
+  "fs",
+  "net",
+] }
 tokio-stream = "0.1"
 tokio-tungstenite = { version = "0.30", features = ["rustls-tls-native-roots"] }
 tokio-util = "0.7"

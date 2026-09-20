@@ -1,6 +1,10 @@
 default:
     @just --list
 
+# Format all tracked files through prek.
+fmt:
+    @prek run --all-files
+
 # Test the Rust SDK, shared protocol, mock provider, and RPC transport.
 sdk-test:
     @cargo test -p kiss-sdk --features "mock rpc"
