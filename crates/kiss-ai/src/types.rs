@@ -77,6 +77,8 @@ pub struct Usage {
     pub output: u64,
     pub cache_read: u64,
     pub cache_write: u64,
+    #[serde(default)]
+    pub cache_write_1h: u64,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub cache_read_available: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -91,6 +93,7 @@ impl Usage {
         self.output += other.output;
         self.cache_read += other.cache_read;
         self.cache_write += other.cache_write;
+        self.cache_write_1h += other.cache_write_1h;
         self.cache_read_available |= other.cache_read_available;
         if let Some(r) = other.reasoning {
             *self.reasoning.get_or_insert(0) += r;

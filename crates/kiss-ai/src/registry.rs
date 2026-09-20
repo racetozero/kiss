@@ -1,14 +1,14 @@
 //! Model catalog: built-in entries plus a `~/.kiss/agent/models.json`
 //! overlay for custom providers (Ollama, vLLM, proxies, ...).
 
-use crate::model::{Model, ModelCost, OpenAICompat};
+use crate::model::{Model, ModelCost, OpenAICompat, PromptCache};
 use crate::types::ThinkingLevel;
 use anyhow::{Context as _, Result};
 use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
-/// Generated model data verified against `@earendil-works/pi-ai` 0.85.1.
+/// Generated model data verified against `@earendil-works/pi-ai` 0.86.0.
 const BUILTIN_PROVIDER_CATALOGS: &[&str] = &[
     include_str!("../data/providers/amazon-bedrock.json"),
     include_str!("../data/providers/ant-ling.json"),
@@ -41,6 +41,7 @@ const BUILTIN_PROVIDER_CATALOGS: &[&str] = &[
     include_str!("../data/providers/qwen-token-plan-cn.json"),
     include_str!("../data/providers/qwen-token-plan-individual.json"),
     include_str!("../data/providers/qwen-token-plan.json"),
+    include_str!("../data/providers/radius.json"),
     include_str!("../data/providers/together.json"),
     include_str!("../data/providers/vercel-ai-gateway.json"),
     include_str!("../data/providers/xai.json"),
@@ -138,6 +139,8 @@ struct CatalogModel {
     max_tokens: Option<u64>,
     #[serde(default)]
     cost: Option<ModelCost>,
+    #[serde(default)]
+    prompt_cache: Option<PromptCache>,
     #[serde(default)]
     compat: Option<OpenAICompat>,
     #[serde(default)]
@@ -286,6 +289,7 @@ impl Registry {
                 reasoning: model.reasoning,
                 input: model.input,
                 cost: model.cost,
+                prompt_cache: None,
                 context_window: model.context_window,
                 max_tokens: model.max_tokens,
                 compat: None,
@@ -312,6 +316,12 @@ impl Registry {
                 if model.api == "mistral-conversations" {
                     model.api = "openai-completions".into();
                     model.base_url = "https://api.mistral.ai/v1".into();
+                    if model.id.starts_with("mistral-medium-") || model.id == "zai-glm-5-2" {
+                        model
+                            .compat
+                            .get_or_insert_default()
+                            .supports_reasoning_effort = Some(true);
+                    }
                 }
                 expand_environment_placeholders(&model.provider, &mut model.base_url);
                 self.upsert(model);
@@ -367,6 +377,7 @@ impl Registry {
                     reasoning: m.reasoning.unwrap_or(false),
                     input: m.input.unwrap_or_else(|| vec!["text".into()]),
                     cost: m.cost.unwrap_or_default(),
+                    prompt_cache: m.prompt_cache,
                     context_window: m.context_window.unwrap_or(128_000),
                     max_tokens: m.max_tokens.unwrap_or(16_384),
                     compat: match (provider.compat.clone(), m.compat) {
@@ -550,9 +561,7 @@ mod tests {
             .map(|model| model.provider.as_str())
             .collect();
         for provider in BUILTIN_PROVIDER_IDS {
-            if *provider != "radius" {
-                assert!(providers.contains(provider), "missing provider {provider}");
-            }
+            assert!(providers.contains(provider), "missing provider {provider}");
         }
         let unsupported: std::collections::BTreeSet<_> = r
             .all()
@@ -578,7 +587,7 @@ mod tests {
     }
 
     #[test]
-    fn pi_0851_catalog_changes_are_present() {
+    fn pi_0860_catalog_changes_are_present() {
         let registry = Registry::from_builtin();
         for provider in ["openai", "openai-codex"] {
             let (model, _) = registry
@@ -625,14 +634,21 @@ mod tests {
             managed.map_thinking_level(ThinkingLevel::Off),
             ThinkingLevel::Minimal
         );
+
+        let (cached, _) = registry
+            .resolve("anthropic/claude-opus-4-8", None)
+            .expect("Anthropic Claude Opus 4.8");
+        assert_eq!(cached.prompt_cache.and_then(|cache| cache.short), Some(300));
+        assert!(registry.resolve("radius/balanced", None).is_some());
+        assert!(registry.resolve("openai-codex/gpt-5.4", None).is_none());
     }
 
     #[test]
-    fn deepseek_v4_flash_vision_is_in_the_catalog() {
+    fn deepseek_flash_is_in_the_catalog() {
         let registry = Registry::from_builtin();
         let (model, _) = registry
-            .resolve("deepseek/deepseek-v4-flash-vision-exp", None)
-            .expect("DeepSeek vision model");
+            .resolve("deepseek/deepseek-flash", None)
+            .expect("DeepSeek Flash model");
         assert!(model.supports_images());
         assert_eq!(
             model.map_thinking_level(ThinkingLevel::Medium),

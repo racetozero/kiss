@@ -103,7 +103,7 @@ current task, or `Alt+Enter` to queue the instruction for later.
 
 Useful commands include `/login`, `/model`, `/mcp`, `/compact`, `/resume`,
 `/loop`, `/autoresearch`, `/jobs`, `/provider`, `/export`, `/cache-usage`,
-`/fast`, `/update`, `/settings`, and `/hotkeys`.
+`/bug`, `/fast`, `/update`, `/settings`, and `/hotkeys`.
 
 Use `/fast` to toggle the low-latency tier for a supported provider. This
 setting applies only to the current session, and provider costs can increase.
@@ -127,11 +127,39 @@ kiss cache-usage --provider anthropic
 kiss cache-usage --session <session-id-or-jsonl-file>
 ```
 
+KISS keeps valuable Anthropic prompt caches active during long tool runs when
+the expected saving is at least $0.05. The default `streaming` mode stops when
+the agent run stops. Set `cacheWarming` to `off` to disable this cost, or to
+`idle` to keep a cost-effective cache active for up to 30 minutes while you
+decide what to do next.
+
+Use exact `provider/model-id` keys when one model needs different compaction
+headroom:
+
+```json
+{
+  "cacheWarming": "streaming",
+  "compaction": {
+    "modelOverrides": {
+      "anthropic/claude-opus-4-8": {
+        "reserveTokens": 32768,
+        "keepRecentTokens": 24000
+      }
+    }
+  },
+  "retry": { "maxAgentDelayMs": 60000 }
+}
+```
+
 ## Continue work from another agent
 
 Run `/resume` to continue a KISS, Pi, Claude Code, or OpenAI Codex session.
 The picker starts with sessions from the current working directory. Press
 `Ctrl+G` to switch between project and global results.
+
+If KISS fails, run `/bug <description>`. KISS writes a redacted JSON report to
+`~/.kiss/agent/bug-reports`. It includes version, platform, model, session, and
+settings data. It does not include the transcript and does not upload data.
 
 ## Automate long tasks
 
@@ -436,14 +464,14 @@ session.prompt("What files are here?").await?;
 async with await kiss_sdk.Session.create(tools=[kiss_sdk.ToolName.READ]) as session:
     await session.prompt("What files are here?")
     stats = await session.session_stats()
-    print(stats["tokens"]["cacheRead"], stats["tokens"]["cacheWrite"])
+    print(stats["tokens"]["cacheRead"], stats["tokens"]["cacheWrite"], stats["tokens"]["cacheWrite1h"])
 ```
 
 ```typescript
 const session = await Session.create({ tools: ["read", "bash"] });
 await session.prompt("What files are here?");
 const stats = await session.sessionStats();
-console.log(stats.tokens.cacheRead, stats.tokens.cacheWrite);
+console.log(stats.tokens.cacheRead, stats.tokens.cacheWrite, stats.tokens.cacheWrite1h);
 ```
 
 `@kiss-sdk/core-wasm` runs the full agent and model/tool loop in a browser. It
@@ -452,8 +480,8 @@ applications that need native filesystem and shell tools.
 
 Use cached-token totals in product analytics, cost dashboards, or alerts.
 Python, Node, and RPC WASM return cumulative totals through session statistics.
-Core WASM returns `cacheRead`, `cacheWrite`, and `cacheReadAvailable` in
-`PromptResult.usage`.
+Core WASM returns `cacheRead`, `cacheWrite`, `cacheWrite1h`, and
+`cacheReadAvailable` in `PromptResult.usage`.
 
 ### JSONL RPC
 

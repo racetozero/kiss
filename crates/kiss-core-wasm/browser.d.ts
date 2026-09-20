@@ -11,6 +11,7 @@ export interface Model {
   input?: string[];
   contextWindow?: number;
   maxTokens?: number;
+  promptCache?: { short?: number; long?: number };
   headers?: Record<string, string>;
 }
 
@@ -37,6 +38,7 @@ export interface Usage {
   output: number;
   cacheRead: number;
   cacheWrite: number;
+  cacheWrite1h?: number;
   cacheReadAvailable?: boolean;
   reasoning?: number;
   totalTokens: number;

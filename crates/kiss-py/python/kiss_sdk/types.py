@@ -43,6 +43,11 @@ class ImageInput(TypedDict):
     mimeType: Required[str]
 
 
+class PromptCacheData(TypedDict, total=False):
+    short: int
+    long: int
+
+
 class ModelData(TypedDict, total=False):
     id: Required[str]
     name: Required[str]
@@ -54,6 +59,7 @@ class ModelData(TypedDict, total=False):
     contextWindow: Required[int]
     maxTokens: Required[int]
     cost: Required[dict[str, float]]
+    promptCache: PromptCacheData
 
 
 class MessageData(TypedDict, total=False):
@@ -162,6 +168,7 @@ class TokenUsageData(TypedDict):
     output: int
     cacheRead: int
     cacheWrite: int
+    cacheWrite1h: int
     cacheReadAvailable: bool
     total: int
 

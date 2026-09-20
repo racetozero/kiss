@@ -151,6 +151,12 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
                         positive(usage.cache_read_input_tokens().unwrap_or_default());
                     builder.message.usage.cache_write =
                         positive(usage.cache_write_input_tokens().unwrap_or_default());
+                    builder.message.usage.cache_write_1h = usage
+                        .cache_details()
+                        .iter()
+                        .filter(|detail| detail.ttl().as_str() == "1h")
+                        .map(|detail| positive(detail.input_tokens()))
+                        .sum();
                 }
             }
             _ => {}
@@ -526,6 +532,7 @@ mod tests {
             reasoning: true,
             input: vec!["text".into()],
             cost: Default::default(),
+            prompt_cache: None,
             context_window: 1000,
             max_tokens: 100,
             compat: None,

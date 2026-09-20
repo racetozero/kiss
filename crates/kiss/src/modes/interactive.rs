@@ -6415,6 +6415,22 @@ fn run_slash_command(
                 ))),
             }
         }
+        "bug" => {
+            if rest.is_empty() {
+                app.cells.push(Cell::Notice(
+                    "usage: /bug <description>; describe what failed and what you expected".into(),
+                ));
+            } else {
+                let manager = session.manager.lock().unwrap();
+                match crate::bug_report::export(&rest, &resources.settings, &session.model(), &manager) {
+                    Ok(path) => app.cells.push(Cell::Notice(format!(
+                        "bug report saved locally to {}; no transcript was included and nothing was uploaded",
+                        path.display()
+                    ))),
+                    Err(error) => app.cells.push(Cell::Error(format!("{error:#}"))),
+                }
+            }
+        }
         "scoped-models" => open_scoped_models_picker(app, session, resources),
         "settings" => open_settings_picker(app, session, resources),
         "mcp" => open_mcp_picker(app, session, args, command_tx),

@@ -297,6 +297,7 @@ mod tests {
             reasoning: false,
             input: vec!["text".into()],
             cost: Default::default(),
+            prompt_cache: None,
             context_window: 1000,
             max_tokens: 100,
             compat: None,

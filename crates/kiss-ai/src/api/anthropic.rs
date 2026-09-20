@@ -97,7 +97,7 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
     for (k, v) in &model.headers {
         request = request.header(k, v);
     }
-    request = apply_provider_headers(request, model, context);
+    request = apply_provider_headers(request, model, context, options);
 
     let response = tokio::select! {
         r = request.send() => r,
@@ -205,6 +205,10 @@ fn handle_event(event: &SseEvent, builder: &mut PartialBuilder, state: &mut Deco
                 usage["cache_read_input_tokens"].as_u64().unwrap_or(0);
             builder.message.usage.cache_write =
                 usage["cache_creation_input_tokens"].as_u64().unwrap_or(0);
+            builder.message.usage.cache_write_1h =
+                usage["cache_creation"]["ephemeral_1h_input_tokens"]
+                    .as_u64()
+                    .unwrap_or(0);
             builder.message.usage.cache_read_available = usage
                 .get("cache_read_input_tokens")
                 .or_else(|| usage.get("cache_creation_input_tokens"))
@@ -325,6 +329,11 @@ fn handle_event(event: &SseEvent, builder: &mut PartialBuilder, state: &mut Deco
             if let Some(cache_write) = data["usage"]["cache_creation_input_tokens"].as_u64() {
                 builder.message.usage.cache_write = cache_write;
                 builder.message.usage.cache_read_available = true;
+            }
+            if let Some(cache_write_1h) =
+                data["usage"]["cache_creation"]["ephemeral_1h_input_tokens"].as_u64()
+            {
+                builder.message.usage.cache_write_1h = cache_write_1h;
             }
             Flow::Continue
         }
@@ -486,6 +495,11 @@ fn build_request(model: &Model, context: &Context, options: &StreamOptions) -> V
                                 }
                             } else if let Some(sig) = thinking_signature {
                                 content.push(json!({"type": "thinking", "thinking": thinking, "signature": sig}));
+                            } else if compat
+                                .and_then(|compat| compat.allow_empty_signature)
+                                .unwrap_or(false)
+                            {
+                                content.push(json!({"type": "thinking", "thinking": thinking, "signature": ""}));
                             }
                         }
                         ContentBlock::ToolCall(tc) => {
@@ -586,6 +600,7 @@ mod tests {
             reasoning: true,
             input: vec!["text".into()],
             cost: Default::default(),
+            prompt_cache: None,
             context_window: 1_000_000,
             max_tokens: 128_000,
             compat: Some(compat),
@@ -609,7 +624,8 @@ mod tests {
                         "usage": {
                             "input_tokens": 10,
                             "cache_read_input_tokens": 20,
-                            "cache_creation_input_tokens": 30
+                            "cache_creation_input_tokens": 30,
+                            "cache_creation": {"ephemeral_1h_input_tokens": 12}
                         }
                     }
                 })
@@ -626,6 +642,7 @@ mod tests {
                         "input_tokens": 12,
                         "cache_read_input_tokens": 40,
                         "cache_creation_input_tokens": 5,
+                        "cache_creation": {"ephemeral_1h_input_tokens": 2},
                         "output_tokens": 7
                     }
                 })
@@ -638,8 +655,32 @@ mod tests {
         assert_eq!(builder.message.usage.input, 12);
         assert_eq!(builder.message.usage.cache_read, 40);
         assert_eq!(builder.message.usage.cache_write, 5);
+        assert_eq!(builder.message.usage.cache_write_1h, 2);
         assert_eq!(builder.message.usage.output, 7);
         assert!(builder.message.usage.cache_read_available);
+    }
+
+    #[test]
+    fn empty_signature_compat_replays_unsigned_thinking() {
+        let model = model(OpenAICompat {
+            allow_empty_signature: Some(true),
+            ..Default::default()
+        });
+        let mut previous = AssistantMessage::empty("anthropic-messages", "relay", "model");
+        previous.content.push(ContentBlock::Thinking {
+            thinking: "reasoning".into(),
+            thinking_signature: None,
+            redacted: false,
+        });
+        let body = build_request(
+            &model,
+            &Context {
+                messages: vec![Message::Assistant(previous)],
+                ..Default::default()
+            },
+            &StreamOptions::default(),
+        );
+        assert_eq!(body["messages"][0]["content"][0]["signature"], "");
     }
 
     #[test]

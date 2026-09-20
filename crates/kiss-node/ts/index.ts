@@ -15,6 +15,7 @@ export interface Model {
   id: string; name: string; api: string; provider: string; baseUrl: string;
   reasoning: boolean; input: string[]; contextWindow: number; maxTokens: number;
   cost: { input: number; output: number; cacheRead: number; cacheWrite: number };
+  promptCache?: { short?: number; long?: number };
 }
 export interface SessionOptions {
   cwd?: string; model?: string; provider?: string; apiKey?: string;
@@ -36,7 +37,7 @@ export interface BashResult {
 }
 export interface TokenUsage {
   input: number; output: number; cacheRead: number; cacheWrite: number;
-  cacheReadAvailable: boolean; total: number;
+  cacheWrite1h: number; cacheReadAvailable: boolean; total: number;
 }
 export interface SessionStats {
   sessionFile: string | null; sessionId: string; userMessages: number;

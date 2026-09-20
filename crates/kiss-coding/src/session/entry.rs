@@ -64,6 +64,19 @@ pub enum SessionEntry {
         extra: Map<String, Value>,
     },
     #[serde(rename_all = "camelCase")]
+    Usage {
+        #[serde(flatten)]
+        base: EntryBase,
+        kind: String,
+        provider: String,
+        model: String,
+        usage: Usage,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        note: Option<String>,
+        #[serde(flatten)]
+        extra: Map<String, Value>,
+    },
+    #[serde(rename_all = "camelCase")]
     Compaction {
         #[serde(flatten)]
         base: EntryBase,
@@ -145,6 +158,7 @@ impl SessionEntry {
             SessionEntry::Message { base, .. }
             | SessionEntry::ModelChange { base, .. }
             | SessionEntry::ThinkingLevelChange { base, .. }
+            | SessionEntry::Usage { base, .. }
             | SessionEntry::Compaction { base, .. }
             | SessionEntry::BranchSummary { base, .. }
             | SessionEntry::Custom { base, .. }

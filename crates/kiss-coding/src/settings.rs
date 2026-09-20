@@ -4,6 +4,7 @@
 use kiss_ai::Transport;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -21,6 +22,14 @@ pub struct CompactionSettings {
     pub mode: CompactionMode,
     pub reserve_tokens: u64,
     pub keep_recent_tokens: u64,
+    pub model_overrides: BTreeMap<String, CompactionModelOverride>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct CompactionModelOverride {
+    pub reserve_tokens: Option<u64>,
+    pub keep_recent_tokens: Option<u64>,
 }
 
 impl Default for CompactionSettings {
@@ -30,6 +39,7 @@ impl Default for CompactionSettings {
             mode: CompactionMode::Summary,
             reserve_tokens: 16_384,
             keep_recent_tokens: 20_000,
+            model_overrides: BTreeMap::new(),
         }
     }
 }
@@ -40,6 +50,7 @@ pub struct RetrySettings {
     pub enabled: bool,
     pub max_retries: u32,
     pub base_delay_ms: u64,
+    pub max_agent_delay_ms: u64,
 }
 
 impl Default for RetrySettings {
@@ -48,6 +59,7 @@ impl Default for RetrySettings {
             enabled: true,
             max_retries: 3,
             base_delay_ms: 2000,
+            max_agent_delay_ms: 60_000,
         }
     }
 }
@@ -139,6 +151,15 @@ pub enum ProjectTrustDefault {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
+pub enum CacheWarmingMode {
+    Off,
+    #[default]
+    Streaming,
+    Idle,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
 pub enum MermaidRendering {
     Off,
     Final,
@@ -184,6 +205,7 @@ pub struct Settings {
     pub default_project_trust: ProjectTrustDefault,
     pub compaction: CompactionSettings,
     pub retry: RetrySettings,
+    pub cache_warming: CacheWarmingMode,
     pub subagents: SubagentSettings,
     pub workflows: WorkflowSettings,
     pub steering_mode: QueueMode,
@@ -245,6 +267,11 @@ fn merged_settings(mut global: Value, project: Option<Value>) -> Settings {
         .pointer("/workflows/enabled")
         .and_then(Value::as_bool)
         .unwrap_or(true);
+    let cache_warming = global
+        .get("cacheWarming")
+        .cloned()
+        .and_then(|value| serde_json::from_value(value).ok())
+        .unwrap_or_default();
     if let Some(project) = project {
         deep_merge(&mut global, project);
     }
@@ -255,6 +282,7 @@ fn merged_settings(mut global: Value, project: Option<Value>) -> Settings {
     // Workflows spend the user's tokens many agents at a time, so the same rule
     // applies: only the user's own settings file decides whether they are on.
     settings.workflows.enabled = workflows_enabled;
+    settings.cache_warming = cache_warming;
     settings
 }
 
@@ -306,10 +334,32 @@ mod tests {
         assert_eq!(s.compaction.reserve_tokens, 16_384);
         assert_eq!(s.compaction.keep_recent_tokens, 20_000);
         assert_eq!(s.retry.max_retries, 3);
+        assert_eq!(s.retry.max_agent_delay_ms, 60_000);
+        assert_eq!(s.cache_warming, CacheWarmingMode::Streaming);
         assert!(!s.subagents.enabled);
         assert_eq!(s.steering_mode, QueueMode::OneAtATime);
         assert!(s.auto_recap_enabled());
         assert_eq!(s.markdown.mermaid, MermaidRendering::Streaming);
+    }
+
+    #[test]
+    fn compaction_model_overrides_use_exact_provider_model_keys() {
+        let settings: Settings = serde_json::from_value(json!({
+            "compaction": {
+                "modelOverrides": {
+                    "anthropic/claude-opus-4-8": {
+                        "reserveTokens": 1000,
+                        "keepRecentTokens": 2000
+                    }
+                }
+            },
+            "cacheWarming": "idle"
+        }))
+        .unwrap();
+        let override_settings = &settings.compaction.model_overrides["anthropic/claude-opus-4-8"];
+        assert_eq!(override_settings.reserve_tokens, Some(1000));
+        assert_eq!(override_settings.keep_recent_tokens, Some(2000));
+        assert_eq!(settings.cache_warming, CacheWarmingMode::Idle);
     }
 
     #[test]
@@ -392,6 +442,15 @@ mod tests {
 
         let on = merged_settings(json!({}), Some(json!({"workflows": {"enabled": false}})));
         assert!(on.workflows.enabled);
+    }
+
+    #[test]
+    fn project_settings_cannot_enable_paid_cache_warming() {
+        let settings = merged_settings(
+            json!({"cacheWarming": "off"}),
+            Some(json!({"cacheWarming": "idle"})),
+        );
+        assert_eq!(settings.cache_warming, CacheWarmingMode::Off);
     }
 
     #[test]

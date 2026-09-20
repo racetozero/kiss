@@ -405,6 +405,26 @@ impl SessionManager {
         })
     }
 
+    pub fn append_usage(
+        &mut self,
+        kind: &str,
+        provider: &str,
+        model: &str,
+        usage: Usage,
+        note: Option<String>,
+    ) -> Result<String> {
+        let (kind, provider, model) = (kind.to_string(), provider.to_string(), model.to_string());
+        self.append_entry(|base| SessionEntry::Usage {
+            base,
+            kind,
+            provider,
+            model,
+            usage,
+            note,
+            extra: Map::new(),
+        })
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn append_compaction(
         &mut self,
@@ -940,7 +960,8 @@ impl SessionManager {
                 }
                 | SessionEntry::BranchSummary {
                     usage: Some(usage), ..
-                } => totals.add(usage),
+                }
+                | SessionEntry::Usage { usage, .. } => totals.add(usage),
                 _ => {}
             }
         }
@@ -1029,6 +1050,7 @@ mod tests {
             reasoning: true,
             input: vec!["text".into()],
             cost: ModelCost::default(),
+            prompt_cache: None,
             context_window: 100_000,
             max_tokens: 1_000,
             compat: None,

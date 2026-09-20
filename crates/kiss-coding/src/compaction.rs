@@ -402,6 +402,24 @@ mod tests {
     }
 
     #[test]
+    fn oversized_trailing_tool_result_keeps_its_assistant_call() {
+        let messages = vec![
+            user("start"),
+            assistant("tool call"),
+            tool_result(&"x".repeat(8_000)),
+        ];
+        let plan = plan_compaction(&messages, 10);
+        assert!(matches!(
+            plan.kept.first(),
+            Some(AgentMessage::Assistant(_))
+        ));
+        assert!(matches!(
+            plan.kept.get(1),
+            Some(AgentMessage::ToolResult(_))
+        ));
+    }
+
+    #[test]
     fn serialization_labels_and_caps() {
         let big = "L".repeat(3000);
         let messages = vec![user("do it"), assistant("on it"), tool_result(&big)];

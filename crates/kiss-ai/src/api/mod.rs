@@ -252,8 +252,11 @@ pub fn finalize_cost(usage: &mut Usage, model: &Model) {
             tier.map_or(c.cache_read, |tier| tier.cache_read),
         ),
         cache_write: per(
-            usage.cache_write,
+            usage.cache_write.saturating_sub(usage.cache_write_1h),
             tier.map_or(c.cache_write, |tier| tier.cache_write),
+        ) + per(
+            usage.cache_write_1h,
+            tier.map_or(c.input, |tier| tier.input) * 2.0,
         ),
         total: 0.0,
     };
@@ -307,7 +310,51 @@ pub fn apply_provider_headers(
     mut request: reqwest::RequestBuilder,
     model: &Model,
     context: &Context,
+    options: &crate::StreamOptions,
 ) -> reqwest::RequestBuilder {
+    if let Some(session_id) = options.session_id.as_deref() {
+        if matches!(model.provider.as_str(), "opencode" | "opencode-go") {
+            request = request.header("x-opencode-session", session_id);
+        }
+        let compat = model.compat.as_ref();
+        let openrouter = model.provider == "openrouter" || model.base_url.contains("openrouter.ai");
+        let format = compat
+            .and_then(|compat| compat.session_affinity_format.as_deref())
+            .or(openrouter.then_some("openrouter"));
+        if matches!(
+            model.api.as_str(),
+            "openai-responses" | "azure-openai-responses"
+        ) {
+            match format {
+                Some("openrouter") => request = request.header("x-session-id", session_id),
+                Some("openai") => {
+                    request = request
+                        .header("session_id", session_id)
+                        .header("x-client-request-id", session_id);
+                }
+                _ => request = request.header("x-client-request-id", session_id),
+            }
+        } else if compat
+            .and_then(|compat| compat.send_session_affinity_headers)
+            .unwrap_or(openrouter)
+        {
+            match format {
+                Some("openrouter") => request = request.header("x-session-id", session_id),
+                Some("openai") => {
+                    request = request
+                        .header("session_id", session_id)
+                        .header("x-client-request-id", session_id)
+                        .header("x-session-affinity", session_id);
+                }
+                Some("openai-nosession") => {
+                    request = request
+                        .header("x-client-request-id", session_id)
+                        .header("x-session-affinity", session_id);
+                }
+                _ => request = request.header("x-session-affinity", session_id),
+            }
+        }
+    }
     if model.provider != "github-copilot" {
         return request;
     }
@@ -353,6 +400,7 @@ mod provider_header_tests {
             reasoning: false,
             input: vec!["text".into()],
             cost: Default::default(),
+            prompt_cache: None,
             context_window: 1,
             max_tokens: 1,
             compat: None,
@@ -391,6 +439,7 @@ mod provider_header_tests {
                 }],
                 ..Default::default()
             },
+            prompt_cache: None,
             context_window: 1,
             max_tokens: 1,
             compat: None,
@@ -419,6 +468,111 @@ mod provider_header_tests {
     }
 
     #[test]
+    fn provider_session_headers_follow_catalog_compatibility() {
+        let model = Model {
+            id: "model".into(),
+            name: String::new(),
+            api: "openai-completions".into(),
+            provider: "opencode".into(),
+            base_url: "https://opencode.ai/v1".into(),
+            reasoning: false,
+            input: vec!["text".into()],
+            cost: Default::default(),
+            prompt_cache: None,
+            context_window: 1,
+            max_tokens: 1,
+            compat: Some(crate::OpenAICompat {
+                send_session_affinity_headers: Some(true),
+                session_affinity_format: Some("openrouter".into()),
+                ..Default::default()
+            }),
+            thinking_level_map: Default::default(),
+            headers: Default::default(),
+        };
+        let request = apply_provider_headers(
+            crate::stream::http_client().get("https://example.invalid"),
+            &model,
+            &Context::default(),
+            &crate::StreamOptions {
+                session_id: Some("session-one".into()),
+                ..Default::default()
+            },
+        )
+        .build()
+        .unwrap();
+        assert_eq!(request.headers()["x-opencode-session"], "session-one");
+        assert_eq!(request.headers()["x-session-id"], "session-one");
+    }
+
+    #[test]
+    fn responses_send_client_request_id_without_opt_in() {
+        let model = Model {
+            id: "model".into(),
+            name: String::new(),
+            api: "openai-responses".into(),
+            provider: "provider".into(),
+            base_url: "https://example.invalid".into(),
+            reasoning: false,
+            input: vec!["text".into()],
+            cost: Default::default(),
+            prompt_cache: None,
+            context_window: 1,
+            max_tokens: 1,
+            compat: Some(crate::OpenAICompat {
+                session_affinity_format: Some("openai-nosession".into()),
+                ..Default::default()
+            }),
+            thinking_level_map: Default::default(),
+            headers: Default::default(),
+        };
+        let request = apply_provider_headers(
+            crate::stream::http_client().get("https://example.invalid"),
+            &model,
+            &Context::default(),
+            &crate::StreamOptions {
+                session_id: Some("session-one".into()),
+                ..Default::default()
+            },
+        )
+        .build()
+        .unwrap();
+        assert_eq!(request.headers()["x-client-request-id"], "session-one");
+        assert!(!request.headers().contains_key("session_id"));
+        assert!(!request.headers().contains_key("x-session-affinity"));
+    }
+
+    #[test]
+    fn one_hour_cache_writes_use_twice_the_input_rate() {
+        let model = Model {
+            id: "bedrock".into(),
+            name: String::new(),
+            api: "bedrock-converse-stream".into(),
+            provider: "amazon-bedrock".into(),
+            base_url: String::new(),
+            reasoning: false,
+            input: vec!["text".into()],
+            cost: crate::ModelCost {
+                input: 2.0,
+                cache_write: 2.5,
+                ..Default::default()
+            },
+            prompt_cache: None,
+            context_window: 1,
+            max_tokens: 1,
+            compat: None,
+            thinking_level_map: Default::default(),
+            headers: Default::default(),
+        };
+        let mut usage = Usage {
+            cache_write: 1_000_000,
+            cache_write_1h: 400_000,
+            ..Default::default()
+        };
+        finalize_cost(&mut usage, &model);
+        assert_eq!(usage.cost.cache_write, 3.1);
+    }
+
+    #[test]
     #[ignore = "release-mode performance benchmark"]
     fn benchmark_performance_stream_delta_snapshots() {
         let model = Model {
@@ -430,6 +584,7 @@ mod provider_header_tests {
             reasoning: true,
             input: vec!["text".into()],
             cost: Default::default(),
+            prompt_cache: None,
             context_window: 100_000,
             max_tokens: 10_000,
             compat: None,

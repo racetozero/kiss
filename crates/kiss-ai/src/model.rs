@@ -30,6 +30,16 @@ pub struct ModelCostTier {
     pub cache_write: f64,
 }
 
+/// Provider prompt-cache lifetimes, in seconds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PromptCache {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub short: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub long: Option<u64>,
+}
+
 /// Compatibility overrides for OpenAI-compatible chat-completions servers.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -46,6 +56,9 @@ pub struct OpenAICompat {
     pub force_adaptive_thinking: Option<bool>,
     pub supports_temperature: Option<bool>,
     pub supports_mid_convo_effort: Option<bool>,
+    pub allow_empty_signature: Option<bool>,
+    pub send_session_affinity_headers: Option<bool>,
+    pub session_affinity_format: Option<String>,
 }
 
 impl OpenAICompat {
@@ -81,6 +94,15 @@ impl OpenAICompat {
             supports_mid_convo_effort: override_values
                 .supports_mid_convo_effort
                 .or(self.supports_mid_convo_effort),
+            allow_empty_signature: override_values
+                .allow_empty_signature
+                .or(self.allow_empty_signature),
+            send_session_affinity_headers: override_values
+                .send_session_affinity_headers
+                .or(self.send_session_affinity_headers),
+            session_affinity_format: override_values
+                .session_affinity_format
+                .or(self.session_affinity_format),
         }
     }
 }
@@ -104,6 +126,8 @@ pub struct Model {
     pub input: Vec<String>,
     #[serde(default)]
     pub cost: ModelCost,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt_cache: Option<PromptCache>,
     #[serde(default = "default_context_window")]
     pub context_window: u64,
     #[serde(default = "default_max_tokens")]
@@ -222,6 +246,13 @@ impl Model {
 mod tests {
     use super::*;
 
+    #[test]
+    fn prompt_cache_tiers_are_independently_optional() {
+        let cache: PromptCache = serde_json::from_str(r#"{"short":300}"#).unwrap();
+        assert_eq!(cache.short, Some(300));
+        assert_eq!(cache.long, None);
+    }
+
     fn model() -> Model {
         Model {
             id: "test".into(),
@@ -232,6 +263,7 @@ mod tests {
             reasoning: true,
             input: vec!["text".into()],
             cost: ModelCost::default(),
+            prompt_cache: None,
             context_window: 1_000,
             max_tokens: 100,
             compat: None,

@@ -21,7 +21,7 @@ impl SlashCommand {
     }
 }
 
-/// Pi core commands at the v0.84.4 release commit.
+/// Pi core commands at the v0.86.0 release commit.
 pub(crate) const PI_CORE_SLASH_COMMANDS: &[SlashCommand] = &[
     SlashCommand::new("settings", "Open settings menu", None),
     SlashCommand::new(
@@ -47,6 +47,11 @@ pub(crate) const PI_CORE_SLASH_COMMANDS: &[SlashCommand] = &[
         None,
     ),
     SlashCommand::new("share", "Share session as a secret GitHub gist", None),
+    SlashCommand::new(
+        "bug",
+        "Export a local redacted bug report",
+        Some("<description>"),
+    ),
     SlashCommand::new("copy", "Copy last agent message to clipboard", None),
     SlashCommand::new("name", "Set session display name", None),
     SlashCommand::new("session", "Show session info and stats", None),
@@ -166,6 +171,7 @@ mod tests {
                 "export",
                 "import",
                 "share",
+                "bug",
                 "copy",
                 "name",
                 "session",
@@ -186,7 +192,7 @@ mod tests {
     }
 
     #[test]
-    fn core_catalog_matches_pi_v0_84_4() {
+    fn core_catalog_matches_pi_v0_86_0() {
         let actual = PI_CORE_SLASH_COMMANDS
             .iter()
             .map(|command| (command.name, command.description, command.argument_hint))
@@ -218,6 +224,11 @@ mod tests {
                     None
                 ),
                 ("share", "Share session as a secret GitHub gist", None),
+                (
+                    "bug",
+                    "Export a local redacted bug report",
+                    Some("<description>")
+                ),
                 ("copy", "Copy last agent message to clipboard", None),
                 ("name", "Set session display name", None),
                 ("session", "Show session info and stats", None),

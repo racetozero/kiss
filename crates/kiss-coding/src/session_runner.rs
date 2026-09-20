@@ -7,7 +7,7 @@ use crate::compaction::{
 };
 use crate::iterative::IterativeRuntime;
 use crate::session::manager::SessionManager;
-use crate::settings::{CompactionMode, QueueMode, Settings};
+use crate::settings::{CacheWarmingMode, CompactionMode, QueueMode, Settings};
 use crate::subagents::{ForkTurns, SUBAGENT_SYSTEM_PROMPT, SubagentRuntime, fork_messages};
 use crate::workflows::{WorkflowApprover, WorkflowRuntime};
 use anyhow::Context as _;
@@ -120,6 +120,7 @@ pub struct AgentSession {
     steering: Arc<Mutex<VecDeque<QueuedPrompt>>>,
     follow_up: Arc<Mutex<VecDeque<QueuedPrompt>>>,
     cancel: Mutex<CancellationToken>,
+    cache_warm_cancel: Mutex<CancellationToken>,
     running: Mutex<bool>,
     totals: Mutex<Usage>,
     context_usage_cache: Mutex<Option<(u64, u64)>>,
@@ -207,6 +208,7 @@ impl AgentSession {
             steering: Default::default(),
             follow_up: Default::default(),
             cancel: Mutex::new(CancellationToken::new()),
+            cache_warm_cancel: Mutex::new(CancellationToken::new()),
             running: Mutex::new(false),
             totals: Mutex::new(totals),
             context_usage_cache: Default::default(),
@@ -275,7 +277,13 @@ impl AgentSession {
     pub fn update_settings(&self, settings: Settings) {
         let was_enabled = self.subagents_enabled();
         let workflows_were_enabled = self.workflows_enabled();
+        let cache_warming = settings.cache_warming;
         *self.settings.lock().unwrap() = settings;
+        if cache_warming == CacheWarmingMode::Off
+            || (cache_warming == CacheWarmingMode::Streaming && !self.is_running())
+        {
+            self.cache_warm_cancel.lock().unwrap().cancel();
+        }
         let is_enabled = self.subagents_enabled();
         if was_enabled && !is_enabled {
             self.stop_child_work();
@@ -289,9 +297,15 @@ impl AgentSession {
     pub fn reload_runtime(&self, settings: Settings, system_prompt: String, tools: Vec<DynTool>) {
         let was_enabled = self.subagents_enabled();
         let workflows_were_enabled = self.workflows_enabled();
+        let cache_warming = settings.cache_warming;
         *self.settings.lock().unwrap() = settings;
         *self.system_prompt.lock().unwrap() = system_prompt;
         *self.base_tools.lock().unwrap() = tools;
+        if cache_warming == CacheWarmingMode::Off
+            || (cache_warming == CacheWarmingMode::Streaming && !self.is_running())
+        {
+            self.cache_warm_cancel.lock().unwrap().cancel();
+        }
         let is_enabled = self.subagents_enabled();
         if was_enabled && !is_enabled {
             self.stop_child_work();
@@ -437,6 +451,7 @@ impl AgentSession {
 
     /// Switch the active session without appending synthetic history.
     pub fn replace_manager(&self, manager: SessionManager) {
+        self.cache_warm_cancel.lock().unwrap().cancel();
         if let Some(runtime) = self.subagents.get() {
             runtime.reset();
         }
@@ -462,6 +477,7 @@ impl AgentSession {
     }
 
     pub fn set_model(&self, model: Model) {
+        self.cache_warm_cancel.lock().unwrap().cancel();
         {
             let mut m = self.manager.lock().unwrap();
             let _ = m.append_model_change(&model.provider, &model.id);
@@ -754,14 +770,14 @@ impl AgentSession {
                 if has_tool_results {
                     let settings = session.settings();
                     let cancel = session.cancel.lock().unwrap().clone();
-                    let context_window = session.model().context_window;
+                    let model = session.model();
                     let revision_before = {
                         let manager = session.manager.lock().unwrap();
                         let context = manager.build_session_context();
                         if !auto_compaction_needed(
                             &settings,
                             &context.messages,
-                            context_window,
+                            &model,
                             cancel.is_cancelled(),
                         ) {
                             None
@@ -1042,6 +1058,7 @@ impl AgentSession {
         prompts: Vec<AgentMessage>,
         prompt_mode: PromptMode,
     ) {
+        self.cache_warm_cancel.lock().unwrap().cancel();
         {
             let mut running = self.running.lock().unwrap();
             if *running {
@@ -1106,14 +1123,20 @@ impl AgentSession {
                 && !cancel.is_cancelled()
             {
                 attempt += 1;
-                let delay = retry.base_delay_ms.saturating_mul(1u64 << (attempt - 1));
+                let delay = retry
+                    .base_delay_ms
+                    .saturating_mul(1u64.checked_shl(attempt - 1).unwrap_or(u64::MAX))
+                    .min(retry.max_agent_delay_ms);
                 (self.sink)(SessionEvent::Retry {
                     attempt,
                     max: retry.max_retries,
                     delay_ms: delay,
                     error,
                 });
-                tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
+                tokio::select! {
+                    _ = tokio::time::sleep(std::time::Duration::from_millis(delay)) => {}
+                    _ = cancel.cancelled() => break,
+                }
                 context = self.build_context_for(*active_prompt_mode.lock().unwrap());
                 // Drop the trailing error assistant message from context.
                 while matches!(
@@ -1133,7 +1156,7 @@ impl AgentSession {
             if auto_compaction_needed(
                 &settings,
                 &ctx.messages,
-                self.model().context_window,
+                &self.model(),
                 cancel.is_cancelled(),
             ) {
                 self.compact(None, true).await;
@@ -1142,15 +1165,19 @@ impl AgentSession {
         }
 
         *self.running.lock().unwrap() = false;
+        if self.settings.lock().unwrap().cache_warming == CacheWarmingMode::Streaming {
+            self.cache_warm_cancel.lock().unwrap().cancel();
+        }
     }
 
-    fn on_agent_event(&self, event: &AgentEvent) {
+    fn on_agent_event(self: &Arc<Self>, event: &AgentEvent) {
         match event {
             AgentEvent::MessageEnd { message } => {
                 // Persist assistant + tool results (prompts persisted earlier;
                 // steering/follow-up user messages arrive here too).
                 let persist = match message {
                     AgentMessage::Assistant(a) => {
+                        self.schedule_cache_warming(a);
                         let mut totals = self.totals.lock().unwrap();
                         totals.add(&a.usage);
                         true
@@ -1178,6 +1205,133 @@ impl AgentSession {
         }
     }
 
+    fn schedule_cache_warming(self: &Arc<Self>, assistant: &kiss_ai::AssistantMessage) {
+        let settings = self.settings();
+        let model = self.model();
+        let Some(cache) = model.prompt_cache else {
+            return;
+        };
+        let Some(short_ttl) = cache.short else {
+            return;
+        };
+        let reasoning = self.thinking_level();
+        let fast_mode = self.fast_mode();
+        if settings.cache_warming == CacheWarmingMode::Off
+            || matches!(
+                assistant.stop_reason,
+                StopReason::Error | StopReason::Aborted
+            )
+            || (assistant.usage.input + assistant.usage.cache_read + assistant.usage.cache_write
+                == 0)
+            || (reasoning != ThinkingLevel::Off
+                && model.api == "anthropic-messages"
+                && !model
+                    .compat
+                    .as_ref()
+                    .and_then(|compat| compat.force_adaptive_thinking)
+                    .unwrap_or(false))
+        {
+            return;
+        }
+        let ttl = std::time::Duration::from_secs(short_ttl);
+        let Some(delay) = cache_warming_delay(ttl) else {
+            return;
+        };
+        let prompt_tokens =
+            assistant.usage.input + assistant.usage.cache_read + assistant.usage.cache_write;
+        let agent_context = self.build_context();
+        let context = kiss_ai::Context {
+            system_prompt: Some(agent_context.system_prompt),
+            openai_responses_input: agent_context.openai_responses_input,
+            messages: kiss_agent::convert_to_llm(&agent_context.messages),
+            tools: agent_context
+                .tools
+                .iter()
+                .map(|tool| tool.to_def())
+                .collect(),
+        };
+        let cancel = CancellationToken::new();
+        {
+            let mut current = self.cache_warm_cancel.lock().unwrap();
+            current.cancel();
+            *current = cancel.clone();
+        }
+        let session = self.clone();
+        tokio::spawn(async move {
+            let started = tokio::time::Instant::now();
+            loop {
+                if tokio::select! {
+                    _ = tokio::time::sleep(delay) => false,
+                    _ = cancel.cancelled() => true,
+                } {
+                    return;
+                }
+                let idle = !session.is_running();
+                let max_age = if idle {
+                    std::time::Duration::from_secs(30 * 60)
+                } else {
+                    std::time::Duration::from_secs(60 * 60)
+                };
+                if started.elapsed() > max_age {
+                    return;
+                }
+                let priced = |input: u64, output: u64, cache_read: u64, cache_write: u64| {
+                    let mut usage = Usage {
+                        input,
+                        output,
+                        cache_read,
+                        cache_write,
+                        ..Default::default()
+                    };
+                    kiss_ai::api::finalize_cost(&mut usage, &model);
+                    usage.cost.total
+                };
+                let hit_cost = priced(0, 0, prompt_tokens, 0);
+                let miss_cost = if model.cost.cache_write > 0.0 {
+                    priced(0, 0, 0, prompt_tokens)
+                } else {
+                    priced(prompt_tokens, 0, 0, 0)
+                };
+                let warm_cost = priced(0, 1, prompt_tokens, 0);
+                let probability = if idle { 0.15 } else { 1.0 };
+                if probability * (miss_cost - hit_cost).max(0.0) - warm_cost < 0.05 {
+                    return;
+                }
+                let Some(credential) = session.resolve_credential(&model.provider).await else {
+                    return;
+                };
+                let options = kiss_ai::StreamOptions {
+                    credential: Some(credential),
+                    max_tokens: Some(1),
+                    reasoning,
+                    fast_mode,
+                    session_id: Some(session.manager.lock().unwrap().session_id().to_string()),
+                    transport: settings.transport,
+                    cancel: cancel.clone(),
+                    ..Default::default()
+                };
+                let stream_fn = session
+                    .stream_fn
+                    .lock()
+                    .unwrap()
+                    .clone()
+                    .unwrap_or_else(|| Arc::new(kiss_ai::stream_simple));
+                let warmed = stream_fn(&model, &context, &options).result().await;
+                if matches!(warmed.stop_reason, StopReason::Error | StopReason::Aborted) {
+                    return;
+                }
+                session.totals.lock().unwrap().add(&warmed.usage);
+                let _ = session.manager.lock().unwrap().append_usage(
+                    "cache_warm",
+                    &warmed.provider,
+                    warmed.response_model.as_deref().unwrap_or(&warmed.model),
+                    warmed.usage,
+                    None,
+                );
+            }
+        });
+    }
+
     /// Manual or automatic compaction.
     pub async fn compact(self: &Arc<Self>, custom_instructions: Option<String>, auto: bool) {
         (self.sink)(SessionEvent::CompactionStart { auto });
@@ -1187,7 +1341,18 @@ impl AgentSession {
             _ => None,
         });
         let settings = self.settings();
-        let plan = plan_compaction(&ctx.messages, settings.compaction.keep_recent_tokens);
+        let model = self.model();
+        let override_settings = settings
+            .compaction
+            .model_overrides
+            .get(&format!("{}/{}", model.provider, model.id));
+        let keep_recent_tokens = override_settings
+            .and_then(|value| value.keep_recent_tokens)
+            .unwrap_or(settings.compaction.keep_recent_tokens);
+        let reserve_tokens = override_settings
+            .and_then(|value| value.reserve_tokens)
+            .unwrap_or(settings.compaction.reserve_tokens);
+        let plan = plan_compaction(&ctx.messages, keep_recent_tokens);
         if plan.to_summarize.is_empty() && plan.turn_prefix.is_empty() {
             (self.sink)(SessionEvent::CompactionEnd {
                 summary: String::new(),
@@ -1220,12 +1385,8 @@ impl AgentSession {
                 let tokens_after = plan.tokens_before.saturating_sub(removed);
                 let useful =
                     estimated_after.saturating_mul(4) <= estimated_before.saturating_mul(3);
-                let resolved_auto_threshold = !auto
-                    || !should_compact(
-                        tokens_after,
-                        self.model().context_window,
-                        settings.compaction.reserve_tokens,
-                    );
+                let resolved_auto_threshold =
+                    !auto || !should_compact(tokens_after, model.context_window, reserve_tokens);
                 if useful && resolved_auto_threshold {
                     let summary = format!(
                         "Jev kept {}, truncated {}, and removed {} of {} older tool interactions",
@@ -1264,7 +1425,6 @@ impl AgentSession {
             }
         }
 
-        let model = self.model();
         let credential = self.resolve_credential(&model.provider).await;
 
         let mut serialized = compaction::serialize_agent_messages(&plan.to_summarize);
@@ -1496,22 +1656,33 @@ fn queued_mode(queue: &Arc<Mutex<VecDeque<QueuedPrompt>>>, mode: QueueMode) -> O
 fn auto_compaction_needed(
     settings: &Settings,
     messages: &[AgentMessage],
-    context_window: u64,
+    model: &Model,
     cancelled: bool,
 ) -> bool {
+    let reserve_tokens = settings
+        .compaction
+        .model_overrides
+        .get(&format!("{}/{}", model.provider, model.id))
+        .and_then(|value| value.reserve_tokens)
+        .unwrap_or(settings.compaction.reserve_tokens);
     settings.compaction.enabled
         && !cancelled
-        && context_window > 0
+        && model.context_window > 0
         && should_compact(
             estimate_context_tokens(messages),
-            context_window,
-            settings.compaction.reserve_tokens,
+            model.context_window,
+            reserve_tokens,
         )
+}
+
+fn cache_warming_delay(ttl: std::time::Duration) -> Option<std::time::Duration> {
+    (ttl > std::time::Duration::from_secs(10))
+        .then(|| std::cmp::min(ttl.mul_f64(0.9), ttl - std::time::Duration::from_secs(10)))
 }
 
 fn is_transient(error: &str) -> bool {
     let e = error.to_lowercase();
-    let transient_status = [429, 500, 502, 503, 504].iter().any(|status| {
+    let transient_status = [429, 500, 502, 503, 504, 520].iter().any(|status| {
         [
             format!("http {status}"),
             format!("status {status}"),
@@ -1524,6 +1695,7 @@ fn is_transient(error: &str) -> bool {
     transient_status
         || [
             "overloaded",
+            "currently experiencing high demand",
             "rate limit",
             "timeout",
             "timed out",
@@ -1556,6 +1728,7 @@ mod ephemeral_tests {
             reasoning: true,
             input: vec!["text".into()],
             cost: Default::default(),
+            prompt_cache: None,
             context_window: 100_000,
             max_tokens: 1_000,
             compat: None,
@@ -1567,6 +1740,8 @@ mod ephemeral_tests {
     #[test]
     fn transient_errors_require_a_status_or_specific_network_failure() {
         assert!(is_transient("request failed with HTTP 503"));
+        assert!(is_transient("Cloudflare returned HTTP 520"));
+        assert!(is_transient("Azure is currently experiencing high demand"));
         assert!(is_transient("connection reset by peer"));
         assert!(is_transient("rate limit exceeded"));
         assert!(!is_transient("model has a 500 token limit"));
@@ -2051,9 +2226,27 @@ mod ephemeral_tests {
         let mut settings = Settings::default();
         settings.compaction.reserve_tokens = 20;
         let messages = vec![AgentMessage::user("x".repeat(360))];
-        assert!(auto_compaction_needed(&settings, &messages, 100, false));
-        assert!(!auto_compaction_needed(&settings, &messages, 100, true));
+        let mut model = openai_model();
+        model.context_window = 100;
+        assert!(auto_compaction_needed(&settings, &messages, &model, false));
+        assert!(!auto_compaction_needed(&settings, &messages, &model, true));
         settings.compaction.enabled = false;
-        assert!(!auto_compaction_needed(&settings, &messages, 100, false));
+        assert!(!auto_compaction_needed(&settings, &messages, &model, false));
+    }
+
+    #[test]
+    fn cache_warming_uses_ninety_percent_with_ten_second_margin() {
+        assert_eq!(
+            cache_warming_delay(std::time::Duration::from_secs(300)),
+            Some(std::time::Duration::from_secs(270))
+        );
+        assert_eq!(
+            cache_warming_delay(std::time::Duration::from_secs(60)),
+            Some(std::time::Duration::from_secs(50))
+        );
+        assert_eq!(
+            cache_warming_delay(std::time::Duration::from_secs(10)),
+            None
+        );
     }
 }

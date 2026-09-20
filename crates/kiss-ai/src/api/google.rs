@@ -1,6 +1,6 @@
 //! Google Generative AI (Gemini) adapter.
 
-use super::{PartialBuilder, thinking_budget};
+use super::{PartialBuilder, apply_provider_headers, thinking_budget};
 use crate::event::EventSink;
 use crate::model::Model;
 use crate::sse::{SseEvent, SseParser};
@@ -50,6 +50,7 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
     for (k, v) in &model.headers {
         request = request.header(k, v);
     }
+    request = apply_provider_headers(request, model, context, options);
 
     let response = tokio::select! {
         r = request.send() => r,
@@ -315,16 +316,30 @@ fn build_request(model: &Model, context: &Context, options: &StreamOptions) -> V
     if let Some(t) = options.temperature {
         generation_config["temperature"] = json!(t);
     }
-    if model.reasoning
-        && let Some(budget) = thinking_budget(
-            options.reasoning,
-            options.max_tokens.unwrap_or(model.max_tokens),
-        )
-    {
-        generation_config["thinkingConfig"] = json!({
-            "thinkingBudget": budget,
-            "includeThoughts": true,
-        });
+    if model.reasoning {
+        let level = model.map_thinking_level(options.reasoning);
+        let id = model.id.to_ascii_lowercase();
+        if (id.contains("gemini-3")
+            || matches!(
+                id.as_str(),
+                "gemini-flash-latest" | "gemini-flash-lite-latest"
+            )
+            || id.contains("gemma-4")
+            || id.contains("gemma4"))
+            && level != crate::ThinkingLevel::Off
+        {
+            generation_config["thinkingConfig"] = json!({
+                "thinkingLevel": level.as_str().to_ascii_uppercase(),
+                "includeThoughts": true,
+            });
+        } else if let Some(budget) =
+            thinking_budget(level, options.max_tokens.unwrap_or(model.max_tokens))
+        {
+            generation_config["thinkingConfig"] = json!({
+                "thinkingBudget": budget,
+                "includeThoughts": true,
+            });
+        }
     }
 
     let mut body = json!({
@@ -384,6 +399,7 @@ mod vertex_tests {
             reasoning: false,
             input: vec!["text".into()],
             cost: Default::default(),
+            prompt_cache: None,
             context_window: 100,
             max_tokens: 10,
             compat: None,
@@ -404,6 +420,46 @@ mod vertex_tests {
                 }
             ),
             Some("priority")
+        );
+    }
+
+    #[test]
+    fn gemini_three_uses_discrete_thinking_levels() {
+        let mut model = Model {
+            id: "gemini-3-flash-preview".into(),
+            name: String::new(),
+            api: "google-generative-ai".into(),
+            provider: "google".into(),
+            base_url: "https://example.invalid".into(),
+            reasoning: true,
+            input: vec!["text".into()],
+            cost: Default::default(),
+            prompt_cache: None,
+            context_window: 100,
+            max_tokens: 10,
+            compat: None,
+            thinking_level_map: BTreeMap::new(),
+            headers: BTreeMap::new(),
+        };
+        model
+            .thinking_level_map
+            .insert("low".into(), Some("medium".into()));
+        let body = build_request(
+            &model,
+            &Context::default(),
+            &StreamOptions {
+                reasoning: crate::ThinkingLevel::Low,
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            body["generationConfig"]["thinkingConfig"]["thinkingLevel"],
+            "MEDIUM"
+        );
+        assert!(
+            body["generationConfig"]["thinkingConfig"]
+                .get("thinkingBudget")
+                .is_none()
         );
     }
 }

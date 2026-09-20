@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Updated Pi compatibility to v0.86.0 with the current provider catalog,
+  offline Radius models, prompt-cache lifetime data and cost-aware warming,
+  per-model compaction budgets, and local redacted `/bug` reports.
+
+### Fixed
+
+- Added provider session-affinity headers, unsigned-thinking replay controls,
+  Gemini discrete thinking levels, Mistral reasoning effort, one-hour cache
+  pricing for Anthropic and Bedrock, Cloudflare 520 retries, Azure peak-load
+  retries, capped and cancellable retry waits, and safe compaction after large
+  tool results.
+
 ## 0.0.13 - 2026-09-19
 
 ### Added

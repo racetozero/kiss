@@ -1,7 +1,7 @@
 use kiss_agent::AgentMessage;
 use kiss_ai::{
-    ContentBlock, Context, Message, Model, ModelCost, OpenAICompat, StopReason, ThinkingLevel,
-    ToolDef, Usage, UserContent,
+    ContentBlock, Context, Message, Model, ModelCost, OpenAICompat, PromptCache, StopReason,
+    ThinkingLevel, ToolDef, Usage, UserContent,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -64,6 +64,8 @@ pub struct ModelInput {
     pub input: Vec<String>,
     #[serde(default)]
     pub cost: ModelCost,
+    #[serde(default)]
+    pub prompt_cache: Option<PromptCache>,
     #[serde(default = "default_context_window")]
     pub context_window: u64,
     #[serde(default = "default_model_tokens")]
@@ -102,6 +104,7 @@ impl From<ModelInput> for Model {
             reasoning: value.reasoning,
             input: value.input,
             cost: value.cost,
+            prompt_cache: value.prompt_cache,
             context_window: value.context_window,
             max_tokens: value.max_tokens,
             compat: value.compat,

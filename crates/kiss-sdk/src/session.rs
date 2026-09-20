@@ -914,6 +914,7 @@ impl Session {
                 "output": totals.output,
                 "cacheRead": totals.cache_read,
                 "cacheWrite": totals.cache_write,
+                "cacheWrite1h": totals.cache_write_1h,
                 "cacheReadAvailable": totals.cache_read_available,
                 "total": totals.total_tokens,
             },

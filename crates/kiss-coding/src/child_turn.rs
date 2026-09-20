@@ -70,6 +70,7 @@ fn usage_delta(after: Usage, before: Usage) -> Usage {
         output: after.output.saturating_sub(before.output),
         cache_read: after.cache_read.saturating_sub(before.cache_read),
         cache_write: after.cache_write.saturating_sub(before.cache_write),
+        cache_write_1h: after.cache_write_1h.saturating_sub(before.cache_write_1h),
         cache_read_available: after.cache_read_available,
         reasoning: after
             .reasoning

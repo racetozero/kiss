@@ -302,6 +302,7 @@ async fn session_statistics_count_the_conversation() {
     assert_eq!(stats["tokens"]["input"], 6);
     assert_eq!(stats["tokens"]["cacheRead"], 4);
     assert_eq!(stats["tokens"]["cacheWrite"], 0);
+    assert_eq!(stats["tokens"]["cacheWrite1h"], 0);
     assert_eq!(stats["tokens"]["cacheReadAvailable"], true);
     assert!(stats["contextUsage"]["contextWindow"].as_u64().unwrap() > 0);
 }

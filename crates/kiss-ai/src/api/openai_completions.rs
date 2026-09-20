@@ -71,7 +71,7 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
     for (k, v) in &model.headers {
         request = request.header(k, v);
     }
-    request = apply_provider_headers(request, model, context);
+    request = apply_provider_headers(request, model, context, options);
 
     let response = tokio::select! {
         r = request.send() => r,
@@ -567,6 +567,7 @@ mod tests {
             reasoning: false,
             input: vec!["text".into()],
             cost: Default::default(),
+            prompt_cache: None,
             context_window: 1_000,
             max_tokens: 100,
             compat: Some(compat),
