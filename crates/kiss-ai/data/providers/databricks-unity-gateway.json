@@ -52,7 +52,15 @@
       "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 1048576,
       "maxTokens": 32768,
-      "thinkingLevelMap": { "off": null, "minimal": null, "low": null, "medium": null, "high": "high", "xhigh": null, "max": "max" }
+      "thinkingLevelMap": {
+        "off": null,
+        "minimal": null,
+        "low": null,
+        "medium": null,
+        "high": "high",
+        "xhigh": null,
+        "max": "max"
+      }
     },
     "system.ai.gpt-5-2": {
       "id": "system.ai.gpt-5-2",
