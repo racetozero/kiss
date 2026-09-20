@@ -68,6 +68,9 @@ struct App {
     queue_note: Option<String>,
     working: bool,
     spinner_frame: usize,
+    session_title: Option<String>,
+    terminal_title_dirty: bool,
+    title_generation_pending: bool,
     picker: Option<Picker>,
     command_menu: Option<CommandCompletion>,
     file_menu: Option<FileCompletion>,
@@ -289,6 +292,10 @@ enum CommandEvent {
         request_id: u64,
         automatic: bool,
         result: std::result::Result<kiss_coding::EphemeralResponse, String>,
+    },
+    SessionTitleFinished {
+        session_id: String,
+        result: std::result::Result<String, String>,
     },
     McpServerChecked(Box<McpPanelServer>),
     McpLoginUrl {
@@ -1216,6 +1223,7 @@ pub async fn run(args: &Args) -> Result<i32> {
         }
     }
 
+    let session_title = session.manager.lock().unwrap().session_name();
     let mut app = App {
         md: MarkdownRenderer::new(theme.clone()),
         editor: provisional_editor,
@@ -1227,6 +1235,9 @@ pub async fn run(args: &Args) -> Result<i32> {
         queue_note: None,
         working: false,
         spinner_frame: 0,
+        session_title,
+        terminal_title_dirty: true,
+        title_generation_pending: false,
         picker: None,
         command_menu: None,
         file_menu: None,
@@ -1273,6 +1284,7 @@ pub async fn run(args: &Args) -> Result<i32> {
 
     // Kick off initial message if provided.
     if let Some(message) = initial_message {
+        maybe_generate_session_title(&mut app, &session, &message, &command_tx);
         let prompt_mode = session.prompt_mode_for(&message);
         if prompt_mode == PromptMode::Workflow
             && let Some(trigger) = workflow_trigger(&message)
@@ -1306,7 +1318,12 @@ pub async fn run(args: &Args) -> Result<i32> {
         let render_is_active = app.working
             || app.command_status.is_some()
             || app.btw_panel.is_some()
-            || app.recap_loading;
+            || app.recap_loading
+            || app.title_generation_pending;
+        if app.terminal_title_dirty {
+            terminal.set_session_title(app.session_title.as_deref());
+            app.terminal_title_dirty = false;
+        }
         terminal.set_activity(render_is_active, app.spinner_frame)?;
         if dirty
             && !resize_state.pending()
@@ -1343,6 +1360,7 @@ pub async fn run(args: &Args) -> Result<i32> {
                     || app.command_status.is_some()
                     || app.btw_panel.is_some()
                     || app.recap_loading
+                    || app.title_generation_pending
                 {
                     app.spinner_frame += 1;
                     dirty = true;
@@ -1830,6 +1848,20 @@ fn handle_command_event(
                 Err(error) => app
                     .cells
                     .push(Cell::Error(format!("recap failed: {error}"))),
+            }
+        }
+        CommandEvent::SessionTitleFinished { session_id, result } => {
+            let mut manager = session.manager.lock().unwrap();
+            if manager.session_id() != session_id {
+                return;
+            }
+            app.title_generation_pending = false;
+            if let Ok(title) = result
+                && manager.session_name().is_none()
+                && manager.append_session_info(&title).is_ok()
+            {
+                drop(manager);
+                set_session_title(app, Some(title));
             }
         }
         CommandEvent::McpServerChecked(server) => {
@@ -2754,7 +2786,14 @@ fn handle_input(
                             PromptMode::Ordinary,
                         );
                     } else {
-                        submit_with_display(app, session, display_text, model_text, running_task);
+                        submit_with_display(
+                            app,
+                            session,
+                            display_text,
+                            model_text,
+                            running_task,
+                            command_tx,
+                        );
                     }
                 }
                 return Flow::Continue;
@@ -2791,7 +2830,14 @@ fn handle_input(
                         PromptMode::Ordinary,
                     );
                 } else {
-                    submit_with_display(app, session, display_text, model_text, running_task);
+                    submit_with_display(
+                        app,
+                        session,
+                        display_text,
+                        model_text,
+                        running_task,
+                        command_tx,
+                    );
                 }
                 return Flow::Continue;
             }
@@ -2818,7 +2864,7 @@ fn handle_input(
                 if app.working {
                     queue_user_message(session, display_text, text, false, PromptMode::Ordinary);
                 } else {
-                    submit_with_display(app, session, display_text, text, running_task);
+                    submit_with_display(app, session, display_text, text, running_task, command_tx);
                 }
             } else {
                 start_shell_passthrough(app, session, shell.to_string(), command_tx);
@@ -2843,6 +2889,7 @@ fn handle_input(
                 text,
                 prompt_mode,
                 running_task,
+                command_tx,
             );
         }
     } else {
@@ -3150,9 +3197,13 @@ fn handle_secret_prompt(
                                 })
                             };
                             match renamed {
-                                Ok(()) => app
-                                    .cells
-                                    .push(Cell::Notice(format!("renamed session to {key}"))),
+                                Ok(()) => {
+                                    if current {
+                                        set_session_title(app, Some(key.to_string()));
+                                    }
+                                    app.cells
+                                        .push(Cell::Notice(format!("renamed session to {key}")));
+                                }
                                 Err(error) => app.cells.push(Cell::Error(format!(
                                     "could not rename session: {error:#}"
                                 ))),
@@ -3270,13 +3321,55 @@ fn cycle_model(
     session.set_model(models[next].clone());
 }
 
+fn set_session_title(app: &mut App, title: Option<String>) {
+    if app.session_title != title {
+        app.session_title = title;
+        app.terminal_title_dirty = true;
+    }
+}
+
+fn sync_session_title(app: &mut App, session: &Arc<kiss_coding::AgentSession>) {
+    let title = session.manager.lock().unwrap().session_name();
+    set_session_title(app, title);
+    app.title_generation_pending = false;
+}
+
+fn maybe_generate_session_title(
+    app: &mut App,
+    session: &Arc<kiss_coding::AgentSession>,
+    prompt: &str,
+    command_tx: &mpsc::UnboundedSender<CommandEvent>,
+) {
+    if app.session_title.is_some() || app.title_generation_pending || prompt.trim().is_empty() {
+        return;
+    }
+    app.title_generation_pending = true;
+    let session_id = session.manager.lock().unwrap().session_id().to_string();
+    let prompt = prompt.to_string();
+    let session = session.clone();
+    let tx = command_tx.clone();
+    tokio::spawn(async move {
+        let cancel = CancellationToken::new();
+        let result = tokio::time::timeout(
+            Duration::from_secs(15),
+            session.generate_session_title(&prompt, cancel.clone()),
+        )
+        .await
+        .map_err(|_| "session title request timed out".to_string())
+        .and_then(|result| result.map_err(|error| error.to_string()));
+        cancel.cancel();
+        let _ = tx.send(CommandEvent::SessionTitleFinished { session_id, result });
+    });
+}
+
 fn submit(
     app: &mut App,
     session: &Arc<kiss_coding::AgentSession>,
     text: String,
     running_task: &mut Option<tokio::task::JoinHandle<()>>,
+    command_tx: &mpsc::UnboundedSender<CommandEvent>,
 ) {
-    submit_with_display(app, session, text.clone(), text, running_task);
+    submit_with_display(app, session, text.clone(), text, running_task, command_tx);
 }
 
 fn submit_in_mode(
@@ -3285,8 +3378,17 @@ fn submit_in_mode(
     text: String,
     prompt_mode: PromptMode,
     running_task: &mut Option<tokio::task::JoinHandle<()>>,
+    command_tx: &mpsc::UnboundedSender<CommandEvent>,
 ) {
-    submit_with_display_in_mode(app, session, text.clone(), text, prompt_mode, running_task);
+    submit_with_display_in_mode(
+        app,
+        session,
+        text.clone(),
+        text,
+        prompt_mode,
+        running_task,
+        command_tx,
+    );
 }
 
 fn submit_with_display(
@@ -3295,6 +3397,7 @@ fn submit_with_display(
     display_text: String,
     model_text: String,
     running_task: &mut Option<tokio::task::JoinHandle<()>>,
+    command_tx: &mpsc::UnboundedSender<CommandEvent>,
 ) {
     submit_with_display_in_mode(
         app,
@@ -3303,6 +3406,7 @@ fn submit_with_display(
         model_text,
         PromptMode::Ordinary,
         running_task,
+        command_tx,
     );
 }
 
@@ -3313,7 +3417,9 @@ fn submit_with_display_in_mode(
     model_text: String,
     prompt_mode: PromptMode,
     running_task: &mut Option<tokio::task::JoinHandle<()>>,
+    command_tx: &mpsc::UnboundedSender<CommandEvent>,
 ) {
+    maybe_generate_session_title(app, session, &display_text, command_tx);
     let stored_text = stored_user_text(&display_text, &model_text);
     app.cells.push(Cell::User(display_text));
     app.working = true;
@@ -5439,6 +5545,7 @@ fn apply_picker_selection(
                 match fork {
                     Ok(manager) => {
                         session.replace_manager(manager);
+                        sync_session_title(app, session);
                         app.cells.clear();
                         app.cell_render_cache.clear();
                         app.editor.set_text(&text);
@@ -5773,6 +5880,7 @@ fn switch_session(app: &mut App, session: &Arc<kiss_coding::AgentSession>, recor
     match result {
         Ok(manager) => {
             session.replace_manager(manager);
+            sync_session_title(app, session);
             app.cells = session_cells(session);
             app.cell_render_cache.clear();
             app.cells.push(Cell::Notice(format!(
@@ -6501,7 +6609,14 @@ fn run_slash_command(
                 app.cells.push(Cell::Notice(
                     "dynamic workflow is active for this turn".into(),
                 ));
-                submit_in_mode(app, session, rest, PromptMode::Workflow, running_task);
+                submit_in_mode(
+                    app,
+                    session,
+                    rest,
+                    PromptMode::Workflow,
+                    running_task,
+                    command_tx,
+                );
             }
         }
         "workflows" => open_workflow_runs_picker(app, session),
@@ -6527,6 +6642,7 @@ fn run_slash_command(
             match fork {
                 Ok(manager) => {
                     session.replace_manager(manager);
+                    sync_session_title(app, session);
                     app.cells = session_cells(session);
                     app.cell_render_cache.clear();
                     app.cells
@@ -6580,9 +6696,16 @@ fn run_slash_command(
                     |name| format!("session name: {name}"),
                 )));
             } else {
-                let _ = session.manager.lock().unwrap().append_session_info(&rest);
-                app.cells
-                    .push(Cell::Notice(format!("session named: {rest}")));
+                match session.manager.lock().unwrap().append_session_info(&rest) {
+                    Ok(_) => {
+                        set_session_title(app, Some(rest.clone()));
+                        app.cells
+                            .push(Cell::Notice(format!("session named: {rest}")));
+                    }
+                    Err(error) => app
+                        .cells
+                        .push(Cell::Error(format!("could not name session: {error:#}"))),
+                }
             }
         }
         "session" => {
@@ -6650,6 +6773,7 @@ fn run_slash_command(
             match manager {
                 Ok(new_manager) => {
                     session.replace_manager(new_manager);
+                    sync_session_title(app, session);
                     app.cells.clear();
                     app.cell_render_cache.clear();
                     app.cells.push(Cell::Notice("started a new session".into()));
@@ -6724,7 +6848,7 @@ fn run_slash_command(
                 if app.working {
                     session.queue_steering(AgentMessage::user(expanded));
                 } else {
-                    submit(app, session, expanded, running_task);
+                    submit(app, session, expanded, running_task, command_tx);
                 }
                 return Flow::Continue;
             }
@@ -6754,9 +6878,14 @@ fn run_slash_command(
                         false,
                         PromptMode::Ordinary,
                     ),
-                    Ok(Some(model_text)) => {
-                        submit_with_display(app, session, display_text, model_text, running_task)
-                    }
+                    Ok(Some(model_text)) => submit_with_display(
+                        app,
+                        session,
+                        display_text,
+                        model_text,
+                        running_task,
+                        command_tx,
+                    ),
                     Ok(None) => app.cells.push(Cell::Error(format!(
                         "could not invoke skill `{skill_name}`"
                     ))),
@@ -6901,6 +7030,7 @@ fn import_session(
     match kiss_coding::SessionManager::fork_from(source, &cwd, Some(session_dir)) {
         Ok(manager) => {
             session.replace_manager(manager);
+            sync_session_title(app, session);
             app.cells = session_cells(session);
             app.cell_render_cache.clear();
             app.cells.push(Cell::Notice(format!(
@@ -7141,6 +7271,9 @@ mod tests {
             queue_note: None,
             working: false,
             spinner_frame: 0,
+            session_title: None,
+            terminal_title_dirty: false,
+            title_generation_pending: false,
             picker: None,
             command_menu: None,
             file_menu: None,
@@ -7725,6 +7858,52 @@ mod tests {
             app.cells.last(),
             Some(Cell::Notice(message)) if message == "session name: parity audit"
         ));
+    }
+
+    #[test]
+    fn generated_session_title_persists_without_overwriting_manual_name() {
+        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
+            "/synthetic",
+        )));
+        let session_id = session.manager.lock().unwrap().session_id().to_string();
+        let mut app = test_app();
+        let mut resources = test_resources();
+        let (file_tx, _file_rx) = mpsc::unbounded_channel();
+        let mut file_search = FileSearchService::new(file_tx);
+
+        app.title_generation_pending = true;
+        handle_command_event(
+            &mut app,
+            CommandEvent::SessionTitleFinished {
+                session_id: session_id.clone(),
+                result: Ok("Fix login flow".into()),
+            },
+            &mut resources,
+            &mut file_search,
+            &session,
+        );
+        assert_eq!(app.session_title.as_deref(), Some("Fix login flow"));
+        assert_eq!(
+            session.manager.lock().unwrap().session_name().as_deref(),
+            Some("Fix login flow")
+        );
+
+        run_command_for_test(&mut app, &session, &mut resources, "name Manual title");
+        handle_command_event(
+            &mut app,
+            CommandEvent::SessionTitleFinished {
+                session_id,
+                result: Ok("Late automatic title".into()),
+            },
+            &mut resources,
+            &mut file_search,
+            &session,
+        );
+        assert_eq!(app.session_title.as_deref(), Some("Manual title"));
+        assert_eq!(
+            session.manager.lock().unwrap().session_name().as_deref(),
+            Some("Manual title")
+        );
     }
 
     #[test]

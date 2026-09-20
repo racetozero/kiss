@@ -106,6 +106,37 @@ pub struct EphemeralResponse {
     pub usage: Usage,
 }
 
+const SESSION_TITLE_MAX_CHARS: usize = 36;
+const SESSION_TITLE_PROMPT_MAX_BYTES: usize = 960;
+
+fn bounded_session_title_prompt(prompt: &str) -> &str {
+    let prompt = prompt.trim();
+    let mut end = prompt.len().min(SESSION_TITLE_PROMPT_MAX_BYTES);
+    while !prompt.is_char_boundary(end) {
+        end -= 1;
+    }
+    &prompt[..end]
+}
+
+fn normalize_session_title(text: &str) -> Option<String> {
+    let line = text.lines().find(|line| !line.trim().is_empty())?;
+    let cleaned: String = line
+        .chars()
+        .filter(|character| !character.is_control())
+        .collect();
+    let normalized = cleaned
+        .trim()
+        .trim_matches(|character| matches!(character, '"' | '\'' | '`' | '“' | '”' | '‘' | '’'))
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    let title: String = normalized.chars().take(SESSION_TITLE_MAX_CHARS).collect();
+    let title = title
+        .trim_end_matches(['.', '?', '!', ',', ':', ';'])
+        .trim();
+    (!title.is_empty()).then(|| title.to_string())
+}
+
 pub struct AgentSession {
     pub manager: Mutex<SessionManager>,
     pub registry: Arc<Registry>,
@@ -1015,6 +1046,31 @@ impl AgentSession {
             cancel,
         )
         .await
+    }
+
+    /// Generate a short session title without changing conversation history.
+    pub async fn generate_session_title(
+        self: &Arc<Self>,
+        prompt: &str,
+        cancel: CancellationToken,
+    ) -> anyhow::Result<String> {
+        let prompt = bounded_session_title_prompt(prompt);
+        if prompt.is_empty() {
+            anyhow::bail!("the session prompt is empty");
+        }
+        let response = self
+            .run_ephemeral(
+                format!(
+                    "Write a one-line title for this task, no more than {SESSION_TITLE_MAX_CHARS} characters. Aim for fewer than five words and start with an imperative verb. Keep ticket IDs and code terms unchanged. Match the user's language. Return the title in sentence case without quotes, Markdown, or ending punctuation."
+                ),
+                format!("User prompt:\n{prompt}"),
+                Vec::new(),
+                64,
+                cancel,
+            )
+            .await?;
+        normalize_session_title(&response.text)
+            .context("the provider returned an invalid session title")
     }
 
     /// Create a one-line recap without changing the active session.
@@ -2232,6 +2288,30 @@ mod ephemeral_tests {
         assert!(!auto_compaction_needed(&settings, &messages, &model, true));
         settings.compaction.enabled = false;
         assert!(!auto_compaction_needed(&settings, &messages, &model, false));
+    }
+
+    #[test]
+    fn session_title_normalization_is_safe_and_bounded() {
+        assert_eq!(
+            normalize_session_title("  `Fix AUTH-123 login flow!`  \nignored").as_deref(),
+            Some("Fix AUTH-123 login flow")
+        );
+        assert_eq!(normalize_session_title("\n\t"), None);
+        assert_eq!(
+            normalize_session_title("🚀".repeat(50).as_str())
+                .unwrap()
+                .chars()
+                .count(),
+            SESSION_TITLE_MAX_CHARS
+        );
+    }
+
+    #[test]
+    fn session_title_prompt_is_utf8_safe_and_bounded() {
+        let prompt = "🚀".repeat(SESSION_TITLE_PROMPT_MAX_BYTES);
+        let bounded = bounded_session_title_prompt(&prompt);
+        assert!(bounded.len() <= SESSION_TITLE_PROMPT_MAX_BYTES);
+        assert!(std::str::from_utf8(bounded.as_bytes()).is_ok());
     }
 
     #[test]
