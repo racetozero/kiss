@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.0.16 - 2026-09-22
+
+### Added
+
+- Added experimental TypeSafe Jev reasoning-effort selection for GPT-6 Astra,
+  with bounded runtime context, reusable generation leases, early reassessment
+  after tool failures or new user input, and safe fixed-effort fallback.
+- Added colored conversation-pane notices when Jev changes reasoning effort,
+  using the same effort colors as the TUI input border.
+
+### Fixed
+
+- Hid unsupported native terminal progress signals in Ghostty.
+
 ## 0.0.15 - 2026-09-20
 
 ### Added
