@@ -1,6 +1,6 @@
 # KISS
 
-<img width="888" height="247" alt="image" src="https://github.com/user-attachments/assets/a18b9b70-d701-499d-8296-b9ee4a8ec6c1" />
+<img width="766" height="244" alt="image" src="https://github.com/user-attachments/assets/08e96d6e-7409-419b-b9db-0149f2465083" />
 
 A fast terminal coding agent that keeps the interface simple and gives you
 control of the model, tools, sessions, and automation.
