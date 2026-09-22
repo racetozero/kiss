@@ -69,6 +69,7 @@ pub struct Terminal {
     title_frame: u8,
     session_title: String,
     title_dirty: bool,
+    progress_enabled: bool,
 }
 
 impl Terminal {
@@ -87,6 +88,8 @@ impl Terminal {
             title_frame: 0,
             session_title: String::new(),
             title_dirty: false,
+            progress_enabled: std::env::var_os("TERM_PROGRAM")
+                .is_none_or(|value| value != "ghostty"),
         })
     }
 
@@ -123,12 +126,11 @@ impl Terminal {
             0
         };
         let progress_changed = (self.title_frame != 0) != working;
-        let progress_keep_alive = working && title_frame == 1 && self.title_frame != 1;
         if !progress_changed && usize::from(self.title_frame) == title_frame && !self.title_dirty {
             return Ok(());
         }
 
-        if progress_changed || progress_keep_alive {
+        if self.progress_enabled && progress_changed {
             out.write_all(if working {
                 PROGRESS_WORKING_SEQUENCE
             } else {
@@ -179,6 +181,7 @@ mod tests {
             title_frame: 0,
             session_title: String::new(),
             title_dirty: false,
+            progress_enabled: true,
         }
     }
 
@@ -224,10 +227,7 @@ mod tests {
 
         output.clear();
         terminal.write_activity(&mut output, true, 10).unwrap();
-        assert_eq!(
-            output,
-            b"\x1b]9;4;3;0\x1b\\\x1b]0;\xf0\x9f\x92\x8b \xe2\xa0\x8b kiss\x07"
-        );
+        assert_eq!(output, b"\x1b]0;\xf0\x9f\x92\x8b \xe2\xa0\x8b kiss\x07");
 
         output.clear();
         terminal.write_activity(&mut output, false, 2).unwrap();
@@ -235,6 +235,11 @@ mod tests {
             output,
             b"\x1b]9;4;0;0\x1b\\\x1b]0;\xf0\x9f\x92\x8b kiss\x07"
         );
+
+        output.clear();
+        terminal.progress_enabled = false;
+        terminal.write_activity(&mut output, true, 0).unwrap();
+        assert_eq!(output, b"\x1b]0;\xf0\x9f\x92\x8b \xe2\xa0\x8b kiss\x07");
     }
 
     #[test]
