@@ -46,6 +46,10 @@ pub enum SessionEvent {
         provider: String,
         model_id: String,
     },
+    ReasoningEffortChanged {
+        level: ThinkingLevel,
+        generations: u8,
+    },
     /// A dynamic workflow changed. The terminal redraws from the shared
     /// snapshot. The event carries only the cheap version marker.
     Workflow {
@@ -837,8 +841,10 @@ impl AgentSession {
                 let dynamic_enabled = settings.reasoning_effort.mode == ReasoningEffortMode::Jev
                     && crate::jev::supports_dynamic_reasoning(&model);
                 let mut next_effort = None;
+                let previous_effort;
                 {
                     let mut lease = reasoning_lease.lock().unwrap();
+                    previous_effort = lease.current().unwrap_or(saved_effort);
                     lease.consume_generation();
                     if !dynamic_enabled || tool_failed || has_queued_user_input {
                         lease.clear();
@@ -902,6 +908,12 @@ impl AgentSession {
                     };
                     if let Some(selection) = selected {
                         next_effort = Some(selection.level);
+                        if selection.level != previous_effort {
+                            (session.sink)(SessionEvent::ReasoningEffortChanged {
+                                level: selection.level,
+                                generations: selection.generations,
+                            });
+                        }
                         reasoning_lease.lock().unwrap().install(&selection);
                     } else {
                         reasoning_lease.lock().unwrap().clear();

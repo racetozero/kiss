@@ -42,6 +42,10 @@ enum Cell {
         done: bool,
     },
     Notice(String),
+    ReasoningEffort {
+        level: ThinkingLevel,
+        generations: u8,
+    },
     Error(String),
     BashExecution {
         command: String,
@@ -582,6 +586,16 @@ impl App {
                         }
                     }
                 }
+                Cell::ReasoningEffort { level, generations } => {
+                    let message = format!(
+                        "◆ Jev changed reasoning to {} for {generations} generation{}",
+                        level.as_str(),
+                        if *generations == 1 { "" } else { "s" }
+                    );
+                    for line in kiss_tui::text::wrap_text(&message, width) {
+                        lines.push(self.theme.fg(thinking_color_token(*level), &line));
+                    }
+                }
                 Cell::Error(text) => {
                     for l in kiss_tui::text::wrap_text(text, width.saturating_sub(2)) {
                         lines.push(self.theme.fg("error", &format!("✗ {l}")));
@@ -854,6 +868,10 @@ fn cell_render_key(
         | Cell::Thinking(text)
         | Cell::Notice(text)
         | Cell::Error(text) => text.hash(&mut hasher),
+        Cell::ReasoningEffort { level, generations } => {
+            (*level as u8).hash(&mut hasher);
+            generations.hash(&mut hasher);
+        }
         Cell::ToolCall {
             title,
             output,
@@ -1650,6 +1668,9 @@ fn handle_session_event(
         SessionEvent::ModelChanged { provider, model_id } => {
             app.cells
                 .push(Cell::Notice(format!("model: {provider}/{model_id}")));
+        }
+        SessionEvent::ReasoningEffortChanged { level, generations } => {
+            app.cells.push(Cell::ReasoningEffort { level, generations });
         }
         SessionEvent::Workflow { run: _, version } => {
             app.workflow_version = version;
@@ -3250,17 +3271,21 @@ fn update_thinking_border(app: &mut App, level: ThinkingLevel) {
     app.editor.border_color_token = if app.editor.text().starts_with('!') {
         "bashMode"
     } else {
-        match level {
-            ThinkingLevel::Off => "thinkingOff",
-            ThinkingLevel::Minimal => "thinkingMinimal",
-            ThinkingLevel::Low => "thinkingLow",
-            ThinkingLevel::Medium => "thinkingMedium",
-            ThinkingLevel::High => "thinkingHigh",
-            ThinkingLevel::Xhigh => "thinkingXhigh",
-            ThinkingLevel::Max => "thinkingMax",
-        }
+        thinking_color_token(level)
     }
     .into();
+}
+
+fn thinking_color_token(level: ThinkingLevel) -> &'static str {
+    match level {
+        ThinkingLevel::Off => "thinkingOff",
+        ThinkingLevel::Minimal => "thinkingMinimal",
+        ThinkingLevel::Low => "thinkingLow",
+        ThinkingLevel::Medium => "thinkingMedium",
+        ThinkingLevel::High => "thinkingHigh",
+        ThinkingLevel::Xhigh => "thinkingXhigh",
+        ThinkingLevel::Max => "thinkingMax",
+    }
 }
 
 fn copy_last_response(app: &mut App) {
@@ -8539,6 +8564,39 @@ mod tests {
             Some(Cell::Notice(text))
                 if text == "verified workflow `audit` was cancelled. No agents ran"
         ));
+    }
+
+    #[test]
+    fn jev_reasoning_change_uses_the_matching_input_border_color() {
+        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
+            "/synthetic",
+        )));
+        let (tx, _rx) = mpsc::unbounded_channel();
+        let mut file_search = FileSearchService::new(tx);
+        let mut app = test_app();
+
+        handle_session_event(
+            &mut app,
+            SessionEvent::ReasoningEffortChanged {
+                level: ThinkingLevel::High,
+                generations: 5,
+            },
+            &mut file_search,
+            &session,
+        );
+
+        assert!(matches!(
+            app.cells.last(),
+            Some(Cell::ReasoningEffort {
+                level: ThinkingLevel::High,
+                generations: 5
+            })
+        ));
+        let expected = app.theme.fg(
+            thinking_color_token(ThinkingLevel::High),
+            "◆ Jev changed reasoning to high for 5 generations",
+        );
+        assert!(app.render(80, &session).contains(&expected));
     }
 
     #[test]

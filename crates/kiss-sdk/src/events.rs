@@ -170,6 +170,11 @@ pub fn session_event_json(event: &SessionEvent) -> Option<Value> {
         SessionEvent::ModelChanged { provider, model_id } => {
             json!({"type": "model_changed", "provider": provider, "modelId": model_id})
         }
+        SessionEvent::ReasoningEffortChanged { level, generations } => json!({
+            "type": "reasoning_effort_changed",
+            "level": level.as_str(),
+            "generations": generations,
+        }),
         SessionEvent::Workflow { run, version } => {
             json!({"type": "workflow_progress", "run": run, "version": version})
         }
@@ -232,6 +237,23 @@ mod tests {
                 "run": null,
                 "name": "audit",
                 "status": "cancelled"
+            })
+        );
+    }
+
+    #[test]
+    fn reasoning_effort_changes_have_a_public_json_event() {
+        let event = session_event_json(&SessionEvent::ReasoningEffortChanged {
+            level: kiss_ai::ThinkingLevel::Xhigh,
+            generations: 2,
+        })
+        .unwrap();
+        assert_eq!(
+            event,
+            json!({
+                "type": "reasoning_effort_changed",
+                "level": "xhigh",
+                "generations": 2
             })
         );
     }
