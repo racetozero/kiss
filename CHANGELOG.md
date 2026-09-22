@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.0.17 - 2026-09-22
+
+### Changed
+
+- Expanded experimental TypeSafe Jev reasoning-effort selection to every
+  reasoning model and provider, using each model's supported effort levels and
+  existing provider-native mappings.
+
 ## 0.0.16 - 2026-09-22
 
 ### Added
