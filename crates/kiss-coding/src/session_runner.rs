@@ -7,7 +7,7 @@ use crate::compaction::{
 };
 use crate::iterative::IterativeRuntime;
 use crate::session::manager::SessionManager;
-use crate::settings::{CacheWarmingMode, CompactionMode, QueueMode, Settings};
+use crate::settings::{CacheWarmingMode, CompactionMode, QueueMode, ReasoningEffortMode, Settings};
 use crate::subagents::{ForkTurns, SUBAGENT_SYSTEM_PROMPT, SubagentRuntime, fork_messages};
 use crate::workflows::{WorkflowApprover, WorkflowRuntime};
 use anyhow::Context as _;
@@ -773,14 +773,20 @@ impl AgentSession {
             session_for_queues.emit_queues();
             Box::pin(async move { drained })
         }));
+        let reasoning_lease = Arc::new(Mutex::new(crate::jev::ReasoningLease::default()));
         let session_for_compaction = session_arc.clone();
         config.prepare_next_turn = Some(Arc::new(move |turn| {
             let has_tool_results = !turn.tool_results.is_empty();
+            let tool_failed = turn.tool_results.iter().any(|result| result.is_error);
+            let will_continue = turn.will_continue;
             let session = session_for_compaction.clone();
             let active_prompt_mode = active_prompt_mode.clone();
             let steering_for_mode = steering_for_mode.clone();
             let follow_up_for_mode = follow_up_for_mode.clone();
+            let reasoning_lease = reasoning_lease.clone();
             Box::pin(async move {
+                let has_queued_user_input = !steering_for_mode.lock().unwrap().is_empty()
+                    || (!will_continue && !follow_up_for_mode.lock().unwrap().is_empty());
                 let queued_mode = queued_mode(&steering_for_mode, steering_mode)
                     .or_else(|| queued_mode(&follow_up_for_mode, follow_up_mode));
                 let mode_changed = {
@@ -824,9 +830,89 @@ impl AgentSession {
                     }
                 }
 
+                let settings = session.settings();
+                let model = session.model();
+                let saved_effort = session.thinking_level();
+                let next_generation = will_continue || has_queued_user_input;
+                let dynamic_enabled = settings.reasoning_effort.mode == ReasoningEffortMode::Jev
+                    && crate::jev::supports_dynamic_reasoning(&model);
+                let mut next_effort = None;
+                {
+                    let mut lease = reasoning_lease.lock().unwrap();
+                    lease.consume_generation();
+                    if !dynamic_enabled || tool_failed || has_queued_user_input {
+                        lease.clear();
+                    }
+                    if dynamic_enabled && next_generation {
+                        next_effort = lease.current();
+                    } else if next_generation {
+                        next_effort = Some(saved_effort);
+                    }
+                }
+                if dynamic_enabled && next_generation && next_effort.is_none() {
+                    let selected = match kiss_ai::auth::resolve_api_key_async(
+                        "typesafe",
+                        &session.registry.declared_keys,
+                    )
+                    .await
+                    {
+                        Ok(Some(api_key)) => {
+                            let mut queued_messages = {
+                                let steering = steering_for_mode.lock().unwrap();
+                                steering
+                                    .iter()
+                                    .take(if steering_mode == QueueMode::All {
+                                        usize::MAX
+                                    } else {
+                                        1
+                                    })
+                                    .map(|prompt| prompt.message.clone())
+                                    .collect::<Vec<_>>()
+                            };
+                            if queued_messages.is_empty() && !will_continue {
+                                let follow_up = follow_up_for_mode.lock().unwrap();
+                                queued_messages.extend(
+                                    follow_up
+                                        .iter()
+                                        .take(if follow_up_mode == QueueMode::All {
+                                            usize::MAX
+                                        } else {
+                                            1
+                                        })
+                                        .map(|prompt| prompt.message.clone()),
+                                );
+                            }
+                            let messages = session
+                                .manager
+                                .lock()
+                                .unwrap()
+                                .build_session_context()
+                                .messages;
+                            let cancel = session.cancel.lock().unwrap().clone();
+                            crate::jev::select_reasoning(
+                                &messages,
+                                &queued_messages,
+                                &api_key,
+                                cancel,
+                            )
+                            .await
+                            .ok()
+                        }
+                        _ => None,
+                    };
+                    if let Some(selection) = selected {
+                        next_effort = Some(selection.level);
+                        reasoning_lease.lock().unwrap().install(&selection);
+                    } else {
+                        reasoning_lease.lock().unwrap().clear();
+                        next_effort = Some(saved_effort);
+                    }
+                }
+
                 Some(TurnUpdate {
                     context: context_changed
                         .then(|| session.build_context_for(*active_prompt_mode.lock().unwrap())),
+                    thinking_level: next_effort,
                     fast_mode: Some(session.fast_mode()),
                     ..Default::default()
                 })

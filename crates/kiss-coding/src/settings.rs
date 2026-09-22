@@ -44,6 +44,20 @@ impl Default for CompactionSettings {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum ReasoningEffortMode {
+    #[default]
+    Fixed,
+    Jev,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct ReasoningEffortSettings {
+    pub mode: ReasoningEffortMode,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct RetrySettings {
@@ -204,6 +218,7 @@ pub struct Settings {
     pub quiet_startup: bool,
     pub default_project_trust: ProjectTrustDefault,
     pub compaction: CompactionSettings,
+    pub reasoning_effort: ReasoningEffortSettings,
     pub retry: RetrySettings,
     pub cache_warming: CacheWarmingMode,
     pub subagents: SubagentSettings,
@@ -333,6 +348,7 @@ mod tests {
         assert_eq!(s.compaction.mode, CompactionMode::Summary);
         assert_eq!(s.compaction.reserve_tokens, 16_384);
         assert_eq!(s.compaction.keep_recent_tokens, 20_000);
+        assert_eq!(s.reasoning_effort.mode, ReasoningEffortMode::Fixed);
         assert_eq!(s.retry.max_retries, 3);
         assert_eq!(s.retry.max_agent_delay_ms, 60_000);
         assert_eq!(s.cache_warming, CacheWarmingMode::Streaming);
@@ -372,6 +388,16 @@ mod tests {
         assert_eq!(
             serde_json::to_value(settings).unwrap()["compaction"]["mode"],
             "summary"
+        );
+    }
+
+    #[test]
+    fn old_settings_default_to_fixed_reasoning_effort() {
+        let settings: Settings = serde_json::from_value(json!({})).unwrap();
+        assert_eq!(settings.reasoning_effort.mode, ReasoningEffortMode::Fixed);
+        assert_eq!(
+            serde_json::to_value(settings).unwrap()["reasoningEffort"]["mode"],
+            "fixed"
         );
     }
 

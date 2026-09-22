@@ -161,6 +161,7 @@ async fn run_loop(
                     message: &assistant_message,
                     tool_results: &tool_results,
                     messages: new_messages,
+                    will_continue: has_more_tool_calls,
                 };
                 if let Some(update) = prepare(&info).await {
                     if let Some(ctx) = update.context {
@@ -183,6 +184,7 @@ async fn run_loop(
                     message: &assistant_message,
                     tool_results: &tool_results,
                     messages: new_messages,
+                    will_continue: has_more_tool_calls,
                 };
                 if should_stop(&info).await {
                     return;

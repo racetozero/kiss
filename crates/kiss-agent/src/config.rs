@@ -62,6 +62,8 @@ pub struct TurnInfo<'a> {
     pub message: &'a AgentMessage,
     pub tool_results: &'a [kiss_ai::ToolResultMessage],
     pub messages: &'a [AgentMessage],
+    /// The completed tool batch requires another model generation.
+    pub will_continue: bool,
 }
 
 type SteeringFn = Arc<dyn Fn() -> BoxFuture<Vec<AgentMessage>> + Send + Sync>;

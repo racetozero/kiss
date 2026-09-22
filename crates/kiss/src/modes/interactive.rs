@@ -12,7 +12,7 @@ use anyhow::{Context as _, Result};
 use kiss_agent::{AgentEvent, AgentMessage};
 use kiss_ai::{AssistantEvent, ContentBlock, StopReason, ThinkingLevel, Transport};
 use kiss_coding::session_runner::{PromptMode, SessionEvent};
-use kiss_coding::settings::{CompactionMode, MermaidRendering, QueueMode};
+use kiss_coding::settings::{CompactionMode, MermaidRendering, QueueMode, ReasoningEffortMode};
 use kiss_coding::workflows::workflow_trigger;
 use kiss_tui::{
     Action, Component, DiffRenderer, Editor, EditorSubmission, InputDecoder, InputEvent, Key,
@@ -4080,6 +4080,17 @@ fn next_compaction_mode(
     }
 }
 
+fn next_reasoning_effort_mode(
+    current: ReasoningEffortMode,
+    typesafe_available: bool,
+) -> Option<ReasoningEffortMode> {
+    if current == ReasoningEffortMode::Jev {
+        Some(ReasoningEffortMode::Fixed)
+    } else {
+        typesafe_available.then_some(ReasoningEffortMode::Jev)
+    }
+}
+
 fn settings_picker(
     app: &App,
     session: &Arc<kiss_coding::AgentSession>,
@@ -4223,6 +4234,17 @@ fn settings_picker(
                 CompactionMode::Jev => "Jev unavailable · /login typesafe".into(),
             }),
             value: 15,
+        },
+        SelectItem {
+            label: "Dynamic reasoning".into(),
+            detail: Some(match settings.reasoning_effort.mode {
+                ReasoningEffortMode::Fixed => "fixed".into(),
+                ReasoningEffortMode::Jev if typesafe_available(session) => {
+                    "Jev (experimental · GPT-6 Astra only)".into()
+                }
+                ReasoningEffortMode::Jev => "Jev unavailable · /login typesafe".into(),
+            }),
+            value: 16,
         },
     ];
     Picker {
@@ -5858,6 +5880,19 @@ fn apply_settings_selection(
                 return;
             };
             resources.settings.compaction.mode = mode;
+        }
+        16 => {
+            let Some(mode) = next_reasoning_effort_mode(
+                resources.settings.reasoning_effort.mode,
+                typesafe_available(session),
+            ) else {
+                app.cells.push(Cell::Notice(
+                    "Jev dynamic reasoning was selected, but it needs a TypeSafe API key. Run /login typesafe or set TYPESAFE_API_KEY, then select it again"
+                        .into(),
+                ));
+                return;
+            };
+            resources.settings.reasoning_effort.mode = mode;
         }
         _ => return,
     }
@@ -8012,6 +8047,40 @@ mod tests {
         assert_eq!(
             next_compaction_mode(CompactionMode::Jev, false),
             Some(CompactionMode::Summary)
+        );
+    }
+
+    #[test]
+    fn jev_reasoning_requires_typesafe_credentials_to_enable() {
+        assert_eq!(
+            next_reasoning_effort_mode(ReasoningEffortMode::Fixed, false),
+            None
+        );
+        assert_eq!(
+            next_reasoning_effort_mode(ReasoningEffortMode::Fixed, true),
+            Some(ReasoningEffortMode::Jev)
+        );
+        assert_eq!(
+            next_reasoning_effort_mode(ReasoningEffortMode::Jev, false),
+            Some(ReasoningEffortMode::Fixed)
+        );
+    }
+
+    #[test]
+    fn settings_picker_shows_dynamic_reasoning_as_fixed_by_default() {
+        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
+            "/synthetic",
+        )));
+        let mut app = test_app();
+        let resources = test_resources();
+
+        open_settings_picker(&mut app, &session, &resources);
+        let picker = app.picker.as_mut().expect("settings picker");
+        assert!(picker.list.select_value(16));
+        assert_eq!(picker.list.current().unwrap().label, "Dynamic reasoning");
+        assert_eq!(
+            picker.list.current().unwrap().detail.as_deref(),
+            Some("fixed")
         );
     }
 

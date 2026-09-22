@@ -1,15 +1,22 @@
 use anyhow::{Context as _, bail};
 use kiss_agent::AgentMessage;
-use kiss_ai::{ContentBlock, ToolResultMessage};
+use kiss_ai::{ContentBlock, Model, ThinkingLevel, ToolResultMessage, UserContent};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::sync::OnceLock;
 use std::time::Duration;
 use tokio_util::sync::CancellationToken;
 
 const ENDPOINT: &str = "https://api.typesafe.ai/v1/systemone";
 const KEEP_THRESHOLD: f64 = 0.5;
 const TRUNCATE_HEAD_CHARS: usize = 300;
+const MAX_TASK_CHARS: usize = 4_000;
+const MAX_PROGRESS_ITEMS: usize = 6;
+const MAX_PROGRESS_CHARS: usize = 1_200;
+const MAX_TOOL_INTERACTIONS: usize = 6;
+const MAX_TOOL_INPUT_CHARS: usize = 1_000;
+const MAX_TOOL_OUTPUT_CHARS: usize = 2_000;
 
 struct Interaction {
     id: String,
@@ -17,10 +24,10 @@ struct Interaction {
 }
 
 #[derive(Serialize)]
-struct JevRequest {
+struct JevRequest<Q> {
     state: Value,
     model: &'static str,
-    questions: BTreeMap<String, NoulQuestion>,
+    questions: BTreeMap<String, Q>,
 }
 
 #[derive(Serialize)]
@@ -30,17 +37,31 @@ struct NoulQuestion {
     instructions: String,
 }
 
+#[derive(Serialize)]
+struct ChoiceQuestion {
+    #[serde(rename = "type")]
+    kind: &'static str,
+    instructions: &'static str,
+    criteria: BTreeMap<&'static str, &'static str>,
+}
+
 #[derive(Deserialize)]
 struct JevResponse {
-    answers: BTreeMap<String, NoulAnswer>,
+    answers: BTreeMap<String, JevAnswer>,
     usage: JevUsage,
 }
 
 #[derive(Deserialize)]
-struct NoulAnswer {
-    #[serde(rename = "type")]
-    kind: String,
-    noul: f64,
+#[serde(tag = "type")]
+enum JevAnswer {
+    #[serde(rename = "noul")]
+    Noul { noul: f64 },
+    #[serde(rename = "choice")]
+    Choice {
+        choice: String,
+        probabilities: BTreeMap<String, f64>,
+        confidence: f64,
+    },
 }
 
 #[derive(Default, Deserialize, Serialize)]
@@ -67,6 +88,42 @@ pub(crate) struct JevCompaction {
     pub stats: JevStats,
 }
 
+pub(crate) struct ReasoningSelection {
+    pub level: ThinkingLevel,
+    pub generations: u8,
+}
+
+#[derive(Default)]
+pub(crate) struct ReasoningLease {
+    level: Option<ThinkingLevel>,
+    remaining: u8,
+}
+
+impl ReasoningLease {
+    pub fn consume_generation(&mut self) {
+        if self.remaining > 0 {
+            self.remaining -= 1;
+            if self.remaining == 0 {
+                self.level = None;
+            }
+        }
+    }
+
+    pub fn current(&self) -> Option<ThinkingLevel> {
+        self.level
+    }
+
+    pub fn install(&mut self, selection: &ReasoningSelection) {
+        self.level = Some(selection.level);
+        self.remaining = selection.generations;
+    }
+
+    pub fn clear(&mut self) {
+        self.level = None;
+        self.remaining = 0;
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Decision {
     Keep,
@@ -85,7 +142,7 @@ pub(crate) async fn compact(
         bail!("Jev found no older tool interactions to compact");
     }
     let request = build_request(messages, &interactions);
-    let send = reqwest::Client::new()
+    let send = http_client()
         .post(ENDPOINT)
         .timeout(Duration::from_secs(15))
         .bearer_auth(api_key)
@@ -105,6 +162,46 @@ pub(crate) async fn compact(
     }
     let (decisions, usage) = parse_response(&body, interactions.len())?;
     Ok(apply_decisions(messages, &interactions, &decisions, usage))
+}
+
+pub(crate) fn supports_dynamic_reasoning(model: &Model) -> bool {
+    model.reasoning && model.id == "gpt-6-astra"
+}
+
+pub(crate) async fn select_reasoning(
+    messages: &[AgentMessage],
+    queued: &[AgentMessage],
+    api_key: &str,
+    cancel: CancellationToken,
+) -> anyhow::Result<ReasoningSelection> {
+    let request = build_reasoning_request(messages, queued);
+    let send = http_client()
+        .post(ENDPOINT)
+        .timeout(Duration::from_secs(2))
+        .bearer_auth(api_key)
+        .json(&request)
+        .send();
+    let response = tokio::select! {
+        _ = cancel.cancelled() => bail!("Jev reasoning selection was cancelled; retry the task or set Dynamic reasoning to fixed"),
+        response = send => response.context("send Jev reasoning selection request")?,
+    };
+    let status = response.status();
+    let body = tokio::select! {
+        _ = cancel.cancelled() => bail!("Jev reasoning selection was cancelled; retry the task or set Dynamic reasoning to fixed"),
+        body = response.text() => body.context("read Jev reasoning selection response")?,
+    };
+    if !status.is_success() {
+        bail!(
+            "Jev reasoning selection failed with {status}: {}; retry with valid TypeSafe credentials or set Dynamic reasoning to fixed",
+            body.trim()
+        );
+    }
+    parse_reasoning_response(&body)
+}
+
+fn http_client() -> &'static reqwest::Client {
+    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+    CLIENT.get_or_init(reqwest::Client::new)
 }
 
 fn collect_interactions(messages: &[AgentMessage], pinned_start: usize) -> Vec<Interaction> {
@@ -131,7 +228,10 @@ fn collect_interactions(messages: &[AgentMessage], pinned_start: usize) -> Vec<I
         .collect()
 }
 
-fn build_request(messages: &[AgentMessage], interactions: &[Interaction]) -> JevRequest {
+fn build_request(
+    messages: &[AgentMessage],
+    interactions: &[Interaction],
+) -> JevRequest<NoulQuestion> {
     let mut goals: Vec<_> = messages
         .iter()
         .filter_map(|message| match message {
@@ -171,6 +271,120 @@ fn build_request(messages: &[AgentMessage], interactions: &[Interaction]) -> Jev
     }
     JevRequest {
         state,
+        model: "jev-latest",
+        questions,
+    }
+}
+
+fn build_reasoning_request(
+    messages: &[AgentMessage],
+    queued: &[AgentMessage],
+) -> JevRequest<ChoiceQuestion> {
+    let task = queued
+        .iter()
+        .rev()
+        .chain(messages.iter().rev())
+        .find_map(|message| match message {
+            AgentMessage::User(user) => Some(user_content_excerpt(&user.content, MAX_TASK_CHARS)),
+            _ => None,
+        })
+        .unwrap_or_default();
+
+    let mut progress = messages
+        .iter()
+        .rev()
+        .filter_map(|message| match message {
+            AgentMessage::Assistant(assistant) => Some(assistant),
+            _ => None,
+        })
+        .flat_map(|assistant| assistant.content.iter().rev())
+        .filter_map(|block| match block {
+            ContentBlock::Text { text, .. } => Some(json!({
+                "kind": "progress",
+                "text": bounded_text(text, MAX_PROGRESS_CHARS),
+            })),
+            ContentBlock::Thinking { thinking, .. } => Some(json!({
+                "kind": "reasoning_summary",
+                "text": bounded_text(thinking, MAX_PROGRESS_CHARS),
+            })),
+            _ => None,
+        })
+        .take(MAX_PROGRESS_ITEMS)
+        .collect::<Vec<_>>();
+    progress.reverse();
+
+    let mut tools = Vec::with_capacity(MAX_TOOL_INTERACTIONS);
+    for result in messages.iter().rev().filter_map(|message| match message {
+        AgentMessage::ToolResult(result) => Some(result),
+        _ => None,
+    }) {
+        let call = messages.iter().rev().find_map(|message| match message {
+            AgentMessage::Assistant(assistant) => assistant
+                .tool_calls()
+                .find(|call| call.id == result.tool_call_id),
+            _ => None,
+        });
+        let Some(call) = call else {
+            continue;
+        };
+        tools.push(json!({
+            "tool": call.name,
+            "input": bounded_text(&call.arguments.to_string(), MAX_TOOL_INPUT_CHARS),
+            "output": content_excerpt(&result.content, MAX_TOOL_OUTPUT_CHARS),
+            "failed": result.is_error,
+        }));
+        if tools.len() == MAX_TOOL_INTERACTIONS {
+            break;
+        }
+    }
+    tools.reverse();
+
+    let questions = BTreeMap::from([
+        (
+            "effort".into(),
+            ChoiceQuestion {
+                kind: "choice",
+                instructions: "Which reasoning effort should GPT-6 Astra use for the next generation?",
+                criteria: BTreeMap::from([
+                    (
+                        "low",
+                        "Routine, clear, or mechanical work with little uncertainty",
+                    ),
+                    ("medium", "Normal coding work that needs some analysis"),
+                    (
+                        "high",
+                        "Complex work, ambiguity, debugging, or important tradeoffs",
+                    ),
+                    (
+                        "xhigh",
+                        "The agent is stuck or the next step needs deep reasoning",
+                    ),
+                    (
+                        "max",
+                        "Repeated failure or an exceptionally difficult high-stakes step",
+                    ),
+                ]),
+            },
+        ),
+        (
+            "generations".into(),
+            ChoiceQuestion {
+                kind: "choice",
+                instructions: "For how many future GPT-6 Astra generations should this effort remain useful before reassessment?",
+                criteria: BTreeMap::from([
+                    (
+                        "1",
+                        "Reassess after the next generation because the phase is changing",
+                    ),
+                    ("2", "The near-term phase is stable for two generations"),
+                    ("5", "The current phase is stable for several generations"),
+                    ("10", "The work is repetitive and likely to stay stable"),
+                ]),
+            },
+        ),
+    ]);
+    JevRequest {
+        state: json!({"task": task, "progress": progress, "tools": tools}),
         model: "jev-latest",
         questions,
     }
@@ -221,11 +435,13 @@ fn parse_response(body: &str, count: usize) -> anyhow::Result<(Vec<Decision>, Je
             .answers
             .get(key)
             .with_context(|| format!("Jev response is missing {key}"))?;
-        if answer.kind != "noul" || !answer.noul.is_finite() || !(0.0..=1.0).contains(&answer.noul)
-        {
-            bail!("Jev returned an invalid answer for {key}");
+        let JevAnswer::Noul { noul } = answer else {
+            bail!("Jev returned the wrong answer type for {key}; expected noul");
+        };
+        if !noul.is_finite() || !(0.0..=1.0).contains(noul) {
+            bail!("Jev returned an invalid probability for {key}; expected a number from 0 to 1");
         }
-        Ok(answer.noul)
+        Ok(*noul)
     };
     let mut decisions = Vec::with_capacity(count);
     for index in 0..count {
@@ -240,6 +456,93 @@ fn parse_response(body: &str, count: usize) -> anyhow::Result<(Vec<Decision>, Je
         });
     }
     Ok((decisions, response.usage))
+}
+
+fn parse_reasoning_response(body: &str) -> anyhow::Result<ReasoningSelection> {
+    let response: JevResponse = serde_json::from_str(body)
+        .context("parse Jev reasoning selection response; expected System One Choice JSON")?;
+    let choice = |key: &str, allowed: &[&str]| -> anyhow::Result<&str> {
+        let answer = response.answers.get(key).with_context(|| {
+            format!(
+                "Jev reasoning response is missing {key}; expected effort and generations choices"
+            )
+        })?;
+        let JevAnswer::Choice {
+            choice,
+            probabilities,
+            confidence,
+        } = answer
+        else {
+            bail!("Jev returned the wrong answer type for {key}; expected choice");
+        };
+        if !allowed.contains(&choice.as_str()) {
+            bail!(
+                "Jev selected invalid {key} value '{choice}'; expected one of {}",
+                allowed.join(", ")
+            );
+        }
+        if !confidence.is_finite() || !(0.0..=1.0).contains(confidence) {
+            bail!("Jev returned invalid confidence for {key}; expected a number from 0 to 1");
+        }
+        if probabilities.len() != allowed.len()
+            || allowed.iter().any(|option| {
+                probabilities
+                    .get(*option)
+                    .is_none_or(|value| !value.is_finite() || !(0.0..=1.0).contains(value))
+            })
+            || (probabilities.values().sum::<f64>() - 1.0).abs() > 0.01
+        {
+            bail!(
+                "Jev returned invalid probabilities for {key}; expected every allowed option with values that sum to 1"
+            );
+        }
+        Ok(choice)
+    };
+    let level = ThinkingLevel::parse(choice(
+        "effort",
+        &["low", "medium", "high", "xhigh", "max"],
+    )?)
+    .context("parse validated Jev effort")?;
+    let generations = choice("generations", &["1", "2", "5", "10"])?
+        .parse()
+        .context("parse validated Jev generation lease")?;
+    Ok(ReasoningSelection { level, generations })
+}
+
+fn bounded_text(text: &str, max_chars: usize) -> String {
+    let Some((end, _)) = text.char_indices().nth(max_chars) else {
+        return text.to_string();
+    };
+    format!("{}…", &text[..end])
+}
+
+fn user_content_excerpt(content: &UserContent, max_chars: usize) -> String {
+    match content {
+        UserContent::Text(text) => bounded_text(text, max_chars),
+        UserContent::Blocks(blocks) => content_excerpt(blocks, max_chars),
+    }
+}
+
+fn content_excerpt(content: &[ContentBlock], max_chars: usize) -> String {
+    let mut excerpt = String::new();
+    let mut remaining = max_chars;
+    for text in content.iter().filter_map(|block| match block {
+        ContentBlock::Text { text, .. } => Some(text),
+        _ => None,
+    }) {
+        if !excerpt.is_empty() && remaining > 0 {
+            excerpt.push('\n');
+            remaining -= 1;
+        }
+        let kept = text.chars().take(remaining).collect::<String>();
+        remaining -= kept.chars().count();
+        excerpt.push_str(&kept);
+        if remaining == 0 {
+            excerpt.push('…');
+            break;
+        }
+    }
+    excerpt
 }
 
 fn apply_decisions(
@@ -342,7 +645,7 @@ fn serialized_len(messages: &[AgentMessage]) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kiss_ai::{AssistantMessage, StopReason, ToolCall};
+    use kiss_ai::{AssistantMessage, Registry, StopReason, ToolCall};
 
     fn assistant(calls: &[(&str, &str)], text: Option<&str>) -> AgentMessage {
         let mut message = AssistantMessage::empty("test", "test", "test");
@@ -371,6 +674,33 @@ mod tests {
             is_error: false,
             timestamp: 1,
         })
+    }
+
+    fn reasoning_response(effort: &str, generations: &str) -> String {
+        json!({
+            "answers": {
+                "effort": {
+                    "type": "choice",
+                    "choice": effort,
+                    "confidence": 0.5,
+                    "probabilities": {
+                        "low": 0.2,
+                        "medium": 0.2,
+                        "high": 0.2,
+                        "xhigh": 0.2,
+                        "max": 0.2
+                    }
+                },
+                "generations": {
+                    "type": "choice",
+                    "choice": generations,
+                    "confidence": 0.5,
+                    "probabilities": {"1": 0.25, "2": 0.25, "5": 0.25, "10": 0.25}
+                }
+            },
+            "usage": {"input_tokens": 12, "output_tokens": 3}
+        })
+        .to_string()
     }
 
     #[test]
@@ -440,5 +770,159 @@ mod tests {
         assert!(parse_response(missing, 1).is_err());
         let invalid = r#"{"answers":{"call_0":{"type":"noul","noul":2},"result_0":{"type":"noul","noul":0}},"usage":{"input_tokens":1,"output_tokens":1}}"#;
         assert!(parse_response(invalid, 1).is_err());
+    }
+
+    #[test]
+    fn reasoning_request_is_bounded_and_uses_choice_questions() {
+        let mut messages = vec![AgentMessage::user("old task")];
+        for index in 0..8 {
+            let id = format!("call_{index}");
+            let mut message = AssistantMessage::empty("test", "test", "test");
+            message.content.push(ContentBlock::Thinking {
+                thinking: format!("summary {index} {}", "界".repeat(2_000)),
+                thinking_signature: None,
+                redacted: false,
+            });
+            message.content.push(ContentBlock::ToolCall(ToolCall {
+                id: id.clone(),
+                name: "read".into(),
+                arguments: json!({"path": format!("{id}-{}", "界".repeat(2_000))}),
+                thought_signature: None,
+            }));
+            message.stop_reason = StopReason::ToolUse;
+            messages.push(AgentMessage::Assistant(message));
+            messages.push(result(
+                &id,
+                &format!("output {index} {}", "界".repeat(3_000)),
+            ));
+        }
+        let request = build_reasoning_request(
+            &messages,
+            &[AgentMessage::user(format!(
+                "new queued task {}",
+                "界".repeat(5_000)
+            ))],
+        );
+        let value = serde_json::to_value(request).unwrap();
+
+        assert_eq!(value["model"], "jev-latest");
+        assert_eq!(value["questions"]["effort"]["type"], "choice");
+        assert_eq!(
+            value["questions"]["effort"]["criteria"]
+                .as_object()
+                .unwrap()
+                .keys()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            ["high", "low", "max", "medium", "xhigh"]
+        );
+        assert_eq!(value["questions"]["generations"]["type"], "choice");
+        assert_eq!(
+            value["questions"]["generations"]["criteria"]
+                .as_object()
+                .unwrap()
+                .len(),
+            4
+        );
+        assert!(
+            value["state"]["task"]
+                .as_str()
+                .unwrap()
+                .starts_with("new queued task")
+        );
+        assert!(value["state"]["task"].as_str().unwrap().chars().count() <= MAX_TASK_CHARS + 1);
+        assert_eq!(value["state"]["progress"].as_array().unwrap().len(), 6);
+        let tools = value["state"]["tools"].as_array().unwrap();
+        assert_eq!(tools.len(), 6);
+        assert!(tools[0]["input"].as_str().unwrap().contains("call_2"));
+        assert!(tools[5]["input"].as_str().unwrap().contains("call_7"));
+        assert!(tools.iter().all(
+            |tool| tool["input"].as_str().unwrap().chars().count() <= MAX_TOOL_INPUT_CHARS + 1
+        ));
+        assert!(
+            tools
+                .iter()
+                .all(|tool| tool["output"].as_str().unwrap().chars().count()
+                    <= MAX_TOOL_OUTPUT_CHARS + 1)
+        );
+    }
+
+    #[test]
+    fn reasoning_response_accepts_only_documented_choices() {
+        let selection = parse_reasoning_response(&reasoning_response("xhigh", "5")).unwrap();
+        assert_eq!(selection.level, ThinkingLevel::Xhigh);
+        assert_eq!(selection.generations, 5);
+
+        assert!(parse_reasoning_response(&reasoning_response("minimal", "5")).is_err());
+        assert!(parse_reasoning_response(&reasoning_response("high", "3")).is_err());
+        let wrong_type = reasoning_response("high", "5")
+            .replace("\"type\":\"choice\"", "\"type\":\"noul\",\"noul\":0.5");
+        assert!(parse_reasoning_response(&wrong_type).is_err());
+    }
+
+    #[test]
+    fn reasoning_lease_counts_generations_and_clears_early() {
+        for generations in [1, 2, 5, 10] {
+            let selection = ReasoningSelection {
+                level: ThinkingLevel::High,
+                generations,
+            };
+            let mut lease = ReasoningLease::default();
+            lease.install(&selection);
+            for _ in 1..generations {
+                assert_eq!(lease.current(), Some(ThinkingLevel::High));
+                lease.consume_generation();
+            }
+            assert_eq!(lease.current(), Some(ThinkingLevel::High));
+            lease.consume_generation();
+            assert_eq!(lease.current(), None);
+        }
+
+        let mut lease = ReasoningLease::default();
+        lease.install(&ReasoningSelection {
+            level: ThinkingLevel::Max,
+            generations: 10,
+        });
+        lease.clear();
+        assert_eq!(lease.current(), None);
+    }
+
+    #[test]
+    fn dynamic_reasoning_targets_only_astra() {
+        let registry = Registry::from_builtin();
+        let (astra, _) = registry.resolve("openai/gpt-6-astra", None).unwrap();
+        let (other, _) = registry.resolve("openai/gpt-5.4", None).unwrap();
+        assert!(supports_dynamic_reasoning(&astra));
+        assert!(!supports_dynamic_reasoning(&other));
+    }
+
+    #[test]
+    #[ignore = "release-mode performance benchmark"]
+    fn benchmark_performance_reasoning_router() {
+        let selection = ReasoningSelection {
+            level: ThinkingLevel::Low,
+            generations: 10,
+        };
+        let mut active = ReasoningLease::default();
+        active.install(&selection);
+        kiss_bench::measure_pair(
+            ("jev_reasoning_disabled", "jev_reasoning_active_lease"),
+            21,
+            1_000_000,
+            ("no_request", "no_request_reuse_10_generations"),
+            || {
+                let mut lease = ReasoningLease::default();
+                lease.clear();
+                lease.current()
+            },
+            || {
+                if active.current().is_none() {
+                    active.install(&selection);
+                }
+                let level = active.current();
+                active.consume_generation();
+                level
+            },
+        );
     }
 }

@@ -89,6 +89,8 @@ struct EchoTool {
     calls: Arc<AtomicUsize>,
 }
 
+struct TerminatingTool;
+
 struct MeasuredTool {
     calls: AtomicUsize,
     active: AtomicUsize,
@@ -168,6 +170,34 @@ impl AgentTool for EchoTool {
             "echo: {}",
             args["value"].as_str().unwrap_or("")
         )))
+    }
+}
+
+#[async_trait::async_trait]
+impl AgentTool for TerminatingTool {
+    fn name(&self) -> &str {
+        "finish"
+    }
+
+    fn description(&self) -> String {
+        "finish the loop".into()
+    }
+
+    fn parameters(&self) -> Value {
+        json!({"type": "object"})
+    }
+
+    async fn execute(
+        &self,
+        _id: &str,
+        _args: Value,
+        _cancel: CancellationToken,
+        _on_update: Option<ToolUpdateSink>,
+    ) -> anyhow::Result<ToolResult> {
+        Ok(ToolResult {
+            terminate: true,
+            ..ToolResult::text("finished")
+        })
     }
 }
 
@@ -315,6 +345,36 @@ async fn prepare_next_turn_replaces_context_before_the_next_request() {
     assert_eq!(seen.len(), 2);
     assert_eq!(seen[0], ["original context"]);
     assert_eq!(seen[1], ["compacted context"]);
+}
+
+#[tokio::test]
+async fn prepare_next_turn_knows_when_a_tool_terminates_the_loop() {
+    let observed = Arc::new(Mutex::new(Vec::new()));
+    let observed_by_hook = observed.clone();
+    let mut config = scripted_config(vec![assistant_tool_call(
+        "finish",
+        json!({}),
+        StopReason::ToolUse,
+    )]);
+    config.prepare_next_turn = Some(Arc::new(move |turn| {
+        observed_by_hook.lock().unwrap().push(turn.will_continue);
+        Box::pin(async { None })
+    }));
+
+    let messages = run_agent_loop(
+        vec![AgentMessage::user("finish")],
+        AgentContext {
+            tools: vec![Arc::new(TerminatingTool)],
+            ..Default::default()
+        },
+        config,
+        CancellationToken::new(),
+        Arc::new(|_| {}),
+    )
+    .await;
+
+    assert_eq!(*observed.lock().unwrap(), [false]);
+    assert_eq!(messages.len(), 3);
 }
 
 #[tokio::test]
