@@ -838,8 +838,8 @@ impl AgentSession {
                 let model = session.model();
                 let saved_effort = session.thinking_level();
                 let next_generation = will_continue || has_queued_user_input;
-                let dynamic_enabled = settings.reasoning_effort.mode == ReasoningEffortMode::Jev
-                    && crate::jev::supports_dynamic_reasoning(&model);
+                let dynamic_enabled =
+                    settings.reasoning_effort.mode == ReasoningEffortMode::Jev && model.reasoning;
                 let mut next_effort = None;
                 let previous_effort;
                 {
@@ -898,6 +898,7 @@ impl AgentSession {
                             crate::jev::select_reasoning(
                                 &messages,
                                 &queued_messages,
+                                &model,
                                 &api_key,
                                 cancel,
                             )

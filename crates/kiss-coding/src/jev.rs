@@ -11,6 +11,7 @@ use tokio_util::sync::CancellationToken;
 const ENDPOINT: &str = "https://api.typesafe.ai/v1/systemone";
 const KEEP_THRESHOLD: f64 = 0.5;
 const TRUNCATE_HEAD_CHARS: usize = 300;
+const MAX_TARGET_CHARS: usize = 200;
 const MAX_TASK_CHARS: usize = 4_000;
 const MAX_PROGRESS_ITEMS: usize = 6;
 const MAX_PROGRESS_CHARS: usize = 1_200;
@@ -164,17 +165,22 @@ pub(crate) async fn compact(
     Ok(apply_decisions(messages, &interactions, &decisions, usage))
 }
 
-pub(crate) fn supports_dynamic_reasoning(model: &Model) -> bool {
-    model.reasoning && model.id == "gpt-6-astra"
-}
-
 pub(crate) async fn select_reasoning(
     messages: &[AgentMessage],
     queued: &[AgentMessage],
+    model: &Model,
     api_key: &str,
     cancel: CancellationToken,
 ) -> anyhow::Result<ReasoningSelection> {
-    let request = build_reasoning_request(messages, queued);
+    let supported = model.supported_thinking_levels();
+    if supported.is_empty() {
+        bail!(
+            "Jev dynamic reasoning was selected for {}/{}, but the model has no supported reasoning efforts; choose a reasoning model with supported efforts or set Dynamic reasoning to fixed",
+            model.provider,
+            model.id
+        );
+    }
+    let request = build_reasoning_request(messages, queued, model, &supported);
     let send = http_client()
         .post(ENDPOINT)
         .timeout(Duration::from_secs(2))
@@ -196,7 +202,7 @@ pub(crate) async fn select_reasoning(
             body.trim()
         );
     }
-    parse_reasoning_response(&body)
+    parse_reasoning_response(&body, &supported)
 }
 
 fn http_client() -> &'static reqwest::Client {
@@ -279,6 +285,8 @@ fn build_request(
 fn build_reasoning_request(
     messages: &[AgentMessage],
     queued: &[AgentMessage],
+    model: &Model,
+    supported: &[ThinkingLevel],
 ) -> JevRequest<ChoiceQuestion> {
     let task = queued
         .iter()
@@ -339,38 +347,45 @@ fn build_reasoning_request(
     }
     tools.reverse();
 
+    let effort_criteria = supported
+        .iter()
+        .map(|level| {
+            (
+                level.as_str(),
+                match level {
+                    ThinkingLevel::Off => "No reasoning for a direct answer or trivial step",
+                    ThinkingLevel::Minimal => "Very light reasoning for a simple task",
+                    ThinkingLevel::Low => {
+                        "Routine, clear, or mechanical work with little uncertainty"
+                    }
+                    ThinkingLevel::Medium => "Normal coding work that needs some analysis",
+                    ThinkingLevel::High => {
+                        "Complex work, ambiguity, debugging, or important tradeoffs"
+                    }
+                    ThinkingLevel::Xhigh => {
+                        "The agent is stuck or the next step needs deep reasoning"
+                    }
+                    ThinkingLevel::Max => {
+                        "Repeated failure or an exceptionally difficult high-stakes step"
+                    }
+                },
+            )
+        })
+        .collect();
     let questions = BTreeMap::from([
         (
             "effort".into(),
             ChoiceQuestion {
                 kind: "choice",
-                instructions: "Which reasoning effort should GPT-6 Astra use for the next generation?",
-                criteria: BTreeMap::from([
-                    (
-                        "low",
-                        "Routine, clear, or mechanical work with little uncertainty",
-                    ),
-                    ("medium", "Normal coding work that needs some analysis"),
-                    (
-                        "high",
-                        "Complex work, ambiguity, debugging, or important tradeoffs",
-                    ),
-                    (
-                        "xhigh",
-                        "The agent is stuck or the next step needs deep reasoning",
-                    ),
-                    (
-                        "max",
-                        "Repeated failure or an exceptionally difficult high-stakes step",
-                    ),
-                ]),
+                instructions: "Which supported reasoning effort should the active model use for the next generation?",
+                criteria: effort_criteria,
             },
         ),
         (
             "generations".into(),
             ChoiceQuestion {
                 kind: "choice",
-                instructions: "For how many future GPT-6 Astra generations should this effort remain useful before reassessment?",
+                instructions: "For how many future model generations should this effort remain useful before reassessment?",
                 criteria: BTreeMap::from([
                     (
                         "1",
@@ -384,7 +399,16 @@ fn build_reasoning_request(
         ),
     ]);
     JevRequest {
-        state: json!({"task": task, "progress": progress, "tools": tools}),
+        state: json!({
+            "target": {
+                "provider": bounded_text(&model.provider, MAX_TARGET_CHARS),
+                "id": bounded_text(&model.id, MAX_TARGET_CHARS),
+                "name": bounded_text(model.display_name(), MAX_TARGET_CHARS),
+            },
+            "task": task,
+            "progress": progress,
+            "tools": tools,
+        }),
         model: "jev-latest",
         questions,
     }
@@ -458,7 +482,10 @@ fn parse_response(body: &str, count: usize) -> anyhow::Result<(Vec<Decision>, Je
     Ok((decisions, response.usage))
 }
 
-fn parse_reasoning_response(body: &str) -> anyhow::Result<ReasoningSelection> {
+fn parse_reasoning_response(
+    body: &str,
+    supported: &[ThinkingLevel],
+) -> anyhow::Result<ReasoningSelection> {
     let response: JevResponse = serde_json::from_str(body)
         .context("parse Jev reasoning selection response; expected System One Choice JSON")?;
     let choice = |key: &str, allowed: &[&str]| -> anyhow::Result<&str> {
@@ -498,11 +525,12 @@ fn parse_reasoning_response(body: &str) -> anyhow::Result<ReasoningSelection> {
         }
         Ok(choice)
     };
-    let level = ThinkingLevel::parse(choice(
-        "effort",
-        &["low", "medium", "high", "xhigh", "max"],
-    )?)
-    .context("parse validated Jev effort")?;
+    let allowed = supported
+        .iter()
+        .map(ThinkingLevel::as_str)
+        .collect::<Vec<_>>();
+    let level =
+        ThinkingLevel::parse(choice("effort", &allowed)?).context("parse validated Jev effort")?;
     let generations = choice("generations", &["1", "2", "5", "10"])?
         .parse()
         .context("parse validated Jev generation lease")?;
@@ -676,20 +704,19 @@ mod tests {
         })
     }
 
-    fn reasoning_response(effort: &str, generations: &str) -> String {
+    fn reasoning_response(effort: &str, generations: &str, efforts: &[&str]) -> String {
+        let probability = 1.0 / efforts.len() as f64;
+        let probabilities = efforts
+            .iter()
+            .map(|effort| ((*effort).to_string(), probability))
+            .collect::<BTreeMap<_, _>>();
         json!({
             "answers": {
                 "effort": {
                     "type": "choice",
                     "choice": effort,
                     "confidence": 0.5,
-                    "probabilities": {
-                        "low": 0.2,
-                        "medium": 0.2,
-                        "high": 0.2,
-                        "xhigh": 0.2,
-                        "max": 0.2
-                    }
+                    "probabilities": probabilities
                 },
                 "generations": {
                     "type": "choice",
@@ -774,6 +801,10 @@ mod tests {
 
     #[test]
     fn reasoning_request_is_bounded_and_uses_choice_questions() {
+        let registry = Registry::from_builtin();
+        let (mut model, _) = registry.resolve("openai/gpt-6-astra", None).unwrap();
+        model.name = "界".repeat(MAX_TARGET_CHARS + 10);
+        let supported = model.supported_thinking_levels();
         let mut messages = vec![AgentMessage::user("old task")];
         for index in 0..8 {
             let id = format!("call_{index}");
@@ -802,10 +833,22 @@ mod tests {
                 "new queued task {}",
                 "界".repeat(5_000)
             ))],
+            &model,
+            &supported,
         );
         let value = serde_json::to_value(request).unwrap();
 
         assert_eq!(value["model"], "jev-latest");
+        assert_eq!(value["state"]["target"]["provider"], "openai");
+        assert_eq!(value["state"]["target"]["id"], "gpt-6-astra");
+        assert!(
+            value["state"]["target"]["name"]
+                .as_str()
+                .unwrap()
+                .chars()
+                .count()
+                <= MAX_TARGET_CHARS + 1
+        );
         assert_eq!(value["questions"]["effort"]["type"], "choice");
         assert_eq!(
             value["questions"]["effort"]["criteria"]
@@ -849,15 +892,31 @@ mod tests {
 
     #[test]
     fn reasoning_response_accepts_only_documented_choices() {
-        let selection = parse_reasoning_response(&reasoning_response("xhigh", "5")).unwrap();
+        let supported = [
+            ThinkingLevel::Low,
+            ThinkingLevel::Medium,
+            ThinkingLevel::High,
+            ThinkingLevel::Xhigh,
+            ThinkingLevel::Max,
+        ];
+        let efforts = ["low", "medium", "high", "xhigh", "max"];
+        let selection =
+            parse_reasoning_response(&reasoning_response("xhigh", "5", &efforts), &supported)
+                .unwrap();
         assert_eq!(selection.level, ThinkingLevel::Xhigh);
         assert_eq!(selection.generations, 5);
 
-        assert!(parse_reasoning_response(&reasoning_response("minimal", "5")).is_err());
-        assert!(parse_reasoning_response(&reasoning_response("high", "3")).is_err());
-        let wrong_type = reasoning_response("high", "5")
+        assert!(
+            parse_reasoning_response(&reasoning_response("minimal", "5", &efforts), &supported)
+                .is_err()
+        );
+        assert!(
+            parse_reasoning_response(&reasoning_response("high", "3", &efforts), &supported)
+                .is_err()
+        );
+        let wrong_type = reasoning_response("high", "5", &efforts)
             .replace("\"type\":\"choice\"", "\"type\":\"noul\",\"noul\":0.5");
-        assert!(parse_reasoning_response(&wrong_type).is_err());
+        assert!(parse_reasoning_response(&wrong_type, &supported).is_err());
     }
 
     #[test]
@@ -888,12 +947,28 @@ mod tests {
     }
 
     #[test]
-    fn dynamic_reasoning_targets_only_astra() {
+    fn reasoning_choices_match_the_active_model() {
         let registry = Registry::from_builtin();
-        let (astra, _) = registry.resolve("openai/gpt-6-astra", None).unwrap();
-        let (other, _) = registry.resolve("openai/gpt-5.4", None).unwrap();
-        assert!(supports_dynamic_reasoning(&astra));
-        assert!(!supports_dynamic_reasoning(&other));
+        let (model, _) = registry.resolve("openai/gpt-5.4", None).unwrap();
+        let supported = model.supported_thinking_levels();
+        let request = build_reasoning_request(&[], &[], &model, &supported);
+        let value = serde_json::to_value(request).unwrap();
+        let efforts = value["questions"]["effort"]["criteria"]
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+        assert_eq!(efforts, ["high", "low", "medium", "off", "xhigh"]);
+
+        let selection =
+            parse_reasoning_response(&reasoning_response("off", "2", &efforts), &supported)
+                .unwrap();
+        assert_eq!(selection.level, ThinkingLevel::Off);
+        assert!(
+            parse_reasoning_response(&reasoning_response("minimal", "2", &efforts), &supported,)
+                .is_err()
+        );
     }
 
     #[test]

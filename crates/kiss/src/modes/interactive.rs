@@ -4265,7 +4265,7 @@ fn settings_picker(
             detail: Some(match settings.reasoning_effort.mode {
                 ReasoningEffortMode::Fixed => "fixed".into(),
                 ReasoningEffortMode::Jev if typesafe_available(session) => {
-                    "Jev (experimental · GPT-6 Astra only)".into()
+                    "Jev (experimental · reasoning models)".into()
                 }
                 ReasoningEffortMode::Jev => "Jev unavailable · /login typesafe".into(),
             }),
