@@ -175,6 +175,11 @@ pub fn session_event_json(event: &SessionEvent) -> Option<Value> {
             "level": level.as_str(),
             "generations": generations,
         }),
+        SessionEvent::ReasoningEffortFallback { level, reason } => json!({
+            "type": "reasoning_effort_fallback",
+            "level": level.as_str(),
+            "reason": reason,
+        }),
         SessionEvent::Workflow { run, version } => {
             json!({"type": "workflow_progress", "run": run, "version": version})
         }
@@ -254,6 +259,23 @@ mod tests {
                 "type": "reasoning_effort_changed",
                 "level": "xhigh",
                 "generations": 2
+            })
+        );
+    }
+
+    #[test]
+    fn reasoning_fallback_reports_the_saved_effort_and_cause() {
+        let event = session_event_json(&SessionEvent::ReasoningEffortFallback {
+            level: kiss_ai::ThinkingLevel::Medium,
+            reason: "request timed out".into(),
+        })
+        .unwrap();
+        assert_eq!(
+            event,
+            json!({
+                "type": "reasoning_effort_fallback",
+                "level": "medium",
+                "reason": "request timed out"
             })
         );
     }

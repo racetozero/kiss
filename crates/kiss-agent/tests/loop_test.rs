@@ -378,6 +378,70 @@ async fn prepare_next_turn_knows_when_a_tool_terminates_the_loop() {
 }
 
 #[tokio::test]
+async fn prepare_generation_runs_before_first_and_following_model_calls() {
+    let prepared = Arc::new(AtomicUsize::new(0));
+    let prepared_by_hook = prepared.clone();
+    let applied = Arc::new(AtomicUsize::new(0));
+    let applied_by_stream = applied.clone();
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let seen_by_stream = seen.clone();
+    let mut config = scripted_config(vec![
+        assistant_tool_call("echo", json!({"value": "x"}), StopReason::ToolUse),
+        assistant_text("done", StopReason::Stop),
+    ]);
+    let stream = config.stream_fn.clone();
+    config.stream_fn = Arc::new(move |model, context, options| {
+        seen_by_stream.lock().unwrap().push((
+            prepared_by_hook.load(Ordering::SeqCst),
+            applied_by_stream.load(Ordering::SeqCst),
+            options.reasoning,
+        ));
+        stream(model, context, options)
+    });
+    let prepared_by_hook = prepared.clone();
+    let applied_by_hook = applied.clone();
+    config.prepare_generation = Some(Arc::new(move |_| {
+        let generation = prepared_by_hook.fetch_add(1, Ordering::SeqCst);
+        let applied = applied_by_hook.clone();
+        Box::pin(async move {
+            Some(kiss_agent::TurnUpdate {
+                thinking_level: Some(if generation == 0 {
+                    kiss_ai::ThinkingLevel::Low
+                } else {
+                    kiss_ai::ThinkingLevel::High
+                }),
+                on_applied: Some(Box::new(move |_, _| {
+                    applied.fetch_add(1, Ordering::SeqCst);
+                })),
+                ..Default::default()
+            })
+        })
+    }));
+
+    run_agent_loop(
+        vec![AgentMessage::user("inspect")],
+        AgentContext {
+            tools: vec![Arc::new(EchoTool {
+                calls: Default::default(),
+            })],
+            ..Default::default()
+        },
+        config,
+        CancellationToken::new(),
+        Arc::new(|_| {}),
+    )
+    .await;
+
+    assert_eq!(
+        *seen.lock().unwrap(),
+        [
+            (1, 1, kiss_ai::ThinkingLevel::Low),
+            (2, 2, kiss_ai::ThinkingLevel::High)
+        ]
+    );
+}
+
+#[tokio::test]
 async fn unknown_tool_yields_error_result() {
     let config = scripted_config(vec![
         assistant_tool_call("missing", json!({}), StopReason::ToolUse),

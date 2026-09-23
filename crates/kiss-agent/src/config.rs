@@ -56,6 +56,8 @@ pub struct TurnUpdate {
     pub model: Option<Model>,
     pub thinking_level: Option<ThinkingLevel>,
     pub fast_mode: Option<bool>,
+    /// Runs after the local settings are applied and before the model request.
+    pub on_applied: Option<AppliedFn>,
 }
 
 pub struct TurnInfo<'a> {
@@ -74,9 +76,12 @@ type AfterToolFn = Arc<
 >;
 type TransformFn = Arc<dyn Fn(Vec<AgentMessage>) -> BoxFuture<Vec<AgentMessage>> + Send + Sync>;
 type ConvertFn = Arc<dyn Fn(&[AgentMessage]) -> Vec<Message> + Send + Sync>;
+type AppliedFn = Box<dyn FnOnce(&Model, ThinkingLevel) + Send>;
 type StopFn = Arc<dyn for<'a> Fn(&'a TurnInfo<'a>) -> BoxFuture<bool> + Send + Sync>;
 type PrepareTurnFn =
     Arc<dyn for<'a> Fn(&'a TurnInfo<'a>) -> BoxFuture<Option<TurnUpdate>> + Send + Sync>;
+type PrepareGenerationFn =
+    Arc<dyn Fn(ThinkingLevel) -> BoxFuture<Option<TurnUpdate>> + Send + Sync>;
 type CredentialFn = Arc<dyn Fn(String) -> BoxFuture<Option<ResolvedCredential>> + Send + Sync>;
 /// The function the loop calls to reach a model provider.
 ///
@@ -109,6 +114,8 @@ pub struct AgentLoopConfig {
     pub after_tool_call: Option<AfterToolFn>,
     pub should_stop_after_turn: Option<StopFn>,
     pub prepare_next_turn: Option<PrepareTurnFn>,
+    /// Runs immediately before each model request, including the first one.
+    pub prepare_generation: Option<PrepareGenerationFn>,
     /// Provider streaming function. Overridable for tests (faux provider).
     pub stream_fn: StreamFn,
 }
@@ -139,6 +146,7 @@ impl AgentLoopConfig {
             after_tool_call: None,
             should_stop_after_turn: None,
             prepare_next_turn: None,
+            prepare_generation: None,
             stream_fn,
         }
     }

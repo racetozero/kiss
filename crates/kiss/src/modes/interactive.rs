@@ -1672,6 +1672,12 @@ fn handle_session_event(
         SessionEvent::ReasoningEffortChanged { level, generations } => {
             app.cells.push(Cell::ReasoningEffort { level, generations });
         }
+        SessionEvent::ReasoningEffortFallback { level, reason } => {
+            app.cells.push(Cell::Error(format!(
+                "Jev could not select reasoning: {reason}. Using saved effort {}",
+                level.as_str()
+            )));
+        }
         SessionEvent::Workflow { run: _, version } => {
             app.workflow_version = version;
         }
@@ -8610,6 +8616,37 @@ mod tests {
             "◆ Jev changed reasoning to high for 5 generations",
         );
         assert!(app.render(80, &session).contains(&expected));
+    }
+
+    #[test]
+    fn jev_reasoning_fallback_is_visible_in_the_conversation() {
+        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
+            "/synthetic",
+        )));
+        let (tx, _rx) = mpsc::unbounded_channel();
+        let mut file_search = FileSearchService::new(tx);
+        let mut app = test_app();
+
+        handle_session_event(
+            &mut app,
+            SessionEvent::ReasoningEffortFallback {
+                level: ThinkingLevel::Medium,
+                reason: "request timed out".into(),
+            },
+            &mut file_search,
+            &session,
+        );
+
+        assert!(matches!(
+            app.cells.last(),
+            Some(Cell::Error(text))
+                if text == "Jev could not select reasoning: request timed out. Using saved effort medium"
+        ));
+        assert!(
+            app.render(120, &session)
+                .iter()
+                .any(|line| line.contains("Using saved effort medium"))
+        );
     }
 
     #[test]

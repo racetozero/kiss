@@ -50,6 +50,10 @@ pub enum SessionEvent {
         level: ThinkingLevel,
         generations: u8,
     },
+    ReasoningEffortFallback {
+        level: ThinkingLevel,
+        reason: String,
+    },
     /// A dynamic workflow changed. The terminal redraws from the shared
     /// snapshot. The event carries only the cheap version marker.
     Workflow {
@@ -169,6 +173,39 @@ pub struct AgentSession {
     /// Optional replacement for the provider streaming function. Embedders and
     /// tests install one to run the whole loop against a scripted fake model.
     stream_fn: Mutex<Option<StreamFn>>,
+}
+
+struct ReasoningRunState {
+    lease: crate::jev::ReasoningLease,
+    provider: String,
+    model_id: String,
+    saved_effort: ThinkingLevel,
+}
+
+impl ReasoningRunState {
+    fn checkpoint(
+        &mut self,
+        model: &Model,
+        saved_effort: ThinkingLevel,
+        current_effort: ThinkingLevel,
+        dynamic_enabled: bool,
+    ) -> (bool, Option<ThinkingLevel>) {
+        let model_changed = self.provider != model.provider || self.model_id != model.id;
+        if model_changed || self.saved_effort != saved_effort || !dynamic_enabled {
+            self.lease.clear();
+        }
+        self.provider.clone_from(&model.provider);
+        self.model_id.clone_from(&model.id);
+        self.saved_effort = saved_effort;
+        if self
+            .lease
+            .current()
+            .is_some_and(|level| level != current_effort)
+        {
+            self.lease.clear();
+        }
+        (model_changed, self.lease.current())
+    }
 }
 
 impl AgentSession {
@@ -778,7 +815,117 @@ impl AgentSession {
             session_for_queues.emit_queues();
             Box::pin(async move { drained })
         }));
-        let reasoning_lease = Arc::new(Mutex::new(crate::jev::ReasoningLease::default()));
+        let reasoning_run = Arc::new(Mutex::new(ReasoningRunState {
+            lease: crate::jev::ReasoningLease::default(),
+            provider: config.model.provider.clone(),
+            model_id: config.model.id.clone(),
+            saved_effort: config.thinking_level,
+        }));
+        let session_for_reasoning = session_arc.clone();
+        let reasoning_for_generation = reasoning_run.clone();
+        let prompt_mode_for_reasoning = active_prompt_mode.clone();
+        config.prepare_generation = Some(Arc::new(move |current_effort| {
+            let session = session_for_reasoning.clone();
+            let reasoning_run = reasoning_for_generation.clone();
+            let active_prompt_mode = prompt_mode_for_reasoning.clone();
+            Box::pin(async move {
+                let settings = session.settings();
+                let model = session.model();
+                let saved_effort = session.thinking_level();
+                let dynamic_enabled =
+                    settings.reasoning_effort.mode == ReasoningEffortMode::Jev && model.reasoning;
+                let (model_changed, leased) = {
+                    let mut run = reasoning_run.lock().unwrap();
+                    run.checkpoint(&model, saved_effort, current_effort, dynamic_enabled)
+                };
+                let mut update = TurnUpdate {
+                    context: model_changed
+                        .then(|| session.build_context_for(*active_prompt_mode.lock().unwrap())),
+                    model: model_changed.then(|| model.clone()),
+                    thinking_level: Some(saved_effort),
+                    fast_mode: Some(session.fast_mode()),
+                    ..Default::default()
+                };
+                if !dynamic_enabled {
+                    return Some(update);
+                }
+                if let Some(level) = leased {
+                    update.thinking_level = Some(level);
+                    return Some(update);
+                }
+
+                let selected = match kiss_ai::auth::resolve_api_key_async(
+                    "typesafe",
+                    &session.registry.declared_keys,
+                )
+                .await
+                {
+                    Ok(Some(api_key)) => {
+                        let messages = session
+                            .manager
+                            .lock()
+                            .unwrap()
+                            .build_session_context()
+                            .messages;
+                        let cancel = session.cancel.lock().unwrap().clone();
+                        crate::jev::select_reasoning(&messages, &[], &model, &api_key, cancel)
+                            .await
+                            .map_err(|error| error.to_string())
+                    }
+                    Ok(None) => Err(
+                        "TypeSafe credentials are unavailable; run /login typesafe or set TYPESAFE_API_KEY"
+                            .into(),
+                    ),
+                    Err(error) => Err(format!(
+                        "TypeSafe credentials could not be read: {error}; run /login typesafe or set TYPESAFE_API_KEY"
+                    )),
+                };
+                let latest_model = session.model();
+                let latest_effort = session.thinking_level();
+                if latest_model.provider != model.provider
+                    || latest_model.id != model.id
+                    || latest_effort != saved_effort
+                    || session.settings().reasoning_effort.mode != ReasoningEffortMode::Jev
+                {
+                    reasoning_run.lock().unwrap().lease.clear();
+                    update.context =
+                        Some(session.build_context_for(*active_prompt_mode.lock().unwrap()));
+                    update.model = Some(latest_model);
+                    update.thinking_level = Some(latest_effort);
+                    return Some(update);
+                }
+                match selected {
+                    Ok(selection) => {
+                        update.thinking_level = Some(selection.level);
+                        if selection.level != current_effort {
+                            let sink = session.sink.clone();
+                            let level = selection.level;
+                            let generations = selection.generations;
+                            update.on_applied = Some(Box::new(move |_, applied| {
+                                if applied == level {
+                                    sink(SessionEvent::ReasoningEffortChanged {
+                                        level,
+                                        generations,
+                                    });
+                                }
+                            }));
+                        }
+                        reasoning_run.lock().unwrap().lease.install(&selection);
+                    }
+                    Err(reason) => {
+                        let sink = session.sink.clone();
+                        let reason = reason.chars().take(300).collect();
+                        update.on_applied = Some(Box::new(move |_, applied| {
+                            sink(SessionEvent::ReasoningEffortFallback {
+                                level: applied,
+                                reason,
+                            });
+                        }));
+                    }
+                }
+                Some(update)
+            })
+        }));
         let session_for_compaction = session_arc.clone();
         config.prepare_next_turn = Some(Arc::new(move |turn| {
             let has_tool_results = !turn.tool_results.is_empty();
@@ -788,7 +935,7 @@ impl AgentSession {
             let active_prompt_mode = active_prompt_mode.clone();
             let steering_for_mode = steering_for_mode.clone();
             let follow_up_for_mode = follow_up_for_mode.clone();
-            let reasoning_lease = reasoning_lease.clone();
+            let reasoning_run = reasoning_run.clone();
             Box::pin(async move {
                 let has_queued_user_input = !steering_for_mode.lock().unwrap().is_empty()
                     || (!will_continue && !follow_up_for_mode.lock().unwrap().is_empty());
@@ -835,98 +982,17 @@ impl AgentSession {
                     }
                 }
 
-                let settings = session.settings();
-                let model = session.model();
-                let saved_effort = session.thinking_level();
-                let next_generation = will_continue || has_queued_user_input;
-                let dynamic_enabled =
-                    settings.reasoning_effort.mode == ReasoningEffortMode::Jev && model.reasoning;
-                let mut next_effort = None;
-                let previous_effort;
                 {
-                    let mut lease = reasoning_lease.lock().unwrap();
-                    previous_effort = lease.current().unwrap_or(saved_effort);
-                    lease.consume_generation();
-                    if !dynamic_enabled || tool_failed || has_queued_user_input {
-                        lease.clear();
-                    }
-                    if dynamic_enabled && next_generation {
-                        next_effort = lease.current();
-                    } else if next_generation {
-                        next_effort = Some(saved_effort);
-                    }
-                }
-                if dynamic_enabled && next_generation && next_effort.is_none() {
-                    let selected = match kiss_ai::auth::resolve_api_key_async(
-                        "typesafe",
-                        &session.registry.declared_keys,
-                    )
-                    .await
-                    {
-                        Ok(Some(api_key)) => {
-                            let mut queued_messages = {
-                                let steering = steering_for_mode.lock().unwrap();
-                                steering
-                                    .iter()
-                                    .take(if steering_mode == QueueMode::All {
-                                        usize::MAX
-                                    } else {
-                                        1
-                                    })
-                                    .map(|prompt| prompt.message.clone())
-                                    .collect::<Vec<_>>()
-                            };
-                            if queued_messages.is_empty() && !will_continue {
-                                let follow_up = follow_up_for_mode.lock().unwrap();
-                                queued_messages.extend(
-                                    follow_up
-                                        .iter()
-                                        .take(if follow_up_mode == QueueMode::All {
-                                            usize::MAX
-                                        } else {
-                                            1
-                                        })
-                                        .map(|prompt| prompt.message.clone()),
-                                );
-                            }
-                            let messages = session
-                                .manager
-                                .lock()
-                                .unwrap()
-                                .build_session_context()
-                                .messages;
-                            let cancel = session.cancel.lock().unwrap().clone();
-                            crate::jev::select_reasoning(
-                                &messages,
-                                &queued_messages,
-                                &model,
-                                &api_key,
-                                cancel,
-                            )
-                            .await
-                            .ok()
-                        }
-                        _ => None,
-                    };
-                    if let Some(selection) = selected {
-                        next_effort = Some(selection.level);
-                        if selection.level != previous_effort {
-                            (session.sink)(SessionEvent::ReasoningEffortChanged {
-                                level: selection.level,
-                                generations: selection.generations,
-                            });
-                        }
-                        reasoning_lease.lock().unwrap().install(&selection);
-                    } else {
-                        reasoning_lease.lock().unwrap().clear();
-                        next_effort = Some(saved_effort);
+                    let mut run = reasoning_run.lock().unwrap();
+                    run.lease.consume_generation();
+                    if tool_failed || has_queued_user_input {
+                        run.lease.clear();
                     }
                 }
 
                 Some(TurnUpdate {
                     context: context_changed
                         .then(|| session.build_context_for(*active_prompt_mode.lock().unwrap())),
-                    thinking_level: next_effort,
                     fast_mode: Some(session.fast_mode()),
                     ..Default::default()
                 })
@@ -1062,6 +1128,7 @@ impl AgentSession {
         config.get_steering_messages = None;
         config.get_follow_up_messages = None;
         config.prepare_next_turn = None;
+        config.prepare_generation = None;
 
         let context = AgentContext {
             system_prompt,
@@ -1904,6 +1971,53 @@ mod ephemeral_tests {
             thinking_level_map: BTreeMap::new(),
             headers: BTreeMap::new(),
         }
+    }
+
+    #[test]
+    fn reasoning_lease_ends_when_model_saved_effort_or_applied_effort_changes() {
+        let model = openai_model();
+        let mut run = ReasoningRunState {
+            lease: crate::jev::ReasoningLease::default(),
+            provider: model.provider.clone(),
+            model_id: model.id.clone(),
+            saved_effort: ThinkingLevel::Medium,
+        };
+        let selection = crate::jev::ReasoningSelection {
+            level: ThinkingLevel::High,
+            generations: 5,
+        };
+        run.lease.install(&selection);
+        assert_eq!(
+            run.checkpoint(&model, ThinkingLevel::Medium, ThinkingLevel::High, true),
+            (false, Some(ThinkingLevel::High))
+        );
+
+        let mut other_model = model.clone();
+        other_model.provider = "other".into();
+        assert_eq!(
+            run.checkpoint(
+                &other_model,
+                ThinkingLevel::Medium,
+                ThinkingLevel::High,
+                true
+            ),
+            (true, None)
+        );
+        run.lease.install(&selection);
+        assert_eq!(
+            run.checkpoint(&other_model, ThinkingLevel::Low, ThinkingLevel::High, true),
+            (false, None)
+        );
+        run.lease.install(&selection);
+        assert_eq!(
+            run.checkpoint(&other_model, ThinkingLevel::Low, ThinkingLevel::Low, true),
+            (false, None)
+        );
+        run.lease.install(&selection);
+        assert_eq!(
+            run.checkpoint(&other_model, ThinkingLevel::Low, ThinkingLevel::High, false),
+            (false, None)
+        );
     }
 
     #[test]

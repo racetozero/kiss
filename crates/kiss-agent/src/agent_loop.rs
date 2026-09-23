@@ -1,7 +1,7 @@
 //! The agent loop: streams assistant turns, executes tool batches, injects
 //! steering messages, drains follow-ups, and emits events throughout.
 
-use crate::config::{AgentContext, AgentLoopConfig, TurnInfo};
+use crate::config::{AgentContext, AgentLoopConfig, TurnInfo, TurnUpdate};
 use crate::events::AgentEvent;
 use crate::message::AgentMessage;
 use crate::tool::{DynTool, ExecutionMode, ToolResult, ToolUpdateSink};
@@ -116,6 +116,21 @@ async fn run_loop(
                 new_messages.push(message);
             }
 
+            if cancel.is_cancelled() {
+                return;
+            }
+            if let Some(prepare) = &config.prepare_generation {
+                let update = prepare(config.thinking_level).await;
+                if cancel.is_cancelled() {
+                    return;
+                }
+                if let Some(update) = update
+                    && let Some(updated_context) = apply_turn_update(config, update)
+                {
+                    *context = updated_context;
+                }
+            }
+
             let assistant = stream_assistant(context, config, cancel.clone(), emit).await;
             new_messages.push(AgentMessage::Assistant(assistant.clone()));
 
@@ -163,19 +178,10 @@ async fn run_loop(
                     messages: new_messages,
                     will_continue: has_more_tool_calls,
                 };
-                if let Some(update) = prepare(&info).await {
-                    if let Some(ctx) = update.context {
-                        *context = ctx;
-                    }
-                    if let Some(model) = update.model {
-                        config.model = model;
-                    }
-                    if let Some(level) = update.thinking_level {
-                        config.thinking_level = level;
-                    }
-                    if let Some(fast_mode) = update.fast_mode {
-                        config.fast_mode = fast_mode;
-                    }
+                if let Some(update) = prepare(&info).await
+                    && let Some(updated_context) = apply_turn_update(config, update)
+                {
+                    *context = updated_context;
                 }
             }
 
@@ -207,6 +213,29 @@ async fn run_loop(
         }
         break;
     }
+}
+
+fn apply_turn_update(config: &mut AgentLoopConfig, update: TurnUpdate) -> Option<AgentContext> {
+    let TurnUpdate {
+        context,
+        model,
+        thinking_level,
+        fast_mode,
+        on_applied,
+    } = update;
+    if let Some(model) = model {
+        config.model = model;
+    }
+    if let Some(level) = thinking_level {
+        config.thinking_level = level;
+    }
+    if let Some(fast_mode) = fast_mode {
+        config.fast_mode = fast_mode;
+    }
+    if let Some(on_applied) = on_applied {
+        on_applied(&config.model, config.thinking_level);
+    }
+    context
 }
 
 /// Stream one assistant response, emitting message events and mutating the
