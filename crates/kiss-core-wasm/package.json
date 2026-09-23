@@ -1,6 +1,6 @@
 {
   "name": "@kiss-sdk/core-wasm",
-  "version": "0.0.17",
+  "version": "0.0.18",
   "description": "Full KISS agent kernel running inside browser WebAssembly",
   "license": "MIT",
   "repository": {

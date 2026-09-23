@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.0.18 - 2026-09-23
 
 ### Added
 
@@ -10,12 +10,16 @@
 
 ### Changed
 
+- Moved Jev reasoning selection to a checkpoint before each model generation,
+  including the first response. Kept leased choices for later generations.
 - Updated Pi compatibility to v0.87.1, including Grok 4.7 and Muse Spark 1.3
   provider defaults, Claude Code 2.1.280 request compatibility, and
   continuation-oriented split-turn compaction summaries.
 
 ### Fixed
 
+- Rejected stale Jev choices after a model or effort change, and showed the
+  saved-effort fallback when Jev could not select an effort.
 - Omitted empty text parts from image-only OpenAI-compatible messages, rejected
   invalid prompt frontmatter with a warning, and skipped late cache refreshes
   that would miss the existing prompt cache.
