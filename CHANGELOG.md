@@ -18,6 +18,8 @@
 
 ### Fixed
 
+- Kept the ACP `Cancelled` stop reason when a task is cancelled during Jev
+  preparation.
 - Rejected stale Jev choices after a model or effort change, and showed the
   saved-effort fallback when Jev could not select an effort.
 - Omitted empty text parts from image-only OpenAI-compatible messages, rejected

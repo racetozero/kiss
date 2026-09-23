@@ -442,6 +442,37 @@ async fn prepare_generation_runs_before_first_and_following_model_calls() {
 }
 
 #[tokio::test]
+async fn cancellation_during_generation_preparation_reports_aborted_message() {
+    let cancel = CancellationToken::new();
+    let cancel_from_hook = cancel.clone();
+    let mut config = scripted_config(vec![assistant_text("", StopReason::Aborted)]);
+    config.prepare_generation = Some(Arc::new(move |_| {
+        cancel_from_hook.cancel();
+        Box::pin(async { None })
+    }));
+    let (sink, events) = collect_events();
+    let messages = run_agent_loop(
+        vec![AgentMessage::user("stop")],
+        AgentContext::default(),
+        config,
+        cancel,
+        sink,
+    )
+    .await;
+
+    assert!(matches!(
+        messages.last(),
+        Some(AgentMessage::Assistant(message)) if message.stop_reason == StopReason::Aborted
+    ));
+    assert!(
+        events
+            .lock()
+            .unwrap()
+            .contains(&"message_end:assistant".into())
+    );
+}
+
+#[tokio::test]
 async fn unknown_tool_yields_error_result() {
     let config = scripted_config(vec![
         assistant_tool_call("missing", json!({}), StopReason::ToolUse),

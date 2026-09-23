@@ -116,15 +116,12 @@ async fn run_loop(
                 new_messages.push(message);
             }
 
-            if cancel.is_cancelled() {
-                return;
-            }
-            if let Some(prepare) = &config.prepare_generation {
+            if !cancel.is_cancelled()
+                && let Some(prepare) = &config.prepare_generation
+            {
                 let update = prepare(config.thinking_level).await;
-                if cancel.is_cancelled() {
-                    return;
-                }
-                if let Some(update) = update
+                if !cancel.is_cancelled()
+                    && let Some(update) = update
                     && let Some(updated_context) = apply_turn_update(config, update)
                 {
                     *context = updated_context;
