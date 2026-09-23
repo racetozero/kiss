@@ -8,7 +8,7 @@ use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
-/// Generated model data verified against `@earendil-works/pi-ai` 0.86.0.
+/// Generated model data verified against `@earendil-works/pi-ai` 0.87.1.
 const BUILTIN_PROVIDER_CATALOGS: &[&str] = &[
     include_str!("../data/providers/amazon-bedrock.json"),
     include_str!("../data/providers/ant-ling.json"),
@@ -28,6 +28,7 @@ const BUILTIN_PROVIDER_CATALOGS: &[&str] = &[
     include_str!("../data/providers/groq.json"),
     include_str!("../data/providers/huggingface.json"),
     include_str!("../data/providers/kimi-coding.json"),
+    include_str!("../data/providers/meta.json"),
     include_str!("../data/providers/minimax-cn.json"),
     include_str!("../data/providers/minimax.json"),
     include_str!("../data/providers/mistral.json"),
@@ -74,6 +75,7 @@ pub const BUILTIN_PROVIDER_IDS: &[&str] = &[
     "groq",
     "huggingface",
     "kimi-coding",
+    "meta",
     "minimax",
     "minimax-cn",
     "mistral",
@@ -756,7 +758,7 @@ mod tests {
     }
 
     #[test]
-    fn pi_0860_catalog_changes_are_present() {
+    fn pi_0871_catalog_changes_are_present() {
         let registry = Registry::from_builtin();
         for provider in ["openai", "openai-codex"] {
             let (model, _) = registry
@@ -810,6 +812,17 @@ mod tests {
         assert_eq!(cached.prompt_cache.and_then(|cache| cache.short), Some(300));
         assert!(registry.resolve("radius/balanced", None).is_some());
         assert!(registry.resolve("openai-codex/gpt-5.4", None).is_none());
+
+        for model in [
+            "anthropic/claude-opus-5-5",
+            "openai/gpt-6-sol",
+            "openai-codex/gpt-6-luna",
+            "github-copilot/gpt-6-sol",
+            "xai/grok-4.7",
+            "meta/muse-spark-1.3",
+        ] {
+            assert!(registry.resolve(model, None).is_some(), "missing {model}");
+        }
     }
 
     #[test]

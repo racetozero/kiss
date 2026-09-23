@@ -20,6 +20,11 @@
         "high": "high",
         "xhigh": null,
         "max": "max"
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "k3-256k": {
@@ -42,6 +47,11 @@
         "high": "high",
         "xhigh": null,
         "max": "max"
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "kimi-for-coding": {
@@ -64,6 +74,11 @@
         "high": "high",
         "xhigh": null,
         "max": "max"
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "kimi-for-coding-highspeed": {
@@ -77,7 +92,12 @@
       "input": ["text", "image"],
       "cost": { "input": 1.9, "output": 8, "cacheRead": 0.38, "cacheWrite": 0 },
       "contextWindow": 262144,
-      "maxTokens": 32768
+      "maxTokens": 32768,
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     }
   }
 }

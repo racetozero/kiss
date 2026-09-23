@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Added Meta Model API keys and Muse subscription device login.
+- Updated the Pi model catalog with Claude Opus 5.5, GPT-6 Sol and Luna, Grok
+  4.7, and Meta Muse models.
+
+### Changed
+
+- Updated Pi compatibility to v0.87.1, including Grok 4.7 and Muse Spark 1.3
+  provider defaults, Claude Code 2.1.280 request compatibility, and
+  continuation-oriented split-turn compaction summaries.
+
+### Fixed
+
+- Omitted empty text parts from image-only OpenAI-compatible messages, rejected
+  invalid prompt frontmatter with a warning, and skipped late cache refreshes
+  that would miss the existing prompt cache.
+
 ## 0.0.17 - 2026-09-22
 
 ### Changed

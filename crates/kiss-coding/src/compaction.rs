@@ -277,19 +277,18 @@ fn summary_failure(message: &kiss_ai::AssistantMessage) -> Option<String> {
     }
 }
 
-/// Generate a structured summary with the LLM. One-off prompt: fresh session
-/// id and no cache writes wanted, so it's a plain request.
-pub async fn generate_summary(
-    model: &Model,
-    credential: Option<kiss_ai::ResolvedCredential>,
+fn summary_prompt(
     conversation_text: &str,
     previous_summary: Option<&str>,
     custom_instructions: Option<&str>,
-    cancel: tokio_util::sync::CancellationToken,
-) -> anyhow::Result<SummaryOutcome> {
-    let mut prompt = String::from(
-        "Summarize the conversation below so a coding agent can pick up where it left off. Use exactly this structure:\n\n",
-    );
+    continuation: bool,
+) -> String {
+    let mut prompt = format!("# Conversation\n{conversation_text}\n\n# Instructions\n");
+    if continuation {
+        prompt.push_str("The conversation above is earlier context from an ongoing task. Later messages are retained separately. Create a concise checkpoint that can be placed before them so work can continue; do not infer or recreate later messages. Use exactly this structure:\n\n");
+    } else {
+        prompt.push_str("Summarize the conversation so a coding agent can pick up where it left off. Use exactly this structure:\n\n");
+    }
     prompt.push_str(SUMMARY_FORMAT);
     prompt.push_str("\n\nAlso include, at the end, a <read-files> block listing files that were read and a <modified-files> block listing files that were changed, one path per line, when known.");
     if let Some(prev) = previous_summary {
@@ -300,9 +299,26 @@ pub async fn generate_summary(
         prompt.push_str("\n\nAdditional focus requested by the user: ");
         prompt.push_str(custom);
     }
-    prompt.push_str("\n\nConversation:\n\n");
-    prompt.push_str(conversation_text);
+    prompt
+}
 
+/// Generate a structured summary with the LLM. One-off prompt: fresh session
+/// id and no cache writes wanted, so it's a plain request.
+pub async fn generate_summary(
+    model: &Model,
+    credential: Option<kiss_ai::ResolvedCredential>,
+    conversation_text: &str,
+    previous_summary: Option<&str>,
+    custom_instructions: Option<&str>,
+    continuation: bool,
+    cancel: tokio_util::sync::CancellationToken,
+) -> anyhow::Result<SummaryOutcome> {
+    let prompt = summary_prompt(
+        conversation_text,
+        previous_summary,
+        custom_instructions,
+        continuation,
+    );
     let context = kiss_ai::Context {
         system_prompt: None,
         openai_responses_input: None,
@@ -453,6 +469,14 @@ mod tests {
     fn threshold() {
         assert!(should_compact(190_000, 200_000, 16_384));
         assert!(!should_compact(100_000, 200_000, 16_384));
+    }
+
+    #[test]
+    fn split_turn_prompt_separates_conversation_from_continuation_instructions() {
+        let prompt = summary_prompt("user work", None, None, true);
+        assert!(prompt.starts_with("# Conversation\nuser work\n\n# Instructions\n"));
+        assert!(prompt.contains("Later messages are retained separately"));
+        assert!(prompt.contains("do not infer or recreate later messages"));
     }
 
     #[test]

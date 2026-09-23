@@ -17,6 +17,7 @@ mod device_code;
 pub mod external;
 pub mod github_copilot;
 pub mod kimi_coding;
+pub mod meta;
 pub mod openai_codex;
 pub mod openrouter;
 pub mod radius;
@@ -146,7 +147,7 @@ pub fn login_methods(provider: &str) -> Vec<LoginMethod> {
         "openai-codex" => vec![BrowserOAuth, DeviceOAuth],
         "anthropic" => vec![BrowserOAuth, ManualOAuth, ApiKey],
         "cursor" => vec![BrowserOAuth, ApiKey],
-        "github-copilot" | "kimi-coding" | "xai" => vec![DeviceOAuth, ApiKey],
+        "github-copilot" | "kimi-coding" | "meta" | "xai" => vec![DeviceOAuth, ApiKey],
         "openrouter" => vec![BrowserOAuth, ManualOAuth, ApiKey],
         "radius" => vec![BrowserOAuth, DeviceOAuth, ApiKey],
         azure::PROVIDER => vec![ApiKey, AzureEntraId],
@@ -181,6 +182,7 @@ pub fn env_var_names(provider: &str) -> &'static [&'static str] {
         "huggingface" => &["HF_TOKEN"],
         "kimi-coding" => &["KIMI_API_KEY"],
         "llama.cpp" => &["LLAMA_API_KEY"],
+        "meta" => &["META_API_KEY"],
         "minimax" => &["MINIMAX_API_KEY"],
         "minimax-cn" => &["MINIMAX_CN_API_KEY"],
         "mistral" => &["MISTRAL_API_KEY"],
@@ -472,6 +474,7 @@ async fn resolve_api_key_async_generic(
                         | "anthropic"
                         | "github-copilot"
                         | "kimi-coding"
+                        | "meta"
                         | "xai"
                         | "radius"
                         | "cursor"
@@ -501,6 +504,7 @@ async fn resolve_api_key_async_generic(
                         github_copilot::refresh(&current, &Default::default()).await?
                     }
                     "kimi-coding" => kimi_coding::refresh(&current, &Default::default()).await?,
+                    "meta" => meta::refresh(&current, &Default::default()).await?,
                     "xai" => xai::refresh(&current, &Default::default()).await?,
                     "radius" => radius::refresh(&current, &Default::default()).await?,
                     "cursor" => cursor::refresh(&current, &Default::default()).await?,
@@ -833,9 +837,10 @@ mod tests {
             vec![LoginMethod::BrowserOAuth, LoginMethod::DeviceOAuth]
         );
         assert!(login_methods("anthropic").contains(&LoginMethod::ManualOAuth));
-        for provider in ["github-copilot", "kimi-coding", "xai"] {
+        for provider in ["github-copilot", "kimi-coding", "meta", "xai"] {
             assert!(login_methods(provider).contains(&LoginMethod::DeviceOAuth));
         }
+        assert_eq!(env_var_names("meta"), &["META_API_KEY"]);
         assert!(login_methods("openrouter").contains(&LoginMethod::BrowserOAuth));
         assert!(login_methods("openrouter").contains(&LoginMethod::ManualOAuth));
         assert_eq!(

@@ -34,7 +34,12 @@
       "input": ["text", "image"],
       "cost": { "input": 0.3, "output": 1.2, "cacheRead": 0.06, "cacheWrite": 0 },
       "contextWindow": 1048576,
-      "maxTokens": 512000
+      "maxTokens": 512000,
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     }
   }
 }

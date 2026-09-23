@@ -382,9 +382,10 @@ fn build_request(
                     let parts: Vec<Value> = blocks
                         .iter()
                         .filter_map(|b| match b {
-                            ContentBlock::Text { text, .. } => {
+                            ContentBlock::Text { text, .. } if !text.is_empty() => {
                                 Some(json!({"type": "text", "text": text}))
                             }
+                            ContentBlock::Text { .. } => None,
                             ContentBlock::Image { data, mime_type } => Some(json!({
                                 "type": "image_url",
                                 "image_url": {"url": format!("data:{mime_type};base64,{data}")},
@@ -723,6 +724,34 @@ mod tests {
             &detect_compat(&model),
         );
         assert_eq!(body["messages"][0]["reasoning_details"], details);
+    }
+
+    #[test]
+    fn image_only_user_messages_omit_empty_text_parts() {
+        let model = model_with_compat(OpenAICompat::default());
+        let context = Context {
+            system_prompt: None,
+            openai_responses_input: None,
+            messages: vec![Message::User(crate::UserMessage {
+                content: UserContent::Blocks(vec![
+                    ContentBlock::text(""),
+                    ContentBlock::Image {
+                        data: "ZmFrZQ==".into(),
+                        mime_type: "image/png".into(),
+                    },
+                ]),
+                timestamp: 0,
+            })],
+            tools: Vec::new(),
+        };
+        let body = build_request(
+            &model,
+            &context,
+            &StreamOptions::default(),
+            &detect_compat(&model),
+        );
+        assert_eq!(body["messages"][0]["content"].as_array().unwrap().len(), 1);
+        assert_eq!(body["messages"][0]["content"][0]["type"], "image_url");
     }
 
     #[test]

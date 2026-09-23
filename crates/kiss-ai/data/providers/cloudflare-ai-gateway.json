@@ -12,7 +12,12 @@
       "contextWindow": 1000000,
       "maxTokens": 128000,
       "compat": { "sendSessionAffinityHeaders": true, "forceAdaptiveThinking": true },
-      "thinkingLevelMap": { "off": null, "xhigh": "xhigh", "max": "max" }
+      "thinkingLevelMap": { "off": null, "xhigh": "xhigh", "max": "max" },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "claude-fable-5.1": {
       "id": "claude-fable-5.1",
@@ -26,7 +31,12 @@
       "contextWindow": 1000000,
       "maxTokens": 128000,
       "compat": { "sendSessionAffinityHeaders": true, "forceAdaptiveThinking": true },
-      "thinkingLevelMap": { "off": null, "xhigh": "xhigh", "max": "max" }
+      "thinkingLevelMap": { "off": null, "xhigh": "xhigh", "max": "max" },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "claude-haiku-4.5": {
       "id": "claude-haiku-4.5",
@@ -39,7 +49,12 @@
       "cost": { "input": 1, "output": 5, "cacheRead": 0.1, "cacheWrite": 1.25 },
       "contextWindow": 200000,
       "maxTokens": 64000,
-      "compat": { "sendSessionAffinityHeaders": true }
+      "compat": { "sendSessionAffinityHeaders": true },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "claude-opus-4.5": {
       "id": "claude-opus-4.5",
@@ -52,7 +67,12 @@
       "cost": { "input": 5, "output": 25, "cacheRead": 0.5, "cacheWrite": 6.25 },
       "contextWindow": 200000,
       "maxTokens": 64000,
-      "compat": { "sendSessionAffinityHeaders": true }
+      "compat": { "sendSessionAffinityHeaders": true },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "claude-opus-4.6": {
       "id": "claude-opus-4.6",
@@ -66,7 +86,12 @@
       "contextWindow": 1000000,
       "maxTokens": 128000,
       "compat": { "sendSessionAffinityHeaders": true, "forceAdaptiveThinking": true },
-      "thinkingLevelMap": { "max": "max" }
+      "thinkingLevelMap": { "max": "max" },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "claude-opus-4.7": {
       "id": "claude-opus-4.7",
@@ -84,7 +109,12 @@
         "forceAdaptiveThinking": true,
         "supportsTemperature": false
       },
-      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" }
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "claude-opus-4.8": {
       "id": "claude-opus-4.8",
@@ -102,7 +132,12 @@
         "forceAdaptiveThinking": true,
         "supportsTemperature": false
       },
-      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" }
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "claude-opus-5": {
       "id": "claude-opus-5",
@@ -120,7 +155,12 @@
         "forceAdaptiveThinking": true,
         "supportsTemperature": false
       },
-      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" }
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "claude-sonnet-4.5": {
       "id": "claude-sonnet-4.5",
@@ -133,7 +173,12 @@
       "cost": { "input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 3.75 },
       "contextWindow": 1000000,
       "maxTokens": 64000,
-      "compat": { "sendSessionAffinityHeaders": true }
+      "compat": { "sendSessionAffinityHeaders": true },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "claude-sonnet-4.6": {
       "id": "claude-sonnet-4.6",
@@ -147,7 +192,12 @@
       "contextWindow": 1000000,
       "maxTokens": 128000,
       "compat": { "sendSessionAffinityHeaders": true, "forceAdaptiveThinking": true },
-      "thinkingLevelMap": { "max": "max" }
+      "thinkingLevelMap": { "max": "max" },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "claude-sonnet-5": {
       "id": "claude-sonnet-5",
@@ -161,7 +211,12 @@
       "contextWindow": 1000000,
       "maxTokens": 128000,
       "compat": { "sendSessionAffinityHeaders": true, "forceAdaptiveThinking": true },
-      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" }
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     }
   },
   "openai-completions": {
@@ -181,7 +236,6 @@
         "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
-        "supportsStrictMode": false,
         "supportsLongCacheRetention": false,
         "sendSessionAffinityHeaders": true,
         "requiresReasoningContentOnAssistantMessages": true,
@@ -211,7 +265,6 @@
         "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
-        "supportsStrictMode": false,
         "supportsLongCacheRetention": false,
         "sendSessionAffinityHeaders": true,
         "requiresReasoningContentOnAssistantMessages": true,
@@ -241,9 +294,13 @@
         "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
-        "supportsStrictMode": false,
         "supportsLongCacheRetention": false,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "workers-ai/@cf/ibm-granite/granite-4.0-h-micro": {
@@ -262,7 +319,6 @@
         "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
-        "supportsStrictMode": false,
         "supportsLongCacheRetention": false,
         "sendSessionAffinityHeaders": true
       }
@@ -283,7 +339,6 @@
         "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
-        "supportsStrictMode": false,
         "supportsLongCacheRetention": false,
         "sendSessionAffinityHeaders": true
       }
@@ -304,9 +359,13 @@
         "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
-        "supportsStrictMode": false,
         "supportsLongCacheRetention": false,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "workers-ai/@cf/mistralai/mistral-small-3.1-24b-instruct": {
@@ -325,7 +384,6 @@
         "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
-        "supportsStrictMode": false,
         "supportsLongCacheRetention": false,
         "sendSessionAffinityHeaders": true
       }
@@ -346,9 +404,13 @@
         "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
-        "supportsStrictMode": false,
         "supportsLongCacheRetention": false,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "workers-ai/@cf/moonshotai/kimi-k2.7-code": {
@@ -367,9 +429,13 @@
         "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
-        "supportsStrictMode": false,
         "supportsLongCacheRetention": false,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "workers-ai/@cf/nvidia/nemotron-3-120b-a12b": {
@@ -388,7 +454,6 @@
         "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
-        "supportsStrictMode": false,
         "supportsLongCacheRetention": false,
         "sendSessionAffinityHeaders": true
       }
@@ -409,7 +474,6 @@
         "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
-        "supportsStrictMode": false,
         "supportsLongCacheRetention": false,
         "sendSessionAffinityHeaders": true
       }
@@ -430,7 +494,6 @@
         "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
-        "supportsStrictMode": false,
         "supportsLongCacheRetention": false,
         "sendSessionAffinityHeaders": true
       }
@@ -451,7 +514,6 @@
         "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
-        "supportsStrictMode": false,
         "supportsLongCacheRetention": false,
         "sendSessionAffinityHeaders": true
       }
@@ -472,9 +534,13 @@
         "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
-        "supportsStrictMode": false,
         "supportsLongCacheRetention": false,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "workers-ai/@cf/zai-org/glm-4.7-flash": {
@@ -493,7 +559,6 @@
         "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
-        "supportsStrictMode": false,
         "supportsLongCacheRetention": false,
         "sendSessionAffinityHeaders": true
       }
@@ -514,7 +579,6 @@
         "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
-        "supportsStrictMode": false,
         "supportsLongCacheRetention": false,
         "sendSessionAffinityHeaders": true
       }
@@ -529,13 +593,12 @@
       "input": ["text"],
       "cost": { "input": 1.4, "output": 4.4, "cacheRead": 0.26, "cacheWrite": 0 },
       "contextWindow": 1310720,
-      "maxTokens": 1310720,
+      "maxTokens": 1048576,
       "compat": {
         "supportsStore": false,
         "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
-        "supportsStrictMode": false,
         "supportsLongCacheRetention": false,
         "sendSessionAffinityHeaders": true
       }
@@ -556,9 +619,13 @@
         "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
-        "supportsStrictMode": false,
         "supportsLongCacheRetention": false,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     }
   },
@@ -574,7 +641,12 @@
       "cost": { "input": 2, "output": 8, "cacheRead": 0.5, "cacheWrite": 0 },
       "contextWindow": 1047576,
       "maxTokens": 32768,
-      "compat": { "supportsStrictMode": true }
+      "compat": { "supportsStrictMode": true },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "gpt-4.1-mini": {
       "id": "gpt-4.1-mini",
@@ -587,7 +659,12 @@
       "cost": { "input": 0.4, "output": 1.6, "cacheRead": 0.1, "cacheWrite": 0 },
       "contextWindow": 1047576,
       "maxTokens": 32768,
-      "compat": { "supportsStrictMode": true }
+      "compat": { "supportsStrictMode": true },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "gpt-4.1-nano": {
       "id": "gpt-4.1-nano",
@@ -600,7 +677,12 @@
       "cost": { "input": 0.1, "output": 0.4, "cacheRead": 0.025, "cacheWrite": 0 },
       "contextWindow": 1000000,
       "maxTokens": 32768,
-      "compat": { "supportsStrictMode": true }
+      "compat": { "supportsStrictMode": true },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "gpt-4o": {
       "id": "gpt-4o",
@@ -613,7 +695,12 @@
       "cost": { "input": 1.25, "output": 5, "cacheRead": 0.625, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 16384,
-      "compat": { "supportsStrictMode": true }
+      "compat": { "supportsStrictMode": true },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "gpt-4o-mini": {
       "id": "gpt-4o-mini",
@@ -626,7 +713,12 @@
       "cost": { "input": 0.075, "output": 0.3, "cacheRead": 0.0375, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 16384,
-      "compat": { "supportsStrictMode": true }
+      "compat": { "supportsStrictMode": true },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "gpt-5": {
       "id": "gpt-5",
@@ -648,7 +740,12 @@
         "xhigh": null,
         "max": null
       },
-      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true }
+      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "gpt-5-mini": {
       "id": "gpt-5-mini",
@@ -670,7 +767,12 @@
         "xhigh": null,
         "max": null
       },
-      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true }
+      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "gpt-5-nano": {
       "id": "gpt-5-nano",
@@ -692,7 +794,12 @@
         "xhigh": null,
         "max": null
       },
-      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true }
+      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "gpt-5.1": {
       "id": "gpt-5.1",
@@ -714,7 +821,12 @@
         "xhigh": null,
         "max": null
       },
-      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true }
+      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "gpt-5.4": {
       "id": "gpt-5.4",
@@ -736,7 +848,12 @@
         "xhigh": "xhigh",
         "max": null
       },
-      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true }
+      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "gpt-5.4-mini": {
       "id": "gpt-5.4-mini",
@@ -758,7 +875,12 @@
         "xhigh": "xhigh",
         "max": null
       },
-      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true }
+      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "gpt-5.4-nano": {
       "id": "gpt-5.4-nano",
@@ -780,7 +902,12 @@
         "xhigh": "xhigh",
         "max": null
       },
-      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true }
+      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "gpt-5.4-pro": {
       "id": "gpt-5.4-pro",
@@ -802,7 +929,12 @@
         "xhigh": "xhigh",
         "max": null
       },
-      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true }
+      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "gpt-5.5": {
       "id": "gpt-5.5",
@@ -824,7 +956,12 @@
         "xhigh": "xhigh",
         "max": null
       },
-      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true }
+      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "gpt-5.5-pro": {
       "id": "gpt-5.5-pro",
@@ -846,7 +983,12 @@
         "xhigh": "xhigh",
         "max": null
       },
-      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true }
+      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "gpt-5.6-luna": {
       "id": "gpt-5.6-luna",
@@ -882,7 +1024,12 @@
         "xhigh": "xhigh",
         "max": "max"
       },
-      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true }
+      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "gpt-5.6-sol": {
       "id": "gpt-5.6-sol",
@@ -892,7 +1039,21 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 2, "output": 10, "cacheRead": 0.25, "cacheWrite": 3.125 },
+      "cost": {
+        "input": 4,
+        "output": 20,
+        "cacheRead": 0.4,
+        "cacheWrite": 5,
+        "tiers": [
+          {
+            "inputTokensAbove": 272000,
+            "input": 8,
+            "output": 30,
+            "cacheRead": 0.8,
+            "cacheWrite": 10
+          }
+        ]
+      },
       "contextWindow": 1050000,
       "maxTokens": 128000,
       "thinkingLevelMap": {
@@ -904,7 +1065,12 @@
         "xhigh": "xhigh",
         "max": "max"
       },
-      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true }
+      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "gpt-5.6-terra": {
       "id": "gpt-5.6-terra",
@@ -940,7 +1106,12 @@
         "xhigh": "xhigh",
         "max": "max"
       },
-      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true }
+      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "gpt-6-astra": {
       "id": "gpt-6-astra",
@@ -950,7 +1121,21 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 10, "output": 50, "cacheRead": 1, "cacheWrite": 12 },
+      "cost": {
+        "input": 10,
+        "output": 50,
+        "cacheRead": 1,
+        "cacheWrite": 12.5,
+        "tiers": [
+          {
+            "inputTokensAbove": 272000,
+            "input": 20,
+            "output": 75,
+            "cacheRead": 2,
+            "cacheWrite": 25
+          }
+        ]
+      },
       "contextWindow": 1050000,
       "maxTokens": 128000,
       "thinkingLevelMap": {
@@ -962,7 +1147,12 @@
         "xhigh": "xhigh",
         "max": "max"
       },
-      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true }
+      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "o3": {
       "id": "o3",
@@ -984,7 +1174,12 @@
         "xhigh": null,
         "max": null
       },
-      "compat": { "supportsStrictMode": true }
+      "compat": { "supportsStrictMode": true },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "o3-mini": {
       "id": "o3-mini",
@@ -1028,7 +1223,12 @@
         "xhigh": null,
         "max": null
       },
-      "compat": { "supportsStrictMode": true }
+      "compat": { "supportsStrictMode": true },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     }
   }
 }

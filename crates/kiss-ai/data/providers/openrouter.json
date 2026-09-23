@@ -10,7 +10,12 @@
       "input": ["text", "image"],
       "cost": { "input": 0.25, "output": 1.25, "cacheRead": 0.03, "cacheWrite": 0.3 },
       "contextWindow": 200000,
-      "maxTokens": 4096
+      "maxTokens": 4096,
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "anthropic/claude-fable-5": {
       "id": "anthropic/claude-fable-5",
@@ -32,7 +37,12 @@
       "cost": { "input": 10, "output": 50, "cacheRead": 1, "cacheWrite": 12.5 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": { "forceAdaptiveThinking": true }
+      "compat": { "forceAdaptiveThinking": true },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "anthropic/claude-fable-5.1": {
       "id": "anthropic/claude-fable-5.1",
@@ -54,7 +64,12 @@
       "cost": { "input": 10, "output": 50, "cacheRead": 0.25, "cacheWrite": 12.5 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": { "supportsMidConvoEffort": true, "forceAdaptiveThinking": true }
+      "compat": { "supportsMidConvoEffort": true, "forceAdaptiveThinking": true },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "anthropic/claude-haiku-4.5": {
       "id": "anthropic/claude-haiku-4.5",
@@ -66,19 +81,12 @@
       "input": ["text", "image"],
       "cost": { "input": 1, "output": 5, "cacheRead": 0.1, "cacheWrite": 1.25 },
       "contextWindow": 200000,
-      "maxTokens": 64000
-    },
-    "anthropic/claude-opus-4": {
-      "id": "anthropic/claude-opus-4",
-      "name": "Anthropic: Claude Opus 4",
-      "api": "anthropic-messages",
-      "baseUrl": "https://openrouter.ai/api",
-      "provider": "openrouter",
-      "reasoning": true,
-      "input": ["text", "image"],
-      "cost": { "input": 15, "output": 75, "cacheRead": 1.5, "cacheWrite": 18.75 },
-      "contextWindow": 200000,
-      "maxTokens": 32000
+      "maxTokens": 64000,
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "anthropic/claude-opus-4.1": {
       "id": "anthropic/claude-opus-4.1",
@@ -90,7 +98,12 @@
       "input": ["text", "image"],
       "cost": { "input": 15, "output": 75, "cacheRead": 1.5, "cacheWrite": 18.75 },
       "contextWindow": 200000,
-      "maxTokens": 32000
+      "maxTokens": 32000,
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "anthropic/claude-opus-4.5": {
       "id": "anthropic/claude-opus-4.5",
@@ -102,7 +115,12 @@
       "input": ["text", "image"],
       "cost": { "input": 5, "output": 25, "cacheRead": 0.5, "cacheWrite": 6.25 },
       "contextWindow": 200000,
-      "maxTokens": 64000
+      "maxTokens": 64000,
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "anthropic/claude-opus-4.6": {
       "id": "anthropic/claude-opus-4.6",
@@ -124,7 +142,12 @@
       "cost": { "input": 5, "output": 25, "cacheRead": 0.5, "cacheWrite": 6.25 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": { "forceAdaptiveThinking": true }
+      "compat": { "forceAdaptiveThinking": true },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "anthropic/claude-opus-4.7": {
       "id": "anthropic/claude-opus-4.7",
@@ -146,7 +169,12 @@
       "cost": { "input": 5, "output": 25, "cacheRead": 0.5, "cacheWrite": 6.25 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": { "forceAdaptiveThinking": true, "supportsTemperature": false }
+      "compat": { "forceAdaptiveThinking": true, "supportsTemperature": false },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "anthropic/claude-opus-4.8": {
       "id": "anthropic/claude-opus-4.8",
@@ -168,7 +196,12 @@
       "cost": { "input": 5, "output": 25, "cacheRead": 0.5, "cacheWrite": 6.25 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": { "forceAdaptiveThinking": true, "supportsTemperature": false }
+      "compat": { "forceAdaptiveThinking": true, "supportsTemperature": false },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "anthropic/claude-opus-5": {
       "id": "anthropic/claude-opus-5",
@@ -190,7 +223,43 @@
       "cost": { "input": 5, "output": 25, "cacheRead": 0.5, "cacheWrite": 6.25 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": { "forceAdaptiveThinking": true, "supportsTemperature": false }
+      "compat": { "forceAdaptiveThinking": true, "supportsTemperature": false },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
+    },
+    "anthropic/claude-opus-5.5": {
+      "id": "anthropic/claude-opus-5.5",
+      "name": "Anthropic: Claude Opus 5.5",
+      "api": "anthropic-messages",
+      "baseUrl": "https://openrouter.ai/api",
+      "provider": "openrouter",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "off": null,
+        "minimal": null,
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh",
+        "max": "max"
+      },
+      "input": ["text", "image"],
+      "cost": { "input": 4, "output": 20, "cacheRead": 0.2, "cacheWrite": 5 },
+      "contextWindow": 1000000,
+      "maxTokens": 128000,
+      "compat": {
+        "supportsMidConvoEffort": true,
+        "forceAdaptiveThinking": true,
+        "supportsTemperature": false
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "anthropic/claude-sonnet-4": {
       "id": "anthropic/claude-sonnet-4",
@@ -202,7 +271,12 @@
       "input": ["text", "image"],
       "cost": { "input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 3.75 },
       "contextWindow": 200000,
-      "maxTokens": 64000
+      "maxTokens": 64000,
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "anthropic/claude-sonnet-4.5": {
       "id": "anthropic/claude-sonnet-4.5",
@@ -214,7 +288,12 @@
       "input": ["text", "image"],
       "cost": { "input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 3.75 },
       "contextWindow": 1000000,
-      "maxTokens": 64000
+      "maxTokens": 64000,
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "anthropic/claude-sonnet-4.6": {
       "id": "anthropic/claude-sonnet-4.6",
@@ -236,7 +315,12 @@
       "cost": { "input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 3.75 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": { "forceAdaptiveThinking": true }
+      "compat": { "forceAdaptiveThinking": true },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "anthropic/claude-sonnet-5": {
       "id": "anthropic/claude-sonnet-5",
@@ -258,7 +342,12 @@
       "cost": { "input": 2, "output": 10, "cacheRead": 0.2, "cacheWrite": 2.5 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": { "forceAdaptiveThinking": true }
+      "compat": { "forceAdaptiveThinking": true },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     }
   },
   "openai-completions": {
@@ -272,11 +361,12 @@
       "thinkingLevelMap": { "off": null },
       "input": ["text"],
       "cost": { "input": 0.8, "output": 1.6, "cacheRead": 0.2, "cacheWrite": 0 },
-      "contextWindow": 131072,
+      "contextWindow": 1048576,
       "maxTokens": 32768,
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -290,11 +380,12 @@
       "thinkingLevelMap": { "off": null },
       "input": ["text"],
       "cost": { "input": 3, "output": 6, "cacheRead": 0.75, "cacheWrite": 0 },
-      "contextWindow": 131072,
+      "contextWindow": 1048576,
       "maxTokens": 32768,
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -308,11 +399,12 @@
       "thinkingLevelMap": { "off": null },
       "input": ["text"],
       "cost": { "input": 0.7, "output": 1.4, "cacheRead": 0.18, "cacheWrite": 0 },
-      "contextWindow": 131072,
+      "contextWindow": 1048576,
       "maxTokens": 32768,
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -330,7 +422,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "amazon/nova-lite-v1": {
@@ -347,7 +445,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "amazon/nova-micro-v1": {
@@ -364,6 +468,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -381,7 +486,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "amazon/nova-pro-v1": {
@@ -398,7 +509,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "anthropic/claude-fable-5.1:batch": {
@@ -423,8 +540,14 @@
       "maxTokens": 128000,
       "compat": {
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "cacheControlFormat": "anthropic",
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "anthropic/claude-fable-5:batch": {
@@ -449,8 +572,14 @@
       "maxTokens": 128000,
       "compat": {
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "cacheControlFormat": "anthropic",
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "anthropic/claude-haiku-4.5:batch": {
@@ -466,8 +595,14 @@
       "maxTokens": 64000,
       "compat": {
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "cacheControlFormat": "anthropic",
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "anthropic/claude-opus-4.1:batch": {
@@ -483,8 +618,14 @@
       "maxTokens": 32000,
       "compat": {
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "cacheControlFormat": "anthropic",
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "anthropic/claude-opus-4.5:batch": {
@@ -500,8 +641,14 @@
       "maxTokens": 64000,
       "compat": {
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "cacheControlFormat": "anthropic",
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "anthropic/claude-opus-4.6:batch": {
@@ -526,8 +673,14 @@
       "maxTokens": 128000,
       "compat": {
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "cacheControlFormat": "anthropic",
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "anthropic/claude-opus-4.7:batch": {
@@ -552,8 +705,14 @@
       "maxTokens": 128000,
       "compat": {
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "cacheControlFormat": "anthropic",
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "anthropic/claude-opus-4.8:batch": {
@@ -578,8 +737,46 @@
       "maxTokens": 128000,
       "compat": {
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "cacheControlFormat": "anthropic",
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
+    },
+    "anthropic/claude-opus-5.5:batch": {
+      "id": "anthropic/claude-opus-5.5:batch",
+      "name": "Anthropic: Claude Opus 5.5 (batch)",
+      "api": "openai-completions",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "provider": "openrouter",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "off": null,
+        "minimal": null,
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh",
+        "max": "max"
+      },
+      "input": ["text", "image"],
+      "cost": { "input": 2, "output": 10, "cacheRead": 0.1, "cacheWrite": 2.5 },
+      "contextWindow": 1000000,
+      "maxTokens": 128000,
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "cacheControlFormat": "anthropic",
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "anthropic/claude-opus-5:batch": {
@@ -604,8 +801,14 @@
       "maxTokens": 128000,
       "compat": {
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "cacheControlFormat": "anthropic",
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "anthropic/claude-sonnet-4.5:batch": {
@@ -621,8 +824,14 @@
       "maxTokens": 64000,
       "compat": {
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "cacheControlFormat": "anthropic",
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "anthropic/claude-sonnet-4.6:batch": {
@@ -647,8 +856,14 @@
       "maxTokens": 128000,
       "compat": {
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "cacheControlFormat": "anthropic",
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "anthropic/claude-sonnet-5:batch": {
@@ -673,8 +888,14 @@
       "maxTokens": 128000,
       "compat": {
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "cacheControlFormat": "anthropic",
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "arcee-ai/trinity-large-thinking": {
@@ -692,6 +913,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -709,7 +931,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "bytedance-seed/seed-1.6": {
@@ -726,7 +954,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "bytedance-seed/seed-1.6-flash": {
@@ -743,7 +977,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "bytedance-seed/seed-2-1-turbo": {
@@ -760,7 +1000,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "bytedance-seed/seed-2.0-code": {
@@ -786,7 +1032,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "bytedance-seed/seed-2.0-lite": {
@@ -812,7 +1064,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "bytedance-seed/seed-2.0-mini": {
@@ -838,7 +1096,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "cohere/command-r-08-2024": {
@@ -855,6 +1119,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -872,6 +1137,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -889,6 +1155,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -906,6 +1173,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -923,6 +1191,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -940,6 +1209,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -958,6 +1228,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -976,6 +1247,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -993,6 +1265,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -1010,6 +1283,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -1027,6 +1301,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -1047,12 +1322,13 @@
         "max": null
       },
       "input": ["text"],
-      "cost": { "input": 0.03836, "output": 0.07672, "cacheRead": 0.007672, "cacheWrite": 0 },
+      "cost": { "input": 0.049, "output": 0.098, "cacheRead": 0.0098, "cacheWrite": 0 },
       "contextWindow": 1024000,
       "maxTokens": 384000,
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true,
         "requiresReasoningContentOnAssistantMessages": true
       }
@@ -1074,66 +1350,13 @@
         "max": "max"
       },
       "input": ["text"],
-      "cost": { "input": 0.04, "output": 0.08, "cacheRead": 0.016, "cacheWrite": 0 },
+      "cost": { "input": 0.04, "output": 0.64, "cacheRead": 0.016, "cacheWrite": 0 },
       "contextWindow": 1048576,
       "maxTokens": 943718,
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
-        "sendSessionAffinityHeaders": true,
-        "requiresReasoningContentOnAssistantMessages": true
-      }
-    },
-    "deepseek/deepseek-v4-flash-0731:batch": {
-      "id": "deepseek/deepseek-v4-flash-0731:batch",
-      "name": "DeepSeek: DeepSeek V4 Flash 0731 (batch)",
-      "api": "openai-completions",
-      "baseUrl": "https://openrouter.ai/api/v1",
-      "provider": "openrouter",
-      "reasoning": true,
-      "thinkingLevelMap": {
-        "off": "none",
-        "minimal": null,
-        "low": "low",
-        "medium": null,
-        "high": "high",
-        "xhigh": null,
-        "max": "max"
-      },
-      "input": ["text"],
-      "cost": { "input": 0.11, "output": 0.33, "cacheRead": 0.0035, "cacheWrite": 0 },
-      "contextWindow": 1048576,
-      "maxTokens": 943718,
-      "compat": {
-        "supportsDeveloperRole": false,
-        "thinkingFormat": "openrouter",
-        "sendSessionAffinityHeaders": true,
-        "requiresReasoningContentOnAssistantMessages": true
-      }
-    },
-    "deepseek/deepseek-v4-flash-0731:free": {
-      "id": "deepseek/deepseek-v4-flash-0731:free",
-      "name": "DeepSeek: DeepSeek V4 Flash 0731 (free)",
-      "api": "openai-completions",
-      "baseUrl": "https://openrouter.ai/api/v1",
-      "provider": "openrouter",
-      "reasoning": true,
-      "thinkingLevelMap": {
-        "off": "none",
-        "minimal": null,
-        "low": "low",
-        "medium": null,
-        "high": "high",
-        "xhigh": null,
-        "max": "max"
-      },
-      "input": ["text"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
-      "contextWindow": 1048576,
-      "maxTokens": 393216,
-      "compat": {
-        "supportsDeveloperRole": false,
-        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true,
         "requiresReasoningContentOnAssistantMessages": true
       }
@@ -1155,41 +1378,20 @@
         "max": "max"
       },
       "input": ["text", "image"],
-      "cost": { "input": 0.2156, "output": 0.6468, "cacheRead": 0.00686, "cacheWrite": 0 },
-      "contextWindow": 1048576,
-      "maxTokens": 262144,
-      "compat": {
-        "supportsDeveloperRole": false,
-        "thinkingFormat": "openrouter",
-        "sendSessionAffinityHeaders": true,
-        "requiresReasoningContentOnAssistantMessages": true
-      }
-    },
-    "deepseek/deepseek-v4-flash-vision-exp:batch": {
-      "id": "deepseek/deepseek-v4-flash-vision-exp:batch",
-      "name": "DeepSeek: DeepSeek V4 Flash Vision Exp (batch)",
-      "api": "openai-completions",
-      "baseUrl": "https://openrouter.ai/api/v1",
-      "provider": "openrouter",
-      "reasoning": true,
-      "thinkingLevelMap": {
-        "off": "none",
-        "minimal": null,
-        "low": "low",
-        "medium": null,
-        "high": "high",
-        "xhigh": null,
-        "max": "max"
-      },
-      "input": ["text", "image"],
-      "cost": { "input": 0.11, "output": 0.33, "cacheRead": 0.0035, "cacheWrite": 0 },
+      "cost": { "input": 0.22, "output": 0.66, "cacheRead": 0.007, "cacheWrite": 0 },
       "contextWindow": 1048576,
       "maxTokens": 943718,
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true,
         "requiresReasoningContentOnAssistantMessages": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "deepseek/deepseek-v4-pro": {
@@ -1209,12 +1411,13 @@
         "max": null
       },
       "input": ["text"],
-      "cost": { "input": 0.422298, "output": 0.844596, "cacheRead": 0.035192, "cacheWrite": 0 },
+      "cost": { "input": 0.895578, "output": 1.791156, "cacheRead": 0.074632, "cacheWrite": 0 },
       "contextWindow": 1024000,
       "maxTokens": 384000,
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true,
         "requiresReasoningContentOnAssistantMessages": true
       }
@@ -1236,39 +1439,13 @@
         "max": "max"
       },
       "input": ["text"],
-      "cost": { "input": 0.57816, "output": 1.73448, "cacheRead": 0.018396, "cacheWrite": 0 },
-      "contextWindow": 1048576,
-      "maxTokens": 393216,
-      "compat": {
-        "supportsDeveloperRole": false,
-        "thinkingFormat": "openrouter",
-        "sendSessionAffinityHeaders": true,
-        "requiresReasoningContentOnAssistantMessages": true
-      }
-    },
-    "deepseek/deepseek-v4-pro-0813:batch": {
-      "id": "deepseek/deepseek-v4-pro-0813:batch",
-      "name": "DeepSeek: DeepSeek V4 Pro 0813 (batch)",
-      "api": "openai-completions",
-      "baseUrl": "https://openrouter.ai/api/v1",
-      "provider": "openrouter",
-      "reasoning": true,
-      "thinkingLevelMap": {
-        "off": "none",
-        "minimal": null,
-        "low": "low",
-        "medium": null,
-        "high": "high",
-        "xhigh": null,
-        "max": "max"
-      },
-      "input": ["text"],
       "cost": { "input": 0.66, "output": 1.98, "cacheRead": 0.022, "cacheWrite": 0 },
       "contextWindow": 1048576,
-      "maxTokens": 943718,
+      "maxTokens": 384000,
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true,
         "requiresReasoningContentOnAssistantMessages": true
       }
@@ -1296,8 +1473,47 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true,
         "requiresReasoningContentOnAssistantMessages": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
+    },
+    "deepseek/deepseek-v4.1-flash:batch": {
+      "id": "deepseek/deepseek-v4.1-flash:batch",
+      "name": "DeepSeek: DeepSeek V4.1 Flash (batch)",
+      "api": "openai-completions",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "provider": "openrouter",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "off": "none",
+        "minimal": null,
+        "low": "low",
+        "medium": null,
+        "high": "high",
+        "xhigh": null,
+        "max": "max"
+      },
+      "input": ["text", "image"],
+      "cost": { "input": 0.112, "output": 0.336, "cacheRead": 0.00336, "cacheWrite": 0 },
+      "contextWindow": 1048576,
+      "maxTokens": 131072,
+      "compat": {
+        "supportsDeveloperRole": false,
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true,
+        "requiresReasoningContentOnAssistantMessages": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "dots-studio/dots-3-note-preview:free": {
@@ -1314,7 +1530,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "google/gemini-2.5-flash": {
@@ -1331,7 +1553,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "google/gemini-2.5-flash-lite": {
@@ -1348,7 +1576,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "google/gemini-2.5-flash-lite:batch": {
@@ -1365,7 +1599,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "google/gemini-2.5-flash:batch": {
@@ -1382,7 +1622,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "google/gemini-2.5-pro": {
@@ -1400,7 +1646,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "google/gemini-2.5-pro-preview": {
@@ -1418,7 +1670,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "google/gemini-2.5-pro:batch": {
@@ -1436,7 +1694,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "google/gemini-3-flash-preview": {
@@ -1462,7 +1726,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "google/gemini-3-flash-preview:batch": {
@@ -1488,7 +1758,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "google/gemini-3-pro-image": {
@@ -1506,7 +1782,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "google/gemini-3.1-flash-lite": {
@@ -1532,7 +1814,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "google/gemini-3.1-flash-lite-preview": {
@@ -1558,7 +1846,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "google/gemini-3.1-flash-lite:batch": {
@@ -1584,7 +1878,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "google/gemini-3.1-pro-preview": {
@@ -1610,7 +1910,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "google/gemini-3.1-pro-preview-customtools": {
@@ -1636,7 +1942,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "google/gemini-3.1-pro-preview:batch": {
@@ -1662,7 +1974,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "google/gemini-3.5-flash": {
@@ -1688,7 +2006,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "google/gemini-3.5-flash-lite": {
@@ -1714,7 +2038,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "google/gemini-3.5-flash-lite:batch": {
@@ -1740,7 +2070,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "google/gemini-3.5-flash:batch": {
@@ -1766,7 +2102,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "google/gemini-3.6-flash": {
@@ -1792,7 +2134,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "google/gemini-3.6-flash:batch": {
@@ -1818,7 +2166,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "google/gemini-3.7-flash": {
@@ -1844,7 +2198,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "google/gemini-3.7-flash:batch": {
@@ -1870,7 +2230,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "google/gemini-3.8-flash": {
@@ -1896,7 +2262,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "google/gemini-3.8-flash:batch": {
@@ -1922,7 +2294,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "google/gemma-3-12b-it": {
@@ -1939,7 +2317,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "google/gemma-3-27b-it": {
@@ -1956,7 +2340,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "google/gemma-4-26b-a4b-it": {
@@ -1973,7 +2363,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "google/gemma-4-26b-a4b-it:free": {
@@ -1990,7 +2386,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "google/gemma-4-31b-it": {
@@ -2007,7 +2409,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "google/gemma-4-31b-it:free": {
@@ -2024,7 +2432,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "ibm-granite/granite-4.2-8b": {
@@ -2050,6 +2464,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -2076,6 +2491,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -2102,6 +2518,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -2119,6 +2536,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -2136,6 +2554,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -2153,6 +2572,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -2170,6 +2590,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -2187,7 +2608,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "inclusionai/ling-3.0-flash-vl:free": {
@@ -2204,24 +2631,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
-      }
-    },
-    "kwaipilot/kat-coder-pro-v2": {
-      "id": "kwaipilot/kat-coder-pro-v2",
-      "name": "Kwaipilot: KAT-Coder-Pro V2",
-      "api": "openai-completions",
-      "baseUrl": "https://openrouter.ai/api/v1",
-      "provider": "openrouter",
-      "reasoning": false,
-      "input": ["text"],
-      "cost": { "input": 0.3, "output": 1.2, "cacheRead": 0.06, "cacheWrite": 0 },
-      "contextWindow": 262144,
-      "maxTokens": 144000,
-      "compat": {
-        "supportsDeveloperRole": false,
-        "thinkingFormat": "openrouter",
-        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "kwaipilot/kat-coder-pro-v2.5": {
@@ -2238,6 +2654,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -2256,6 +2673,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -2273,6 +2691,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -2290,6 +2709,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -2307,6 +2727,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -2324,6 +2745,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -2341,7 +2763,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "meta-llama/llama-4-scout": {
@@ -2358,7 +2786,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "meta/muse-glimmer-30b": {
@@ -2378,39 +2812,19 @@
         "max": null
       },
       "input": ["text", "image"],
-      "cost": { "input": 0.35, "output": 1.5, "cacheRead": 0.04, "cacheWrite": 0 },
+      "cost": { "input": 0.3, "output": 1.2, "cacheRead": 0.04, "cacheWrite": 0 },
       "contextWindow": 131072,
-      "maxTokens": 117964,
+      "maxTokens": 16384,
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
-      }
-    },
-    "meta/muse-glimmer-30b:batch": {
-      "id": "meta/muse-glimmer-30b:batch",
-      "name": "Meta: Muse Glimmer 30B (batch)",
-      "api": "openai-completions",
-      "baseUrl": "https://openrouter.ai/api/v1",
-      "provider": "openrouter",
-      "reasoning": true,
-      "thinkingLevelMap": {
-        "off": null,
-        "minimal": null,
-        "low": "low",
-        "medium": "medium",
-        "high": "high",
-        "xhigh": "xhigh",
-        "max": null
       },
-      "input": ["text", "image"],
-      "cost": { "input": 0.175, "output": 0.75, "cacheRead": 0.02, "cacheWrite": 0 },
-      "contextWindow": 131072,
-      "maxTokens": 117964,
-      "compat": {
-        "supportsDeveloperRole": false,
-        "thinkingFormat": "openrouter",
-        "sendSessionAffinityHeaders": true
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "meta/muse-spark-1.1": {
@@ -2436,7 +2850,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "meta/muse-spark-1.2": {
@@ -2462,7 +2882,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "meta/muse-spark-1.2-contributor": {
@@ -2488,7 +2914,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "meta/muse-spark-1.3": {
@@ -2514,7 +2946,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "meta/muse-spark-1.3-contributor": {
@@ -2540,7 +2978,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "minimax/minimax-m1": {
@@ -2557,6 +3001,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -2575,6 +3020,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -2593,6 +3039,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -2611,6 +3058,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -2629,6 +3077,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -2646,24 +3095,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
-      }
-    },
-    "minimax/minimax-m3:batch": {
-      "id": "minimax/minimax-m3:batch",
-      "name": "MiniMax: MiniMax M3 (batch)",
-      "api": "openai-completions",
-      "baseUrl": "https://openrouter.ai/api/v1",
-      "provider": "openrouter",
-      "reasoning": true,
-      "input": ["text", "image"],
-      "cost": { "input": 0.3, "output": 1.2, "cacheRead": 0.06, "cacheWrite": 0 },
-      "contextWindow": 524288,
-      "maxTokens": 471859,
-      "compat": {
-        "supportsDeveloperRole": false,
-        "thinkingFormat": "openrouter",
-        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "mistralai/codestral-2508": {
@@ -2680,6 +3118,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -2697,6 +3136,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -2714,6 +3154,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -2731,7 +3172,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "mistralai/ministral-3b-2512": {
@@ -2748,7 +3195,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "mistralai/ministral-8b-2512": {
@@ -2765,7 +3218,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "mistralai/ministral-8b-2512:batch": {
@@ -2782,7 +3241,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "mistralai/mistral-large": {
@@ -2799,6 +3264,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -2816,6 +3282,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -2833,7 +3300,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "mistralai/mistral-medium-3": {
@@ -2850,7 +3323,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "mistralai/mistral-medium-3-5": {
@@ -2876,7 +3355,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "mistralai/mistral-medium-3-5:batch": {
@@ -2902,7 +3387,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "mistralai/mistral-medium-3.1": {
@@ -2919,7 +3410,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "mistralai/mistral-medium-3.1:batch": {
@@ -2936,7 +3433,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "mistralai/mistral-nemo": {
@@ -2953,6 +3456,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -2970,6 +3474,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -2996,7 +3501,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "mistralai/mistral-small-2603:batch": {
@@ -3022,7 +3533,36 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
+    },
+    "mistralai/mistral-small-3.1-24b-instruct": {
+      "id": "mistralai/mistral-small-3.1-24b-instruct",
+      "name": "Mistral: Mistral Small 3.1 24B",
+      "api": "openai-completions",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "provider": "openrouter",
+      "reasoning": false,
+      "input": ["text", "image"],
+      "cost": { "input": 0.351, "output": 0.555, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 128000,
+      "maxTokens": 102400,
+      "compat": {
+        "supportsDeveloperRole": false,
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "mistralai/mistral-small-3.2-24b-instruct": {
@@ -3039,7 +3579,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "mistralai/mixtral-8x22b-instruct": {
@@ -3056,6 +3602,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -3073,6 +3620,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -3090,6 +3638,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -3107,6 +3656,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -3125,6 +3675,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -3142,7 +3693,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "moonshotai/kimi-k2.6": {
@@ -3159,8 +3716,14 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true,
         "requiresReasoningContentOnAssistantMessages": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "moonshotai/kimi-k2.7-code": {
@@ -3172,13 +3735,19 @@
       "reasoning": true,
       "thinkingLevelMap": { "off": null },
       "input": ["text", "image"],
-      "cost": { "input": 0.7062, "output": 3.21, "cacheRead": 0.18, "cacheWrite": 0 },
+      "cost": { "input": 0.7062, "output": 3.3, "cacheRead": 0.18, "cacheWrite": 0 },
       "contextWindow": 262144,
       "maxTokens": 235929,
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "moonshotai/kimi-k3": {
@@ -3198,13 +3767,19 @@
         "max": "max"
       },
       "input": ["text", "image"],
-      "cost": { "input": 1.7, "output": 8.5, "cacheRead": 0.17, "cacheWrite": 0 },
+      "cost": { "input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 0 },
       "contextWindow": 1048576,
       "maxTokens": 131072,
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "moonshotai/kimi-k3:batch": {
@@ -3224,13 +3799,19 @@
         "max": "max"
       },
       "input": ["text", "image"],
-      "cost": { "input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 0 },
+      "cost": { "input": 2.28, "output": 11.4, "cacheRead": 0.228, "cacheWrite": 0 },
       "contextWindow": 1048576,
-      "maxTokens": 943718,
+      "maxTokens": 16384,
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "nex-agi/nex-n2.5-mini:free": {
@@ -3256,7 +3837,45 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
+    },
+    "nex-agi/nex-n2.5-pro": {
+      "id": "nex-agi/nex-n2.5-pro",
+      "name": "Nex AGI: Nex-N2.5-Pro",
+      "api": "openai-completions",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "provider": "openrouter",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "off": "none",
+        "minimal": null,
+        "low": null,
+        "medium": "medium",
+        "high": "high",
+        "xhigh": null,
+        "max": null
+      },
+      "input": ["text", "image"],
+      "cost": { "input": 0.075, "output": 0.25, "cacheRead": 0.015, "cacheWrite": 0 },
+      "contextWindow": 262144,
+      "maxTokens": 235929,
+      "compat": {
+        "supportsDeveloperRole": false,
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "nex-agi/nex-n2.5-pro:free": {
@@ -3282,7 +3901,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "nvidia/nemotron-3-nano-30b-a3b": {
@@ -3293,12 +3918,13 @@
       "provider": "openrouter",
       "reasoning": true,
       "input": ["text"],
-      "cost": { "input": 0.06, "output": 0.24, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": { "input": 0.05, "output": 0.2, "cacheRead": 0.03, "cacheWrite": 0 },
       "contextWindow": 262144,
       "maxTokens": 235929,
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -3316,7 +3942,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "nvidia/nemotron-3-super-120b-a12b": {
@@ -3342,6 +3974,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -3368,6 +4001,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -3394,6 +4028,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -3420,6 +4055,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -3437,6 +4073,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -3454,6 +4091,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -3468,7 +4106,11 @@
       "cost": { "input": 0.5, "output": 1.5, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 16385,
       "maxTokens": 4096,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      }
     },
     "openai/gpt-3.5-turbo-0613": {
       "id": "openai/gpt-3.5-turbo-0613",
@@ -3481,7 +4123,11 @@
       "cost": { "input": 1, "output": 2, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 4095,
       "maxTokens": 3685,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      }
     },
     "openai/gpt-3.5-turbo-16k": {
       "id": "openai/gpt-3.5-turbo-16k",
@@ -3494,7 +4140,11 @@
       "cost": { "input": 3, "output": 4, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 16385,
       "maxTokens": 4096,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      }
     },
     "openai/gpt-3.5-turbo:batch": {
       "id": "openai/gpt-3.5-turbo:batch",
@@ -3507,7 +4157,11 @@
       "cost": { "input": 0.25, "output": 0.75, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 16385,
       "maxTokens": 4096,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      }
     },
     "openai/gpt-4": {
       "id": "openai/gpt-4",
@@ -3520,7 +4174,11 @@
       "cost": { "input": 30, "output": 60, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 8191,
       "maxTokens": 4096,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      }
     },
     "openai/gpt-4-turbo": {
       "id": "openai/gpt-4-turbo",
@@ -3533,7 +4191,16 @@
       "cost": { "input": 10, "output": 30, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 4096,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-4-turbo:batch": {
       "id": "openai/gpt-4-turbo:batch",
@@ -3546,7 +4213,16 @@
       "cost": { "input": 5, "output": 15, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 4096,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-4.1": {
       "id": "openai/gpt-4.1",
@@ -3559,7 +4235,16 @@
       "cost": { "input": 2, "output": 8, "cacheRead": 0.5, "cacheWrite": 0 },
       "contextWindow": 1047576,
       "maxTokens": 32768,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-4.1-mini": {
       "id": "openai/gpt-4.1-mini",
@@ -3572,7 +4257,16 @@
       "cost": { "input": 0.4, "output": 1.6, "cacheRead": 0.1, "cacheWrite": 0 },
       "contextWindow": 1047576,
       "maxTokens": 32768,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-4.1-mini:batch": {
       "id": "openai/gpt-4.1-mini:batch",
@@ -3585,7 +4279,16 @@
       "cost": { "input": 0.2, "output": 0.8, "cacheRead": 0.05, "cacheWrite": 0 },
       "contextWindow": 1047576,
       "maxTokens": 32768,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-4.1-nano": {
       "id": "openai/gpt-4.1-nano",
@@ -3598,7 +4301,16 @@
       "cost": { "input": 0.1, "output": 0.4, "cacheRead": 0.025, "cacheWrite": 0 },
       "contextWindow": 1047576,
       "maxTokens": 32768,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-4.1-nano:batch": {
       "id": "openai/gpt-4.1-nano:batch",
@@ -3611,7 +4323,16 @@
       "cost": { "input": 0.05, "output": 0.2, "cacheRead": 0.0125, "cacheWrite": 0 },
       "contextWindow": 1047576,
       "maxTokens": 32768,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-4.1:batch": {
       "id": "openai/gpt-4.1:batch",
@@ -3624,7 +4345,16 @@
       "cost": { "input": 1, "output": 4, "cacheRead": 0.25, "cacheWrite": 0 },
       "contextWindow": 1047576,
       "maxTokens": 32768,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-4o": {
       "id": "openai/gpt-4o",
@@ -3637,7 +4367,16 @@
       "cost": { "input": 2.5, "output": 10, "cacheRead": 1.25, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 16384,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-4o-2024-05-13": {
       "id": "openai/gpt-4o-2024-05-13",
@@ -3650,7 +4389,16 @@
       "cost": { "input": 5, "output": 15, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 4096,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-4o-2024-08-06": {
       "id": "openai/gpt-4o-2024-08-06",
@@ -3663,7 +4411,16 @@
       "cost": { "input": 2.5, "output": 10, "cacheRead": 1.25, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 16384,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-4o-2024-11-20": {
       "id": "openai/gpt-4o-2024-11-20",
@@ -3676,7 +4433,16 @@
       "cost": { "input": 2.5, "output": 10, "cacheRead": 1.25, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 16384,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-4o-mini": {
       "id": "openai/gpt-4o-mini",
@@ -3689,7 +4455,16 @@
       "cost": { "input": 0.15, "output": 0.6, "cacheRead": 0.075, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 16384,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-4o-mini-2024-07-18": {
       "id": "openai/gpt-4o-mini-2024-07-18",
@@ -3702,7 +4477,16 @@
       "cost": { "input": 0.15, "output": 0.6, "cacheRead": 0.075, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 16384,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-4o-mini:batch": {
       "id": "openai/gpt-4o-mini:batch",
@@ -3715,7 +4499,16 @@
       "cost": { "input": 0.075, "output": 0.3, "cacheRead": 0.0375, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 16384,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-4o:batch": {
       "id": "openai/gpt-4o:batch",
@@ -3728,7 +4521,16 @@
       "cost": { "input": 1.25, "output": 5, "cacheRead": 0.625, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 16384,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-5": {
       "id": "openai/gpt-5",
@@ -3750,7 +4552,16 @@
       "cost": { "input": 1.25, "output": 10, "cacheRead": 0.125, "cacheWrite": 0 },
       "contextWindow": 400000,
       "maxTokens": 128000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-5-mini": {
       "id": "openai/gpt-5-mini",
@@ -3772,7 +4583,16 @@
       "cost": { "input": 0.25, "output": 2, "cacheRead": 0.025, "cacheWrite": 0 },
       "contextWindow": 400000,
       "maxTokens": 128000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-5-mini:batch": {
       "id": "openai/gpt-5-mini:batch",
@@ -3794,7 +4614,16 @@
       "cost": { "input": 0.125, "output": 1, "cacheRead": 0.0125, "cacheWrite": 0 },
       "contextWindow": 400000,
       "maxTokens": 128000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-5-nano": {
       "id": "openai/gpt-5-nano",
@@ -3816,7 +4645,16 @@
       "cost": { "input": 0.05, "output": 0.4, "cacheRead": 0.005, "cacheWrite": 0 },
       "contextWindow": 400000,
       "maxTokens": 128000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-5-nano:batch": {
       "id": "openai/gpt-5-nano:batch",
@@ -3838,7 +4676,16 @@
       "cost": { "input": 0.025, "output": 0.2, "cacheRead": 0.0025, "cacheWrite": 0 },
       "contextWindow": 400000,
       "maxTokens": 128000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-5-pro": {
       "id": "openai/gpt-5-pro",
@@ -3860,7 +4707,16 @@
       "cost": { "input": 15, "output": 120, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 400000,
       "maxTokens": 128000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-5-pro:batch": {
       "id": "openai/gpt-5-pro:batch",
@@ -3882,7 +4738,16 @@
       "cost": { "input": 7.5, "output": 60, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 400000,
       "maxTokens": 128000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-5.1": {
       "id": "openai/gpt-5.1",
@@ -3904,7 +4769,16 @@
       "cost": { "input": 1.25, "output": 10, "cacheRead": 0.125, "cacheWrite": 0 },
       "contextWindow": 400000,
       "maxTokens": 128000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-5.1-codex": {
       "id": "openai/gpt-5.1-codex",
@@ -3926,7 +4800,16 @@
       "cost": { "input": 1.25, "output": 10, "cacheRead": 0.13, "cacheWrite": 0 },
       "contextWindow": 400000,
       "maxTokens": 128000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-5.1-codex-max": {
       "id": "openai/gpt-5.1-codex-max",
@@ -3948,7 +4831,16 @@
       "cost": { "input": 1.25, "output": 10, "cacheRead": 0.125, "cacheWrite": 0 },
       "contextWindow": 400000,
       "maxTokens": 128000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-5.1-codex-mini": {
       "id": "openai/gpt-5.1-codex-mini",
@@ -3970,7 +4862,16 @@
       "cost": { "input": 0.25, "output": 2, "cacheRead": 0.03, "cacheWrite": 0 },
       "contextWindow": 400000,
       "maxTokens": 128000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-5.1:batch": {
       "id": "openai/gpt-5.1:batch",
@@ -3992,7 +4893,16 @@
       "cost": { "input": 0.625, "output": 5, "cacheRead": 0.0625, "cacheWrite": 0 },
       "contextWindow": 400000,
       "maxTokens": 128000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-5.2": {
       "id": "openai/gpt-5.2",
@@ -4014,7 +4924,16 @@
       "cost": { "input": 1.75, "output": 14, "cacheRead": 0.175, "cacheWrite": 0 },
       "contextWindow": 400000,
       "maxTokens": 128000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-5.2-chat": {
       "id": "openai/gpt-5.2-chat",
@@ -4027,8 +4946,17 @@
       "cost": { "input": 1.75, "output": 14, "cacheRead": 0.175, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 32000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true },
-      "thinkingLevelMap": { "xhigh": "xhigh" }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "thinkingLevelMap": { "xhigh": "xhigh" },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-5.2-codex": {
       "id": "openai/gpt-5.2-codex",
@@ -4050,7 +4978,16 @@
       "cost": { "input": 1.75, "output": 14, "cacheRead": 0.175, "cacheWrite": 0 },
       "contextWindow": 400000,
       "maxTokens": 128000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-5.2-pro": {
       "id": "openai/gpt-5.2-pro",
@@ -4072,7 +5009,16 @@
       "cost": { "input": 21, "output": 168, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 400000,
       "maxTokens": 128000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-5.2-pro:batch": {
       "id": "openai/gpt-5.2-pro:batch",
@@ -4094,7 +5040,16 @@
       "cost": { "input": 10.5, "output": 84, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 400000,
       "maxTokens": 128000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-5.2:batch": {
       "id": "openai/gpt-5.2:batch",
@@ -4116,7 +5071,16 @@
       "cost": { "input": 0.875, "output": 7, "cacheRead": 0.0875, "cacheWrite": 0 },
       "contextWindow": 400000,
       "maxTokens": 128000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-5.3-codex": {
       "id": "openai/gpt-5.3-codex",
@@ -4138,7 +5102,16 @@
       "cost": { "input": 1.75, "output": 14, "cacheRead": 0.175, "cacheWrite": 0 },
       "contextWindow": 400000,
       "maxTokens": 128000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-5.4": {
       "id": "openai/gpt-5.4",
@@ -4162,8 +5135,14 @@
       "maxTokens": 128000,
       "compat": {
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true,
         "supportsMidConvoSystemMessages": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "openai/gpt-5.4-mini": {
@@ -4188,8 +5167,14 @@
       "maxTokens": 128000,
       "compat": {
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true,
         "supportsMidConvoSystemMessages": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "openai/gpt-5.4-mini:batch": {
@@ -4212,7 +5197,16 @@
       "cost": { "input": 0.375, "output": 2.25, "cacheRead": 0.0375, "cacheWrite": 0 },
       "contextWindow": 400000,
       "maxTokens": 128000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-5.4-nano": {
       "id": "openai/gpt-5.4-nano",
@@ -4234,7 +5228,16 @@
       "cost": { "input": 0.2, "output": 1.25, "cacheRead": 0.02, "cacheWrite": 0 },
       "contextWindow": 400000,
       "maxTokens": 128000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-5.4-nano:batch": {
       "id": "openai/gpt-5.4-nano:batch",
@@ -4256,7 +5259,16 @@
       "cost": { "input": 0.1, "output": 0.625, "cacheRead": 0.01, "cacheWrite": 0 },
       "contextWindow": 400000,
       "maxTokens": 128000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-5.4-pro": {
       "id": "openai/gpt-5.4-pro",
@@ -4280,8 +5292,14 @@
       "maxTokens": 128000,
       "compat": {
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true,
         "supportsMidConvoSystemMessages": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "openai/gpt-5.4-pro:batch": {
@@ -4304,7 +5322,16 @@
       "cost": { "input": 15, "output": 90, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 1050000,
       "maxTokens": 128000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-5.4:batch": {
       "id": "openai/gpt-5.4:batch",
@@ -4326,7 +5353,16 @@
       "cost": { "input": 1.25, "output": 7.5, "cacheRead": 0.125, "cacheWrite": 0 },
       "contextWindow": 1050000,
       "maxTokens": 128000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-5.5": {
       "id": "openai/gpt-5.5",
@@ -4350,8 +5386,14 @@
       "maxTokens": 128000,
       "compat": {
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true,
         "supportsMidConvoSystemMessages": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "openai/gpt-5.5-pro": {
@@ -4374,7 +5416,16 @@
       "cost": { "input": 30, "output": 180, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 1050000,
       "maxTokens": 128000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-5.5-pro:batch": {
       "id": "openai/gpt-5.5-pro:batch",
@@ -4396,7 +5447,16 @@
       "cost": { "input": 15, "output": 90, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 1050000,
       "maxTokens": 128000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-5.5:batch": {
       "id": "openai/gpt-5.5:batch",
@@ -4418,7 +5478,16 @@
       "cost": { "input": 2.5, "output": 15, "cacheRead": 0.25, "cacheWrite": 0 },
       "contextWindow": 1050000,
       "maxTokens": 128000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-5.6-luna": {
       "id": "openai/gpt-5.6-luna",
@@ -4442,8 +5511,14 @@
       "maxTokens": 128000,
       "compat": {
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true,
         "supportsMidConvoSystemMessages": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "openai/gpt-5.6-luna-pro": {
@@ -4466,7 +5541,16 @@
       "cost": { "input": 0.2, "output": 1.2, "cacheRead": 0.02, "cacheWrite": 0.25 },
       "contextWindow": 1050000,
       "maxTokens": 128000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-5.6-luna-pro:batch": {
       "id": "openai/gpt-5.6-luna-pro:batch",
@@ -4488,7 +5572,16 @@
       "cost": { "input": 0.1, "output": 0.6, "cacheRead": 0.01, "cacheWrite": 0 },
       "contextWindow": 1050000,
       "maxTokens": 128000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-5.6-luna:batch": {
       "id": "openai/gpt-5.6-luna:batch",
@@ -4510,7 +5603,16 @@
       "cost": { "input": 0.1, "output": 0.6, "cacheRead": 0.01, "cacheWrite": 0 },
       "contextWindow": 1050000,
       "maxTokens": 128000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-5.6-sol": {
       "id": "openai/gpt-5.6-sol",
@@ -4534,8 +5636,14 @@
       "maxTokens": 128000,
       "compat": {
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true,
         "supportsMidConvoSystemMessages": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "openai/gpt-5.6-sol-pro": {
@@ -4558,7 +5666,16 @@
       "cost": { "input": 2, "output": 10, "cacheRead": 0.2, "cacheWrite": 2.5 },
       "contextWindow": 1050000,
       "maxTokens": 128000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-5.6-sol-pro:batch": {
       "id": "openai/gpt-5.6-sol-pro:batch",
@@ -4580,7 +5697,16 @@
       "cost": { "input": 1, "output": 5, "cacheRead": 0.1, "cacheWrite": 1.25 },
       "contextWindow": 1050000,
       "maxTokens": 128000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-5.6-sol:batch": {
       "id": "openai/gpt-5.6-sol:batch",
@@ -4602,7 +5728,16 @@
       "cost": { "input": 1, "output": 5, "cacheRead": 0.1, "cacheWrite": 1.25 },
       "contextWindow": 1050000,
       "maxTokens": 128000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-5.6-terra": {
       "id": "openai/gpt-5.6-terra",
@@ -4626,8 +5761,14 @@
       "maxTokens": 128000,
       "compat": {
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true,
         "supportsMidConvoSystemMessages": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "openai/gpt-5.6-terra-pro": {
@@ -4650,7 +5791,16 @@
       "cost": { "input": 2, "output": 12, "cacheRead": 0.2, "cacheWrite": 2.5 },
       "contextWindow": 1050000,
       "maxTokens": 128000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-5.6-terra-pro:batch": {
       "id": "openai/gpt-5.6-terra-pro:batch",
@@ -4672,7 +5822,16 @@
       "cost": { "input": 1, "output": 6, "cacheRead": 0.1, "cacheWrite": 0 },
       "contextWindow": 1050000,
       "maxTokens": 128000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-5.6-terra:batch": {
       "id": "openai/gpt-5.6-terra:batch",
@@ -4694,7 +5853,16 @@
       "cost": { "input": 1, "output": 6, "cacheRead": 0.1, "cacheWrite": 0 },
       "contextWindow": 1050000,
       "maxTokens": 128000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-5:batch": {
       "id": "openai/gpt-5:batch",
@@ -4716,7 +5884,16 @@
       "cost": { "input": 0.625, "output": 5, "cacheRead": 0.0625, "cacheWrite": 0 },
       "contextWindow": 400000,
       "maxTokens": 128000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-6-astra": {
       "id": "openai/gpt-6-astra",
@@ -4740,8 +5917,14 @@
       "maxTokens": 128000,
       "compat": {
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true,
         "supportsMidConvoSystemMessages": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "openai/gpt-6-astra-pro": {
@@ -4764,7 +5947,16 @@
       "cost": { "input": 10, "output": 50, "cacheRead": 1, "cacheWrite": 12.5 },
       "contextWindow": 1050000,
       "maxTokens": 128000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-6-astra-pro:batch": {
       "id": "openai/gpt-6-astra-pro:batch",
@@ -4786,7 +5978,16 @@
       "cost": { "input": 5, "output": 25, "cacheRead": 0.5, "cacheWrite": 6.25 },
       "contextWindow": 1050000,
       "maxTokens": 128000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-6-astra:batch": {
       "id": "openai/gpt-6-astra:batch",
@@ -4808,7 +6009,266 @@
       "cost": { "input": 5, "output": 25, "cacheRead": 0.5, "cacheWrite": 6.25 },
       "contextWindow": 1050000,
       "maxTokens": 128000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
+    },
+    "openai/gpt-6-luna": {
+      "id": "openai/gpt-6-luna",
+      "name": "OpenAI: GPT-6 Luna",
+      "api": "openai-completions",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "provider": "openrouter",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "off": "none",
+        "minimal": null,
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh",
+        "max": "max"
+      },
+      "input": ["text", "image"],
+      "cost": { "input": 0.1, "output": 0.5, "cacheRead": 0.01, "cacheWrite": 0.125 },
+      "contextWindow": 1050000,
+      "maxTokens": 128000,
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true,
+        "supportsMidConvoSystemMessages": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
+    },
+    "openai/gpt-6-luna-pro": {
+      "id": "openai/gpt-6-luna-pro",
+      "name": "OpenAI: GPT-6 Luna Pro",
+      "api": "openai-completions",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "provider": "openrouter",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "off": "none",
+        "minimal": null,
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh",
+        "max": "max"
+      },
+      "input": ["text", "image"],
+      "cost": { "input": 0.1, "output": 0.5, "cacheRead": 0.01, "cacheWrite": 0.125 },
+      "contextWindow": 1050000,
+      "maxTokens": 128000,
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
+    },
+    "openai/gpt-6-luna-pro:batch": {
+      "id": "openai/gpt-6-luna-pro:batch",
+      "name": "OpenAI: GPT-6 Luna Pro (batch)",
+      "api": "openai-completions",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "provider": "openrouter",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "off": "none",
+        "minimal": null,
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh",
+        "max": "max"
+      },
+      "input": ["text", "image"],
+      "cost": { "input": 0.05, "output": 0.25, "cacheRead": 0.005, "cacheWrite": 0.0625 },
+      "contextWindow": 1050000,
+      "maxTokens": 128000,
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
+    },
+    "openai/gpt-6-luna:batch": {
+      "id": "openai/gpt-6-luna:batch",
+      "name": "OpenAI: GPT-6 Luna (batch)",
+      "api": "openai-completions",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "provider": "openrouter",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "off": "none",
+        "minimal": null,
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh",
+        "max": "max"
+      },
+      "input": ["text", "image"],
+      "cost": { "input": 0.05, "output": 0.25, "cacheRead": 0.005, "cacheWrite": 0.0625 },
+      "contextWindow": 1050000,
+      "maxTokens": 128000,
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
+    },
+    "openai/gpt-6-sol": {
+      "id": "openai/gpt-6-sol",
+      "name": "OpenAI: GPT-6 Sol",
+      "api": "openai-completions",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "provider": "openrouter",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "off": "none",
+        "minimal": null,
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh",
+        "max": "max"
+      },
+      "input": ["text", "image"],
+      "cost": { "input": 2, "output": 10, "cacheRead": 0.2, "cacheWrite": 2.5 },
+      "contextWindow": 1050000,
+      "maxTokens": 128000,
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true,
+        "supportsMidConvoSystemMessages": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
+    },
+    "openai/gpt-6-sol-pro": {
+      "id": "openai/gpt-6-sol-pro",
+      "name": "OpenAI: GPT-6 Sol Pro",
+      "api": "openai-completions",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "provider": "openrouter",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "off": "none",
+        "minimal": null,
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh",
+        "max": "max"
+      },
+      "input": ["text", "image"],
+      "cost": { "input": 2, "output": 10, "cacheRead": 0.2, "cacheWrite": 2.5 },
+      "contextWindow": 1050000,
+      "maxTokens": 128000,
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
+    },
+    "openai/gpt-6-sol-pro:batch": {
+      "id": "openai/gpt-6-sol-pro:batch",
+      "name": "OpenAI: GPT-6 Sol Pro (batch)",
+      "api": "openai-completions",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "provider": "openrouter",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "off": "none",
+        "minimal": null,
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh",
+        "max": "max"
+      },
+      "input": ["text", "image"],
+      "cost": { "input": 1, "output": 5, "cacheRead": 0.1, "cacheWrite": 1.25 },
+      "contextWindow": 1050000,
+      "maxTokens": 128000,
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
+    },
+    "openai/gpt-6-sol:batch": {
+      "id": "openai/gpt-6-sol:batch",
+      "name": "OpenAI: GPT-6 Sol (batch)",
+      "api": "openai-completions",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "provider": "openrouter",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "off": "none",
+        "minimal": null,
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh",
+        "max": "max"
+      },
+      "input": ["text", "image"],
+      "cost": { "input": 1, "output": 5, "cacheRead": 0.1, "cacheWrite": 1.25 },
+      "contextWindow": 1050000,
+      "maxTokens": 128000,
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-audio": {
       "id": "openai/gpt-audio",
@@ -4821,7 +6281,11 @@
       "cost": { "input": 2.5, "output": 10, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 16384,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      }
     },
     "openai/gpt-audio-mini": {
       "id": "openai/gpt-audio-mini",
@@ -4834,7 +6298,11 @@
       "cost": { "input": 0.6, "output": 2.4, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 16384,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      }
     },
     "openai/gpt-chat-latest": {
       "id": "openai/gpt-chat-latest",
@@ -4847,7 +6315,16 @@
       "cost": { "input": 5, "output": 30, "cacheRead": 0.5, "cacheWrite": 0 },
       "contextWindow": 400000,
       "maxTokens": 128000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/gpt-oss-120b": {
       "id": "openai/gpt-oss-120b",
@@ -4869,29 +6346,11 @@
       "cost": { "input": 0.15, "output": 0.6, "cacheRead": 0.075, "cacheWrite": 0 },
       "contextWindow": 131072,
       "maxTokens": 65536,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
-    },
-    "openai/gpt-oss-120b:batch": {
-      "id": "openai/gpt-oss-120b:batch",
-      "name": "OpenAI: gpt-oss-120b (batch)",
-      "api": "openai-completions",
-      "baseUrl": "https://openrouter.ai/api/v1",
-      "provider": "openrouter",
-      "reasoning": true,
-      "thinkingLevelMap": {
-        "off": null,
-        "minimal": null,
-        "low": "low",
-        "medium": "medium",
-        "high": "high",
-        "xhigh": null,
-        "max": null
-      },
-      "input": ["text"],
-      "cost": { "input": 0.15, "output": 0.6, "cacheRead": 0, "cacheWrite": 0 },
-      "contextWindow": 131072,
-      "maxTokens": 117964,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      }
     },
     "openai/gpt-oss-20b": {
       "id": "openai/gpt-oss-20b",
@@ -4910,10 +6369,40 @@
         "max": null
       },
       "input": ["text"],
-      "cost": { "input": 0.03, "output": 0.13, "cacheRead": 0.03, "cacheWrite": 0 },
+      "cost": { "input": 0.018, "output": 0.09, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 131072,
+      "maxTokens": 32768,
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      }
+    },
+    "openai/gpt-oss-20b:batch": {
+      "id": "openai/gpt-oss-20b:batch",
+      "name": "OpenAI: gpt-oss-20b (batch)",
+      "api": "openai-completions",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "provider": "openrouter",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "off": null,
+        "minimal": null,
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": null,
+        "max": null
+      },
+      "input": ["text"],
+      "cost": { "input": 0.024, "output": 0.112, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 131072,
       "maxTokens": 117964,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      }
     },
     "openai/gpt-oss-safeguard-20b": {
       "id": "openai/gpt-oss-safeguard-20b",
@@ -4927,7 +6416,11 @@
       "cost": { "input": 0.075, "output": 0.3, "cacheRead": 0.0375, "cacheWrite": 0 },
       "contextWindow": 131072,
       "maxTokens": 65536,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      }
     },
     "openai/o1": {
       "id": "openai/o1",
@@ -4940,7 +6433,16 @@
       "cost": { "input": 15, "output": 60, "cacheRead": 7.5, "cacheWrite": 0 },
       "contextWindow": 200000,
       "maxTokens": 100000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/o3": {
       "id": "openai/o3",
@@ -4953,7 +6455,16 @@
       "cost": { "input": 2, "output": 8, "cacheRead": 0.5, "cacheWrite": 0 },
       "contextWindow": 200000,
       "maxTokens": 100000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/o3-mini": {
       "id": "openai/o3-mini",
@@ -4966,7 +6477,11 @@
       "cost": { "input": 1.1, "output": 4.4, "cacheRead": 0.55, "cacheWrite": 0 },
       "contextWindow": 200000,
       "maxTokens": 100000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      }
     },
     "openai/o3-mini-high": {
       "id": "openai/o3-mini-high",
@@ -4988,7 +6503,11 @@
       "cost": { "input": 1.1, "output": 4.4, "cacheRead": 0.55, "cacheWrite": 0 },
       "contextWindow": 200000,
       "maxTokens": 100000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      }
     },
     "openai/o3-mini:batch": {
       "id": "openai/o3-mini:batch",
@@ -5001,7 +6520,11 @@
       "cost": { "input": 0.55, "output": 2.2, "cacheRead": 0.275, "cacheWrite": 0 },
       "contextWindow": 200000,
       "maxTokens": 100000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      }
     },
     "openai/o3-pro": {
       "id": "openai/o3-pro",
@@ -5014,7 +6537,16 @@
       "cost": { "input": 20, "output": 80, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 200000,
       "maxTokens": 100000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/o3:batch": {
       "id": "openai/o3:batch",
@@ -5027,7 +6559,16 @@
       "cost": { "input": 1, "output": 4, "cacheRead": 0.25, "cacheWrite": 0 },
       "contextWindow": 200000,
       "maxTokens": 100000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/o4-mini": {
       "id": "openai/o4-mini",
@@ -5040,7 +6581,16 @@
       "cost": { "input": 1.1, "output": 4.4, "cacheRead": 0.275, "cacheWrite": 0 },
       "contextWindow": 200000,
       "maxTokens": 100000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/o4-mini-high": {
       "id": "openai/o4-mini-high",
@@ -5062,7 +6612,16 @@
       "cost": { "input": 1.1, "output": 4.4, "cacheRead": 0.275, "cacheWrite": 0 },
       "contextWindow": 200000,
       "maxTokens": 100000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openai/o4-mini:batch": {
       "id": "openai/o4-mini:batch",
@@ -5075,7 +6634,16 @@
       "cost": { "input": 0.55, "output": 2.2, "cacheRead": 0.1375, "cacheWrite": 0 },
       "contextWindow": 200000,
       "maxTokens": 100000,
-      "compat": { "thinkingFormat": "openrouter", "sendSessionAffinityHeaders": true }
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "openrouter/auto": {
       "id": "openrouter/auto",
@@ -5091,7 +6659,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "openrouter/auto-beta": {
@@ -5108,7 +6682,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "openrouter/free": {
@@ -5125,7 +6705,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "openrouter/fusion": {
@@ -5142,6 +6728,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -5159,6 +6746,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -5176,6 +6764,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -5193,6 +6782,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -5210,6 +6800,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -5236,7 +6827,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "qwen/qwen-2.5-72b-instruct": {
@@ -5253,6 +6850,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -5270,6 +6868,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -5287,6 +6886,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -5304,6 +6904,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -5321,6 +6922,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -5338,6 +6940,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -5355,6 +6958,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -5373,6 +6977,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -5390,6 +6995,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -5407,6 +7013,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -5425,6 +7032,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -5442,6 +7050,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -5459,6 +7068,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -5476,6 +7086,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -5493,6 +7104,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -5510,6 +7122,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -5527,6 +7140,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -5544,6 +7158,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -5561,6 +7176,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -5578,6 +7194,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -5595,6 +7212,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -5608,11 +7226,12 @@
       "thinkingLevelMap": { "off": null },
       "input": ["text"],
       "cost": { "input": 0.15, "output": 1.2, "cacheRead": 0, "cacheWrite": 0 },
-      "contextWindow": 131072,
-      "maxTokens": 32768,
+      "contextWindow": 262144,
+      "maxTokens": 235929,
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -5630,7 +7249,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "qwen/qwen3-vl-235b-a22b-thinking": {
@@ -5648,7 +7273,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "qwen/qwen3-vl-30b-a3b-instruct": {
@@ -5665,7 +7296,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "qwen/qwen3-vl-30b-a3b-thinking": {
@@ -5683,7 +7320,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "qwen/qwen3-vl-32b-instruct": {
@@ -5700,7 +7343,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "qwen/qwen3-vl-8b-instruct": {
@@ -5717,7 +7366,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "qwen/qwen3-vl-8b-thinking": {
@@ -5735,7 +7390,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "qwen/qwen3.5-122b-a10b": {
@@ -5752,7 +7413,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "qwen/qwen3.5-27b": {
@@ -5769,7 +7436,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "qwen/qwen3.5-35b-a3b": {
@@ -5780,13 +7453,19 @@
       "provider": "openrouter",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 0.1625, "output": 1.3, "cacheRead": 0, "cacheWrite": 0 },
-      "contextWindow": 262144,
-      "maxTokens": 65536,
+      "cost": { "input": 0.3125, "output": 1.25, "cacheRead": 0.15625, "cacheWrite": 0 },
+      "contextWindow": 256000,
+      "maxTokens": 16384,
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "qwen/qwen3.5-397b-a17b": {
@@ -5803,7 +7482,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "qwen/qwen3.5-9b": {
@@ -5815,29 +7500,18 @@
       "reasoning": true,
       "input": ["text", "image"],
       "cost": { "input": 0.1, "output": 0.15, "cacheRead": 0, "cacheWrite": 0 },
-      "contextWindow": 262144,
-      "maxTokens": 235929,
+      "contextWindow": 256000,
+      "maxTokens": 32768,
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
-      }
-    },
-    "qwen/qwen3.5-9b:batch": {
-      "id": "qwen/qwen3.5-9b:batch",
-      "name": "Qwen: Qwen3.5-9B (batch)",
-      "api": "openai-completions",
-      "baseUrl": "https://openrouter.ai/api/v1",
-      "provider": "openrouter",
-      "reasoning": true,
-      "input": ["text", "image"],
-      "cost": { "input": 0.17, "output": 0.25, "cacheRead": 0, "cacheWrite": 0 },
-      "contextWindow": 262144,
-      "maxTokens": 235929,
-      "compat": {
-        "supportsDeveloperRole": false,
-        "thinkingFormat": "openrouter",
-        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "qwen/qwen3.5-flash-02-23": {
@@ -5854,7 +7528,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "qwen/qwen3.5-plus-02-15": {
@@ -5871,7 +7551,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "qwen/qwen3.5-plus-20260420": {
@@ -5888,7 +7574,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "qwen/qwen3.6-27b": {
@@ -5899,13 +7591,19 @@
       "provider": "openrouter",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 0.3, "output": 2, "cacheRead": 0.03, "cacheWrite": 0 },
+      "cost": { "input": 0.32, "output": 2.7, "cacheRead": 0.15, "cacheWrite": 0 },
       "contextWindow": 262144,
-      "maxTokens": 65536,
+      "maxTokens": 262140,
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "qwen/qwen3.6-35b-a3b": {
@@ -5916,13 +7614,19 @@
       "provider": "openrouter",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 0.1, "output": 0.9, "cacheRead": 0.05, "cacheWrite": 0 },
+      "cost": { "input": 0.15, "output": 1, "cacheRead": 0.05, "cacheWrite": 0 },
       "contextWindow": 262144,
       "maxTokens": 235929,
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "qwen/qwen3.6-flash": {
@@ -5939,7 +7643,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "qwen/qwen3.6-max-preview": {
@@ -5956,6 +7666,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -5973,7 +7684,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "qwen/qwen3.7-flash": {
@@ -5990,7 +7707,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "qwen/qwen3.7-max": {
@@ -6007,6 +7730,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -6024,7 +7748,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "qwen/qwen3.8-2.4t-a95b": {
@@ -6050,32 +7780,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
-        "sendSessionAffinityHeaders": true
-      }
-    },
-    "qwen/qwen3.8-2.4t-a95b:batch": {
-      "id": "qwen/qwen3.8-2.4t-a95b:batch",
-      "name": "Qwen: Qwen3.8 2.4T A95B (batch)",
-      "api": "openai-completions",
-      "baseUrl": "https://openrouter.ai/api/v1",
-      "provider": "openrouter",
-      "reasoning": true,
-      "thinkingLevelMap": {
-        "off": null,
-        "minimal": null,
-        "low": "low",
-        "medium": "medium",
-        "high": null,
-        "xhigh": "xhigh",
-        "max": null
-      },
-      "input": ["text"],
-      "cost": { "input": 2, "output": 6, "cacheRead": 0.25, "cacheWrite": 0 },
-      "contextWindow": 1010000,
-      "maxTokens": 909000,
-      "compat": {
-        "supportsDeveloperRole": false,
-        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -6096,13 +7801,19 @@
         "max": null
       },
       "input": ["text", "image"],
-      "cost": { "input": 0.214, "output": 2.55, "cacheRead": 0.15, "cacheWrite": 0 },
-      "contextWindow": 262144,
+      "cost": { "input": 0.42, "output": 3, "cacheRead": 0.085, "cacheWrite": 0 },
+      "contextWindow": 1000000,
       "maxTokens": 131072,
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "qwen/qwen3.8-27b:free": {
@@ -6128,7 +7839,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "qwen/qwen3.8-flash": {
@@ -6145,7 +7862,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "qwen/qwen3.8-max-0902": {
@@ -6171,7 +7894,36 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
+    },
+    "qwen/qwen3.8-omni-flash": {
+      "id": "qwen/qwen3.8-omni-flash",
+      "name": "Qwen: Qwen3.8 Omni Flash",
+      "api": "openai-completions",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "provider": "openrouter",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 0.15, "output": 0.47, "cacheRead": 0.016, "cacheWrite": 0 },
+      "contextWindow": 1000000,
+      "maxTokens": 131072,
+      "compat": {
+        "supportsDeveloperRole": false,
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "rekaai/reka-edge": {
@@ -6188,7 +7940,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "relace/relace-search": {
@@ -6205,6 +7963,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -6231,7 +7990,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "sakana/fugu-ultra": {
@@ -6257,7 +8022,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "sakana/fugu-ultra-v2": {
@@ -6283,7 +8054,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "sakana/sakana-namazu": {
@@ -6309,7 +8086,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "sao10k/l3.1-euryale-70b": {
@@ -6326,6 +8109,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -6344,6 +8128,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -6370,7 +8155,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "tencent/hy3": {
@@ -6396,6 +8187,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -6422,6 +8214,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -6448,6 +8241,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -6474,7 +8268,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "thinkingmachines/inkling-small": {
@@ -6500,7 +8300,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "thinkingmachines/inkling-small:free": {
@@ -6526,33 +8332,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
-      }
-    },
-    "thinkingmachines/inkling:batch": {
-      "id": "thinkingmachines/inkling:batch",
-      "name": "Thinking Machines: Inkling (batch)",
-      "api": "openai-completions",
-      "baseUrl": "https://openrouter.ai/api/v1",
-      "provider": "openrouter",
-      "reasoning": true,
-      "thinkingLevelMap": {
-        "off": "none",
-        "minimal": "minimal",
-        "low": "low",
-        "medium": "medium",
-        "high": "high",
-        "xhigh": null,
-        "max": "max"
       },
-      "input": ["text", "image"],
-      "cost": { "input": 1, "output": 4.05, "cacheRead": 0.17, "cacheWrite": 0 },
-      "contextWindow": 524288,
-      "maxTokens": 471859,
-      "compat": {
-        "supportsDeveloperRole": false,
-        "thinkingFormat": "openrouter",
-        "sendSessionAffinityHeaders": true
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "thinkingmachines/inkling:free": {
@@ -6578,7 +8364,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "unbiased/pareto": {
@@ -6595,7 +8387,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "upstage/solar-pro-3": {
@@ -6621,6 +8419,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -6647,6 +8446,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -6664,7 +8464,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "x-ai/grok-4.3": {
@@ -6690,7 +8496,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "x-ai/grok-4.3:batch": {
@@ -6716,7 +8528,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "x-ai/grok-4.5": {
@@ -6742,7 +8560,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "x-ai/grok-4.6": {
@@ -6768,7 +8592,45 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
+    },
+    "x-ai/grok-4.7": {
+      "id": "x-ai/grok-4.7",
+      "name": "SpaceXAI: Grok 4.7",
+      "api": "openai-completions",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "provider": "openrouter",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "off": null,
+        "minimal": null,
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh",
+        "max": null
+      },
+      "input": ["text", "image"],
+      "cost": { "input": 1.6, "output": 4.8, "cacheRead": 0.4, "cacheWrite": 0 },
+      "contextWindow": 500000,
+      "maxTokens": 450000,
+      "compat": {
+        "supportsDeveloperRole": false,
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "x-ai/grok-build-0.1": {
@@ -6786,7 +8648,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "xiaomi/mimo-v2.5": {
@@ -6803,7 +8671,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "xiaomi/mimo-v2.5-pro": {
@@ -6820,7 +8694,77 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      }
+    },
+    "xiaomi/mimo-v2.6-flash": {
+      "id": "xiaomi/mimo-v2.6-flash",
+      "name": "Xiaomi: MiMo-V2.6-Flash",
+      "api": "openai-completions",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "provider": "openrouter",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 0.14, "output": 0.28, "cacheRead": 0.0028, "cacheWrite": 0 },
+      "contextWindow": 1048576,
+      "maxTokens": 131072,
+      "compat": {
+        "supportsDeveloperRole": false,
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
+    },
+    "xiaomi/mimo-v2.6-pro": {
+      "id": "xiaomi/mimo-v2.6-pro",
+      "name": "Xiaomi: MiMo-V2.6-Pro",
+      "api": "openai-completions",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "provider": "openrouter",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 0.435, "output": 0.87, "cacheRead": 0.0036, "cacheWrite": 0 },
+      "contextWindow": 1048576,
+      "maxTokens": 131072,
+      "compat": {
+        "supportsDeveloperRole": false,
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
+    },
+    "xiaomi/mimo-v2.6-pro-ultraspeed": {
+      "id": "xiaomi/mimo-v2.6-pro-ultraspeed",
+      "name": "Xiaomi: MiMo-V2.6-Pro-UltraSpeed",
+      "api": "openai-completions",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "provider": "openrouter",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 4.35, "output": 8.7, "cacheRead": 0.036, "cacheWrite": 0 },
+      "contextWindow": 1048576,
+      "maxTokens": 131072,
+      "compat": {
+        "supportsDeveloperRole": false,
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "z-ai/glm-4.5": {
@@ -6837,6 +8781,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -6854,6 +8799,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -6871,7 +8817,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "z-ai/glm-4.6": {
@@ -6888,6 +8840,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -6905,7 +8858,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "z-ai/glm-4.7": {
@@ -6922,6 +8881,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -6939,6 +8899,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -6956,6 +8917,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -6973,6 +8935,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -6990,6 +8953,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -7016,32 +8980,7 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
-        "sendSessionAffinityHeaders": true
-      }
-    },
-    "z-ai/glm-5.2:batch": {
-      "id": "z-ai/glm-5.2:batch",
-      "name": "Z.ai: GLM 5.2 (batch)",
-      "api": "openai-completions",
-      "baseUrl": "https://openrouter.ai/api/v1",
-      "provider": "openrouter",
-      "reasoning": true,
-      "thinkingLevelMap": {
-        "off": "none",
-        "minimal": null,
-        "low": null,
-        "medium": null,
-        "high": "high",
-        "xhigh": "xhigh",
-        "max": null
-      },
-      "input": ["text"],
-      "cost": { "input": 0.7, "output": 2.2, "cacheRead": 0.07, "cacheWrite": 0 },
-      "contextWindow": 1048576,
-      "maxTokens": 943718,
-      "compat": {
-        "supportsDeveloperRole": false,
-        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -7062,12 +9001,13 @@
         "max": "max"
       },
       "input": ["text"],
-      "cost": { "input": 0.91, "output": 2.86, "cacheRead": 0.169, "cacheWrite": 0 },
+      "cost": { "input": 0.6538, "output": 2.0548, "cacheRead": 0.12142, "cacheWrite": 0 },
       "contextWindow": 1048576,
       "maxTokens": 131072,
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -7088,13 +9028,19 @@
         "max": "max"
       },
       "input": ["text", "image"],
-      "cost": { "input": 0.09, "output": 0.3, "cacheRead": 0.018, "cacheWrite": 0 },
+      "cost": { "input": 0.15, "output": 0.5, "cacheRead": 0.05, "cacheWrite": 0 },
       "contextWindow": 1048576,
-      "maxTokens": 131072,
+      "maxTokens": 943718,
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "z-ai/glm-5.3-flash:batch": {
@@ -7114,13 +9060,19 @@
         "max": "max"
       },
       "input": ["text", "image"],
-      "cost": { "input": 0.075, "output": 0.25, "cacheRead": 0.015, "cacheWrite": 0 },
+      "cost": { "input": 0.06, "output": 0.2, "cacheRead": 0.012, "cacheWrite": 0 },
       "contextWindow": 1048576,
-      "maxTokens": 943718,
+      "maxTokens": 131072,
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "z-ai/glm-5.3-flashx": {
@@ -7146,7 +9098,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "z-ai/glm-5.3:batch": {
@@ -7166,12 +9124,13 @@
         "max": "max"
       },
       "input": ["text"],
-      "cost": { "input": 0.7, "output": 2.2, "cacheRead": 0.13, "cacheWrite": 0 },
+      "cost": { "input": 0.72, "output": 2.4, "cacheRead": 0.12, "cacheWrite": 0 },
       "contextWindow": 1048576,
-      "maxTokens": 943718,
+      "maxTokens": 131072,
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -7189,7 +9148,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "~anthropic/claude-fable-latest": {
@@ -7215,8 +9180,14 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "cacheControlFormat": "anthropic",
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "~anthropic/claude-haiku-latest": {
@@ -7233,8 +9204,14 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "cacheControlFormat": "anthropic",
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "~anthropic/claude-opus-latest": {
@@ -7245,7 +9222,7 @@
       "provider": "openrouter",
       "reasoning": true,
       "thinkingLevelMap": {
-        "off": "none",
+        "off": null,
         "minimal": null,
         "low": "low",
         "medium": "medium",
@@ -7254,14 +9231,20 @@
         "max": "max"
       },
       "input": ["text", "image"],
-      "cost": { "input": 5, "output": 25, "cacheRead": 0.5, "cacheWrite": 6.25 },
+      "cost": { "input": 4, "output": 20, "cacheRead": 0.2, "cacheWrite": 5 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "cacheControlFormat": "anthropic",
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "~anthropic/claude-sonnet-latest": {
@@ -7287,8 +9270,14 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "cacheControlFormat": "anthropic",
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "~deepseek/deepseek-flash-latest": {
@@ -7308,13 +9297,19 @@
         "max": "max"
       },
       "input": ["text", "image"],
-      "cost": { "input": 0.13, "output": 0.52, "cacheRead": 0.0026, "cacheWrite": 0 },
+      "cost": { "input": 0.12, "output": 0.48, "cacheRead": 0.0036, "cacheWrite": 0 },
       "contextWindow": 1048576,
       "maxTokens": 943718,
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "~deepseek/deepseek-pro-latest": {
@@ -7334,12 +9329,13 @@
         "max": "max"
       },
       "input": ["text"],
-      "cost": { "input": 0.57816, "output": 1.73448, "cacheRead": 0.018396, "cacheWrite": 0 },
+      "cost": { "input": 0.39996, "output": 1.19988, "cacheRead": 0.012726, "cacheWrite": 0 },
       "contextWindow": 1048576,
       "maxTokens": 393216,
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     },
@@ -7360,12 +9356,13 @@
         "max": "max"
       },
       "input": ["text"],
-      "cost": { "input": 0.04, "output": 0.08, "cacheRead": 0.016, "cacheWrite": 0 },
+      "cost": { "input": 0.03, "output": 0.8, "cacheRead": 0.008, "cacheWrite": 0 },
       "contextWindow": 1048576,
       "maxTokens": 943718,
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true,
         "requiresReasoningContentOnAssistantMessages": true
       }
@@ -7393,7 +9390,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "~google/gemini-pro-latest": {
@@ -7419,7 +9422,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "~moonshotai/kimi-latest": {
@@ -7439,13 +9448,19 @@
         "max": "max"
       },
       "input": ["text", "image"],
-      "cost": { "input": 1.7, "output": 8.5, "cacheRead": 0.17, "cacheWrite": 0 },
+      "cost": { "input": 1.4989, "output": 10.758, "cacheRead": 0.3, "cacheWrite": 0 },
       "contextWindow": 1048576,
       "maxTokens": 131072,
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "~openai/gpt-astra-latest": {
@@ -7471,7 +9486,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "~openai/gpt-luna-latest": {
@@ -7491,13 +9512,19 @@
         "max": "max"
       },
       "input": ["text", "image"],
-      "cost": { "input": 0.2, "output": 1.2, "cacheRead": 0.02, "cacheWrite": 0.25 },
+      "cost": { "input": 0.1, "output": 0.5, "cacheRead": 0.01, "cacheWrite": 0.125 },
       "contextWindow": 1050000,
       "maxTokens": 128000,
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "~openai/gpt-mini-latest": {
@@ -7523,7 +9550,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "~openai/gpt-sol-latest": {
@@ -7549,7 +9582,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "~openai/gpt-terra-latest": {
@@ -7575,7 +9614,13 @@
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "~x-ai/grok-latest": {
@@ -7595,13 +9640,19 @@
         "max": null
       },
       "input": ["text", "image"],
-      "cost": { "input": 2, "output": 6, "cacheRead": 0.5, "cacheWrite": 0 },
+      "cost": { "input": 1.6, "output": 4.8, "cacheRead": 0.4, "cacheWrite": 0 },
       "contextWindow": 500000,
       "maxTokens": 450000,
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "~z-ai/glm-flash-latest": {
@@ -7623,11 +9674,17 @@
       "input": ["text", "image"],
       "cost": { "input": 0.075, "output": 0.25, "cacheRead": 0.015, "cacheWrite": 0 },
       "contextWindow": 1048576,
-      "maxTokens": 131072,
+      "maxTokens": 943718,
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "~z-ai/glm-latest": {
@@ -7647,12 +9704,13 @@
         "max": "max"
       },
       "input": ["text"],
-      "cost": { "input": 0.8442, "output": 2.6532, "cacheRead": 0.15678, "cacheWrite": 0 },
+      "cost": { "input": 0.6538, "output": 2.0548, "cacheRead": 0.12142, "cacheWrite": 0 },
       "contextWindow": 1048576,
       "maxTokens": 131072,
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
         "sendSessionAffinityHeaders": true
       }
     }

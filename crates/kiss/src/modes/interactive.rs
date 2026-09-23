@@ -6196,6 +6196,19 @@ fn start_provider_device_login(
                         kiss_ai::auth::kimi_coding::finish(&config, &device, &cancel).await?;
                     kiss_ai::auth::store_oauth(&provider, credential)
                 }
+                "meta" => {
+                    let config = kiss_ai::auth::meta::OAuthConfig::default();
+                    let device = kiss_ai::auth::meta::start(&config, &cancel).await?;
+                    let opened = crate::auth_flow::open_browser(&device.verification_uri);
+                    let _ = tx.send(CommandEvent::DeviceLoginNotice {
+                        provider: provider.clone(),
+                        url: device.verification_uri.clone(),
+                        code: device.user_code.clone(),
+                        opened,
+                    });
+                    let credential = kiss_ai::auth::meta::finish(&config, &device, &cancel).await?;
+                    kiss_ai::auth::store_oauth(&provider, credential)
+                }
                 "xai" => {
                     let config = kiss_ai::auth::xai::OAuthConfig::default();
                     let device = kiss_ai::auth::xai::start(&config, &cancel).await?;

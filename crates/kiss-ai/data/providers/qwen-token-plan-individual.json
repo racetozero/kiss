@@ -7,6 +7,7 @@
       "provider": "qwen-token-plan-individual",
       "baseUrl": "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
       "compat": {
+        "supportsStrictMode": true,
         "thinkingFormat": "qwen",
         "supportsDeveloperRole": false,
         "supportsStore": false,
@@ -34,6 +35,7 @@
       "provider": "qwen-token-plan-individual",
       "baseUrl": "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
       "compat": {
+        "supportsStrictMode": true,
         "thinkingFormat": "qwen",
         "supportsDeveloperRole": false,
         "supportsStore": false,
@@ -61,6 +63,7 @@
       "provider": "qwen-token-plan-individual",
       "baseUrl": "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
       "compat": {
+        "supportsStrictMode": true,
         "thinkingFormat": "qwen",
         "supportsDeveloperRole": false,
         "supportsStore": false,
@@ -88,6 +91,7 @@
       "provider": "qwen-token-plan-individual",
       "baseUrl": "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
       "compat": {
+        "supportsStrictMode": true,
         "thinkingFormat": "qwen",
         "supportsDeveloperRole": false,
         "supportsStore": false,
@@ -115,6 +119,7 @@
       "provider": "qwen-token-plan-individual",
       "baseUrl": "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
       "compat": {
+        "supportsStrictMode": true,
         "thinkingFormat": "qwen",
         "supportsDeveloperRole": false,
         "supportsStore": false,
@@ -124,7 +129,12 @@
       "input": ["text", "image"],
       "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 1000000,
-      "maxTokens": 65536
+      "maxTokens": 65536,
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "qwen3.7-max": {
       "id": "qwen3.7-max",
@@ -133,6 +143,7 @@
       "provider": "qwen-token-plan-individual",
       "baseUrl": "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
       "compat": {
+        "supportsStrictMode": true,
         "thinkingFormat": "qwen",
         "supportsDeveloperRole": false,
         "supportsStore": false,
@@ -151,6 +162,7 @@
       "provider": "qwen-token-plan-individual",
       "baseUrl": "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
       "compat": {
+        "supportsStrictMode": true,
         "thinkingFormat": "qwen",
         "supportsDeveloperRole": false,
         "supportsStore": false,
@@ -160,7 +172,12 @@
       "input": ["text", "image"],
       "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 1000000,
-      "maxTokens": 65536
+      "maxTokens": 65536,
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "qwen3.8-flash": {
       "id": "qwen3.8-flash",
@@ -169,6 +186,7 @@
       "provider": "qwen-token-plan-individual",
       "baseUrl": "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
       "compat": {
+        "supportsStrictMode": true,
         "thinkingFormat": "qwen",
         "supportsDeveloperRole": false,
         "supportsStore": false,
@@ -187,7 +205,12 @@
       "input": ["text", "image"],
       "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 1000000,
-      "maxTokens": 131072
+      "maxTokens": 131072,
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "qwen3.8-max": {
       "id": "qwen3.8-max",
@@ -196,6 +219,7 @@
       "provider": "qwen-token-plan-individual",
       "baseUrl": "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
       "compat": {
+        "supportsStrictMode": true,
         "thinkingFormat": "qwen",
         "supportsDeveloperRole": false,
         "supportsStore": false,
@@ -214,7 +238,12 @@
       "input": ["text", "image"],
       "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 1000000,
-      "maxTokens": 131072
+      "maxTokens": 131072,
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     }
   }
 }

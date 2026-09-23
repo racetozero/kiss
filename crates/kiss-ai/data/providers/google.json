@@ -10,7 +10,14 @@
       "input": ["text", "image"],
       "cost": { "input": 2, "output": 12, "cacheRead": 0.2, "cacheWrite": 0 },
       "contextWindow": 131072,
-      "maxTokens": 65536
+      "maxTokens": 65536,
+      "inputLimits": {
+        "maxRequestBytes": 20971520,
+        "images": {
+          "maxPerRequest": 3600,
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "deep-research-preview-04-2026": {
       "id": "deep-research-preview-04-2026",
@@ -22,7 +29,14 @@
       "input": ["text", "image"],
       "cost": { "input": 2, "output": 12, "cacheRead": 0.2, "cacheWrite": 0 },
       "contextWindow": 131072,
-      "maxTokens": 65536
+      "maxTokens": 65536,
+      "inputLimits": {
+        "maxRequestBytes": 20971520,
+        "images": {
+          "maxPerRequest": 3600,
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "gemini-2.5-computer-use-preview-10-2025": {
       "id": "gemini-2.5-computer-use-preview-10-2025",
@@ -34,7 +48,14 @@
       "input": ["text", "image"],
       "cost": { "input": 1.25, "output": 10, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 131072,
-      "maxTokens": 65536
+      "maxTokens": 65536,
+      "inputLimits": {
+        "maxRequestBytes": 20971520,
+        "images": {
+          "maxPerRequest": 3600,
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "gemini-2.5-flash": {
       "id": "gemini-2.5-flash",
@@ -46,7 +67,14 @@
       "input": ["text", "image"],
       "cost": { "input": 0.3, "output": 2.5, "cacheRead": 0.03, "cacheWrite": 0 },
       "contextWindow": 1048576,
-      "maxTokens": 65536
+      "maxTokens": 65536,
+      "inputLimits": {
+        "maxRequestBytes": 20971520,
+        "images": {
+          "maxPerRequest": 3600,
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "gemini-2.5-flash-lite": {
       "id": "gemini-2.5-flash-lite",
@@ -58,7 +86,14 @@
       "input": ["text", "image"],
       "cost": { "input": 0.1, "output": 0.4, "cacheRead": 0.01, "cacheWrite": 0 },
       "contextWindow": 1048576,
-      "maxTokens": 65536
+      "maxTokens": 65536,
+      "inputLimits": {
+        "maxRequestBytes": 20971520,
+        "images": {
+          "maxPerRequest": 3600,
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "gemini-2.5-pro": {
       "id": "gemini-2.5-pro",
@@ -70,7 +105,14 @@
       "input": ["text", "image"],
       "cost": { "input": 1.25, "output": 10, "cacheRead": 0.125, "cacheWrite": 0 },
       "contextWindow": 1048576,
-      "maxTokens": 65536
+      "maxTokens": 65536,
+      "inputLimits": {
+        "maxRequestBytes": 20971520,
+        "images": {
+          "maxPerRequest": 3600,
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "gemini-3-flash-preview": {
       "id": "gemini-3-flash-preview",
@@ -91,7 +133,14 @@
       "input": ["text", "image"],
       "cost": { "input": 0.5, "output": 3, "cacheRead": 0.05, "cacheWrite": 0 },
       "contextWindow": 1048576,
-      "maxTokens": 65536
+      "maxTokens": 65536,
+      "inputLimits": {
+        "maxRequestBytes": 20971520,
+        "images": {
+          "maxPerRequest": 3600,
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "gemini-3.1-flash-lite": {
       "id": "gemini-3.1-flash-lite",
@@ -112,7 +161,14 @@
       "input": ["text", "image"],
       "cost": { "input": 0.25, "output": 1.5, "cacheRead": 0.025, "cacheWrite": 0 },
       "contextWindow": 1048576,
-      "maxTokens": 65536
+      "maxTokens": 65536,
+      "inputLimits": {
+        "maxRequestBytes": 20971520,
+        "images": {
+          "maxPerRequest": 3600,
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "gemini-3.1-flash-lite-image": {
       "id": "gemini-3.1-flash-lite-image",
@@ -133,7 +189,14 @@
       "input": ["text", "image"],
       "cost": { "input": 0.25, "output": 30, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 65536,
-      "maxTokens": 65536
+      "maxTokens": 65536,
+      "inputLimits": {
+        "maxRequestBytes": 20971520,
+        "images": {
+          "maxPerRequest": 3600,
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "gemini-3.1-flash-lite-preview": {
       "id": "gemini-3.1-flash-lite-preview",
@@ -154,7 +217,14 @@
       "input": ["text", "image"],
       "cost": { "input": 0.25, "output": 1.5, "cacheRead": 0.025, "cacheWrite": 0 },
       "contextWindow": 1048576,
-      "maxTokens": 65536
+      "maxTokens": 65536,
+      "inputLimits": {
+        "maxRequestBytes": 20971520,
+        "images": {
+          "maxPerRequest": 3600,
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "gemini-3.1-flash-live-preview": {
       "id": "gemini-3.1-flash-live-preview",
@@ -175,7 +245,14 @@
       "input": ["text", "image"],
       "cost": { "input": 0.75, "output": 4.5, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 131072,
-      "maxTokens": 65536
+      "maxTokens": 65536,
+      "inputLimits": {
+        "maxRequestBytes": 20971520,
+        "images": {
+          "maxPerRequest": 3600,
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "gemini-3.1-pro-preview": {
       "id": "gemini-3.1-pro-preview",
@@ -196,7 +273,14 @@
       "input": ["text", "image"],
       "cost": { "input": 2, "output": 12, "cacheRead": 0.2, "cacheWrite": 0 },
       "contextWindow": 1048576,
-      "maxTokens": 65536
+      "maxTokens": 65536,
+      "inputLimits": {
+        "maxRequestBytes": 20971520,
+        "images": {
+          "maxPerRequest": 3600,
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "gemini-3.1-pro-preview-customtools": {
       "id": "gemini-3.1-pro-preview-customtools",
@@ -217,7 +301,14 @@
       "input": ["text", "image"],
       "cost": { "input": 2, "output": 12, "cacheRead": 0.2, "cacheWrite": 0 },
       "contextWindow": 1048576,
-      "maxTokens": 65536
+      "maxTokens": 65536,
+      "inputLimits": {
+        "maxRequestBytes": 20971520,
+        "images": {
+          "maxPerRequest": 3600,
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "gemini-3.5-flash": {
       "id": "gemini-3.5-flash",
@@ -238,7 +329,14 @@
       "input": ["text", "image"],
       "cost": { "input": 1.5, "output": 9, "cacheRead": 0.15, "cacheWrite": 0 },
       "contextWindow": 1048576,
-      "maxTokens": 65536
+      "maxTokens": 65536,
+      "inputLimits": {
+        "maxRequestBytes": 20971520,
+        "images": {
+          "maxPerRequest": 3600,
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "gemini-3.5-flash-lite": {
       "id": "gemini-3.5-flash-lite",
@@ -259,7 +357,14 @@
       "input": ["text", "image"],
       "cost": { "input": 0.3, "output": 2.5, "cacheRead": 0.03, "cacheWrite": 0 },
       "contextWindow": 1048576,
-      "maxTokens": 65536
+      "maxTokens": 65536,
+      "inputLimits": {
+        "maxRequestBytes": 20971520,
+        "images": {
+          "maxPerRequest": 3600,
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "gemini-3.6-flash": {
       "id": "gemini-3.6-flash",
@@ -280,7 +385,14 @@
       "input": ["text", "image"],
       "cost": { "input": 0.75, "output": 3.75, "cacheRead": 0.075, "cacheWrite": 0 },
       "contextWindow": 1048576,
-      "maxTokens": 65536
+      "maxTokens": 65536,
+      "inputLimits": {
+        "maxRequestBytes": 20971520,
+        "images": {
+          "maxPerRequest": 3600,
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "gemini-3.7-flash": {
       "id": "gemini-3.7-flash",
@@ -301,7 +413,14 @@
       "input": ["text", "image"],
       "cost": { "input": 0.75, "output": 3.75, "cacheRead": 0.075, "cacheWrite": 0 },
       "contextWindow": 1048576,
-      "maxTokens": 65536
+      "maxTokens": 65536,
+      "inputLimits": {
+        "maxRequestBytes": 20971520,
+        "images": {
+          "maxPerRequest": 3600,
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "gemini-3.8-flash": {
       "id": "gemini-3.8-flash",
@@ -322,7 +441,14 @@
       "input": ["text", "image"],
       "cost": { "input": 0.75, "output": 3.75, "cacheRead": 0.075, "cacheWrite": 0 },
       "contextWindow": 1048576,
-      "maxTokens": 65536
+      "maxTokens": 65536,
+      "inputLimits": {
+        "maxRequestBytes": 20971520,
+        "images": {
+          "maxPerRequest": 3600,
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "gemini-flash-latest": {
       "id": "gemini-flash-latest",
@@ -343,7 +469,14 @@
       "input": ["text", "image"],
       "cost": { "input": 1.5, "output": 9, "cacheRead": 0.15, "cacheWrite": 0 },
       "contextWindow": 1048576,
-      "maxTokens": 65536
+      "maxTokens": 65536,
+      "inputLimits": {
+        "maxRequestBytes": 20971520,
+        "images": {
+          "maxPerRequest": 3600,
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "gemini-flash-lite-latest": {
       "id": "gemini-flash-lite-latest",
@@ -364,7 +497,14 @@
       "input": ["text", "image"],
       "cost": { "input": 0.25, "output": 1.5, "cacheRead": 0.025, "cacheWrite": 0 },
       "contextWindow": 1048576,
-      "maxTokens": 65536
+      "maxTokens": 65536,
+      "inputLimits": {
+        "maxRequestBytes": 20971520,
+        "images": {
+          "maxPerRequest": 3600,
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "gemma-4-26b-a4b-it": {
       "id": "gemma-4-26b-a4b-it",
@@ -383,7 +523,14 @@
       "input": ["text", "image"],
       "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 262144,
-      "maxTokens": 32768
+      "maxTokens": 32768,
+      "inputLimits": {
+        "maxRequestBytes": 20971520,
+        "images": {
+          "maxPerRequest": 3600,
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "gemma-4-31b-it": {
       "id": "gemma-4-31b-it",
@@ -402,7 +549,14 @@
       "input": ["text", "image"],
       "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 262144,
-      "maxTokens": 32768
+      "maxTokens": 32768,
+      "inputLimits": {
+        "maxRequestBytes": 20971520,
+        "images": {
+          "maxPerRequest": 3600,
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     }
   }
 }

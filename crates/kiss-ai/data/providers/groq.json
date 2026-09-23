@@ -10,7 +10,8 @@
       "input": ["text"],
       "cost": { "input": 0.05, "output": 0.08, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 131072,
-      "maxTokens": 131072
+      "maxTokens": 131072,
+      "compat": { "supportsStrictMode": true }
     },
     "llama-3.3-70b-versatile": {
       "id": "llama-3.3-70b-versatile",
@@ -22,7 +23,8 @@
       "input": ["text"],
       "cost": { "input": 0.59, "output": 0.79, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 131072,
-      "maxTokens": 32768
+      "maxTokens": 32768,
+      "compat": { "supportsStrictMode": true }
     },
     "openai/gpt-oss-120b": {
       "id": "openai/gpt-oss-120b",
@@ -35,6 +37,7 @@
       "cost": { "input": 0.15, "output": 0.6, "cacheRead": 0.075, "cacheWrite": 0 },
       "contextWindow": 131072,
       "maxTokens": 65536,
+      "compat": { "supportsStrictMode": true },
       "thinkingLevelMap": {
         "off": null,
         "minimal": null,
@@ -56,6 +59,7 @@
       "cost": { "input": 0.075, "output": 0.3, "cacheRead": 0.0375, "cacheWrite": 0 },
       "contextWindow": 131072,
       "maxTokens": 65536,
+      "compat": { "supportsStrictMode": true },
       "thinkingLevelMap": {
         "off": null,
         "minimal": null,
@@ -77,6 +81,7 @@
       "cost": { "input": 0.075, "output": 0.3, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 131072,
       "maxTokens": 65536,
+      "compat": { "supportsStrictMode": true },
       "thinkingLevelMap": {
         "off": null,
         "minimal": null,
@@ -98,6 +103,7 @@
       "cost": { "input": 0.6, "output": 3, "cacheRead": 0.3, "cacheWrite": 0 },
       "contextWindow": 131072,
       "maxTokens": 16384,
+      "compat": { "supportsStrictMode": true },
       "thinkingLevelMap": {
         "off": "none",
         "minimal": null,
@@ -106,6 +112,11 @@
         "high": "default",
         "xhigh": null,
         "max": null
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "qwen/qwen3.8-27b": {
@@ -119,6 +130,7 @@
       "cost": { "input": 0.8, "output": 4, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 131042,
       "maxTokens": 16384,
+      "compat": { "supportsStrictMode": true },
       "thinkingLevelMap": {
         "off": "none",
         "minimal": null,
@@ -127,6 +139,11 @@
         "high": "high",
         "xhigh": null,
         "max": null
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     }
   }

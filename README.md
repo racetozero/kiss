@@ -8,7 +8,7 @@ control of the model, tools, sessions, and automation.
 KISS takes its name and product philosophy from [Keep It Simple, Stupid](https://en.wikipedia.org/wiki/KISS_principle).
 Why? Because I am stupid :)
 
-KISS has 43 built-in providers, including OpenAI Codex (ChatGPT Subscription), OpenAI API, Anthropic OAuth (Claude Subscription), Anthropic API, Cursor, 
+KISS has 44 built-in providers, including OpenAI Codex (ChatGPT Subscription), OpenAI API, Anthropic OAuth (Claude Subscription), Anthropic API, Meta Muse, Cursor,
 Google, OpenRouter, Bedrock, Databricks, Snowflake, and GitHub Copilot. You can also add
 OpenAI-compatible providers.
 
@@ -656,7 +656,7 @@ options. Custom themes live in `~/.kiss/agent/settings.json`.
 
 ## Compatibility
 
-KISS tracks [Pi v0.85.1](https://github.com/earendil-works/pi/releases/tag/v0.85.1).
+KISS tracks [Pi v0.87.1](https://github.com/earendil-works/pi/releases/tag/v0.87.1).
 It keeps Pi-compatible session files, model data, core commands, compaction,
 and OpenAI Responses WebSocket transport. `Cargo.toml` records the tracked
 release.

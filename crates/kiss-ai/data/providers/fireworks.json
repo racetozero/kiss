@@ -56,6 +56,11 @@
         "high": "high",
         "xhigh": null,
         "max": "max"
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "accounts/fireworks/models/deepseek-v4-pro": {
@@ -143,6 +148,11 @@
         "high": "high",
         "xhigh": null,
         "max": "max"
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "accounts/fireworks/models/gpt-oss-120b": {
@@ -191,6 +201,11 @@
         "supportsEagerToolInputStreaming": false,
         "supportsCacheControlOnTools": false,
         "supportsLongCacheRetention": false
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "accounts/fireworks/models/kimi-k2p6": {
@@ -210,6 +225,11 @@
         "supportsEagerToolInputStreaming": false,
         "supportsCacheControlOnTools": false,
         "supportsLongCacheRetention": false
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "accounts/fireworks/models/kimi-k2p7-code": {
@@ -229,6 +249,11 @@
         "supportsEagerToolInputStreaming": false,
         "supportsCacheControlOnTools": false,
         "supportsLongCacheRetention": false
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "accounts/fireworks/models/minimax-m2p7": {
@@ -316,6 +341,11 @@
         "high": "high",
         "xhigh": "xhigh",
         "max": null
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "accounts/fireworks/models/nemotron-3-ultra-nvfp4": {
@@ -383,6 +413,11 @@
         "high": "high",
         "xhigh": null,
         "max": null
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "accounts/fireworks/models/qwen3p8-2p4t-a95b": {
@@ -441,6 +476,11 @@
         "high": null,
         "xhigh": "xhigh",
         "max": null
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "accounts/fireworks/routers/deepseek-flash-latest": {
@@ -470,6 +510,11 @@
         "high": "high",
         "xhigh": null,
         "max": "max"
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "accounts/fireworks/routers/deepseek-pro-latest": {
@@ -528,6 +573,11 @@
         "high": "high",
         "xhigh": null,
         "max": "max"
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "accounts/fireworks/routers/kimi-latest": {
@@ -557,6 +607,11 @@
         "high": "high",
         "xhigh": null,
         "max": "max"
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "accounts/fireworks/routers/minimax-latest": {
@@ -605,6 +660,11 @@
         "supportsEagerToolInputStreaming": false,
         "supportsCacheControlOnTools": false,
         "supportsLongCacheRetention": false
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     }
   },
@@ -621,6 +681,7 @@
       "api": "openai-completions",
       "baseUrl": "https://api.fireworks.ai/inference/v1",
       "compat": {
+        "supportsStrictMode": true,
         "supportsStore": false,
         "supportsDeveloperRole": false,
         "sendSessionAffinityHeaders": true,
@@ -648,6 +709,7 @@
       "api": "openai-completions",
       "baseUrl": "https://api.fireworks.ai/inference/v1",
       "compat": {
+        "supportsStrictMode": true,
         "supportsStore": false,
         "supportsDeveloperRole": false,
         "sendSessionAffinityHeaders": true,
@@ -675,6 +737,7 @@
       "api": "openai-completions",
       "baseUrl": "https://api.fireworks.ai/inference/v1",
       "compat": {
+        "supportsStrictMode": true,
         "supportsStore": false,
         "supportsDeveloperRole": false,
         "sendSessionAffinityHeaders": true,
@@ -688,6 +751,11 @@
         "high": "high",
         "xhigh": null,
         "max": "max"
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "accounts/fireworks/models/kimi-k3": {
@@ -702,6 +770,7 @@
       "api": "openai-completions",
       "baseUrl": "https://api.fireworks.ai/inference/v1",
       "compat": {
+        "supportsStrictMode": true,
         "supportsStore": false,
         "supportsDeveloperRole": false,
         "sendSessionAffinityHeaders": true,
@@ -719,6 +788,11 @@
         "high": "high",
         "xhigh": null,
         "max": "max"
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "accounts/fireworks/routers/glm-5p2-fast": {
@@ -733,6 +807,7 @@
       "api": "openai-completions",
       "baseUrl": "https://api.fireworks.ai/inference/v1",
       "compat": {
+        "supportsStrictMode": true,
         "supportsStore": false,
         "supportsDeveloperRole": false,
         "sendSessionAffinityHeaders": true,
@@ -760,6 +835,7 @@
       "api": "openai-completions",
       "baseUrl": "https://api.fireworks.ai/inference/v1",
       "compat": {
+        "supportsStrictMode": true,
         "supportsStore": false,
         "supportsDeveloperRole": false,
         "sendSessionAffinityHeaders": true,
@@ -787,6 +863,7 @@
       "api": "openai-completions",
       "baseUrl": "https://api.fireworks.ai/inference/v1",
       "compat": {
+        "supportsStrictMode": true,
         "supportsStore": false,
         "supportsDeveloperRole": false,
         "sendSessionAffinityHeaders": true,
@@ -814,6 +891,7 @@
       "api": "openai-completions",
       "baseUrl": "https://api.fireworks.ai/inference/v1",
       "compat": {
+        "supportsStrictMode": true,
         "supportsStore": false,
         "supportsDeveloperRole": false,
         "sendSessionAffinityHeaders": true,
@@ -827,6 +905,11 @@
         "high": "high",
         "xhigh": null,
         "max": "max"
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "accounts/fireworks/routers/glm-latest": {
@@ -841,6 +924,7 @@
       "api": "openai-completions",
       "baseUrl": "https://api.fireworks.ai/inference/v1",
       "compat": {
+        "supportsStrictMode": true,
         "supportsStore": false,
         "supportsDeveloperRole": false,
         "sendSessionAffinityHeaders": true,
@@ -868,6 +952,7 @@
       "api": "openai-completions",
       "baseUrl": "https://api.fireworks.ai/inference/v1",
       "compat": {
+        "supportsStrictMode": true,
         "supportsStore": false,
         "supportsDeveloperRole": false,
         "sendSessionAffinityHeaders": true,
@@ -885,6 +970,11 @@
         "high": "high",
         "xhigh": null,
         "max": "max"
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     }
   }

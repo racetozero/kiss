@@ -19,6 +19,11 @@
         "supportsStrictMode": false,
         "thinkingFormat": "deepseek",
         "supportsMidConvoSystemMessages": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     },
     "kimi-k2.7-code": {
@@ -41,7 +46,12 @@
         "thinkingFormat": "deepseek",
         "supportsMidConvoSystemMessages": true
       },
-      "thinkingLevelMap": { "off": null }
+      "thinkingLevelMap": { "off": null },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "kimi-k2.7-code-highspeed": {
       "id": "kimi-k2.7-code-highspeed",
@@ -63,7 +73,12 @@
         "thinkingFormat": "deepseek",
         "supportsMidConvoSystemMessages": true
       },
-      "thinkingLevelMap": { "off": null }
+      "thinkingLevelMap": { "off": null },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "kimi-k3": {
       "id": "kimi-k3",
@@ -95,6 +110,11 @@
         "high": "high",
         "xhigh": null,
         "max": "max"
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       }
     }
   }

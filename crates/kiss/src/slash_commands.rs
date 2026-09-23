@@ -21,7 +21,7 @@ impl SlashCommand {
     }
 }
 
-/// Pi core commands at the v0.86.0 release commit.
+/// Pi core commands at the v0.87.1 release commit.
 pub(crate) const PI_CORE_SLASH_COMMANDS: &[SlashCommand] = &[
     SlashCommand::new("settings", "Open settings menu", None),
     SlashCommand::new(

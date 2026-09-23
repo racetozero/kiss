@@ -17,6 +17,7 @@
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
         "thinkingFormat": "ant-ling",
+        "supportsStrictMode": true,
         "supportsLongCacheRetention": false
       }
     },
@@ -37,6 +38,7 @@
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
         "thinkingFormat": "ant-ling",
+        "supportsStrictMode": true,
         "supportsLongCacheRetention": false
       }
     },
@@ -57,6 +59,7 @@
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
         "thinkingFormat": "ant-ling",
+        "supportsStrictMode": true,
         "supportsLongCacheRetention": false
       },
       "thinkingLevelMap": {

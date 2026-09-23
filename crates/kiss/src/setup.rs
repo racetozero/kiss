@@ -170,14 +170,14 @@ pub fn resolve_model(
         .provider
         .as_deref()
         .or(settings.default_provider.as_deref())
-        && let Some(model) = registry.all().iter().find(|m| m.provider == provider)
+        && let Some(model) = provider_default(registry, provider)
     {
-        return Ok((model.clone(), None));
+        return Ok((model, None));
     }
     if args.api_key.is_some() {
         let provider = args.provider.as_deref().unwrap_or("anthropic");
-        if let Some(model) = registry.all().iter().find(|m| m.provider == provider) {
-            return Ok((model.clone(), None));
+        if let Some(model) = provider_default(registry, provider) {
+            return Ok((model, None));
         }
     }
     for model in registry.all() {
@@ -215,6 +215,23 @@ pub fn resolve_model(
     anyhow::bail!(
         "no model available: set an API key (e.g. ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY) or pass --model/--api-key"
     )
+}
+
+fn provider_default(registry: &Registry, provider: &str) -> Option<Model> {
+    let preferred = match provider {
+        "xai" => Some("grok-4.7"),
+        "meta" => Some("muse-spark-1.3"),
+        _ => None,
+    };
+    preferred
+        .and_then(|id| registry.resolve(id, Some(provider)).map(|(model, _)| model))
+        .or_else(|| {
+            registry
+                .all()
+                .iter()
+                .find(|model| model.provider == provider)
+                .cloned()
+        })
 }
 
 pub fn session_dir(args: &Args, settings: &Settings) -> PathBuf {
@@ -469,6 +486,16 @@ mod tests {
     fn exclusions_apply_to_default_tools() {
         let args = Args::parse_from(["kiss", "--exclude-tools", "bash"]);
         assert_eq!(selected_tool_names(&args), ["read", "write", "edit"]);
+    }
+
+    #[test]
+    fn changed_pi_provider_defaults_are_preferred() {
+        let registry = Registry::from_builtin();
+        assert_eq!(provider_default(&registry, "xai").unwrap().id, "grok-4.7");
+        assert_eq!(
+            provider_default(&registry, "meta").unwrap().id,
+            "muse-spark-1.3"
+        );
     }
 
     #[test]

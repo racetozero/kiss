@@ -19,9 +19,24 @@ fn parse_template(path: &Path) -> Option<PromptTemplate> {
     let name = path.file_stem()?.to_str()?.to_string();
     let mut description = None;
     let mut argument_hint = None;
-    if let Some(fm) = frontmatter
-        && let Ok(value) = serde_yaml::from_str::<serde_yaml::Value>(fm)
-    {
+    if text.starts_with("---") && frontmatter.is_none() {
+        eprintln!(
+            "warning: invalid prompt frontmatter in {}: missing closing ---",
+            path.display()
+        );
+        return None;
+    }
+    if let Some(fm) = frontmatter {
+        let value = match serde_yaml::from_str::<serde_yaml::Value>(fm) {
+            Ok(value) => value,
+            Err(error) => {
+                eprintln!(
+                    "warning: invalid prompt frontmatter in {}: {error}",
+                    path.display()
+                );
+                return None;
+            }
+        };
         description = value["description"].as_str().map(String::from);
         argument_hint = value["argument-hint"].as_str().map(String::from);
     }
@@ -163,6 +178,14 @@ mod tests {
         assert_eq!(expand("x ${1:-default}", &[]), "x default");
         assert_eq!(expand("x ${1:-default}", &["given"]), "x given");
         assert_eq!(expand("$3 missing", &["a"]), " missing");
+    }
+
+    #[test]
+    fn malformed_frontmatter_rejects_the_template() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("broken.md");
+        std::fs::write(&path, "---\ndescription: [broken\n---\nbody").unwrap();
+        assert!(parse_template(&path).is_none());
     }
 
     #[test]

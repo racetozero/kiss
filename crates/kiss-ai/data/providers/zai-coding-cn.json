@@ -15,10 +15,16 @@
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
         "thinkingFormat": "zai",
+        "supportsStrictMode": true,
         "zaiToolStream": true
       },
       "contextWindow": 128000,
-      "maxTokens": 32768
+      "maxTokens": 32768,
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "glm-5.3": {
       "id": "glm-5.3",
@@ -44,6 +50,7 @@
         "supportsReasoningEffort": true,
         "maxTokensField": "max_tokens",
         "thinkingFormat": "zai",
+        "supportsStrictMode": true,
         "zaiToolStream": true
       },
       "contextWindow": 1000000,
@@ -73,10 +80,16 @@
         "supportsReasoningEffort": true,
         "maxTokensField": "max_tokens",
         "thinkingFormat": "zai",
+        "supportsStrictMode": true,
         "zaiToolStream": true
       },
       "contextWindow": 1000000,
-      "maxTokens": 131072
+      "maxTokens": 131072,
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
     },
     "glm-5.3-highspeed": {
       "id": "glm-5.3-highspeed",
@@ -102,6 +115,7 @@
         "supportsReasoningEffort": true,
         "maxTokensField": "max_tokens",
         "thinkingFormat": "zai",
+        "supportsStrictMode": true,
         "zaiToolStream": true
       },
       "contextWindow": 1000000,

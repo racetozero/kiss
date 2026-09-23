@@ -603,6 +603,7 @@ impl AgentSession {
                 &serialized,
                 None,
                 custom_instructions.as_deref(),
+                false,
                 cancel.clone(),
             )
             .await?;
@@ -1415,10 +1416,14 @@ impl AgentSession {
         tokio::spawn(async move {
             let started = tokio::time::Instant::now();
             loop {
+                let scheduled = tokio::time::Instant::now();
                 if tokio::select! {
                     _ = tokio::time::sleep(delay) => false,
                     _ = cancel.cancelled() => true,
                 } {
+                    return;
+                }
+                if cache_refresh_deadline_missed(scheduled.elapsed(), ttl, delay) {
                     return;
                 }
                 let idle = !session.is_running();
@@ -1619,6 +1624,7 @@ impl AgentSession {
             &serialized,
             previous_summary.as_deref(),
             custom_instructions.as_deref(),
+            plan.is_split_turn,
             summary_cancel.clone(),
         );
         let remote_model = model.clone();
@@ -1835,6 +1841,14 @@ fn cache_warming_delay(ttl: std::time::Duration) -> Option<std::time::Duration> 
         .then(|| std::cmp::min(ttl.mul_f64(0.9), ttl - std::time::Duration::from_secs(10)))
 }
 
+fn cache_refresh_deadline_missed(
+    elapsed: std::time::Duration,
+    ttl: std::time::Duration,
+    delay: std::time::Duration,
+) -> bool {
+    elapsed > delay + ttl.saturating_sub(delay) / 2
+}
+
 fn is_transient(error: &str) -> bool {
     let e = error.to_lowercase();
     let transient_status = [429, 500, 502, 503, 504, 520].iter().any(|status| {
@@ -1890,6 +1904,22 @@ mod ephemeral_tests {
             thinking_level_map: BTreeMap::new(),
             headers: BTreeMap::new(),
         }
+    }
+
+    #[test]
+    fn late_cache_refreshes_are_skipped_before_the_cache_expires() {
+        let ttl = std::time::Duration::from_secs(300);
+        let delay = cache_warming_delay(ttl).unwrap();
+        assert!(!cache_refresh_deadline_missed(
+            std::time::Duration::from_secs(284),
+            ttl,
+            delay,
+        ));
+        assert!(cache_refresh_deadline_missed(
+            std::time::Duration::from_secs(286),
+            ttl,
+            delay,
+        ));
     }
 
     #[test]

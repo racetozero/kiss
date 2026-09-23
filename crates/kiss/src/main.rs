@@ -150,6 +150,7 @@ async fn run_command(args: &Args, command: &Command) -> anyhow::Result<i32> {
                         | "anthropic"
                         | "github-copilot"
                         | "kimi-coding"
+                        | "meta"
                         | "openrouter"
                         | "radius"
                         | "xai"
@@ -324,6 +325,12 @@ async fn run_oauth_login(provider: &str, headless: bool) -> anyhow::Result<()> {
                 let device = kiss_ai::auth::kimi_coding::start(&config, &cancel).await?;
                 show_device_code(&device.verification_uri, &device.user_code);
                 kiss_ai::auth::kimi_coding::finish(&config, &device, &cancel).await
+            }
+            "meta" => {
+                let config = kiss_ai::auth::meta::OAuthConfig::default();
+                let device = kiss_ai::auth::meta::start(&config, &cancel).await?;
+                show_device_code(&device.verification_uri, &device.user_code);
+                kiss_ai::auth::meta::finish(&config, &device, &cancel).await
             }
             "xai" => {
                 let config = kiss_ai::auth::xai::OAuthConfig::default();

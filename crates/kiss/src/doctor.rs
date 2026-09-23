@@ -446,6 +446,11 @@ fn add_login_targets(targets: &mut BTreeMap<(String, Connection, String), Target
     let kimi = kiss_ai::auth::kimi_coding::OAuthConfig::default();
     insert_url(targets, "kimi-coding", Connection::Login, kimi.oauth_host);
 
+    let meta = kiss_ai::auth::meta::OAuthConfig::default();
+    insert_url(targets, "meta", Connection::Login, meta.device_url);
+    insert_url(targets, "meta", Connection::Login, meta.token_url);
+    insert_url(targets, "meta", Connection::Login, meta.mint_url);
+
     let xai = kiss_ai::auth::xai::OAuthConfig::default();
     insert_url(targets, "xai", Connection::Login, xai.device_url);
     insert_url(targets, "xai", Connection::Login, xai.token_url);
