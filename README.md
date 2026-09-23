@@ -5,15 +5,13 @@
 A fast terminal coding agent that keeps the interface simple and gives you
 control of the model, tools, sessions, and automation.
 
-KISS takes its name and product philosophy from [Keep It Simple, Stupid](https://en.wikipedia.org/wiki/KISS_principle).
-Why? Because I am stupid :)
-
 KISS has 44 built-in providers, including OpenAI Codex (ChatGPT Subscription), OpenAI API, Anthropic OAuth (Claude Subscription), Anthropic API, Meta Muse, Cursor,
 Google, OpenRouter, Bedrock, Databricks, Snowflake, and GitHub Copilot. You can also add
 OpenAI-compatible providers.
 
 KISS is built in Rust and based on
-[Pi](https://github.com/earendil-works/pi).
+[Pi](https://github.com/earendil-works/pi). KISS takes its name and product philosophy from [Keep It Simple, Stupid](https://en.wikipedia.org/wiki/KISS_principle).
+Why? Because I am stupid :)
 
 ## Why KISS
 
