@@ -68,6 +68,7 @@ struct App {
     cell_render_cache: Vec<Option<CachedCellLines>>,
     editor: Editor,
     voice_mode: VoiceMode,
+    voice_preview: Option<String>,
     recording: Option<crate::voice::Recording>,
     voice_busy: bool,
     voice_generation: u64,
@@ -352,6 +353,10 @@ enum CommandEvent {
     VoiceFinished {
         generation: u64,
         result: std::result::Result<String, String>,
+    },
+    VoicePreview {
+        generation: u64,
+        text: String,
     },
 }
 
@@ -785,6 +790,15 @@ impl App {
             }
         } else {
             lines.extend(self.editor.render(width));
+            if let Some(preview) = &self.voice_preview {
+                lines.push(self.theme.fg(
+                    "dim",
+                    &format!(
+                        "  🎤 {}",
+                        kiss_tui::text::truncate_to_width(preview, width.saturating_sub(5))
+                    ),
+                ));
+            }
             if let Some(menu) = &mut self.command_menu {
                 lines.extend(menu.list.render_compact(width, ""));
             } else if let Some(menu) = &mut self.file_menu {
@@ -841,9 +855,9 @@ impl App {
             totals.cost.total,
         );
         let voice = match self.voice_mode {
-            VoiceMode::Off => "",
-            VoiceMode::Hold => " · voice hold",
-            VoiceMode::Tap => " · voice tap",
+            VoiceMode::Off => "".to_owned(),
+            VoiceMode::Hold => " · voice hold".to_owned(),
+            VoiceMode::Tap => " · voice tap".to_owned(),
         };
         let right = format!("({}) {}{thinking}{voice}", model.provider, model.id);
         let left_width = kiss_tui::text::display_width(&left);
@@ -1283,6 +1297,7 @@ pub async fn run(args: &Args) -> Result<i32> {
         md: MarkdownRenderer::new(theme.clone()),
         editor: provisional_editor,
         voice_mode: VoiceMode::Off,
+        voice_preview: None,
         recording: None,
         voice_busy: false,
         voice_generation: 0,
@@ -1745,8 +1760,15 @@ fn handle_command_event(
     session: &Arc<kiss_coding::AgentSession>,
 ) {
     match event {
+        CommandEvent::VoicePreview { generation, text } => {
+            if generation == app.voice_generation {
+                app.voice_preview = Some(text);
+            }
+        }
         CommandEvent::VoiceFinished { generation, result } => {
             if generation == app.voice_generation {
+                app.recording = None;
+                app.voice_preview = None;
                 app.voice_busy = false;
                 match result {
                     Ok(text) if !text.is_empty() => {
@@ -2647,26 +2669,18 @@ fn voice_space(event: &InputEvent) -> Option<bool> {
     }
 }
 
-fn stop_voice(app: &mut App, language: &str, tx: &mpsc::UnboundedSender<CommandEvent>) {
-    let Some(recording) = app.recording.take() else {
-        return;
-    };
-    app.voice_busy = true;
-    app.cells.push(Cell::Notice("transcribing voice…".into()));
-    let language = language.to_owned();
-    let generation = app.voice_generation;
-    let tx = tx.clone();
-    tokio::task::spawn_blocking(move || {
-        let result = recording
-            .finish(&language)
-            .map_err(|error| format!("{error:#}"));
-        let _ = tx.send(CommandEvent::VoiceFinished { generation, result });
-    });
+fn stop_voice(app: &mut App) {
+    if let Some(recording) = &app.recording {
+        recording.stop();
+        app.voice_busy = true;
+        app.cells.push(Cell::Notice("transcribing voice…".into()));
+    }
 }
 
 fn voice_input(
     app: &mut App,
     event: &InputEvent,
+    backend: crate::voice::Backend,
     language: &str,
     tx: &mpsc::UnboundedSender<CommandEvent>,
 ) -> bool {
@@ -2685,9 +2699,12 @@ fn voice_input(
     {
         return false;
     }
+    if app.voice_busy {
+        return true;
+    }
     if !pressed {
         if app.voice_mode == VoiceMode::Hold && app.recording.is_some() {
-            stop_voice(app, language, tx);
+            stop_voice(app);
         }
         return true;
     }
@@ -2697,14 +2714,34 @@ fn voice_input(
     }
     if app.recording.is_some() {
         if app.voice_mode == VoiceMode::Tap {
-            stop_voice(app, language, tx);
+            stop_voice(app);
         }
     } else if !app.voice_busy {
-        match crate::voice::Recording::start() {
-            Ok(recording) => {
+        match crate::voice::start(backend, language.to_owned()) {
+            Ok((recording, mut events)) => {
+                let generation = app.voice_generation;
+                let tx = tx.clone();
+                tokio::spawn(async move {
+                    while let Some(event) = events.recv().await {
+                        let command = match event {
+                            crate::voice::Event::Preview(text) => {
+                                CommandEvent::VoicePreview { generation, text }
+                            }
+                            crate::voice::Event::Finished(result) => {
+                                CommandEvent::VoiceFinished { generation, result }
+                            }
+                        };
+                        if tx.send(command).is_err() {
+                            break;
+                        }
+                    }
+                });
                 app.recording = Some(recording);
-                app.cells
-                    .push(Cell::Notice("recording voice… (Esc cancels)".into()));
+                app.voice_preview = Some(String::new());
+                app.cells.push(Cell::Notice(format!(
+                    "recording voice ({})… (Esc cancels)",
+                    backend.name()
+                )));
             }
             Err(error) => app
                 .cells
@@ -2731,6 +2768,8 @@ fn handle_input(
         && matches!(event, InputEvent::Key(key) if key.key == Key::Escape || *key == KeyEvent::ctrl('c'))
     {
         app.recording = None;
+        app.voice_preview = None;
+        app.voice_generation = app.voice_generation.wrapping_add(1);
         app.cells
             .push(Cell::Notice("voice recording cancelled".into()));
         return Flow::Continue;
@@ -2738,6 +2777,14 @@ fn handle_input(
     if voice_input(
         app,
         event,
+        crate::voice::Backend::parse(
+            resources
+                .settings
+                .voice_backend
+                .as_deref()
+                .unwrap_or("local"),
+        )
+        .unwrap_or(crate::voice::Backend::Local),
         resources.settings.voice_language.as_deref().unwrap_or("en"),
         command_tx,
     ) {
@@ -6788,10 +6835,45 @@ fn run_slash_command(
         "scoped-models" => open_scoped_models_picker(app, session, resources),
         "settings" => open_settings_picker(app, session, resources),
         "voice" => {
+            if let Some(backend) = crate::voice::Backend::parse(&rest) {
+                if let Err(error) = crate::voice::check_setup(backend) {
+                    app.cells
+                        .push(Cell::Error(format!("voice unavailable: {error:#}")));
+                    return Flow::Continue;
+                }
+                app.recording = None;
+                app.voice_preview = None;
+                app.voice_generation = app.voice_generation.wrapping_add(1);
+                app.voice_busy = false;
+                resources.settings.voice_backend = Some(backend.name().into());
+                save_interactive_settings(app, session, resources);
+                if app.voice_mode == VoiceMode::Off {
+                    app.voice_mode = VoiceMode::Hold;
+                }
+                app.cells.push(Cell::Notice(format!(
+                    "voice backend: {}. {}",
+                    backend.name(),
+                    if backend == crate::voice::Backend::Local {
+                        "Audio stays local."
+                    } else {
+                        "Microphone audio is sent to this provider."
+                    }
+                )));
+                return Flow::Continue;
+            }
             match VoiceMode::parse(&rest) {
                 Some(mode) => {
                     if mode != VoiceMode::Off
-                        && let Err(error) = crate::voice::check_setup()
+                        && let Err(error) = crate::voice::check_setup(
+                            crate::voice::Backend::parse(
+                                resources
+                                    .settings
+                                    .voice_backend
+                                    .as_deref()
+                                    .unwrap_or("local"),
+                            )
+                            .unwrap_or(crate::voice::Backend::Local),
+                        )
                     {
                         app.cells
                             .push(Cell::Error(format!("voice unavailable: {error:#}")));
@@ -6799,6 +6881,7 @@ fn run_slash_command(
                     }
                     if mode == VoiceMode::Off {
                         app.recording = None;
+                        app.voice_preview = None;
                         app.voice_generation = app.voice_generation.wrapping_add(1);
                         app.voice_busy = false;
                     }
@@ -6812,11 +6895,19 @@ fn run_slash_command(
                         }
                         VoiceMode::Off => "Voice mode disabled.",
                     };
-                    app.cells.push(Cell::Notice(format!("{notice} Dictation language: {} (/config voice-language <code> to change).", resources.settings.voice_language.as_deref().unwrap_or("en"))));
+                    let backend = crate::voice::Backend::parse(
+                        resources
+                            .settings
+                            .voice_backend
+                            .as_deref()
+                            .unwrap_or("local"),
+                    )
+                    .unwrap_or(crate::voice::Backend::Local);
+                    app.cells.push(Cell::Notice(format!("{notice} Backend: {}{} Dictation language: {} (/config voice-language <code> to change).", backend.name(), if mode != VoiceMode::Off && backend != crate::voice::Backend::Local { " (microphone audio sent to provider)." } else { "." }, resources.settings.voice_language.as_deref().unwrap_or("en"))));
                 }
-                None => app
-                    .cells
-                    .push(Cell::Error("usage: /voice [hold|tap|off]".into())),
+                None => app.cells.push(Cell::Error(
+                    "usage: /voice [hold|tap|off|local|deepgram|elevenlabs]".into(),
+                )),
             }
         }
         "config" => {
@@ -7546,6 +7637,7 @@ mod tests {
             md: MarkdownRenderer::new(theme.clone()),
             editor: Editor::new(theme.clone()),
             voice_mode: VoiceMode::Off,
+            voice_preview: None,
             recording: None,
             voice_busy: false,
             voice_generation: 0,

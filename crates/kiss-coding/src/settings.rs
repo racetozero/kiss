@@ -237,6 +237,7 @@ pub struct Settings {
     /// `None` preserves the default-on behavior for existing settings files.
     pub auto_recap: Option<bool>,
     pub voice_language: Option<String>,
+    pub voice_backend: Option<String>,
     pub markdown: MarkdownSettings,
     pub webmcp: WebMcpSettings,
     /// Unknown keys survive load/save.
@@ -283,6 +284,11 @@ fn merged_settings(mut global: Value, project: Option<Value>) -> Settings {
         .pointer("/workflows/enabled")
         .and_then(Value::as_bool)
         .unwrap_or(true);
+    // A project must not opt the user's microphone in to a cloud service.
+    let voice_backend = global
+        .get("voiceBackend")
+        .and_then(Value::as_str)
+        .map(str::to_owned);
     let cache_warming = global
         .get("cacheWarming")
         .cloned()
@@ -299,6 +305,7 @@ fn merged_settings(mut global: Value, project: Option<Value>) -> Settings {
     // applies: only the user's own settings file decides whether they are on.
     settings.workflows.enabled = workflows_enabled;
     settings.cache_warming = cache_warming;
+    settings.voice_backend = voice_backend;
     settings
 }
 
@@ -332,6 +339,17 @@ impl Settings {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn project_cannot_enable_cloud_voice() {
+        let settings = merged_settings(json!({}), Some(json!({"voiceBackend":"deepgram"})));
+        assert_eq!(settings.voice_backend, None);
+        let settings = merged_settings(
+            json!({"voiceBackend":"elevenlabs"}),
+            Some(json!({"voiceBackend":"local"})),
+        );
+        assert_eq!(settings.voice_backend.as_deref(), Some("elevenlabs"));
+    }
 
     #[test]
     fn deep_merge_nested() {

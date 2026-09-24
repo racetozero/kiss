@@ -91,7 +91,11 @@ pub(crate) const LLAMA_SLASH_COMMAND: SlashCommand =
 
 /// KISS-local commands that preserve Pi's core command inventory.
 pub(crate) const KISS_SLASH_COMMANDS: &[SlashCommand] = &[
-    SlashCommand::new("voice", "Local voice dictation", Some("[hold|tap|off]")),
+    SlashCommand::new(
+        "voice",
+        "Voice dictation",
+        Some("[hold|tap|off|local|deepgram|elevenlabs]"),
+    ),
     SlashCommand::new(
         "config",
         "Configure dictation language",
