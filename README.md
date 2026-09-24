@@ -137,6 +137,17 @@ refresh is expected to save money. This is automatic. Set `cacheWarming` to
 what to do next. Model-aware context management and bounded retry delays keep
 long sessions responsive without routine tuning.
 
+### Experimental Jev options
+
+KISS also offers two opt-in [Jev](https://typesafe.ai/) features in `/settings`:
+**Compaction method → Jev** selects older tool interactions to keep, truncate,
+or remove instead of using summary compaction. **Dynamic reasoning → Jev**
+selects reasoning effort for supported reasoning models instead of using a
+fixed effort. Run `/login` and select **TypeSafe** to sign in. You can also
+run `/login typesafe` directly or set `TYPESAFE_API_KEY`. Both features
+send conversation context to Jev. The default settings remain summary
+compaction and fixed reasoning effort.
+
 ## Continue work from another agent
 
 Run `/resume` to continue a KISS, Pi, Claude Code, or OpenAI Codex session.
