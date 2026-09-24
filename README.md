@@ -10,7 +10,7 @@ Google, OpenRouter, Bedrock, Databricks, Snowflake, and GitHub Copilot. You can 
 OpenAI-compatible providers.
 
 KISS is built in Rust and based on
-[Pi](https://github.com/earendil-works/pi). 
+[Pi](https://github.com/earendil-works/pi).
 
 KISS takes its name and product philosophy from [Keep It Simple, Stupid](https://en.wikipedia.org/wiki/KISS_principle).
 Why? Because I am stupid :)
