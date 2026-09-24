@@ -1030,6 +1030,12 @@ fn note_user_activity(app: &mut App) {
 }
 
 fn tool_title(name: &str, args: &serde_json::Value) -> String {
+    if name == "mcp" && args["action"] == "call"
+        && let (Some(server), Some(tool)) = (args["server"].as_str(), args["name"].as_str())
+        && !server.is_empty() && !tool.is_empty()
+    {
+        return format!("mcp {server}.{tool}");
+    }
     let detail = args["path"]
         .as_str()
         .or_else(|| args["pattern"].as_str())
@@ -7834,6 +7840,29 @@ mod tests {
         assert!(matches!(flow, Flow::Continue));
         assert_eq!(app.editor.text(), "one ");
         assert!(app.workflow_view.is_none());
+    }
+
+    #[test]
+    fn mcp_tool_title_names_server_and_tool() {
+        assert_eq!(
+            tool_title(
+                "mcp",
+                &serde_json::json!({"action": "call", "server": "linkup", "name": "linkup-search"})
+            ),
+            "mcp linkup.linkup-search"
+        );
+        assert_eq!(
+            tool_title("mcp", &serde_json::json!({"action": "list"})),
+            "mcp"
+        );
+        assert_eq!(
+            tool_title("mcp", &serde_json::json!({"action": "call"})),
+            "mcp"
+        );
+        assert_eq!(
+            tool_title("read", &serde_json::json!({"path": "file.rs"})),
+            "read file.rs"
+        );
     }
 
     #[test]
