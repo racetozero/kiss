@@ -67,6 +67,10 @@ struct App {
     cells: Vec<Cell>,
     cell_render_cache: Vec<Option<CachedCellLines>>,
     editor: Editor,
+    voice_mode: VoiceMode,
+    recording: Option<crate::voice::Recording>,
+    voice_busy: bool,
+    voice_generation: u64,
     keybindings: Keybindings,
     startup_lines: Vec<String>,
     queue_note: Option<String>,
@@ -110,6 +114,24 @@ struct App {
     workflow_version: u64,
     /// Runtime-verified workflow results waiting for the end of this turn.
     workflow_outcomes: Vec<String>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum VoiceMode {
+    Off,
+    Hold,
+    Tap,
+}
+
+impl VoiceMode {
+    fn parse(value: &str) -> Option<Self> {
+        match value {
+            "" | "hold" => Some(Self::Hold),
+            "tap" => Some(Self::Tap),
+            "off" => Some(Self::Off),
+            _ => None,
+        }
+    }
 }
 
 struct BtwPanel {
@@ -327,6 +349,10 @@ enum CommandEvent {
     WorkflowStarted(Arc<kiss_coding::workflows::RunRecord>),
     /// A saved workflow was cancelled before it made a run record.
     WorkflowCancelled,
+    VoiceFinished {
+        generation: u64,
+        result: std::result::Result<String, String>,
+    },
 }
 
 enum WebMcpCommandResult {
@@ -814,7 +840,12 @@ impl App {
                 .unwrap_or_else(|| "n/a cache".into()),
             totals.cost.total,
         );
-        let right = format!("({}) {}{thinking}", model.provider, model.id);
+        let voice = match self.voice_mode {
+            VoiceMode::Off => "",
+            VoiceMode::Hold => " · voice hold",
+            VoiceMode::Tap => " · voice tap",
+        };
+        let right = format!("({}) {}{thinking}{voice}", model.provider, model.id);
         let left_width = kiss_tui::text::display_width(&left);
         let right_width = kiss_tui::text::display_width(&right);
         let stats = if left_width + right_width + 2 <= width {
@@ -1245,6 +1276,10 @@ pub async fn run(args: &Args) -> Result<i32> {
     let mut app = App {
         md: MarkdownRenderer::new(theme.clone()),
         editor: provisional_editor,
+        voice_mode: VoiceMode::Off,
+        recording: None,
+        voice_busy: false,
+        voice_generation: 0,
         theme,
         cells: Vec::new(),
         cell_render_cache: Vec::new(),
@@ -1704,6 +1739,20 @@ fn handle_command_event(
     session: &Arc<kiss_coding::AgentSession>,
 ) {
     match event {
+        CommandEvent::VoiceFinished { generation, result } => {
+            if generation == app.voice_generation {
+                app.voice_busy = false;
+                match result {
+                    Ok(text) if !text.is_empty() => {
+                        app.editor.insert(&text);
+                        app.cells
+                            .push(Cell::Notice("voice transcript inserted into draft".into()));
+                    }
+                    Ok(_) => app.cells.push(Cell::Notice("no speech detected".into())),
+                    Err(error) => app.cells.push(Cell::Error(format!("voice: {error}"))),
+                }
+            }
+        }
         CommandEvent::BrowserLoginUrl { url, opened } => {
             let message = if opened {
                 "finish authentication in the browser".to_string()
@@ -2584,6 +2633,81 @@ fn queue_user_message(
     }
 }
 
+fn voice_space(event: &InputEvent) -> Option<bool> {
+    match event {
+        InputEvent::Key(key) if *key == KeyEvent::char(' ') => Some(true),
+        InputEvent::KeyRelease(key) if *key == KeyEvent::char(' ') => Some(false),
+        _ => None,
+    }
+}
+
+fn stop_voice(app: &mut App, language: &str, tx: &mpsc::UnboundedSender<CommandEvent>) {
+    let Some(recording) = app.recording.take() else {
+        return;
+    };
+    app.voice_busy = true;
+    app.cells.push(Cell::Notice("transcribing voice…".into()));
+    let language = language.to_owned();
+    let generation = app.voice_generation;
+    let tx = tx.clone();
+    tokio::task::spawn_blocking(move || {
+        let result = recording
+            .finish(&language)
+            .map_err(|error| format!("{error:#}"));
+        let _ = tx.send(CommandEvent::VoiceFinished { generation, result });
+    });
+}
+
+fn voice_input(
+    app: &mut App,
+    event: &InputEvent,
+    language: &str,
+    tx: &mpsc::UnboundedSender<CommandEvent>,
+) -> bool {
+    if app.voice_mode == VoiceMode::Off {
+        return false;
+    }
+    let Some(pressed) = voice_space(event) else {
+        return false;
+    };
+    if app.recording.is_none()
+        && (app.picker.is_some()
+            || app.secret_prompt.is_some()
+            || app.btw_panel.is_some()
+            || app.workflow_view.is_some()
+            || app.job_view.is_some())
+    {
+        return false;
+    }
+    if !pressed {
+        if app.voice_mode == VoiceMode::Hold && app.recording.is_some() {
+            stop_voice(app, language, tx);
+        }
+        return true;
+    }
+    // Allow /voice off, /config, and other slash commands to be typed normally.
+    if app.recording.is_none() && app.editor.text().starts_with('/') {
+        return false;
+    }
+    if app.recording.is_some() {
+        if app.voice_mode == VoiceMode::Tap {
+            stop_voice(app, language, tx);
+        }
+    } else if !app.voice_busy {
+        match crate::voice::Recording::start() {
+            Ok(recording) => {
+                app.recording = Some(recording);
+                app.cells
+                    .push(Cell::Notice("recording voice… (Esc cancels)".into()));
+            }
+            Err(error) => app
+                .cells
+                .push(Cell::Error(format!("could not record voice: {error:#}"))),
+        }
+    }
+    true
+}
+
 #[allow(clippy::too_many_arguments)]
 fn handle_input(
     app: &mut App,
@@ -2596,6 +2720,26 @@ fn handle_input(
     command_tx: &mpsc::UnboundedSender<CommandEvent>,
 ) -> Flow {
     note_user_activity(app);
+
+    if app.recording.is_some()
+        && matches!(event, InputEvent::Key(key) if key.key == Key::Escape || *key == KeyEvent::ctrl('c'))
+    {
+        app.recording = None;
+        app.cells
+            .push(Cell::Notice("voice recording cancelled".into()));
+        return Flow::Continue;
+    }
+    if voice_input(
+        app,
+        event,
+        resources.settings.voice_language.as_deref().unwrap_or("en"),
+        command_tx,
+    ) {
+        return Flow::Continue;
+    }
+    if matches!(event, InputEvent::KeyRelease(_)) {
+        return Flow::Continue;
+    }
 
     if app.btw_panel.is_some() {
         if let InputEvent::Key(key) = event
@@ -2943,6 +3087,7 @@ fn handle_secret_prompt(
     command_tx: &mpsc::UnboundedSender<CommandEvent>,
 ) -> Flow {
     match event {
+        InputEvent::KeyRelease(_) => {}
         InputEvent::Paste(text) => {
             if let Some(prompt) = &mut app.secret_prompt {
                 prompt.value.push_str(text.trim());
@@ -6636,6 +6781,58 @@ fn run_slash_command(
         }
         "scoped-models" => open_scoped_models_picker(app, session, resources),
         "settings" => open_settings_picker(app, session, resources),
+        "voice" => {
+            match VoiceMode::parse(&rest) {
+                Some(mode) => {
+                    if mode != VoiceMode::Off
+                        && let Err(error) = crate::voice::check_setup()
+                    {
+                        app.cells
+                            .push(Cell::Error(format!("voice unavailable: {error:#}")));
+                        return Flow::Continue;
+                    }
+                    if mode == VoiceMode::Off {
+                        app.recording = None;
+                        app.voice_generation = app.voice_generation.wrapping_add(1);
+                        app.voice_busy = false;
+                    }
+                    app.voice_mode = mode;
+                    let notice = match mode {
+                        VoiceMode::Hold => {
+                            "Voice mode enabled (hold). Hold space to record; release to transcribe. Requires a terminal with Kitty key-release support; use /voice tap otherwise."
+                        }
+                        VoiceMode::Tap => {
+                            "Voice mode enabled (tap). Press space to start, then space to stop recording."
+                        }
+                        VoiceMode::Off => "Voice mode disabled.",
+                    };
+                    app.cells.push(Cell::Notice(format!("{notice} Dictation language: {} (/config voice-language <code> to change).", resources.settings.voice_language.as_deref().unwrap_or("en"))));
+                }
+                None => app
+                    .cells
+                    .push(Cell::Error("usage: /voice [hold|tap|off]".into())),
+            }
+        }
+        "config" => {
+            if let Some(lang) = rest.strip_prefix("voice-language ") {
+                if lang == "auto"
+                    || (2..=3).contains(&lang.len()) && lang.bytes().all(|b| b.is_ascii_lowercase())
+                {
+                    resources.settings.voice_language = Some(lang.into());
+                    save_interactive_settings(app, session, resources);
+                    app.cells
+                        .push(Cell::Notice(format!("dictation language: {lang}")));
+                } else {
+                    app.cells.push(Cell::Error(
+                        "use a lowercase two- or three-letter language code (or auto)".into(),
+                    ));
+                }
+            } else {
+                app.cells.push(Cell::Notice(
+                    "usage: /config voice-language <code> (for example en, es, or auto)".into(),
+                ));
+            }
+        }
         "mcp" => open_mcp_picker(app, session, args, command_tx),
         "webmcp" => start_webmcp(app, session, &rest, command_tx),
         "provider" => run_provider_command(app, &rest),
@@ -7342,6 +7539,10 @@ mod tests {
         App {
             md: MarkdownRenderer::new(theme.clone()),
             editor: Editor::new(theme.clone()),
+            voice_mode: VoiceMode::Off,
+            recording: None,
+            voice_busy: false,
+            voice_generation: 0,
             theme,
             cells: Vec::new(),
             cell_render_cache: Vec::new(),
@@ -7703,6 +7904,69 @@ mod tests {
         let mut disabled = settings;
         disabled.auto_recap = Some(false);
         assert!(!should_start_idle_recap(&app, &disabled, now));
+    }
+
+    #[test]
+    fn voice_command_and_keyboard_transitions() {
+        assert_eq!(VoiceMode::parse(""), Some(VoiceMode::Hold));
+        assert_eq!(VoiceMode::parse("tap"), Some(VoiceMode::Tap));
+        assert_eq!(VoiceMode::parse("off"), Some(VoiceMode::Off));
+        assert_eq!(VoiceMode::parse("oops"), None);
+        let mut app = test_app();
+        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
+            "/synthetic",
+        )));
+        let mut resources = test_resources();
+        run_command_for_test(&mut app, &session, &mut resources, "voice nope");
+        assert!(matches!(app.cells.last(), Some(Cell::Error(_))));
+        run_command_for_test(&mut app, &session, &mut resources, "voice off");
+        assert_eq!(app.voice_mode, VoiceMode::Off);
+        assert_eq!(app.voice_generation, 1);
+        assert_eq!(
+            voice_space(&InputEvent::KeyRelease(KeyEvent::char(' '))),
+            Some(false)
+        );
+        assert_eq!(
+            voice_space(&InputEvent::Key(KeyEvent::char(' '))),
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn voice_result_edits_draft_without_sending() {
+        let mut app = test_app();
+        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
+            "/synthetic",
+        )));
+        let mut resources = test_resources();
+        let (tx, _) = mpsc::unbounded_channel();
+        let mut search = FileSearchService::new(tx);
+        app.editor.set_text("before ");
+        app.voice_busy = true;
+        handle_command_event(
+            &mut app,
+            CommandEvent::VoiceFinished {
+                generation: 0,
+                result: Ok("hello".into()),
+            },
+            &mut resources,
+            &mut search,
+            &session,
+        );
+        assert_eq!(app.editor.text(), "before hello");
+        assert!(!app.voice_busy);
+        app.voice_generation = 1;
+        handle_command_event(
+            &mut app,
+            CommandEvent::VoiceFinished {
+                generation: 0,
+                result: Ok("old".into()),
+            },
+            &mut resources,
+            &mut search,
+            &session,
+        );
+        assert_eq!(app.editor.text(), "before hello");
     }
 
     #[test]

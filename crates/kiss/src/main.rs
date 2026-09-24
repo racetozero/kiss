@@ -18,6 +18,7 @@ mod session_sources;
 mod setup;
 mod slash_commands;
 mod update;
+mod voice;
 mod workflow_ui;
 
 use args::{Args, Command};

@@ -634,6 +634,29 @@ Run the complete native and browser suite with `just bench`. It requires
 cargo-nextest, wasm-pack, Deno, and Node. Harness results are written to
 `target/harness-benchmark.json`.
 
+## Voice dictation
+
+Interactive `/voice` enables local voice dictation (hold Space to record and release
+it to transcribe). `/voice tap` starts/stops on successive Space presses, for
+terminals that do not report key releases; `/voice off` restores normal Space.
+Esc cancels a recording. Transcription is inserted at the editor cursor, **not
+sent** until you press Enter. Audio and transcription stay on your machine.
+
+Install `ffmpeg` and whisper.cpp's `whisper-cli` in `PATH`, download a whisper.cpp
+GGML model, and set `KISS_VOICE_MODEL` to its absolute path before starting kiss.
+For example, on macOS: `brew install ffmpeg whisper-cpp`; then set
+`export KISS_VOICE_MODEL=/absolute/path/to/ggml-base.en.bin`. Model downloads
+are intentionally manual. The default input is `:0` (macOS avfoundation),
+`default` (Linux PulseAudio), or `audio=default` (Windows DirectShow). If that
+is not your microphone, set `KISS_VOICE_INPUT` to the ffmpeg device name;
+find devices with `ffmpeg -f avfoundation -list_devices true -i ""` on macOS,
+`pactl list sources short` on Linux, or
+`ffmpeg -list_devices true -f dshow -i dummy` on Windows. Grant microphone
+permission to your terminal where required. `/config voice-language es`
+selects a different language (`en` by default; `auto` also works) and saves it
+to user settings. If Space never stops a hold recording, press Esc and choose
+`/voice tap` instead.
+
 ## Configuration
 
 KISS stores user configuration in `~/.kiss/agent`. It loads project

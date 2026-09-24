@@ -4,7 +4,7 @@
 use crossterm::terminal;
 use std::io::Write;
 
-const ENTER_SEQUENCE: &[u8] = b"\x1b[?2004h\x1b[>1u\x1b[1 q\x1b[?25l";
+const ENTER_SEQUENCE: &[u8] = b"\x1b[?2004h\x1b[>3u\x1b[1 q\x1b[?25l";
 const RESTORE_SEQUENCE: &[u8] =
     b"\x1b]9;4;0;0\x1b\\\x1b]0;\x07\x1b[?2004l\x1b[<1u\x1b[0 q\x1b[?25h\x1b[0m\r\n";
 const TITLE_PREFIX: &[u8] = b"\x1b]0;\xf0\x9f\x92\x8b ";
@@ -187,7 +187,7 @@ mod tests {
 
     #[test]
     fn terminal_control_sequences_are_symmetric() {
-        assert_eq!(ENTER_SEQUENCE, b"\x1b[?2004h\x1b[>1u\x1b[1 q\x1b[?25l");
+        assert_eq!(ENTER_SEQUENCE, b"\x1b[?2004h\x1b[>3u\x1b[1 q\x1b[?25l");
         let mut title = Vec::new();
         write_title(&mut title, 0, "").unwrap();
         assert_eq!(title, b"\x1b]0;\xf0\x9f\x92\x8b kiss\x07");

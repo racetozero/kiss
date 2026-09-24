@@ -236,6 +236,7 @@ pub struct Settings {
     pub enable_skill_commands: Option<bool>,
     /// `None` preserves the default-on behavior for existing settings files.
     pub auto_recap: Option<bool>,
+    pub voice_language: Option<String>,
     pub markdown: MarkdownSettings,
     pub webmcp: WebMcpSettings,
     /// Unknown keys survive load/save.

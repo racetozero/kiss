@@ -405,6 +405,7 @@ impl Editor {
                 None
             }
             InputEvent::Key(key) => self.handle_key(key),
+            InputEvent::KeyRelease(_) => None,
         }
     }
 

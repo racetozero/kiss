@@ -138,6 +138,7 @@ pub struct InputDecoder {
 #[derive(Debug, Clone, PartialEq)]
 pub enum InputEvent {
     Key(KeyEvent),
+    KeyRelease(KeyEvent),
     Paste(String),
 }
 
@@ -301,13 +302,12 @@ impl InputDecoder {
         // Modifier encoding: CSI 1;<mods> X or CSI <num>;<mods> ~
         let parts: Vec<&str> = params.split(';').collect();
         let modifier_parts = parts.get(1).map(|part| part.split(':').collect::<Vec<_>>());
-        if modifier_parts
+        let event_type = modifier_parts
             .as_ref()
             .and_then(|parts| parts.get(1))
-            .and_then(|event_type| event_type.parse::<u8>().ok())
-            == Some(3)
-        {
-            return Some((None, consumed));
+            .and_then(|event_type| event_type.parse::<u8>().ok());
+        if event_type == Some(2) {
+            return Some((None, consumed)); // keyboard auto-repeat
         }
         if let Some(m) = modifier_parts
             .as_ref()
@@ -369,7 +369,12 @@ impl InputDecoder {
             }
             _ => return Some((None, consumed)),
         };
-        Some((Some(InputEvent::Key(event)), consumed))
+        let input = if event_type == Some(3) {
+            InputEvent::KeyRelease(event)
+        } else {
+            InputEvent::Key(event)
+        };
+        Some((Some(input), consumed))
     }
 }
 
@@ -533,8 +538,12 @@ mod tests {
     }
 
     #[test]
-    fn kitty_protocol_ignores_key_release_events() {
-        assert!(decode(b"\x1b[13;1:3u").is_empty());
+    fn kitty_protocol_reports_release_and_ignores_repeat() {
+        assert_eq!(
+            decode(b"\x1b[32;1:3u"),
+            vec![InputEvent::KeyRelease(KeyEvent::char(' '))]
+        );
+        assert!(decode(b"\x1b[32;1:2u").is_empty());
         assert_eq!(
             decode(b"\x1b[9;2:1u"),
             vec![InputEvent::Key(KeyEvent::parse("shift+tab").unwrap())]
