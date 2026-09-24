@@ -148,6 +148,8 @@ run `/login typesafe` directly or set `TYPESAFE_API_KEY`. Both features
 send conversation context to Jev. The default settings remain summary
 compaction and fixed reasoning effort.
 
+<img width="432" height="62" alt="image" src="https://github.com/user-attachments/assets/3a3ce46e-3b70-49ce-ba7c-d02996a64630" />
+
 ## Continue work from another agent
 
 Run `/resume` to continue a KISS, Pi, Claude Code, or OpenAI Codex session.
