@@ -1044,9 +1044,11 @@ fn note_user_activity(app: &mut App) {
 }
 
 fn tool_title(name: &str, args: &serde_json::Value) -> String {
-    if name == "mcp" && args["action"] == "call"
+    if name == "mcp"
+        && args["action"] == "call"
         && let (Some(server), Some(tool)) = (args["server"].as_str(), args["name"].as_str())
-        && !server.is_empty() && !tool.is_empty()
+        && !server.is_empty()
+        && !tool.is_empty()
     {
         return format!("mcp {server}.{tool}");
     }
@@ -1211,6 +1213,7 @@ pub async fn run(args: &Args) -> Result<i32> {
         context_file_paths,
         enabled_models,
         mut initial_message,
+        needs_login,
     } = startup;
     let mut resources = InteractiveResources {
         settings: settings.clone(),
@@ -1348,6 +1351,11 @@ pub async fn run(args: &Args) -> Result<i32> {
         app.md.code_indent = indent.clone();
     }
     app.editor.placeholder = "Ask anything. / commands, $ skills, @ files, ! shell.".into();
+    if needs_login {
+        app.cells.push(Cell::Notice(
+            "No credentials yet. Type /login to sign in.".into(),
+        ));
+    }
     update_thinking_border(&mut app, session.thinking_level());
     refresh_git_branch(&mut app, &session);
 

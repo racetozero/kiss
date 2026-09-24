@@ -24,6 +24,7 @@ pub struct Startup {
     pub context_file_paths: Vec<PathBuf>,
     pub enabled_models: Vec<Model>,
     pub initial_message: Option<String>,
+    pub needs_login: bool,
 }
 
 pub struct ReloadedRuntime {
@@ -217,6 +218,22 @@ pub fn resolve_model(
     )
 }
 
+fn startup_model(
+    args: &Args,
+    registry: &Registry,
+    interactive: bool,
+    resolved: Result<(Model, Option<ThinkingLevel>)>,
+) -> Result<(Model, Option<ThinkingLevel>, bool)> {
+    if interactive && args.model.is_none() && resolved.is_err() {
+        return Ok((
+            provider_default(registry, "openai-codex").context("no fallback model available")?,
+            None,
+            true,
+        ));
+    }
+    resolved.map(|(model, thinking)| (model, thinking, false))
+}
+
 fn provider_default(registry: &Registry, provider: &str) -> Option<Model> {
     let preferred = match provider {
         "xai" => Some("grok-4.7"),
@@ -309,7 +326,12 @@ pub async fn build_startup(
         registry.refresh_databricks_unity_gateway().await;
     }
 
-    let (model, cli_thinking) = resolve_model(args, &settings, &registry)?;
+    let (model, cli_thinking, needs_login) = startup_model(
+        args,
+        &registry,
+        interactive,
+        resolve_model(args, &settings, &registry),
+    )?;
     let thinking = args
         .thinking
         .as_deref()
@@ -453,7 +475,6 @@ pub async fn build_startup(
         Some(parts.join("\n\n"))
     };
 
-    let _ = interactive;
     Ok(Startup {
         session,
         settings,
@@ -462,6 +483,7 @@ pub async fn build_startup(
         context_file_paths: context.into_iter().map(|c| c.path).collect(),
         enabled_models,
         initial_message,
+        needs_login,
     })
 }
 
@@ -496,6 +518,32 @@ mod tests {
             provider_default(&registry, "meta").unwrap().id,
             "muse-spark-1.3"
         );
+    }
+
+    #[test]
+    fn fresh_interactive_startup_allows_login_without_credentials() {
+        let registry = Registry::from_builtin();
+        let args = Args::parse_from(["kiss"]);
+        let (model, _, needs_login) = startup_model(
+            &args,
+            &registry,
+            true,
+            Err(anyhow::anyhow!("no credentials")),
+        )
+        .unwrap();
+        assert_eq!(model.provider, "openai-codex");
+        assert!(needs_login);
+        assert!(
+            startup_model(
+                &args,
+                &registry,
+                false,
+                Err(anyhow::anyhow!("no credentials"))
+            )
+            .is_err()
+        );
+        let args = Args::parse_from(["kiss", "--model", "bad-model"]);
+        assert!(startup_model(&args, &registry, true, Err(anyhow::anyhow!("bad model"))).is_err());
     }
 
     #[test]

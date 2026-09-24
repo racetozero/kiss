@@ -50,7 +50,10 @@ powershell -ExecutionPolicy ByPass -c "irm https://raw.githubusercontent.com/rac
 The installer selects the correct release, verifies its SHA-256 checksum, and
 installs `kiss` in your user binary directory. On Linux, if the glibc
 release needs a newer `GLIBC_*` version than the system provides, it
-automatically installs the matching musl release.
+automatically installs the matching musl release. The macOS/Linux installer
+adds `~/.local/bin` to your shell's startup file (bash, zsh, fish, or sh) so
+new terminals can run `kiss`. Open a new terminal after installing, or run
+`~/.local/bin/kiss` immediately.
 
 Update later with:
 

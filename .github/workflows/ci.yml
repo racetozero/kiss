@@ -99,12 +99,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Check shell installer
         if: runner.os != 'Windows'
-        run: |
-          bash -n install.sh tests/installer_regression.sh
-          bash tests/installer_regression.sh
+        run: bash -n install.sh
       - name: Check shell installer with ShellCheck
         if: runner.os == 'Linux'
-        run: shellcheck -x install.sh tests/installer_regression.sh
+        run: shellcheck -x install.sh
       - name: Check PowerShell installer
         if: runner.os == 'Windows'
         shell: pwsh

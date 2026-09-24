@@ -175,6 +175,59 @@ verify_archive() {
         fail "checksum verification failed for $archive_name"
 }
 
+# shellcheck disable=SC2016 # Variables expand when the shell reads its startup file.
+configure_path() {
+    # Only the default location can be written without embedding an arbitrary
+    # user-supplied path in shell code.
+    if [ -n "${KISS_INSTALL_DIR:-}" ]; then
+        case ":${PATH:-}:" in
+            *":$install_directory:"*) return ;;
+        esac
+        say "Add $install_directory to PATH to run kiss from any directory."
+        return
+    fi
+
+    case "${SHELL##*/}" in
+        bash)
+            add_path_line "${HOME}/.bashrc" 'case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) export PATH="$HOME/.local/bin:$PATH" ;; esac'
+            # Login bash reads the first of these files, not .bashrc.
+            if [ -f "${HOME}/.bash_profile" ]; then
+                login_rc="${HOME}/.bash_profile"
+            elif [ -f "${HOME}/.bash_login" ]; then
+                login_rc="${HOME}/.bash_login"
+            else
+                login_rc="${HOME}/.profile"
+            fi
+            add_path_line "$login_rc" 'case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) export PATH="$HOME/.local/bin:$PATH" ;; esac'
+            ;;
+        zsh)
+            add_path_line "${ZDOTDIR:-$HOME}/.zshrc" 'case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) export PATH="$HOME/.local/bin:$PATH" ;; esac'
+            ;;
+        fish)
+            add_path_line "${XDG_CONFIG_HOME:-$HOME/.config}/fish/config.fish" 'contains -- "$HOME/.local/bin" $PATH; or set -gx PATH "$HOME/.local/bin" $PATH'
+            ;;
+        sh | dash | ksh | ash)
+            add_path_line "${HOME}/.profile" 'case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) export PATH="$HOME/.local/bin:$PATH" ;; esac'
+            ;;
+        *)
+            say "Add $install_directory to your shell's PATH to run kiss from any directory."
+            return
+            ;;
+    esac
+    say "Open a new terminal to use kiss, or run $install_directory/kiss now."
+}
+
+add_path_line() {
+    rc="$1"
+    line="$2"
+    if [ -f "$rc" ] && grep -Fqx "$line" "$rc"; then
+        return
+    fi
+    mkdir -p "$(dirname "$rc")"
+    printf '\n%s\n' "$line" >> "$rc"
+    say "Added $install_directory to PATH in $rc"
+}
+
 install_binary() {
     command_exists tar || fail "tar is required to extract $archive_name"
     extract_directory="$temporary_directory/extract"
@@ -195,10 +248,7 @@ install_binary() {
     staged=''
 
     say "Installed kiss $version to $install_directory/kiss"
-    case ":${PATH:-}:" in
-        *":$install_directory:"*) ;;
-        *) say "Add $install_directory to PATH to run kiss from any directory." ;;
-    esac
+    configure_path
 }
 
 umask 077
