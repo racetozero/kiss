@@ -11,7 +11,7 @@ Add the workspace crate (or its published version) and Tokio:
 
 ```toml
 [dependencies]
-kiss-sdk = "0.0.20"
+kiss-agent-sdk = "0.0.21"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -88,11 +88,11 @@ converted directly into Python dict/list objects in Rust, without a per-token
 ## TypeScript: Node, Bun, and Deno
 
 ```sh
-npm install @kiss-sdk/node
+bun add kiss-agent-sdk
 ```
 
 ```ts
-import { Session } from "@kiss-sdk/node"
+import { Session } from "kiss-agent-sdk"
 
 const session = await Session.create({ tools: ["read", "bash"] })
 const events = session.events()
@@ -116,7 +116,7 @@ KISS offers two separate browser topologies.
 
 ### Local agent kernel
 
-`@kiss-sdk/core-wasm` runs the conversation, model/tool turn loop, schema
+`kiss-agent-sdk-wasm` runs the conversation, model/tool turn loop, schema
 validation, events, cancellation, limits, and checkpoints inside WebAssembly.
 It needs no native KISS process, WebSocket, or JSPI support. The host explicitly
 provides model and tool capabilities:
@@ -126,7 +126,7 @@ wasm-pack build crates/kiss-core-wasm --target web --release
 ```
 
 ```ts
-import init, { KissAgent, createOpenAICompatibleProvider } from "@kiss-sdk/core-wasm"
+import init, { KissAgent, createOpenAICompatibleProvider } from "kiss-agent-sdk-wasm"
 await init()
 
 const provider = createOpenAICompatibleProvider({

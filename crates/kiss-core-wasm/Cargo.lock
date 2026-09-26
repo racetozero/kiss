@@ -241,12 +241,12 @@ dependencies = [
 
 [[package]]
 name = "kiss-agent"
-version = "0.0.20"
+version = "0.0.21"
 dependencies = [
  "anyhow",
  "async-trait",
  "futures",
- "kiss-ai",
+ "kiss-agent-ai",
  "serde",
  "serde_json",
  "tokio",
@@ -254,8 +254,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "kiss-ai"
-version = "0.0.20"
+name = "kiss-agent-ai"
+version = "0.0.21"
 dependencies = [
  "chrono",
  "serde",
@@ -267,14 +267,14 @@ dependencies = [
 
 [[package]]
 name = "kiss-core-wasm"
-version = "0.0.20"
+version = "0.0.21"
 dependencies = [
  "anyhow",
  "async-trait",
  "futures",
  "js-sys",
  "kiss-agent",
- "kiss-ai",
+ "kiss-agent-ai",
  "serde",
  "serde-wasm-bindgen",
  "serde_json",

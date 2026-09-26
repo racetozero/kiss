@@ -2016,7 +2016,7 @@ dependencies = [
 
 [[package]]
 name = "kiss-agent"
-version = "0.0.20"
+version = "0.0.21"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2024,7 +2024,7 @@ dependencies = [
  "dirs",
  "futures",
  "jsonschema",
- "kiss-ai",
+ "kiss-agent-ai",
  "libc",
  "serde",
  "serde_json",
@@ -2035,8 +2035,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "kiss-ai"
-version = "0.0.20"
+name = "kiss-agent-ai"
+version = "0.0.21"
 dependencies = [
  "anyhow",
  "aws-config",
@@ -2068,8 +2068,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "kiss-agent-sdk"
+version = "0.0.21"
+dependencies = [
+ "anyhow",
+ "dirs",
+ "futures",
+ "kiss-agent",
+ "kiss-agent-ai",
+ "kiss-coding",
+ "kiss-mcp",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "tokio",
+ "tokio-tungstenite",
+ "tokio-util",
+ "uuid",
+]
+
+[[package]]
 name = "kiss-coding"
-version = "0.0.20"
+version = "0.0.21"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2083,7 +2103,7 @@ dependencies = [
  "ignore",
  "jsonschema",
  "kiss-agent",
- "kiss-ai",
+ "kiss-agent-ai",
  "kiss-workflow",
  "rand 0.9.5",
  "regex",
@@ -2100,7 +2120,7 @@ dependencies = [
 
 [[package]]
 name = "kiss-mcp"
-version = "0.0.20"
+version = "0.0.21"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2108,7 +2128,7 @@ dependencies = [
  "fs2",
  "http 1.5.0",
  "kiss-agent",
- "kiss-ai",
+ "kiss-agent-ai",
  "reqwest 0.13.4",
  "rmcp",
  "rustls 0.23.43",
@@ -2122,9 +2142,9 @@ dependencies = [
 
 [[package]]
 name = "kiss-node"
-version = "0.0.20"
+version = "0.0.21"
 dependencies = [
- "kiss-sdk",
+ "kiss-agent-sdk",
  "napi",
  "napi-build",
  "napi-derive",
@@ -2133,28 +2153,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "kiss-sdk"
-version = "0.0.20"
-dependencies = [
- "anyhow",
- "dirs",
- "futures",
- "kiss-agent",
- "kiss-ai",
- "kiss-coding",
- "kiss-mcp",
- "serde",
- "serde_json",
- "thiserror 2.0.20",
- "tokio",
- "tokio-tungstenite",
- "tokio-util",
- "uuid",
-]
-
-[[package]]
 name = "kiss-workflow"
-version = "0.0.20"
+version = "0.0.21"
 dependencies = [
  "anyhow",
  "async-trait",

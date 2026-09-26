@@ -1,4 +1,4 @@
-# @kiss-sdk/core-wasm
+# kiss-agent-sdk-wasm
 
 The complete KISS agent loop for browser WebAssembly. Conversation state,
 model/tool turn sequencing, tool argument validation, normalized events,
@@ -14,7 +14,7 @@ import init, {
   KissAgent,
   createOpenAICompatibleProvider,
   type ModelProvider,
-} from "@kiss-sdk/core-wasm"
+} from "kiss-agent-sdk-wasm"
 
 await init()
 

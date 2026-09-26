@@ -1,6 +1,6 @@
 {
-  "name": "@kiss-sdk/node",
-  "version": "0.0.20",
+  "name": "kiss-agent-sdk",
+  "version": "0.0.21",
   "description": "N-API TypeScript SDK for the kiss coding agent (Node.js, Bun, and Deno)",
   "license": "MIT",
   "repository": "github:racetozero/kiss",

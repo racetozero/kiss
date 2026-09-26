@@ -3,7 +3,7 @@
   "configVersion": 0,
   "workspaces": {
     "": {
-      "name": "@kiss-sdk/node",
+      "name": "kiss-agent-sdk",
       "devDependencies": {
         "@types/node": "^24.0.0",
         "typescript": "^5.9.0",

@@ -1,10 +1,10 @@
-# @kiss-sdk/node
+# kiss-agent-sdk
 
 A native N-API TypeScript SDK for the KISS coding agent. It runs on Node.js,
 Bun, and Deno's Node-compatibility layer.
 
 ```ts
-import { Session } from "@kiss-sdk/node"
+import { Session } from "kiss-agent-sdk"
 
 const session = await Session.create({ tools: ["read", "bash"] })
 const events = session.events()

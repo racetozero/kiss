@@ -84,8 +84,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "kiss-sdk"
-version = "0.0.20"
+name = "kiss-agent-sdk"
+version = "0.0.21"
 dependencies = [
  "anyhow",
  "serde",
@@ -95,10 +95,10 @@ dependencies = [
 
 [[package]]
 name = "kiss-wasm"
-version = "0.0.20"
+version = "0.0.21"
 dependencies = [
  "js-sys",
- "kiss-sdk",
+ "kiss-agent-sdk",
  "serde",
  "serde-wasm-bindgen",
  "wasm-bindgen",

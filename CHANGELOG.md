@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.0.21 - 2026-09-26
+
+### Fixed
+
+- Publish the Rust and Bun SDKs as `kiss-agent-sdk` to match PyPI. Rename the
+  internal AI crate to `kiss-agent-ai` to avoid a crates.io name owned by
+  another publisher. Rename the browser package to `kiss-agent-sdk-wasm` and
+  check npm credentials before attempting to publish.
+
 ## 0.0.20 - 2026-09-26
 
 ### Added

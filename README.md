@@ -512,7 +512,7 @@ const stats = await session.sessionStats()
 console.log(stats.tokens.cacheRead, stats.tokens.cacheWrite, stats.tokens.cacheWrite1h)
 ```
 
-`@kiss-sdk/core-wasm` runs the full agent and model/tool loop in a browser. It
+`kiss-agent-sdk-wasm` runs the full agent and model/tool loop in a browser. It
 does not need a KISS server. `@kiss-sdk/wasm` is the remote client for
 applications that need native filesystem and shell tools.
 

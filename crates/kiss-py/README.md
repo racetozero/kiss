@@ -1,4 +1,4 @@
-# kiss-sdk for Python
+# kiss-agent-sdk for Python
 
 Python 3.11+ bindings for the KISS coding agent. Releases include separate
 wheels for CPython 3.11 through 3.15, plus free-threaded 3.14t and 3.15t.

@@ -66,7 +66,7 @@ jobs:
           deno-version: v2.x
       - name: Check portable agent crates
         run: |
-          cargo clippy -p kiss-ai --no-default-features --features portable --target wasm32-unknown-unknown -- -D warnings
+          cargo clippy -p kiss-agent-ai --no-default-features --features portable --target wasm32-unknown-unknown -- -D warnings
           cargo clippy -p kiss-agent --no-default-features --features portable --target wasm32-unknown-unknown -- -D warnings
       - name: Format standalone browser crate
         run: cargo fmt --manifest-path crates/kiss-core-wasm/Cargo.toml -- --check

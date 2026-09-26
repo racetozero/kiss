@@ -318,10 +318,28 @@ jobs:
 
           gh release create "${{ needs.plan.outputs.tag }}" --target "$RELEASE_COMMIT" $PRERELEASE_FLAG --title "$ANNOUNCEMENT_TITLE" --notes-file "$RUNNER_TEMP/notes.txt" artifacts/*
 
+  # Fail before building SDK wheels or publishing to any registry if the npm
+  # token cannot authenticate. Write access and 2FA bypass are still required.
+  validate-npm-token:
+    needs: plan
+    if: ${{ needs.plan.outputs.publishing == 'true' && startsWith(github.ref, 'refs/tags/v') }}
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Authenticate with npm
+        env:
+          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$NPM_CONFIG_TOKEN"
+          if ! curl -fsS -H "Authorization: Bearer $NPM_CONFIG_TOKEN" https://registry.npmjs.org/-/whoami | jq -e '.username' > /dev/null; then
+            echo '::error::NPM_TOKEN is invalid; create a publish-capable token with 2FA bypass for the unscoped kiss-agent-sdk package.'
+            exit 1
+          fi
+
   # The npm wrapper loads a native addon, so a single runner's binary cannot
   # serve users on the other supported platforms.
   build-node-sdk:
-    needs: plan
+    needs: [plan, validate-npm-token]
     if: ${{ needs.plan.outputs.publishing == 'true' && startsWith(github.ref, 'refs/tags/v') }}
     strategy:
       fail-fast: false
@@ -356,7 +374,7 @@ jobs:
           if-no-files-found: error
 
   build-python-sdk:
-    needs: plan
+    needs: [plan, validate-npm-token]
     if: ${{ needs.plan.outputs.publishing == 'true' && startsWith(github.ref, 'refs/tags/v') }}
     strategy:
       fail-fast: false
@@ -409,7 +427,7 @@ jobs:
           if-no-files-found: error
 
   publish-crates:
-    needs: [plan, host]
+    needs: [plan, host, validate-npm-token]
     if: ${{ needs.host.result == 'success' && startsWith(github.ref, 'refs/tags/v') }}
     runs-on: ubuntu-22.04
     steps:
@@ -425,8 +443,8 @@ jobs:
         run: |
           set -euo pipefail
           version="${VERSION#v}"
-          test "$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name | IN("kiss-bench", "kiss-ai", "kiss-agent", "kiss-workflow", "kiss-coding", "kiss-mcp", "kiss-sdk")) | .version' | sort -u)" = "$version"
-          for crate in kiss-bench kiss-ai kiss-agent kiss-workflow kiss-coding kiss-mcp kiss-sdk; do
+          test "$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name | IN("kiss-bench", "kiss-agent-ai", "kiss-agent", "kiss-workflow", "kiss-coding", "kiss-mcp", "kiss-agent-sdk")) | .version' | sort -u)" = "$version"
+          for crate in kiss-bench kiss-agent-ai kiss-agent kiss-workflow kiss-coding kiss-mcp kiss-agent-sdk; do
             # Reruns after a partial release must not try to republish versions.
             if curl -fsS "https://crates.io/api/v1/crates/$crate/$version" > /dev/null; then
               echo "$crate $version already published"
@@ -436,7 +454,7 @@ jobs:
           done
 
   publish-npm:
-    needs: [plan, host, build-node-sdk]
+    needs: [plan, host, build-node-sdk, validate-npm-token]
     if: ${{ needs.host.result == 'success' && needs.build-node-sdk.result == 'success' }}
     runs-on: ubuntu-22.04
     steps:
@@ -464,11 +482,10 @@ jobs:
           done
           bun install --frozen-lockfile
           bun run build:ts
-          test -n "$NPM_CONFIG_TOKEN"
           bun publish --access public --tolerate-republish
 
   publish-pypi:
-    needs: [plan, host, build-python-sdk]
+    needs: [plan, host, build-python-sdk, validate-npm-token]
     if: ${{ needs.host.result == 'success' && needs.build-python-sdk.result == 'success' }}
     runs-on: ubuntu-22.04
     permissions:

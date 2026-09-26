@@ -1,10 +1,13 @@
 [package]
-name = "kiss-ai"
+name = "kiss-agent-ai"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Unified multi-provider LLM streaming API for the kiss coding harness"
+
+[lib]
+name = "kiss_ai"
 
 [lints]
 workspace = true
