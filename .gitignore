@@ -273,12 +273,11 @@ $RECYCLE.BIN/
 
 # End of https://www.toptal.com/developers/gitignore/api/jetbrains+all,visualstudiocode,rust,rust-analyzer,macos,linux,windows,emacs,vim
 
-# Local agent instructions, plans, and design notes
-/AGENTS.md
-/CLAUDE.md
+# Local agent instructions, plans, and design notes (at any depth)
+AGENTS.md
+CLAUDE.md
 /subagents.md
-/.agent/
-/.agent/plans/
+.agent/
 /PI_UPSTREAM.md
 /performance.md
 /PERFORMANCE.md

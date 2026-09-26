@@ -17,6 +17,12 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Keep local agent files out of Git
+        run: |
+          if git ls-files | grep -E '(^|/)\.agent/|(^|/)(AGENTS|CLAUDE)\.md$'; then
+            echo 'Local agent files must not be tracked' >&2
+            exit 1
+          fi
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
