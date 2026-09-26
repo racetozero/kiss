@@ -11,7 +11,7 @@ Add the workspace crate (or its published version) and Tokio:
 
 ```toml
 [dependencies]
-kiss-sdk = "0.0.3"
+kiss-sdk = "0.0.19"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -50,7 +50,7 @@ history without creating a file through `SessionBuilder::restore_entries` or
 Build/install with `maturin` (published wheels use PyO3 `abi3-py311`):
 
 ```sh
-pip install kiss-sdk
+pip install kiss-agent-sdk
 ```
 
 ```python

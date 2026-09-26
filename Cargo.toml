@@ -20,7 +20,7 @@ members = [
 exclude = ["crates/kiss-py", "crates/kiss-node", "crates/kiss-wasm", "crates/kiss-core-wasm"]
 
 [workspace.package]
-version = "0.0.18"
+version = "0.0.19"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/racetozero/kiss"
@@ -64,14 +64,14 @@ grep-searcher = "0.1"
 http = "1"
 ignore = "0.4"
 jsonschema = { version = "0.33", default-features = false }
-kiss-agent = { path = "crates/kiss-agent" }
-kiss-ai = { path = "crates/kiss-ai", default-features = false }
-kiss-bench = { path = "crates/kiss-bench" }
-kiss-coding = { path = "crates/kiss-coding" }
-kiss-mcp = { path = "crates/kiss-mcp" }
-kiss-sdk = { path = "crates/kiss-sdk" }
+kiss-agent = { path = "crates/kiss-agent", version = "0.0.19" }
+kiss-ai = { path = "crates/kiss-ai", version = "0.0.19", default-features = false }
+kiss-bench = { path = "crates/kiss-bench", version = "0.0.19" }
+kiss-coding = { path = "crates/kiss-coding", version = "0.0.19" }
+kiss-mcp = { path = "crates/kiss-mcp", version = "0.0.19" }
+kiss-sdk = { path = "crates/kiss-sdk", version = "0.0.19" }
 kiss-tui = { path = "crates/kiss-tui" }
-kiss-workflow = { path = "crates/kiss-workflow" }
+kiss-workflow = { path = "crates/kiss-workflow", version = "0.0.19" }
 kiss-webmcp = { path = "crates/kiss-webmcp" }
 libc = "0.2"
 mdwright-latex = "0.1.3"

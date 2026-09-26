@@ -3,7 +3,7 @@ import path from "node:path"
 // The addon is deliberately loaded once. Node, Bun, and Deno's Node-compat
 // layer all implement N-API and `require` native addons.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const binding = require(path.join(__dirname, "..", "kiss.node")) as NativeBinding
+const binding = require(path.join(__dirname, "..", "native", `${process.platform}-${process.arch}`, "kiss.node")) as NativeBinding
 
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max"
 export type StreamingBehavior = "steer" | "followUp"

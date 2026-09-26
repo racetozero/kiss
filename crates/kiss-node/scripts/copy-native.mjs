@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync } from "node:fs"
+import { copyFileSync, existsSync, mkdirSync } from "node:fs"
 import { join } from "node:path"
 
 const names =
@@ -10,7 +10,9 @@ const names =
 for (const name of names) {
   const source = join("target", "release", name)
   if (existsSync(source)) {
-    copyFileSync(source, "kiss.node")
+    const destination = join("native", process.env.KISS_NODE_PLATFORM ?? `${process.platform}-${process.arch}`)
+    mkdirSync(destination, { recursive: true })
+    copyFileSync(source, join(destination, "kiss.node"))
     process.exit(0)
   }
 }

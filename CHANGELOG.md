@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.0.19 - 2026-09-26
+
+### Added
+
+- Published the Rust SDK to crates.io, the native Node SDK to npm using Bun,
+  and Python SDK wheels to PyPI using trusted publishing on release tags.
+- Added local voice dictation and streaming Deepgram dictation with ElevenLabs
+  playback in the interactive editor.
+- Improved fresh-install and first-launch experience.
+
+### Fixed
+
+- Identified MCP servers and tools in TUI call titles.
+
 ## 0.0.18 - 2026-09-23
 
 ### Added
