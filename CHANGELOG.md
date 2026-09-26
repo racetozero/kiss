@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.0.20 - 2026-09-26
+
+### Added
+
+- Prebuilt Python wheels for CPython 3.11–3.15, including free-threaded
+  3.14t and 3.15t, on the existing Linux, macOS, and Windows targets.
+
+### Fixed
+
+- Pass the npm publishing token to Bun through `NPM_CONFIG_TOKEN`.
+- Publish packages before announcing a release and avoid a macOS linker
+  incompatibility with newer SDKs.
+
 ## 0.0.19 - 2026-09-26
 
 ### Added

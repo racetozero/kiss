@@ -78,14 +78,7 @@ run_checks() {
   cargo clippy --workspace --all-targets --all-features -- -D warnings
   cargo nextest run --workspace --all-targets
 
-  if [[ "$target" == *-apple-darwin ]]; then
-    local icf_flags
-    icf_flags="-C linker=rust-lld -C linker-flavor=ld64.lld -C link-arg=--icf=safe"
-    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }$icf_flags" \
-      dist build --allow-dirty --tag="$tag" --target="$target"
-  else
-    dist build --allow-dirty --tag="$tag" --target="$target"
-  fi
+  dist build --allow-dirty --tag="$tag" --target="$target"
 
   verify_archive
 }

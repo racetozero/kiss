@@ -1,7 +1,8 @@
 # kiss-sdk for Python
 
-Python 3.11+ bindings for the KISS coding agent. The native module uses PyO3's
-stable `abi3-py311` ABI, so one wheel works on Python 3.11 and newer.
+Python 3.11+ bindings for the KISS coding agent. Releases include separate
+wheels for CPython 3.11 through 3.15, plus free-threaded 3.14t and 3.15t.
+PyO3 0.29 does not support the experimental 3.13t build.
 
 ```python
 import asyncio

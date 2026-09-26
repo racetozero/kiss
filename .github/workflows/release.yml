@@ -4,8 +4,8 @@
 # SPDX-License-Identifier: MIT or Apache-2.0
 #
 # KISS overrides: build-local-artifacts trains target-specific PGO profiles
-# where Rust provides a profiling runtime, sets macOS-only RUSTFLAGS for safe
-# ICF, and keeps the default token permission read-only. `dist generate`
+# where Rust provides a profiling runtime and keeps the default token permission
+# read-only. `dist generate`
 # removes these overrides. Reapply them after a dist upgrade.
 #
 # CI that:
@@ -117,9 +117,6 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       BUILD_MANIFEST_NAME: target/distrib/${{ join(matrix.targets, '-') }}-dist-manifest.json
-      # Match uv's measured macOS release configuration. Linux did not show a
-      # useful ICF size reduction in uv's measurements, so it stays unchanged.
-      RUSTFLAGS: ${{ (contains(matrix.targets, 'aarch64-apple-darwin') || contains(matrix.targets, 'x86_64-apple-darwin')) && '-C linker=rust-lld -C linker-flavor=ld64.lld -C link-arg=--icf=safe' || '' }}
     steps:
       - name: enable windows longpaths
         run: |
@@ -277,15 +274,10 @@ jobs:
           name: artifacts-dist-manifest
           path: dist-manifest.json
 
-  # Create a GitHub Release while uploading all files to it
+  # Announce only after every registry has accepted its package.
   announce:
-    needs:
-      - plan
-      - host
-    # use "always() && ..." to allow us to wait for all publish jobs while
-    # still allowing individual publish jobs to skip themselves (for prereleases).
-    # "host" however must run to completion, no skipping allowed!
-    if: ${{ always() && needs.host.result == 'success' }}
+    needs: [plan, host, publish-crates, publish-npm, publish-pypi]
+    if: ${{ needs.host.result == 'success' && needs.publish-crates.result == 'success' && needs.publish-npm.result == 'success' && needs.publish-pypi.result == 'success' }}
     runs-on: 'ubuntu-22.04'
     permissions:
       'attestations': 'write'
@@ -369,12 +361,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - { runner: ubuntu-22.04, target: x86_64 }
-          - { runner: ubuntu-22.04-arm, target: aarch64 }
-          - { runner: macos-15-intel, target: x86_64 }
-          - { runner: macos-15, target: aarch64 }
-          - { runner: windows-2022, target: x64 }
+        runner: [ubuntu-22.04, ubuntu-22.04-arm, macos-15-intel, macos-15, windows-2022]
+        # Build a distinct wheel for every supported interpreter. PyO3 0.29
+        # does not support the experimental free-threaded CPython 3.13t.
+        python: ['3.11', '3.12', '3.13', '3.14', '3.15', '3.14t', '3.15t']
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -382,7 +372,8 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
-          python-version: '3.11'
+          python-version: ${{ matrix.python }}
+          allow-prereleases: true # 3.15 is still a release candidate
       - uses: dtolnay/rust-toolchain@stable
       - name: Check Python package version
         shell: bash
@@ -394,17 +385,32 @@ jobs:
         with:
           working-directory: crates/kiss-py
           command: build
-          args: --release --out dist
+          maturin-version: v1.15.0
+          args: --release --out dist -i python${{ matrix.python }}
           manylinux: auto
+      - name: Check wheel ABI and free-threading
+        working-directory: crates/kiss-py
+        shell: bash
+        env:
+          PYTHON_VERSION: ${{ matrix.python }}
+        run: |
+          set -euo pipefail
+          abi="cp${PYTHON_VERSION/./}"
+          compgen -G "dist/*-${abi%%t}-${abi}-*" > /dev/null
+          python -m pip install --no-deps dist/*.whl
+          python -c 'import kiss_sdk._kiss'
+          if [[ "$PYTHON_VERSION" == *t ]]; then
+            python -c 'import sys, kiss_sdk._kiss; assert not sys._is_gil_enabled()'
+          fi
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: python-sdk-${{ matrix.target }}-${{ matrix.runner }}
+          name: python-sdk-${{ matrix.python }}-${{ matrix.runner }}
           path: crates/kiss-py/dist/*.whl
           if-no-files-found: error
 
   publish-crates:
-    needs: [plan, announce]
-    if: ${{ needs.announce.result == 'success' && startsWith(github.ref, 'refs/tags/v') }}
+    needs: [plan, host]
+    if: ${{ needs.host.result == 'success' && startsWith(github.ref, 'refs/tags/v') }}
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -430,8 +436,8 @@ jobs:
           done
 
   publish-npm:
-    needs: [plan, announce, build-node-sdk]
-    if: ${{ needs.announce.result == 'success' && needs.build-node-sdk.result == 'success' }}
+    needs: [plan, host, build-node-sdk]
+    if: ${{ needs.host.result == 'success' && needs.build-node-sdk.result == 'success' }}
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -446,7 +452,7 @@ jobs:
       - name: Build and publish npm package
         working-directory: crates/kiss-node
         env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
           VERSION: ${{ github.ref_name }}
         shell: bash
         run: |
@@ -458,13 +464,12 @@ jobs:
           done
           bun install --frozen-lockfile
           bun run build:ts
-          printf '//registry.npmjs.org/:_authToken=%s\n' "$NPM_TOKEN" > .npmrc
-          trap 'rm -f .npmrc' EXIT
+          test -n "$NPM_CONFIG_TOKEN"
           bun publish --access public --tolerate-republish
 
   publish-pypi:
-    needs: [plan, announce, build-python-sdk]
-    if: ${{ needs.announce.result == 'success' && needs.build-python-sdk.result == 'success' }}
+    needs: [plan, host, build-python-sdk]
+    if: ${{ needs.host.result == 'success' && needs.build-python-sdk.result == 'success' }}
     runs-on: ubuntu-22.04
     permissions:
       id-token: write
