@@ -359,7 +359,7 @@ fn convert_messages(context: &Context) -> Result<Vec<Message>> {
                         ContentBlock::ToolCall(call) => {
                             content.push(BedrockContent::ToolUse(
                                 ToolUseBlock::builder()
-                                    .tool_use_id(&call.id)
+                                    .tool_use_id(super::anthropic_tool_id(&call.id))
                                     .name(&call.name)
                                     .input(value_to_document(&call.arguments))
                                     .build()?,
@@ -385,7 +385,7 @@ fn convert_messages(context: &Context) -> Result<Vec<Message>> {
                     .collect::<Vec<_>>()
                     .join("\n");
                 let tool_result = ToolResultBlock::builder()
-                    .tool_use_id(&result.tool_call_id)
+                    .tool_use_id(super::anthropic_tool_id(&result.tool_call_id))
                     .content(ToolResultContentBlock::Text(if text.is_empty() {
                         "<empty>".into()
                     } else {

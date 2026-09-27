@@ -505,7 +505,7 @@ fn build_request(model: &Model, context: &Context, options: &StreamOptions) -> V
                         ContentBlock::ToolCall(tc) => {
                             content.push(json!({
                                 "type": "tool_use",
-                                "id": tc.id,
+                                "id": super::anthropic_tool_id(&tc.id),
                                 "name": tc.name,
                                 "input": tc.arguments,
                             }));
@@ -533,7 +533,7 @@ fn build_request(model: &Model, context: &Context, options: &StreamOptions) -> V
                 let inner: Vec<Value> = result.content.iter().filter_map(user_block).collect();
                 let tool_result = json!({
                     "type": "tool_result",
-                    "tool_use_id": result.tool_call_id,
+                    "tool_use_id": super::anthropic_tool_id(&result.tool_call_id),
                     "content": inner,
                     "is_error": result.is_error,
                 });
@@ -658,6 +658,44 @@ mod tests {
         assert_eq!(builder.message.usage.cache_write_1h, 2);
         assert_eq!(builder.message.usage.output, 7);
         assert!(builder.message.usage.cache_read_available);
+    }
+
+    #[test]
+    fn foreign_tool_ids_are_sanitized() {
+        let id = "call_abc|fc_123";
+        let mut previous = AssistantMessage::empty("openai-codex-responses", "openai-codex", "gpt");
+        previous
+            .content
+            .push(ContentBlock::ToolCall(crate::types::ToolCall {
+                id: id.into(),
+                name: "bash".into(),
+                arguments: json!({}),
+                thought_signature: None,
+            }));
+        let body = build_request(
+            &model(OpenAICompat::default()),
+            &Context {
+                messages: vec![
+                    Message::Assistant(previous),
+                    Message::ToolResult(crate::types::ToolResultMessage {
+                        tool_call_id: id.into(),
+                        tool_name: "bash".into(),
+                        content: vec![ContentBlock::text("ok")],
+                        details: None,
+                        usage: None,
+                        is_error: false,
+                        timestamp: 0,
+                    }),
+                ],
+                ..Default::default()
+            },
+            &StreamOptions::default(),
+        );
+        assert_eq!(body["messages"][0]["content"][0]["id"], "call_abc_fc_123");
+        assert_eq!(
+            body["messages"][1]["content"][0]["tool_use_id"],
+            "call_abc_fc_123"
+        );
     }
 
     #[test]

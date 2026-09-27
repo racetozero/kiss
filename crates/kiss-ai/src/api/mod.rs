@@ -19,6 +19,22 @@ use crate::model::Model;
 use crate::types::{AssistantMessage, ContentBlock, Cost, StopReason, ToolCall, Usage};
 use crate::types::{Context, Message};
 
+/// Maps a tool call id onto Anthropic/Bedrock's `^[a-zA-Z0-9_-]+$` (max 64)
+/// pattern. Ids from other providers (e.g. OpenAI Responses `call_x|fc_y`)
+/// otherwise get rejected after a mid-session model switch.
+pub(crate) fn anthropic_tool_id(id: &str) -> String {
+    id.chars()
+        .take(64)
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
 /// Accumulates a streaming assistant message and emits unified events with
 /// partial snapshots, mirroring pi's event protocol.
 pub struct PartialBuilder {
