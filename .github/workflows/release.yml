@@ -480,9 +480,16 @@ jobs:
           for platform in linux-x64 linux-arm64 darwin-x64 darwin-arm64 win32-x64 win32-arm64; do
             test -s "native/$platform/kiss.node"
           done
+          test -n "$NPM_CONFIG_TOKEN"
           bun install --frozen-lockfile
           bun run build:ts
-          bun publish --access public --tolerate-republish
+          # Bun reads this per-registry credential without putting the token on
+          # the command line or in the package tarball. Never log the file.
+          printf '//registry.npmjs.org/:_authToken=${NPM_CONFIG_TOKEN}\n' > .npmrc
+          trap 'rm -f .npmrc' EXIT
+          # A token without publish permission or 2FA bypass must fail in CI,
+          # not wait five minutes for an interactive browser login.
+          bun publish --access public --auth-type legacy --tolerate-republish
 
   publish-pypi:
     needs: [plan, host, build-python-sdk, validate-npm-token]
