@@ -1,14 +1,5 @@
 # Changelog
 
-## 0.0.21 - 2026-09-26
-
-### Fixed
-
-- Publish the Rust and Bun SDKs as `kiss-agent-sdk` to match PyPI. Rename the
-  internal AI crate to `kiss-agent-ai` to avoid a crates.io name owned by
-  another publisher. Rename the browser package to `kiss-agent-sdk-wasm` and
-  check npm credentials before attempting to publish.
-
 ## 0.0.20 - 2026-09-26
 
 ### Added
@@ -18,9 +9,15 @@
 
 ### Fixed
 
-- Pass the npm publishing token to Bun through `NPM_CONFIG_TOKEN`.
-- Publish packages before announcing a release and avoid a macOS linker
-  incompatibility with newer SDKs.
+- Publish the Rust and Node SDKs as `kiss-agent-sdk` to match PyPI. Rename the
+  internal AI crate to `kiss-agent-ai` to avoid a crates.io name owned by
+  another publisher, and the browser package to `kiss-agent-sdk-wasm`.
+- Build npm packages with Bun and publish them with npm trusted publishing;
+  announce the GitHub Release only after all registries accept the packages.
+- Avoid a macOS linker incompatibility with newer SDKs.
+
+Retagging does not replace the previously uploaded PyPI 0.0.20 wheels or
+remove the already published PyPI and crates.io 0.0.21 packages.
 
 ## 0.0.19 - 2026-09-26
 
