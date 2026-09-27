@@ -487,9 +487,9 @@ jobs:
           # the command line or in the package tarball. Never log the file.
           printf '//registry.npmjs.org/:_authToken=${NPM_CONFIG_TOKEN}\n' > .npmrc
           trap 'rm -f .npmrc' EXIT
-          # A token without publish permission or 2FA bypass must fail in CI,
-          # not wait five minutes for an interactive browser login.
-          bun publish --access public --auth-type legacy --tolerate-republish
+          # whoami proves identity, not publish rights or 2FA bypass. Bun can
+          # still offer browser login after a 401 OTP challenge, even in CI.
+          timeout 180s bun publish --access public --auth-type legacy --tolerate-republish </dev/null
 
   publish-pypi:
     needs: [plan, host, build-python-sdk, validate-npm-token]
