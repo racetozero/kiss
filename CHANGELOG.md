@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.22 - 2026-09-28
+
+### Fixed
+
+- Wrap long Markdown table cells across lines instead of truncating them with an ellipsis.
+
 ## 0.0.20 - 2026-09-26
 
 ### Added
