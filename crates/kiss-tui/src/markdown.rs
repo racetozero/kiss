@@ -660,33 +660,76 @@ impl MarkdownRenderer {
         if rows.is_empty() {
             return Vec::new();
         }
-        let cols = rows.iter().map(|r| r.len()).max().unwrap_or(0);
-        let mut widths = vec![0usize; cols];
+        let cols = rows.iter().map(Vec::len).max().unwrap_or(0);
+        if cols == 0 {
+            return Vec::new();
+        }
+        if width < cols {
+            return rows
+                .iter()
+                .flat_map(|row| row.iter().flat_map(|cell| wrap_text(cell, width.max(1))))
+                .collect();
+        }
+        let gap = if width >= cols.saturating_add(2 * cols.saturating_sub(1)) {
+            2
+        } else if width >= cols.saturating_add(cols.saturating_sub(1)) {
+            1
+        } else {
+            0
+        };
+        let budget = width - gap * (cols - 1);
+        let mut desired = vec![1usize; cols];
         for row in rows {
             for (i, cell) in row.iter().enumerate() {
-                widths[i] = widths[i]
-                    .max(crate::text::display_width(cell))
-                    .min(width / cols.max(1));
+                desired[i] = desired[i].max(crate::text::display_width(cell));
+            }
+        }
+        let mut widths = vec![1usize; cols];
+        let mut remaining = budget - cols;
+        while remaining > 0 {
+            let pending = (0..cols)
+                .filter(|&i| widths[i] < desired[i])
+                .collect::<Vec<_>>();
+            if pending.is_empty() {
+                break;
+            }
+            for i in pending {
+                if remaining == 0 {
+                    break;
+                }
+                widths[i] += 1;
+                remaining -= 1;
             }
         }
         let mut out = Vec::new();
         for (ri, row) in rows.iter().enumerate() {
-            let mut line = String::new();
-            for (i, w) in widths.iter().enumerate() {
-                let cell = row.get(i).map(String::as_str).unwrap_or("");
-                line.push_str(&crate::text::fit_to_width(cell, *w));
-                if i + 1 < cols {
-                    line.push_str("  ");
+            let cells = widths
+                .iter()
+                .enumerate()
+                .map(|(i, &w)| wrap_text(row.get(i).map(String::as_str).unwrap_or(""), w))
+                .collect::<Vec<_>>();
+            let height = cells.iter().map(Vec::len).max().unwrap_or(1);
+            for line_index in 0..height {
+                let mut line = String::new();
+                for (i, (cell, &w)) in cells.iter().zip(&widths).enumerate() {
+                    let fragment = cell.get(line_index).map(String::as_str).unwrap_or("");
+                    line.push_str(fragment);
+                    if i + 1 < cols {
+                        line.push_str(
+                            &" ".repeat(
+                                w.saturating_sub(crate::text::display_width(fragment)) + gap,
+                            ),
+                        );
+                    }
                 }
+                out.push(if ri == 0 {
+                    self.theme.bold(&line)
+                } else {
+                    line
+                });
             }
             if ri == 0 {
-                out.push(self.theme.bold(&line));
-                out.push(self.theme.fg(
-                    "dim",
-                    &"─".repeat(crate::text::display_width(&line).min(width)),
-                ));
-            } else {
-                out.push(line);
+                out.push(self.theme.fg("dim", &"─".repeat(width - remaining)));
             }
         }
         out
@@ -1006,6 +1049,100 @@ mod tests {
         let lines = render_plain("| a | b |\n|---|---|\n| 1 | 2 |");
         assert!(lines[0].starts_with('a'));
         assert!(lines.iter().any(|l| l.starts_with('1')));
+    }
+
+    #[test]
+    fn table_wraps_long_prose() {
+        let prose = "This is a deliberately long line of text that keeps going across the table cell to show how a table renders when its content is much wider than the column heading.";
+        let md = format!(
+            "| Column | Long line |\n|---|---|\n| Example | {prose} |\n| Another | Short text |\n"
+        );
+        let lines = MarkdownRenderer::new(Theme::dark()).render(&md, 60);
+        let plain = lines
+            .iter()
+            .map(|line| strip_ansi(line))
+            .collect::<Vec<_>>();
+        assert!(
+            plain
+                .iter()
+                .all(|line| crate::text::display_width(line) <= 60),
+            "{plain:?}"
+        );
+        assert!(!plain.join("\n").contains('…'), "{plain:?}");
+        assert!(
+            plain.iter().any(|line| line.starts_with("Example  This")),
+            "{plain:?}"
+        );
+        let fragments = plain[2..]
+            .iter()
+            .take_while(|line| !line.starts_with("Another"))
+            .map(|line| line.get(9..).unwrap_or("").trim())
+            .collect::<Vec<_>>()
+            .join(" ");
+        assert_eq!(fragments, prose);
+    }
+
+    #[test]
+    fn table_wraps_long_links_and_unicode_without_losing_text() {
+        let md = "| Key | Value |\n|---|---|\n| 🔑 | [café 漢字 repeated words](https://example.com/docs) and `code` |";
+        let lines = MarkdownRenderer::new(Theme::dark()).render(md, 22);
+        assert!(
+            lines
+                .iter()
+                .all(|line| crate::text::display_width(line) <= 22),
+            "{lines:?}"
+        );
+        let text = lines[2..]
+            .iter()
+            .map(|line| strip_ansi(line).get(5..).unwrap_or("").trim().to_string())
+            .collect::<Vec<_>>()
+            .join(" ");
+        assert!(text.contains("café 漢字 repeated words"), "{text:?}");
+        assert!(text.contains("`code`"), "{text:?}");
+        assert!(
+            lines
+                .iter()
+                .filter(|line| line.contains("\x1b]8;;https://example.com/docs\x1b\\"))
+                .count()
+                >= 2
+        );
+    }
+
+    #[test]
+    fn table_tiny_width_keeps_cells() {
+        let lines = render_plain("| a | b |\n|---|---|\n| x | y |");
+        assert!(lines.iter().any(|line| line.starts_with('x')));
+        let lines =
+            MarkdownRenderer::new(Theme::dark()).render("| a | b |\n|---|---|\n| x | y |", 1);
+        assert!(
+            lines
+                .iter()
+                .all(|line| crate::text::display_width(line) <= 1)
+        );
+        assert!(lines.iter().any(|line| strip_ansi(line) == "y"));
+    }
+
+    #[test]
+    #[ignore = "manual rendering microbenchmark"]
+    fn table_render_cost() {
+        let renderer = MarkdownRenderer::new(Theme::dark());
+        let source = format!(
+            "| Column | Long line |\n|---|---|\n{}",
+            (0..20)
+                .map(|_| "| Example | This is a deliberately long line of text that keeps going across the table cell to show how a table renders when its content is much wider than the column heading. |\n")
+                .collect::<String>()
+        );
+        for _ in 0..100 {
+            std::hint::black_box(renderer.render(&source, 80));
+        }
+        let start = std::time::Instant::now();
+        for _ in 0..1000 {
+            std::hint::black_box(renderer.render(&source, 80));
+        }
+        eprintln!(
+            "table_render_cost: {:.1} us/render",
+            start.elapsed().as_secs_f64() * 1000.0
+        );
     }
 
     #[test]
