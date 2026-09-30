@@ -543,6 +543,13 @@ event protocol.
 
 ### Rust
 
+Add the [Rust SDK crate from crates.io](https://crates.io/crates/kiss-agent-sdk)
+to your project.
+
+```bash
+cargo add kiss-agent-sdk
+```
+
 ```rust
 let session = kiss_sdk::Session::builder().tools(["read", "bash"]).build().await?;
 session.prompt("What files are here?").await?;
