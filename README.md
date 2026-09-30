@@ -5,9 +5,12 @@
 A [ridiculously fast](#performance) terminal coding agent that keeps the interface simple and gives you
 control of the model, tools, sessions, and automation.
 
-KISS has 44 built-in providers, including OpenAI Codex (ChatGPT Subscription), OpenAI API, Anthropic OAuth (Claude Subscription), Anthropic API, Meta Muse, Cursor,
-Google, OpenRouter, Bedrock, Databricks, Snowflake, and GitHub Copilot. You can also add
-OpenAI-compatible providers.
+KISS has 44 built-in providers. These include OpenAI Codex (ChatGPT
+subscription), OpenAI API, Anthropic OAuth (Claude subscription), Anthropic
+API, Meta Muse, Cursor, Google, OpenRouter, Bedrock, Databricks, Snowflake,
+and GitHub Copilot.
+
+You can also add OpenAI-compatible providers.
 
 KISS is built in Rust and based on
 [Pi](https://github.com/earendil-works/pi).
@@ -48,11 +51,13 @@ powershell -ExecutionPolicy ByPass -c "irm https://raw.githubusercontent.com/rac
 ```
 
 The installer selects the correct release, verifies its SHA-256 checksum, and
-installs `kiss` in your user binary directory. On Linux, if the glibc
-release needs a newer `GLIBC_*` version than the system provides, it
-automatically installs the matching musl release. The macOS/Linux installer
-adds `~/.local/bin` to your shell's startup file (bash, zsh, fish, or sh) so
-new terminals can run `kiss`. Open a new terminal after installing, or run
+installs `kiss` in your user binary directory.
+
+On Linux, if the glibc release needs a newer `GLIBC_*` version than your
+system provides, the installer uses the matching musl release.
+
+On macOS and Linux, the installer adds `~/.local/bin` to your shell's startup
+file (bash, zsh, fish, or sh). Open a new terminal after installation, or run
 `~/.local/bin/kiss` immediately.
 
 Update later with:
@@ -108,9 +113,12 @@ syntax colors for fenced code.
 Send a new instruction while the agent works. Press `Enter` to steer the
 current task, or `Alt+Enter` to queue the instruction for later.
 
-Useful commands include `/login`, `/model`, `/mcp`, `/compact`, `/resume`,
-`/loop`, `/autoresearch`, `/jobs`, `/provider`, `/export`, `/cache-usage`,
-`/bug`, `/fast`, `/update`, `/settings`, and `/hotkeys`.
+Common commands:
+
+- **Setup:** `/login`, `/model`, `/provider`, `/mcp`, `/settings`, `/hotkeys`.
+- **Sessions:** `/compact`, `/resume`, `/export`, `/cache-usage`.
+- **Automation:** `/loop`, `/autoresearch`, `/jobs`.
+- **Support:** `/bug`, `/fast`, `/update`.
 
 Use `/fast` to toggle the low-latency tier for a supported provider. This
 setting applies only to the current session, and provider costs can increase.
@@ -121,10 +129,13 @@ Use `/update` to update the installed KISS binary.
 Prompt caching can reduce the cost of repeated context. KISS shows the current
 cache rate beside the session cost, so you can see when a workload benefits.
 
-Run `/cache-usage` to see the current session trend. Use `/cache-usage all` to
-check whether cache efficiency improves across saved sessions, or
-`/cache-usage <provider>` to compare one provider. Every chart uses the same
-scale, so changes are easy to compare.
+Choose a cache report:
+
+- `/cache-usage`: Show the current session trend.
+- `/cache-usage all`: Compare cache efficiency across saved sessions.
+- `/cache-usage <provider>`: Show results for one provider.
+
+Every chart uses the same scale, so you can compare the results.
 
 Use the same report in scripts and CI:
 
@@ -135,21 +146,29 @@ kiss cache-usage --session <session-id-or-jsonl-file>
 ```
 
 KISS also protects valuable prompt caches during long-running work when a
-refresh is expected to save money. This is automatic. Set `cacheWarming` to
-`off` to disable refreshes, or to `idle` to protect the cache while you decide
-what to do next. Model-aware context management and bounded retry delays keep
-long sessions responsive without routine tuning.
+refresh is expected to save money. This is automatic.
+
+To change this behavior, set `cacheWarming` to `off` to disable refreshes, or
+to `idle` to protect the cache while you decide what to do next.
+
+Model-aware context management and bounded retry delays keep long sessions
+responsive without routine tuning.
 
 ### Jev options
 
-KISS offers two generally available, opt-in [Jev](https://typesafe.ai/) features in `/settings`:
-**Compaction method → Jev** selects older tool interactions to keep, truncate,
-or remove instead of using summary compaction. **Dynamic reasoning → Jev**
-selects reasoning effort for supported reasoning models instead of using a
-fixed effort. Run `/login` and select **TypeSafe** to sign in. You can also
-run `/login typesafe` directly or set `TYPESAFE_API_KEY`. Both features
-send conversation context to Jev. The default settings remain summary
-compaction and fixed reasoning effort.
+The two [Jev](https://typesafe.ai/) features are generally available.
+To use them, select them in `/settings`:
+
+- **Compaction method → Jev:** Selects which older tool interactions to keep,
+  shorten, or remove.
+- **Dynamic reasoning → Jev:** Selects the reasoning effort for supported
+  reasoning models.
+
+To sign in, run `/login` and select **TypeSafe**, or run `/login typesafe`.
+You can also set `TYPESAFE_API_KEY`.
+
+Both features send conversation context to Jev. They are opt-in. The default
+settings are summary compaction and fixed reasoning effort.
 
 <img width="432" height="62" alt="image" src="https://github.com/user-attachments/assets/3a3ce46e-3b70-49ce-ba7c-d02996a64630" />
 
@@ -197,8 +216,11 @@ improvements, and reverts regressions. It is also unlimited by default:
 /autoresearch reduce Markdown render time and verify it with the existing benchmark --iterations 20
 ```
 
-A loop interval and `--iterations` are mutually exclusive. Autoresearch does
-not accept an interval. The maximum explicit iteration limit is 100.
+Limits:
+
+- A loop accepts an interval or `--iterations`, but not both.
+- Autoresearch does not accept an interval.
+- The maximum explicit iteration limit is 100.
 
 Each job branches from the current conversation into a persistent KISS
 session. Run `/jobs`, `/loop` without a goal, or `/autoresearch` without a goal
@@ -257,11 +279,15 @@ and elapsed time. It lists separate SSE, WebSocket, AWS event-stream, and login
 destinations. You can send the failed rows to a network team as a firewall
 allowlist request. The summary report shows one row for each provider.
 
-Any HTTP status means that the destination is reachable. For example, `401`
-is normal when the probe does not send a credential. `SKIP` means that the
-provider needs local configuration, such as an Azure resource name or a Google
-Cloud location. The command does not send a prompt, use provider credentials,
-or create model cost. It checks reachability, not credential validity.
+Read the results as follows:
+
+- **An HTTP status:** The destination is reachable. For example, `401` is
+  normal because the probe does not send a credential.
+- **`SKIP`:** The provider needs local configuration, such as an Azure resource
+  name or a Google Cloud location.
+
+The command checks network access. It does not check credential validity,
+send a prompt, use provider credentials, or create model cost.
 
 ### Login and model selection
 
@@ -279,6 +305,8 @@ kiss --list-models
 kiss --model sonnet:high
 ```
 
+#### Cursor
+
 Use a Cursor subscription through KISS's native HTTP/2 provider:
 
 ```bash
@@ -286,11 +314,15 @@ kiss login cursor
 kiss --model cursor/auto
 ```
 
-KISS talks directly to Cursor's Agent service. It does not start Cursor's
-`agent` command, Cursor desktop, Node.js, Bun, or a local proxy. You can also
-set `CURSOR_ACCESS_TOKEN` instead of saving a login. When Cursor is selected,
-KISS refreshes the model list for the signed-in account and keeps a built-in
-fallback list if discovery is not available.
+KISS connects directly to Cursor's Agent service. It does not start Cursor's
+`agent` command, Cursor desktop, Node.js, Bun, or a local proxy.
+
+You can set `CURSOR_ACCESS_TOKEN` instead of saving a login.
+
+When you select Cursor, KISS refreshes the model list for your account. It uses
+the built-in list if model discovery is not available.
+
+#### Databricks
 
 Use Databricks Unity Gateway with a workspace token and URL:
 
@@ -304,9 +336,13 @@ kiss --model databricks-unity-gateway/system.ai.claude-sonnet-4-6
 
 Azure Databricks uses the same provider. Supply the Azure workspace URL, such
 as `https://adb-1234567890123456.7.azuredatabricks.net`. You can set
-`DATABRICKS_TOKEN` and `DATABRICKS_HOST` instead of saving a login. KISS gets
-the complete `system.ai` model-service list from the selected workspace. The
-list can differ by workspace and can change after KISS is released.
+`DATABRICKS_TOKEN` and `DATABRICKS_HOST` instead of saving a login.
+
+KISS gets the complete `system.ai` model-service list from the selected
+workspace. The list can differ by workspace and can change after KISS is
+released.
+
+#### Snowflake
 
 Use Snowflake Cortex with a programmatic access token and an account URL:
 
@@ -319,10 +355,11 @@ kiss --model snowflake-cortex/claude-sonnet-4-6
 
 KISS also accepts a URL that ends in `/api/v2/cortex` or
 `/api/v2/aigateways/SNOWFLAKE`. You can set `SNOWFLAKE_PAT` and
-`SNOWFLAKE_CORTEX_BASE_URL` instead of saving a login. The built-in catalog
-contains all 34 text-generation models in the current Cortex REST API model
-availability table. Account and region rules can reduce the models that you
-can use.
+`SNOWFLAKE_CORTEX_BASE_URL` instead of saving a login.
+
+The built-in catalog contains all 34 text-generation models in the current
+Cortex REST API model availability table. Account and region rules can reduce
+the models that you can use.
 
 ### Your own OpenAI-compatible provider
 
@@ -339,9 +376,11 @@ kiss --model local/local-model
 kiss provider remove local
 ```
 
-Use `--api responses` for a Responses API server. Use `--api-key-env NAME` to
-read a key from an environment variable, or use `kiss login <provider>
---api-key KEY` to save one.
+Choose the API and credential source:
+
+- Use `--api responses` for a Responses API server.
+- Use `--api-key-env NAME` to read a key from an environment variable.
+- Use `kiss login <provider> --api-key KEY` to save a key.
 
 CodexLB can reuse the OpenAI Codex login stored by KISS:
 
@@ -387,18 +426,24 @@ kiss mcp list
 kiss mcp test local
 ```
 
-Use `--scope project` to save a server in `.mcp.json`. Use `kiss mcp login
-remote --no-browser` for headless OAuth. Use `/mcp` to manage servers in the
-TUI.
+- Use `--scope project` to save a server in `.mcp.json`.
+- Use `kiss mcp login remote --no-browser` for headless OAuth.
+- Use `/mcp` to manage servers in the terminal interface.
 
 ### WebMCP
 
 KISS can discover and call tools that Chrome pages expose through the
-experimental [WebMCP API](https://webmachinelearning.github.io/webmcp/). Enable
-`chrome://flags/#enable-webmcp-testing` and, when present,
-`chrome://flags/#devtools-webmcp-support`. Restart Chrome, enable remote
-debugging at `chrome://inspect/#remote-debugging`, and open a WebMCP page. See
-the [Chrome guide](https://developer.chrome.com/docs/ai/webmcp) for current
+experimental [WebMCP API](https://webmachinelearning.github.io/webmcp/).
+
+Set up Chrome:
+
+1. Enable `chrome://flags/#enable-webmcp-testing`.
+2. Enable `chrome://flags/#devtools-webmcp-support`, if available.
+3. Restart Chrome.
+4. Enable remote debugging at `chrome://inspect/#remote-debugging`.
+5. Open a WebMCP page.
+
+See the [Chrome guide](https://developer.chrome.com/docs/ai/webmcp) for current
 browser requirements and demos.
 
 Use WebMCP in the interactive TUI:
@@ -428,10 +473,13 @@ project's `.kiss/settings.json`:
 }
 ```
 
-`allowedOrigins` and `disallowedOrigins` accept a complete origin or a host
-name. Without an allow list, KISS permits normal page origins after the user
-connects. The deny list always wins. `cdp` accepts a local debugging port or a
-complete `ws://` loopback or `wss://` browser WebSocket URL.
+Settings:
+
+- `allowedOrigins` and `disallowedOrigins` accept a complete origin or a host
+  name. Without an allow list, KISS permits normal page origins after you
+  connect. The deny list always takes priority.
+- `cdp` accepts a local debugging port, a complete `ws://` loopback URL, or a
+  complete `wss://` browser WebSocket URL.
 
 KISS does not connect until the user runs `/webmcp`. Calls require the exact
 origin and tool name. KISS ignores internal browser pages, treats page metadata
@@ -473,11 +521,13 @@ Global KISS options must come before `acp`. In the example above, change
 level, or to `["--no-session", "acp"]` to disable session history.
 
 Persistent sessions are the default. Clients can list, load, resume, close,
-and delete them, and can change the model and thinking level. KISS accepts
-text, images, resource links, and embedded resources. It streams answers,
-reasoning, tool status, usage, file locations, and diffs. Tools run in the
-working directory that the client supplies. Cancellation stops active and
-queued work.
+and delete them. Clients can also change the model and thinking level.
+
+KISS accepts text, images, resource links, and embedded resources. It streams
+answers, reasoning, tool status, usage, file locations, and diffs.
+
+Tools run in the working directory that the client supplies. Cancellation
+stops active and queued work.
 
 Client-provided stdio and streamable-HTTP MCP servers apply only to the ACP
 session and are not saved. Draft ACP v2, audio, legacy MCP SSE, and client
@@ -652,35 +702,74 @@ cargo-nextest, wasm-pack, Deno, and Node. Harness results are written to
 
 ## Voice dictation
 
-Interactive `/voice` enables voice dictation (hold Space to record and release
-it to transcribe). `/voice tap` starts/stops on successive Space presses, for
-terminals that do not report key releases. `/voice off` restores normal Space.
-Esc cancels a recording. Transcription is inserted at the editor cursor, **not
-sent** until you press Enter. The default `/voice local` backend stays on your
-machine. `/voice deepgram` and `/voice elevenlabs` explicitly opt in to sending
-microphone audio to that service. Cloud transcriptions preview live, while the
-local backend transcribes when you stop recording.
+Use `/voice` in the terminal interface to enable dictation:
 
-All backends require `ffmpeg` in `PATH`. For local voice also install
-whisper.cpp's `whisper-cli`, download a whisper.cpp GGML model, and set
-`KISS_VOICE_MODEL` to its absolute path before starting kiss.
-For example, on macOS, run `brew install ffmpeg whisper-cpp`, then set
-`export KISS_VOICE_MODEL=/absolute/path/to/ggml-base.en.bin`. Model downloads
-are intentionally manual. The default input is `:0` (macOS avfoundation),
-`default` (Linux PulseAudio), or `audio=default` (Windows DirectShow). If that
-is not your microphone, set `KISS_VOICE_INPUT` to the ffmpeg device name.
-find devices with `ffmpeg -f avfoundation -list_devices true -i ""` on macOS,
-`pactl list sources short` on Linux, or
-`ffmpeg -list_devices true -f dshow -i dummy` on Windows. Grant microphone
-permission to your terminal where required. Cloud backends use your own
-`DEEPGRAM_API_KEY` or `ELEVENLABS_API_KEY` environment variable. Select one
-with `/voice deepgram` or `/voice elevenlabs`. `/voice local` switches back.
-The selected backend is saved in user settings, but credentials are never
-saved there. An unavailable provider fails explicitly: kiss does not send
-microphone audio to another backend without your choice. `/config voice-language es`
-selects a different language (`en` by default, with `auto` also available) and saves it
-to user settings. If Space never stops a hold recording, press Esc and choose
-`/voice tap` instead.
+- **`/voice`:** Hold Space to record. Release Space to transcribe.
+- **`/voice tap`:** Press Space to start recording. Press it again to stop.
+  Use this mode if your terminal does not report key releases.
+- **`/voice off`:** Restore normal Space input.
+- **Esc:** Cancel a recording.
+
+KISS inserts the transcript at the editor cursor. Press Enter to send it.
+If Space does not stop a hold recording, press Esc and use `/voice tap`.
+
+### Set up local dictation
+
+The default backend, `/voice local`, processes audio on your machine. It
+transcribes when you stop recording.
+
+1. Install `ffmpeg` and make sure it is in `PATH`.
+2. Install whisper.cpp's `whisper-cli`.
+3. Download a whisper.cpp GGML model. KISS does not download it for you.
+4. Set `KISS_VOICE_MODEL` to the model's absolute path before you start KISS.
+
+For example, on macOS:
+
+```bash
+brew install ffmpeg whisper-cpp
+export KISS_VOICE_MODEL=/absolute/path/to/ggml-base.en.bin
+kiss
+```
+
+### Set up cloud dictation
+
+Cloud dictation also requires `ffmpeg` in `PATH`. Set your API key, then select
+the service:
+
+- **Deepgram:** Set `DEEPGRAM_API_KEY` and run `/voice deepgram`.
+- **ElevenLabs:** Set `ELEVENLABS_API_KEY` and run `/voice elevenlabs`.
+
+Selecting a cloud service permits KISS to send microphone audio to that
+service. Cloud transcripts appear as you speak. Run `/voice local` to return
+to local processing.
+
+KISS saves the selected backend in user settings. It does not save credentials
+there. If the selected provider is unavailable, KISS reports an error. It does
+not send audio to another backend without your selection.
+
+### Select a microphone and language
+
+The default microphone input depends on your system:
+
+| System  | Audio source         | Default input   |
+| ------- | -------------------- | --------------- |
+| macOS   | avfoundation         | `:0`            |
+| Linux   | PulseAudio           | `default`       |
+| Windows | DirectShow           | `audio=default` |
+
+If the default input is not your microphone, set `KISS_VOICE_INPUT` to the
+ffmpeg device name. Use these commands to find devices:
+
+| System  | Command                                                 |
+| ------- | ------------------------------------------------------- |
+| macOS   | `ffmpeg -f avfoundation -list_devices true -i ""`         |
+| Linux   | `pactl list sources short`                              |
+| Windows | `ffmpeg -list_devices true -f dshow -i dummy`             |
+
+Give your terminal microphone permission if your system requires it.
+
+Use `/config voice-language es` to select Spanish. The default is `en`;
+`auto` is also available. KISS saves the language in user settings.
 
 ## Configuration
 
