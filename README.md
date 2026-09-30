@@ -597,13 +597,13 @@ from a recorded full release benchmark run.
 
 ### Startup and memory
 
-| Measure                     | Mean            |
+| Measure                     |            Mean |
 | --------------------------- | --------------: |
-| Warm time to first frame    | 5.037 ms        |
-| Warm time to first input    | 5.094 ms        |
-| One idle session            | 15.802 MiB RSS  |
+| Warm time to first frame    |        5.037 ms |
+| Warm time to first input    |        5.094 ms |
+| One idle session            |  15.802 MiB RSS |
 | Ten idle sessions           | 159.010 MiB RSS |
-| Extra RSS per added session | 15.912 MiB      |
+| Extra RSS per added session |      15.912 MiB |
 
 Startup results use ten launches after one warm-up. Memory results use three
 trials. RSS is the resident memory reported by macOS. Do not compare these
@@ -611,27 +611,27 @@ values directly with Linux proportional set size.
 
 ### Core operations
 
-| User action              | Test size                         | Mean      | p95       |
+| User action              | Test size                         |      Mean |       p95 |
 | ------------------------ | --------------------------------- | --------: | --------: |
-| File search              | 100,000 files, three warm queries | 4.606 ms  | 4.889 ms  |
-| File search              | 500,000 files, three warm queries | 7.110 ms  | 7.690 ms  |
-| SSE parsing              | 10,000 events                     | 0.931 ms  | 0.973 ms  |
-| Grep                     | 1,000 files and 200 matches       | 6.933 ms  | 8.340 ms  |
+| File search              | 100,000 files, three warm queries |  4.606 ms |  4.889 ms |
+| File search              | 500,000 files, three warm queries |  7.110 ms |  7.690 ms |
+| SSE parsing              | 10,000 events                     |  0.931 ms |  0.973 ms |
+| Grep                     | 1,000 files and 200 matches       |  6.933 ms |  8.340 ms |
 | Incremental Markdown     | 200 streaming prefix renders      | 12.427 ms | 12.576 ms |
-| Rust syntax highlighting | One 200-line fence                | 5.830 ms  | 6.165 ms  |
-| Unchanged frame          | 10,000 logical rows               | 0.876 ms  | 0.885 ms  |
+| Rust syntax highlighting | One 200-line fence                |  5.830 ms |  6.165 ms |
+| Unchanged frame          | 10,000 logical rows               |  0.876 ms |  0.885 ms |
 
 ### SDK, RPC, and browser WebAssembly
 
 These tests use an immediate local model or `ping`. They do not call an
 external model.
 
-| Surface      | Work                                              | Mean      |
+| Surface      | Work                                              |      Mean |
 | ------------ | ------------------------------------------------- | --------: |
-| Native SDK   | Shared in-process command dispatch                | 113 ns    |
+| Native SDK   | Shared in-process command dispatch                |    113 ns |
 | JSONL RPC    | Encode, decode, in-memory transport, and dispatch | 14.439 us |
-| Browser WASM | Warm full-agent prompt, 100 samples               | 0.077 ms  |
-| Browser WASM | 25 isolated agents in parallel, 11 batches        | 0.749 ms  |
+| Browser WASM | Warm full-agent prompt, 100 samples               |  0.077 ms |
+| Browser WASM | 25 isolated agents in parallel, 11 batches        |  0.749 ms |
 
 Fresh WebAssembly module initialization averaged 11.269 ms per Deno process.
 The release module is 574,734 bytes raw and 209,375 bytes gzip. It starts with
@@ -642,19 +642,19 @@ The release module is 574,734 bytes raw and 209,375 bytes gzip. It starts with
 Subagents are off by default. Session setup had no measured slowdown when they
 were enabled. Their six control tools added 71 ns to request preparation.
 
-| Measure                    | State or size         | Mean       | p95        |
+| Measure                    | State or size         |       Mean |        p95 |
 | -------------------------- | --------------------- | ---------: | ---------: |
 | Subagent session setup     | Off                   | 358.845 us | 364.466 us |
 | Subagent session setup     | On                    | 358.352 us | 361.740 us |
-| Request preparation        | Subagents off         | 171 ns     | 177 ns     |
-| Request preparation        | Subagents on          | 242 ns     | 249 ns     |
-| Workflow script parsing    | 200 lines             | 57.884 us  | 59.922 us  |
-| Workflow interpreter       | 1,000 agent calls     | 2.185 ms   | 2.423 ms   |
-| Workflow progress snapshot | 500 agents, 5 phases  | 43.075 us  | 64.816 us  |
-| Workflow phase view        | 500 agents, 5 phases  | 11.298 us  | 12.207 us  |
-| Workflow agent detail      | One prompt and result | 4.886 us   | 5.021 us   |
-| Workflow unchanged view    | 500 agents, cached    | 311 ns     | 317 ns     |
-| Job detail view            | Long goal and result  | 45.193 us  | 46.595 us  |
+| Request preparation        | Subagents off         |     171 ns |     177 ns |
+| Request preparation        | Subagents on          |     242 ns |     249 ns |
+| Workflow script parsing    | 200 lines             |  57.884 us |  59.922 us |
+| Workflow interpreter       | 1,000 agent calls     |   2.185 ms |   2.423 ms |
+| Workflow progress snapshot | 500 agents, 5 phases  |  43.075 us |  64.816 us |
+| Workflow phase view        | 500 agents, 5 phases  |  11.298 us |  12.207 us |
+| Workflow agent detail      | One prompt and result |   4.886 us |   5.021 us |
+| Workflow unchanged view    | 500 agents, cached    |     311 ns |     317 ns |
+| Job detail view            | Long goal and result  |  45.193 us |  46.595 us |
 
 The workflow interpreter used 2.185 us per agent call. Arming a workflow added
 651 ns to request preparation and kept the total below 1 us. Loop and
@@ -663,7 +663,7 @@ events.
 
 ### TUI rendering and resize
 
-| Measure                   | Test size           | Mean     | p95      |
+| Measure                   | Test size           |     Mean |      p95 |
 | ------------------------- | ------------------- | -------: | -------: |
 | Full renderer             | 1,800 logical rows  | 0.398 ms | 0.436 ms |
 | Unchanged renderer        | 10,000 logical rows | 0.876 ms | 0.885 ms |
@@ -677,12 +677,12 @@ change. The full resize test wrote 178,231 bytes.
 
 ### Profile-guided release builds
 
-| Measure                | Standard build | Optimized build | Change         |
+| Measure                | Standard build | Optimized build |         Change |
 | ---------------------- | -------------: | --------------: | -------------: |
-| `kiss --help` startup  | 3.696 ms       | 3.676 ms        | 0.52% faster   |
-| Geometric mean latency | 1.000x         | 0.985x          | 1.51% faster   |
-| Executable size        | 17.16 MiB      | 14.87 MiB       | 13.37% smaller |
-| gzip size              | 8.17 MiB       | 7.36 MiB        | 9.94% smaller  |
+| `kiss --help` startup  |       3.696 ms |        3.676 ms |   0.52% faster |
+| Geometric mean latency |         1.000x |          0.985x |   1.51% faster |
+| Executable size        |      17.16 MiB |       14.87 MiB | 13.37% smaller |
+| gzip size              |       8.17 MiB |        7.36 MiB |  9.94% smaller |
 
 ### Method
 
