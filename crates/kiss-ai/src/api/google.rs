@@ -407,6 +407,7 @@ mod vertex_tests {
             compat: None,
             thinking_level_map: BTreeMap::new(),
             headers: BTreeMap::new(),
+            sampling_params: Default::default(),
         };
         assert_eq!(
             vertex_url(&model, "project-one", "us-central1"),
@@ -442,6 +443,7 @@ mod vertex_tests {
             compat: None,
             thinking_level_map: BTreeMap::new(),
             headers: BTreeMap::new(),
+            sampling_params: Default::default(),
         };
         model
             .thinking_level_map

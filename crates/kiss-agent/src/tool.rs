@@ -18,6 +18,8 @@ pub struct ToolResult {
     pub content: Vec<ContentBlock>,
     /// Structured details for logs / UI rendering (never sent to the model).
     pub details: Value,
+    /// A tool can report a failure while retaining structured details and images.
+    pub is_error: bool,
     /// Usage from nested LLM work performed by the tool, if any.
     pub usage: Option<Usage>,
     /// Hint that the agent should stop after the current tool batch.

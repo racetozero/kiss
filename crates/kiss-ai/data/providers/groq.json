@@ -1,6 +1,6 @@
 {
   "openai-completions": {
-    "llama-3.1-8b-instant": {
+    "chat:llama-3.1-8b-instant": {
       "id": "llama-3.1-8b-instant",
       "name": "Llama 3.1 8B",
       "api": "openai-completions",
@@ -8,12 +8,20 @@
       "baseUrl": "https://api.groq.com/openai/v1",
       "reasoning": false,
       "input": ["text"],
-      "cost": { "input": 0.05, "output": 0.08, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.05,
+        "output": 0.08,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
       "contextWindow": 131072,
       "maxTokens": 131072,
-      "compat": { "supportsStrictMode": true }
+      "compat": {
+        "supportsStrictMode": true
+      },
+      "type": "chat"
     },
-    "llama-3.3-70b-versatile": {
+    "chat:llama-3.3-70b-versatile": {
       "id": "llama-3.3-70b-versatile",
       "name": "Llama 3.3 70B",
       "api": "openai-completions",
@@ -21,12 +29,20 @@
       "baseUrl": "https://api.groq.com/openai/v1",
       "reasoning": false,
       "input": ["text"],
-      "cost": { "input": 0.59, "output": 0.79, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.59,
+        "output": 0.79,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
       "contextWindow": 131072,
       "maxTokens": 32768,
-      "compat": { "supportsStrictMode": true }
+      "compat": {
+        "supportsStrictMode": true
+      },
+      "type": "chat"
     },
-    "openai/gpt-oss-120b": {
+    "chat:openai/gpt-oss-120b": {
       "id": "openai/gpt-oss-120b",
       "name": "GPT OSS 120B",
       "api": "openai-completions",
@@ -34,10 +50,17 @@
       "baseUrl": "https://api.groq.com/openai/v1",
       "reasoning": true,
       "input": ["text"],
-      "cost": { "input": 0.15, "output": 0.6, "cacheRead": 0.075, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.15,
+        "output": 0.6,
+        "cacheRead": 0.075,
+        "cacheWrite": 0
+      },
       "contextWindow": 131072,
       "maxTokens": 65536,
-      "compat": { "supportsStrictMode": true },
+      "compat": {
+        "supportsStrictMode": true
+      },
       "thinkingLevelMap": {
         "off": null,
         "minimal": null,
@@ -46,9 +69,10 @@
         "high": "high",
         "xhigh": null,
         "max": null
-      }
+      },
+      "type": "chat"
     },
-    "openai/gpt-oss-20b": {
+    "chat:openai/gpt-oss-20b": {
       "id": "openai/gpt-oss-20b",
       "name": "GPT OSS 20B",
       "api": "openai-completions",
@@ -56,10 +80,17 @@
       "baseUrl": "https://api.groq.com/openai/v1",
       "reasoning": true,
       "input": ["text"],
-      "cost": { "input": 0.075, "output": 0.3, "cacheRead": 0.0375, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.075,
+        "output": 0.3,
+        "cacheRead": 0.0375,
+        "cacheWrite": 0
+      },
       "contextWindow": 131072,
       "maxTokens": 65536,
-      "compat": { "supportsStrictMode": true },
+      "compat": {
+        "supportsStrictMode": true
+      },
       "thinkingLevelMap": {
         "off": null,
         "minimal": null,
@@ -68,9 +99,10 @@
         "high": "high",
         "xhigh": null,
         "max": null
-      }
+      },
+      "type": "chat"
     },
-    "openai/gpt-oss-safeguard-20b": {
+    "chat:openai/gpt-oss-safeguard-20b": {
       "id": "openai/gpt-oss-safeguard-20b",
       "name": "Safety GPT OSS 20B",
       "api": "openai-completions",
@@ -78,10 +110,17 @@
       "baseUrl": "https://api.groq.com/openai/v1",
       "reasoning": true,
       "input": ["text"],
-      "cost": { "input": 0.075, "output": 0.3, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.075,
+        "output": 0.3,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
       "contextWindow": 131072,
       "maxTokens": 65536,
-      "compat": { "supportsStrictMode": true },
+      "compat": {
+        "supportsStrictMode": true
+      },
       "thinkingLevelMap": {
         "off": null,
         "minimal": null,
@@ -90,9 +129,10 @@
         "high": "high",
         "xhigh": null,
         "max": null
-      }
+      },
+      "type": "chat"
     },
-    "qwen/qwen3.6-27b": {
+    "chat:qwen/qwen3.6-27b": {
       "id": "qwen/qwen3.6-27b",
       "name": "Qwen3.6 27B",
       "api": "openai-completions",
@@ -100,10 +140,17 @@
       "baseUrl": "https://api.groq.com/openai/v1",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 0.6, "output": 3, "cacheRead": 0.3, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.6,
+        "output": 3,
+        "cacheRead": 0.3,
+        "cacheWrite": 0
+      },
       "contextWindow": 131072,
       "maxTokens": 16384,
-      "compat": { "supportsStrictMode": true },
+      "compat": {
+        "supportsStrictMode": true
+      },
       "thinkingLevelMap": {
         "off": "none",
         "minimal": null,
@@ -115,11 +162,17 @@
       },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "qwen/qwen3.8-27b": {
+    "chat:qwen/qwen3.8-27b": {
       "id": "qwen/qwen3.8-27b",
       "name": "Qwen3.8 27B",
       "api": "openai-completions",
@@ -127,10 +180,17 @@
       "baseUrl": "https://api.groq.com/openai/v1",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 0.8, "output": 4, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.8,
+        "output": 4,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
       "contextWindow": 131042,
       "maxTokens": 16384,
-      "compat": { "supportsStrictMode": true },
+      "compat": {
+        "supportsStrictMode": true
+      },
       "thinkingLevelMap": {
         "off": "none",
         "minimal": null,
@@ -142,9 +202,15 @@
       },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     }
   }
 }

@@ -348,7 +348,11 @@ impl Session {
         if args.message.trim().is_empty() && args.images.is_empty() {
             return Err(SdkError::Command("prompt message is empty".into()));
         }
-        let busy = self.running.load(Ordering::SeqCst) || self.inner.is_running();
+        let busy = self.inner.is_running()
+            || self
+                .running
+                .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                .is_err();
         if busy {
             return match args.streaming_behavior {
                 Some(StreamingBehavior::Steer) => {
@@ -364,7 +368,6 @@ impl Session {
                 )),
             };
         }
-        self.running.store(true, Ordering::SeqCst);
         Ok(false)
     }
 
@@ -585,12 +588,19 @@ impl Session {
                 images,
                 streaming_behavior,
             } => {
-                self.prompt_detached(PromptArgs {
+                let args = PromptArgs {
                     message,
                     images,
                     streaming_behavior,
-                })?;
-                Ok(None)
+                };
+                let queued = self.accept_prompt(&args)?;
+                if !queued {
+                    let session = self.clone();
+                    tokio::spawn(async move { session.run_prompt(args).await });
+                }
+                Ok(Some(
+                    json!({"disposition": if queued { "queued" } else { "started" }}),
+                ))
             }
             Command::Steer { message, images } => {
                 let args = PromptArgs {
@@ -599,7 +609,7 @@ impl Session {
                     streaming_behavior: None,
                 };
                 self.inner.queue_steering(user_message(&args));
-                Ok(None)
+                Ok(Some(json!({"disposition": "queued"})))
             }
             Command::FollowUp { message, images } => {
                 let args = PromptArgs {
@@ -608,7 +618,7 @@ impl Session {
                     streaming_behavior: None,
                 };
                 self.inner.queue_follow_up(user_message(&args));
-                Ok(None)
+                Ok(Some(json!({"disposition": "queued"})))
             }
             Command::Abort {} => {
                 self.abort();

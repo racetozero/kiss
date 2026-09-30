@@ -820,6 +820,7 @@ pub async fn discover_models(access_token: &str) -> Result<Vec<Model>> {
             compat: None,
             thinking_level_map: BTreeMap::new(),
             headers: BTreeMap::new(),
+            sampling_params: Default::default(),
         });
     }
     Ok(models)
@@ -846,6 +847,7 @@ mod tests {
             compat: None,
             thinking_level_map: Default::default(),
             headers: Default::default(),
+            sampling_params: Default::default(),
         }
     }
 

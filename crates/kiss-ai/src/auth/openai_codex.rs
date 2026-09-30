@@ -28,6 +28,8 @@ pub struct OAuthConfig {
     pub device_redirect_uri: String,
     pub device_timeout: Duration,
     pub minimum_poll_interval: Duration,
+    pub direct_token: bool,
+    pub device_id: Option<String>,
 }
 
 impl Default for OAuthConfig {
@@ -39,11 +41,24 @@ impl Default for OAuthConfig {
             device_redirect_uri: DEVICE_REDIRECT_URI.into(),
             device_timeout: Duration::from_secs(15 * 60),
             minimum_poll_interval: Duration::from_secs(1),
+            direct_token: false,
+            device_id: None,
         }
     }
 }
 
 impl OAuthConfig {
+    /// Direct ChatGPT subscription access to the OpenAI Responses API.
+    pub fn chatgpt(device_id: Option<String>) -> Self {
+        Self {
+            client_id: "dynamic_agent_client".into(),
+            browser_redirect_uri: "http://127.0.0.1:1455/auth/callback".into(),
+            direct_token: true,
+            device_id,
+            ..Default::default()
+        }
+    }
+
     fn endpoint(&self, path: &str) -> String {
         format!("{}{}", self.auth_base_url.trim_end_matches('/'), path)
     }
@@ -66,6 +81,10 @@ struct TokenResponse {
     access_token: String,
     refresh_token: String,
     expires_in: i64,
+    #[serde(default)]
+    scope: Option<String>,
+    #[serde(default)]
+    id_token: Option<String>,
 }
 
 fn random_url_safe(byte_count: usize) -> String {
@@ -82,18 +101,42 @@ fn create_pkce() -> (String, String) {
 }
 
 fn authorization_url(config: &OAuthConfig, state: &str, challenge: &str) -> Result<String> {
-    let mut url = Url::parse(&config.endpoint("/oauth/authorize"))?;
+    let path = if config.direct_token {
+        "/api/accounts/authorize"
+    } else {
+        "/oauth/authorize"
+    };
+    let mut url = Url::parse(&config.endpoint(path))?;
     url.query_pairs_mut()
         .append_pair("response_type", "code")
         .append_pair("client_id", &config.client_id)
         .append_pair("redirect_uri", &config.browser_redirect_uri)
-        .append_pair("scope", SCOPE)
+        .append_pair(
+            "scope",
+            if config.direct_token {
+                "openid profile email offline_access resource.invoke chatgpt.tokens.use.direct"
+            } else {
+                SCOPE
+            },
+        )
         .append_pair("code_challenge", challenge)
         .append_pair("code_challenge_method", "S256")
-        .append_pair("state", state)
-        .append_pair("id_token_add_organizations", "true")
-        .append_pair("codex_cli_simplified_flow", "true")
-        .append_pair("originator", "kiss");
+        .append_pair("state", state);
+    if config.direct_token {
+        let device_id = config.device_id.as_deref()
+            .and_then(|value| uuid::Uuid::parse_str(value).ok())
+            .context("ChatGPT login has no valid installation UUID. Start login from KISS to create a device ID.")?;
+        url.query_pairs_mut()
+            .append_pair("agent_name_hint", "KISS")
+            .append_pair("ext_agent_host_id", &format!("urn:uuid:{device_id}"))
+            .append_pair("resource", "https://api.openai.com/v1")
+            .append_pair("nonce", &random_url_safe(32));
+    } else {
+        url.query_pairs_mut()
+            .append_pair("id_token_add_organizations", "true")
+            .append_pair("codex_cli_simplified_flow", "true")
+            .append_pair("originator", "kiss");
+    }
     Ok(url.into())
 }
 
@@ -107,16 +150,41 @@ async fn cancellable_send(
     }
 }
 
-fn credential_from_token(token: TokenResponse) -> Result<OAuthCredential> {
-    let account_id = decode_jwt_account_id(&token.access_token)
-        .context("OpenAI Codex token has no ChatGPT account ID")?;
+fn credential_from_token(token: TokenResponse, client_id: Option<&str>) -> Result<OAuthCredential> {
+    if token.access_token.trim().is_empty()
+        || token.refresh_token.trim().is_empty()
+        || token.expires_in <= 0
+    {
+        anyhow::bail!(
+            "OpenAI login returned an invalid token. Non-empty access and refresh tokens and a positive expiry are required. Run login again."
+        );
+    }
+    let account_id = if client_id.is_some() {
+        if !token.scope.as_deref().is_some_and(|scope| {
+            scope
+                .split_whitespace()
+                .any(|scope| scope == "chatgpt.tokens.use.direct")
+        }) {
+            anyhow::bail!(
+                "ChatGPT login did not grant direct token use. The chatgpt.tokens.use.direct scope is required. Run `kiss login openai` and approve this scope."
+            );
+        }
+        String::new()
+    } else {
+        decode_jwt_account_id(&token.access_token)
+            .context("OpenAI Codex token has no ChatGPT account ID")?
+    };
     Ok(OAuthCredential {
         kind: "oauth".into(),
         access: token.access_token,
         refresh: token.refresh_token,
-        expires: chrono::Utc::now().timestamp_millis() + token.expires_in.saturating_mul(1000),
+        expires: chrono::Utc::now()
+            .timestamp_millis()
+            .saturating_add(token.expires_in.saturating_mul(1000))
+            .saturating_sub(if client_id.is_some() { 180_000 } else { 0 }),
         account_id,
         available_model_ids: None,
+        client_id: client_id.map(str::to_string),
     })
 }
 
@@ -139,22 +207,43 @@ async fn exchange_code(
     code: &str,
     verifier: &str,
     redirect_uri: &str,
+    issued_client_id: Option<&str>,
     cancel: &CancellationToken,
 ) -> Result<OAuthCredential> {
+    let client_id = issued_client_id.unwrap_or(&config.client_id);
+    let mut form = vec![
+        ("grant_type", "authorization_code"),
+        ("client_id", client_id),
+        ("code", code),
+        ("code_verifier", verifier),
+        ("redirect_uri", redirect_uri),
+    ];
+    if config.direct_token {
+        form.push(("resource", "https://api.openai.com/v1"));
+    }
     let response = cancellable_send(
         crate::stream::http_client()
-            .post(config.endpoint("/oauth/token"))
-            .form(&[
-                ("grant_type", "authorization_code"),
-                ("client_id", config.client_id.as_str()),
-                ("code", code),
-                ("code_verifier", verifier),
-                ("redirect_uri", redirect_uri),
-            ]),
+            .post(config.endpoint(if config.direct_token {
+                "/api/accounts/oauth/token"
+            } else {
+                "/oauth/token"
+            }))
+            .form(&form),
         cancel,
     )
     .await?;
-    credential_from_token(read_token_response(response, "exchange").await?)
+    let token = read_token_response(response, "exchange").await?;
+    if config.direct_token
+        && !token
+            .id_token
+            .as_deref()
+            .is_some_and(|value| !value.trim().is_empty())
+    {
+        anyhow::bail!(
+            "ChatGPT login returned no ID token. A non-empty ID token is required. Run `kiss login openai` again."
+        );
+    }
+    credential_from_token(token, issued_client_id)
 }
 
 /// Start a browser login. The callback runs after the local listener starts.
@@ -180,14 +269,18 @@ pub async fn login_browser(
 
     let deadline = tokio::time::sleep(config.device_timeout);
     tokio::pin!(deadline);
-    let code = loop {
+    let (code, issued_client_id) = loop {
         let (mut socket, _) = tokio::select! {
             accepted = listener.accept() => accepted?,
             _ = cancel.cancelled() => anyhow::bail!("login cancelled"),
             _ = &mut deadline => anyhow::bail!("browser login timed out"),
         };
         let mut request = vec![0_u8; 8192];
-        let count = socket.read(&mut request).await?;
+        let count = tokio::select! {
+            count = socket.read(&mut request) => count?,
+            _ = cancel.cancelled() => anyhow::bail!("login cancelled"),
+            _ = &mut deadline => anyhow::bail!("browser login timed out"),
+        };
         let request = String::from_utf8_lossy(&request[..count]);
         let target = request
             .lines()
@@ -208,7 +301,22 @@ pub async fn login_browser(
                 .find(|(key, _)| key == "code")
                 .map(|(_, value)| value.into_owned())
         });
-        let accepted = valid_path && returned_state.as_deref() == Some(&state) && code.is_some();
+        let issued_client_id = parsed.as_ref().and_then(|url| {
+            url.query_pairs()
+                .find(|(key, _)| key == "client_id")
+                .map(|(_, value)| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+        });
+        let authorization_error = parsed.as_ref().and_then(|url| {
+            url.query_pairs()
+                .find(|(key, _)| key == "error")
+                .map(|_| ())
+        });
+        let valid_state = valid_path && returned_state.as_deref() == Some(&state);
+        let accepted = valid_state
+            && code.as_ref().is_some_and(|code| !code.is_empty())
+            && (!config.direct_token || issued_client_id.is_some())
+            && authorization_error.is_none();
         let (status, page) = if accepted {
             (
                 "200 OK",
@@ -223,8 +331,16 @@ pub async fn login_browser(
         );
         socket.write_all(response.as_bytes()).await?;
         socket.shutdown().await?;
+        if valid_state && authorization_error.is_some() {
+            anyhow::bail!(
+                "OpenAI browser login was refused. Successful authorization is required. Run login again and approve access."
+            );
+        }
         if accepted {
-            break code.expect("accepted callback has a code");
+            break (
+                code.expect("accepted callback has a code"),
+                issued_client_id,
+            );
         }
     };
 
@@ -233,6 +349,7 @@ pub async fn login_browser(
         &code,
         &verifier,
         &config.browser_redirect_uri,
+        issued_client_id.as_deref().filter(|_| config.direct_token),
         cancel,
     )
     .await
@@ -314,8 +431,15 @@ pub async fn finish_device_authorization(
             let verifier = body["code_verifier"]
                 .as_str()
                 .context("device token response has no code_verifier")?;
-            return exchange_code(config, code, verifier, &config.device_redirect_uri, cancel)
-                .await;
+            return exchange_code(
+                config,
+                code,
+                verifier,
+                &config.device_redirect_uri,
+                None,
+                cancel,
+            )
+            .await;
         }
 
         let pending_status = status.as_u16() == 403 || status.as_u16() == 404;
@@ -349,18 +473,35 @@ pub async fn refresh(
     config: &OAuthConfig,
 ) -> Result<OAuthCredential> {
     let cancel = CancellationToken::new();
+    let client_id = if config.direct_token {
+        credential.client_id.as_deref().filter(|value| !value.trim().is_empty())
+            .context("Stored ChatGPT login has no issued client ID. A valid client ID is required. Run `kiss login openai` again.")?
+    } else {
+        &config.client_id
+    };
+    let mut form = vec![
+        ("grant_type", "refresh_token"),
+        ("refresh_token", credential.refresh.as_str()),
+        ("client_id", client_id),
+    ];
+    if config.direct_token {
+        form.push(("resource", "https://api.openai.com/v1"));
+    }
     let response = cancellable_send(
         crate::stream::http_client()
-            .post(config.endpoint("/oauth/token"))
-            .form(&[
-                ("grant_type", "refresh_token"),
-                ("refresh_token", credential.refresh.as_str()),
-                ("client_id", config.client_id.as_str()),
-            ]),
+            .post(config.endpoint(if config.direct_token {
+                "/api/accounts/oauth/token"
+            } else {
+                "/oauth/token"
+            }))
+            .form(&form),
         &cancel,
     )
     .await?;
-    credential_from_token(read_token_response(response, "refresh").await?)
+    credential_from_token(
+        read_token_response(response, "refresh").await?,
+        config.direct_token.then_some(client_id),
+    )
 }
 
 pub(crate) fn decode_jwt_account_id(token: &str) -> Option<String> {
@@ -412,11 +553,16 @@ mod tests {
 
     #[test]
     fn token_response_builds_refreshable_credential() {
-        let credential = credential_from_token(TokenResponse {
-            access_token: fake_access_token("acct-one"),
-            refresh_token: "refresh".into(),
-            expires_in: 3600,
-        })
+        let credential = credential_from_token(
+            TokenResponse {
+                access_token: fake_access_token("acct-one"),
+                refresh_token: "refresh".into(),
+                expires_in: 3600,
+                scope: None,
+                id_token: None,
+            },
+            None,
+        )
         .unwrap();
         assert_eq!(credential.account_id, "acct-one");
         assert_eq!(credential.kind, "oauth");
@@ -542,34 +688,59 @@ mod tests {
 
     #[tokio::test]
     async fn browser_flow_validates_callback_and_exchanges_code() {
-        let (base, server) = mock_server(vec![("200 OK", token_json("acct-browser"))]).await;
-        let probe = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
-        let callback_port = probe.local_addr().unwrap().port();
-        drop(probe);
-        let mut config = test_config(base);
-        config.browser_redirect_uri = format!("http://localhost:{callback_port}/auth/callback");
-        let cancel = CancellationToken::new();
-        let (url_tx, url_rx) = tokio::sync::oneshot::channel();
-        let login_config = config.clone();
-        let login_cancel = cancel.clone();
-        let login = tokio::spawn(async move {
-            login_browser(&login_config, &login_cancel, |url| {
-                url_tx.send(url.to_string()).unwrap();
-            })
-            .await
-        });
-        let authorization_url = Url::parse(&url_rx.await.unwrap()).unwrap();
-        let state = authorization_url
-            .query_pairs()
-            .find(|(name, _)| name == "state")
-            .unwrap()
-            .1
-            .into_owned();
-        let target = format!("/auth/callback?code=browser-code&state={state}");
-        let mut socket = TcpStream::connect(("127.0.0.1", callback_port))
-            .await
-            .unwrap();
-        socket
+        for direct in [false, true] {
+            let mut token: Value = serde_json::from_str(&token_json("acct-browser")).unwrap();
+            if direct {
+                token["scope"] = json!("openid chatgpt.tokens.use.direct");
+                token["id_token"] = json!("id-token");
+            }
+            let (base, server) = mock_server(vec![("200 OK", token.to_string())]).await;
+            let probe = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+            let callback_port = probe.local_addr().unwrap().port();
+            drop(probe);
+            let mut config = test_config(base);
+            if direct {
+                config = OAuthConfig {
+                    auth_base_url: config.auth_base_url,
+                    device_timeout: config.device_timeout,
+                    ..OAuthConfig::chatgpt(Some("6eaad9bc-3130-40e6-8d63-e42ec4f121de".into()))
+                };
+            }
+            config.browser_redirect_uri = format!("http://localhost:{callback_port}/auth/callback");
+            let cancel = CancellationToken::new();
+            let (url_tx, url_rx) = tokio::sync::oneshot::channel();
+            let login_config = config.clone();
+            let login_cancel = cancel.clone();
+            let login = tokio::spawn(async move {
+                login_browser(&login_config, &login_cancel, |url| {
+                    url_tx.send(url.to_string()).unwrap();
+                })
+                .await
+            });
+            let authorization_url = Url::parse(&url_rx.await.unwrap()).unwrap();
+            if direct {
+                assert_eq!(authorization_url.path(), "/api/accounts/authorize");
+                let query: std::collections::BTreeMap<_, _> =
+                    authorization_url.query_pairs().into_owned().collect();
+                assert_eq!(query["client_id"], "dynamic_agent_client");
+                assert_eq!(
+                    query["ext_agent_host_id"],
+                    "urn:uuid:6eaad9bc-3130-40e6-8d63-e42ec4f121de"
+                );
+                assert!(query["scope"].contains("chatgpt.tokens.use.direct"));
+            }
+            let state = authorization_url
+                .query_pairs()
+                .find(|(name, _)| name == "state")
+                .unwrap()
+                .1
+                .into_owned();
+            let target =
+                format!("/auth/callback?code=browser-code&state={state}&client_id=issued-client");
+            let mut socket = TcpStream::connect(("127.0.0.1", callback_port))
+                .await
+                .unwrap();
+            socket
             .write_all(
                 format!(
                     "GET {target} HTTP/1.1\r\nHost: 127.0.0.1:{callback_port}\r\nConnection: close\r\n\r\n"
@@ -578,12 +749,92 @@ mod tests {
             )
             .await
             .unwrap();
+            let mut response = Vec::new();
+            socket.read_to_end(&mut response).await.unwrap();
+            assert!(String::from_utf8_lossy(&response).starts_with("HTTP/1.1 200 OK"));
+            let credential = login.await.unwrap().unwrap();
+            if direct {
+                assert_eq!(credential.client_id.as_deref(), Some("issued-client"));
+                assert_eq!(server.await.unwrap(), ["/api/accounts/oauth/token"]);
+            } else {
+                assert_eq!(credential.account_id, "acct-browser");
+                assert_eq!(server.await.unwrap(), ["/oauth/token"]);
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn chatgpt_refresh_requires_direct_scope_and_retains_client_id() {
+        for scope in ["openid", "openid chatgpt.tokens.use.direct"] {
+            let token = json!({"access_token":"new-access","refresh_token":"new-refresh","expires_in":3600,"scope":scope});
+            let (base, server) = mock_server(vec![("200 OK", token.to_string())]).await;
+            let credential = OAuthCredential {
+                kind: "oauth".into(),
+                access: "old-access".into(),
+                refresh: "old-refresh".into(),
+                expires: 0,
+                account_id: String::new(),
+                available_model_ids: None,
+                client_id: Some("issued-client".into()),
+            };
+            let config = OAuthConfig {
+                auth_base_url: base,
+                ..OAuthConfig::chatgpt(None)
+            };
+            let refreshed = refresh(&credential, &config).await;
+            if scope == "openid" {
+                assert!(
+                    refreshed
+                        .unwrap_err()
+                        .to_string()
+                        .contains("chatgpt.tokens.use.direct")
+                );
+            } else {
+                let refreshed = refreshed.unwrap();
+                assert_eq!(refreshed.client_id, credential.client_id);
+                assert_eq!(refreshed.refresh, "new-refresh");
+                assert!(!refreshed.is_expired());
+            }
+            assert_eq!(server.await.unwrap(), ["/api/accounts/oauth/token"]);
+        }
+    }
+
+    #[tokio::test]
+    async fn browser_authorization_error_stops_login() {
+        let probe = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = probe.local_addr().unwrap().port();
+        drop(probe);
+        let config = OAuthConfig {
+            browser_redirect_uri: format!("http://localhost:{port}/auth/callback"),
+            device_timeout: Duration::from_secs(2),
+            ..Default::default()
+        };
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        let task = tokio::spawn(async move {
+            login_browser(&config, &CancellationToken::new(), |url| {
+                tx.send(url.to_string()).unwrap();
+            })
+            .await
+        });
+        let url = Url::parse(&rx.await.unwrap()).unwrap();
+        let state = url
+            .query_pairs()
+            .find(|(key, _)| key == "state")
+            .unwrap()
+            .1
+            .into_owned();
+        let mut socket = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+        socket.write_all(format!("GET /auth/callback?error=access_denied&state={state} HTTP/1.1\r\nHost: localhost\r\n\r\n").as_bytes()).await.unwrap();
         let mut response = Vec::new();
         socket.read_to_end(&mut response).await.unwrap();
-        assert!(String::from_utf8_lossy(&response).starts_with("HTTP/1.1 200 OK"));
-        let credential = login.await.unwrap().unwrap();
-        assert_eq!(credential.account_id, "acct-browser");
-        assert_eq!(server.await.unwrap(), ["/oauth/token"]);
+        assert!(String::from_utf8_lossy(&response).starts_with("HTTP/1.1 400"));
+        assert!(
+            task.await
+                .unwrap()
+                .unwrap_err()
+                .to_string()
+                .contains("refused")
+        );
     }
 
     #[tokio::test]
@@ -600,6 +851,7 @@ mod tests {
             expires: 0,
             account_id: "acct-old".into(),
             available_model_ids: None,
+            client_id: None,
         };
         let error = refresh(&credential, &test_config(base))
             .await

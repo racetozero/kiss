@@ -76,6 +76,7 @@ fn credential(body: &Value) -> Result<OAuthCredential> {
         expires: chrono::Utc::now().timestamp_millis() + expires.saturating_mul(1000),
         account_id: String::new(),
         available_model_ids: None,
+        client_id: None,
     })
 }
 

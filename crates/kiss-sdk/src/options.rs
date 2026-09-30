@@ -191,9 +191,18 @@ impl SessionOptions {
         };
         let skills = kiss_coding::skills::discover(&cwd, trusted, &[]);
 
-        let mut tool_names =
-            select_tool_names(self.tools.as_deref(), &self.exclude_tools, self.no_tools);
-        let mcp = self.load_mcp(&cwd, trusted, &mut tool_names)?;
+        let mut tool_names = select_tool_names(
+            self.tools.as_deref(),
+            &self.exclude_tools,
+            self.no_tools,
+            settings.default_tools.as_deref(),
+        );
+        let mcp = self.load_mcp(
+            &cwd,
+            trusted,
+            &mut tool_names,
+            settings.default_tools.as_deref(),
+        )?;
         let files = context_files::system_prompt_files(&cwd);
         let custom = self.system_prompt.clone().or(files.replace);
         let append = match (&self.append_system_prompt, &files.append) {
@@ -266,6 +275,7 @@ impl SessionOptions {
         cwd: &Path,
         trusted: bool,
         tool_names: &mut Vec<String>,
+        defaults: Option<&[String]>,
     ) -> Result<Option<kiss_mcp::McpManager>> {
         if self.no_tools {
             return Ok(None);
@@ -279,10 +289,15 @@ impl SessionOptions {
                 .insert(name.clone(), server.clone());
         }
         if loaded.enabled_server_count() == 0 {
+            tool_names.retain(|name| name != "mcp");
             return Ok(None);
         }
         let explicitly_excluded = self.exclude_tools.iter().any(|name| name == "mcp");
-        if self.tools.is_none() && !explicitly_excluded {
+        if self.tools.is_none()
+            && defaults.is_none()
+            && !explicitly_excluded
+            && !tool_names.iter().any(|name| name == "mcp")
+        {
             tool_names.push("mcp".to_string());
         }
         if !tool_names.iter().any(|name| name == "mcp") {
@@ -391,14 +406,31 @@ mod tests {
             },
         );
 
-        let mut names = select_tool_names(None, &[], false);
+        let mut names = select_tool_names(None, &[], false, None);
         let manager = options
-            .load_mcp(directory.path(), false, &mut names)
+            .load_mcp(directory.path(), false, &mut names, None)
             .unwrap()
             .expect("MCP manager");
 
         assert!(names.iter().any(|name| name == "mcp"));
         assert!(manager.config().config.mcp_servers.contains_key("editor"));
         assert!(!directory.path().join(".mcp.json").exists());
+        for defaults in [
+            vec![],
+            vec!["read".into()],
+            vec!["-mcp".into()],
+            vec!["+mcp".into()],
+        ] {
+            let mut names = select_tool_names(None, &[], false, Some(&defaults));
+            let manager = options
+                .load_mcp(directory.path(), false, &mut names, Some(&defaults))
+                .unwrap();
+            let expected = defaults == ["+mcp"];
+            assert_eq!(manager.is_some(), expected);
+            assert_eq!(
+                names.iter().filter(|name| *name == "mcp").count(),
+                usize::from(expected)
+            );
+        }
     }
 }

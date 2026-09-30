@@ -75,6 +75,8 @@ pub struct ModelInput {
     pub thinking_level_map: BTreeMap<String, Option<String>>,
     #[serde(default)]
     pub headers: BTreeMap<String, String>,
+    #[serde(default)]
+    pub sampling_params: BTreeMap<String, Value>,
 }
 
 fn host_api() -> String {
@@ -110,6 +112,7 @@ impl From<ModelInput> for Model {
             compat: value.compat,
             thinking_level_map: value.thinking_level_map,
             headers: value.headers,
+            sampling_params: value.sampling_params,
         }
     }
 }
@@ -246,6 +249,8 @@ pub enum ToolResultInput {
 #[derive(Debug, Clone, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct ToolResultObject {
+    #[serde(default)]
+    pub is_error: bool,
     #[serde(default)]
     pub content: ToolResultContent,
     #[serde(default)]

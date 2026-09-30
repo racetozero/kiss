@@ -82,6 +82,7 @@ fn credential(body: &Value, old_refresh: Option<&str>) -> Result<OAuthCredential
             - 5 * 60 * 1000,
         account_id: String::new(),
         available_model_ids: None,
+        client_id: None,
     })
 }
 

@@ -129,6 +129,7 @@ pub async fn finish_authorization(
         expires: i64::MAX,
         account_id: String::new(),
         available_model_ids: None,
+        client_id: None,
     })
 }
 

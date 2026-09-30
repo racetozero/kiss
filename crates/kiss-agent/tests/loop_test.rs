@@ -166,6 +166,13 @@ impl AgentTool for EchoTool {
         _on_update: Option<ToolUpdateSink>,
     ) -> anyhow::Result<ToolResult> {
         self.calls.fetch_add(1, Ordering::SeqCst);
+        if args["value"] == "error" {
+            return Ok(ToolResult {
+                is_error: true,
+                details: json!({"code":"not_found"}),
+                ..ToolResult::text("No matching item.")
+            });
+        }
         Ok(ToolResult::text(format!(
             "echo: {}",
             args["value"].as_str().unwrap_or("")
@@ -244,6 +251,39 @@ async fn simple_turn_no_tools() {
     assert_eq!(log.first().unwrap(), "agent_start");
     assert_eq!(log.last().unwrap(), "agent_end");
     assert!(log.contains(&"message_end:assistant".to_string()));
+}
+
+#[tokio::test]
+async fn returned_tool_errors_preserve_content_and_details() {
+    let config = scripted_config(vec![
+        assistant_tool_call("echo", json!({"value":"error"}), StopReason::ToolUse),
+        assistant_text("handled", StopReason::Stop),
+    ]);
+    let messages = run_agent_loop(
+        vec![AgentMessage::user("find an item")],
+        AgentContext {
+            tools: vec![Arc::new(EchoTool {
+                calls: Default::default(),
+            })],
+            ..Default::default()
+        },
+        config,
+        CancellationToken::new(),
+        Arc::new(|_| {}),
+    )
+    .await;
+    let result = messages
+        .iter()
+        .find_map(|message| match message {
+            AgentMessage::ToolResult(result) => Some(result),
+            _ => None,
+        })
+        .unwrap();
+    assert!(result.is_error);
+    assert_eq!(result.details.as_ref().unwrap()["code"], "not_found");
+    assert!(
+        matches!(&result.content[0], ContentBlock::Text { text, .. } if text == "No matching item.")
+    );
 }
 
 #[tokio::test]

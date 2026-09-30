@@ -118,20 +118,10 @@ impl AgentTool for McpTool {
                     "meta": result.meta,
                 });
                 let content = convert_content(result.content)?;
-                if is_error {
-                    let text = content
-                        .iter()
-                        .filter_map(|block| match block {
-                            KissContent::Text { text, .. } => Some(text.as_str()),
-                            _ => None,
-                        })
-                        .collect::<Vec<_>>()
-                        .join("\n");
-                    bail!("MCP tool `{server}/{name}` failed: {text}")
-                }
                 Ok(ToolResult {
                     content,
                     details,
+                    is_error,
                     ..Default::default()
                 })
             }

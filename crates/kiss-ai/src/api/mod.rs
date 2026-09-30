@@ -43,6 +43,7 @@ pub struct PartialBuilder {
     /// Raw argument text per tool-call content index.
     tool_args: Vec<(usize, String)>,
     started: bool,
+    cost_multiplier: f64,
 }
 
 impl PartialBuilder {
@@ -52,6 +53,7 @@ impl PartialBuilder {
             sink,
             tool_args: Vec::new(),
             started: false,
+            cost_multiplier: 1.0,
         }
     }
 
@@ -66,6 +68,28 @@ impl PartialBuilder {
 
     pub fn is_started(&self) -> bool {
         self.started
+    }
+
+    /// Use the reported tier when present, otherwise the requested tier.
+    pub fn set_service_tier(&mut self, tier: &str) {
+        if matches!(self.message.provider.as_str(), "openai" | "openai-codex") {
+            self.cost_multiplier = match tier {
+                "flex" => 0.5,
+                "priority" | "fast" if self.message.model == "gpt-5.5" => 2.5,
+                "priority" | "fast" => 2.0,
+                _ => 1.0,
+            };
+        }
+    }
+
+    fn finalize_usage(&mut self, model: &Model) {
+        finalize_cost(&mut self.message.usage, model);
+        let cost = &mut self.message.usage.cost;
+        cost.input *= self.cost_multiplier;
+        cost.output *= self.cost_multiplier;
+        cost.cache_read *= self.cost_multiplier;
+        cost.cache_write *= self.cost_multiplier;
+        cost.total = cost.input + cost.output + cost.cache_read + cost.cache_write;
     }
 
     pub fn begin_text(&mut self) -> usize {
@@ -224,7 +248,7 @@ impl PartialBuilder {
         self.start();
         self.close_open_blocks();
         self.message.stop_reason = stop_reason;
-        finalize_cost(&mut self.message.usage, model);
+        self.finalize_usage(model);
         if matches!(stop_reason, StopReason::Stop)
             && self
                 .message
@@ -245,8 +269,13 @@ impl PartialBuilder {
         } else {
             StopReason::Error
         };
-        self.message.error_message = Some(error.into());
-        finalize_cost(&mut self.message.usage, model);
+        let mut error = error.into();
+        if model.provider == "openai" && error.contains("subscription_sharing_usage_limit_exceeded")
+        {
+            error.push_str("\nCheck your ChatGPT usage: https://chatgpt.com/settings/usage");
+        }
+        self.message.error_message = Some(error);
+        self.finalize_usage(model);
         self.sink.error(self.message);
     }
 }
@@ -422,6 +451,7 @@ mod provider_header_tests {
             compat: None,
             thinking_level_map: Default::default(),
             headers: Default::default(),
+            sampling_params: Default::default(),
         };
         assert_eq!(
             provider_base_url(
@@ -461,6 +491,7 @@ mod provider_header_tests {
             compat: None,
             thinking_level_map: Default::default(),
             headers: Default::default(),
+            sampling_params: Default::default(),
         };
         let mut usage = Usage {
             input: 101,
@@ -504,6 +535,7 @@ mod provider_header_tests {
             }),
             thinking_level_map: Default::default(),
             headers: Default::default(),
+            sampling_params: Default::default(),
         };
         let request = apply_provider_headers(
             crate::stream::http_client().get("https://example.invalid"),
@@ -540,6 +572,7 @@ mod provider_header_tests {
             }),
             thinking_level_map: Default::default(),
             headers: Default::default(),
+            sampling_params: Default::default(),
         };
         let request = apply_provider_headers(
             crate::stream::http_client().get("https://example.invalid"),
@@ -578,6 +611,7 @@ mod provider_header_tests {
             compat: None,
             thinking_level_map: Default::default(),
             headers: Default::default(),
+            sampling_params: Default::default(),
         };
         let mut usage = Usage {
             cache_write: 1_000_000,
@@ -606,6 +640,7 @@ mod provider_header_tests {
             compat: None,
             thinking_level_map: Default::default(),
             headers: Default::default(),
+            sampling_params: Default::default(),
         };
         kiss_bench::measure(
             "stream_text_40k_2000",

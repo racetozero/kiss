@@ -9,6 +9,15 @@ pub async fn login_browser(
     show_url: impl FnOnce(&str),
 ) -> Result<()> {
     let credential = match provider {
+        "openai" => {
+            let id = kiss_coding::settings::Settings::get_or_create_device_id()?;
+            kiss_ai::auth::openai_codex::login_browser(
+                &kiss_ai::auth::openai_codex::OAuthConfig::chatgpt(Some(id)),
+                cancel,
+                show_url,
+            )
+            .await?
+        }
         "openai-codex" => {
             kiss_ai::auth::openai_codex::login_browser(&Default::default(), cancel, show_url)
                 .await?

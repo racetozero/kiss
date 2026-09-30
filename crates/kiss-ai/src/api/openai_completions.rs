@@ -50,6 +50,9 @@ fn detect_compat(model: &Model) -> Compat {
 
 pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, sink: EventSink) {
     let mut builder = PartialBuilder::new(model, sink);
+    if options.fast_mode && model.supports_fast_mode() {
+        builder.set_service_tier("priority");
+    }
     let Some(credential) = options.credential.as_ref() else {
         builder.fail(
             format!("no API key for provider {}", model.provider),
@@ -269,6 +272,9 @@ fn handle_chunk(
         let msg = err["message"].as_str().unwrap_or("provider error");
         return Err(msg.to_string());
     }
+    if let Some(tier) = chunk["service_tier"].as_str() {
+        builder.set_service_tier(tier);
+    }
     if let Some(usage) = chunk.get("usage").filter(|u| !u.is_null()) {
         let cached = usage["prompt_tokens_details"]["cached_tokens"]
             .as_u64()
@@ -306,14 +312,19 @@ fn handle_chunk(
     let delta = &choice["delta"];
 
     // DeepSeek-style reasoning stream.
-    if let Some(reasoning) = delta["reasoning_content"]
-        .as_str()
-        .filter(|s| !s.is_empty())
+    if let Some((field, reasoning)) = ["reasoning_content", "reasoning", "reasoning_text"]
+        .into_iter()
+        .find_map(|field| {
+            delta[field]
+                .as_str()
+                .filter(|s| !s.is_empty())
+                .map(|text| (field, text))
+        })
     {
         let idx = *state
             .thinking_idx
             .get_or_insert_with(|| builder.begin_thinking());
-        builder.set_thinking_signature(idx, "reasoning_content".into());
+        builder.set_thinking_signature(idx, field.into());
         builder.append_thinking(idx, reasoning);
     }
     if let Some(details) = delta["reasoning_details"].as_array() {
@@ -550,6 +561,9 @@ fn build_request(
     if let Some(choice) = &options.tool_choice {
         body["tool_choice"] = choice.openai_chat_value();
     }
+    for (key, value) in model.sampling_params.iter().chain(&options.sampling_params) {
+        body[key] = value.clone();
+    }
     body
 }
 
@@ -574,6 +588,7 @@ mod tests {
             compat: Some(compat),
             thinking_level_map: Default::default(),
             headers: Default::default(),
+            sampling_params: Default::default(),
         }
     }
 
@@ -602,6 +617,28 @@ mod tests {
             &detect_compat(&model),
         );
         assert_eq!(body["priority"], 7);
+    }
+
+    #[test]
+    fn request_sampling_overrides_model_defaults() {
+        let mut model = model_with_compat(OpenAICompat::default());
+        model.sampling_params = [
+            ("temperature".into(), json!(0.4)),
+            ("top_p".into(), json!(0.8)),
+        ]
+        .into();
+        let options = StreamOptions {
+            sampling_params: [("temperature".into(), json!(0.2))].into(),
+            ..Default::default()
+        };
+        let body = build_request(
+            &model,
+            &Context::default(),
+            &options,
+            &detect_compat(&model),
+        );
+        assert_eq!(body["temperature"], 0.2);
+        assert_eq!(body["top_p"], 0.8);
     }
 
     #[test]
@@ -674,6 +711,43 @@ mod tests {
         assert_eq!(body["tool_choice"]["type"], "function");
         assert_eq!(body["tool_choice"]["function"]["name"], "read");
         assert!(body.get("tools").is_none());
+    }
+
+    #[test]
+    fn reasoning_fields_replay_separately_from_text() {
+        for field in ["reasoning", "reasoning_content", "reasoning_text"] {
+            let model = model_with_compat(OpenAICompat::default());
+            let (sink, stream) = crate::EventStream::channel();
+            let mut builder = PartialBuilder::new(&model, sink);
+            let mut state = DecodeState::default();
+            for delta in [
+                json!({field: ""}),
+                json!({field: "Think"}),
+                json!({"content":"Answer"}),
+            ] {
+                handle_chunk(
+                    &json!({"choices":[{"delta":delta}]}).to_string(),
+                    &mut builder,
+                    &mut state,
+                )
+                .unwrap();
+            }
+            state.finish_reason = Some("stop".into());
+            finish(builder, state, &model, true);
+            let output = futures::executor::block_on(stream.result());
+            let context = Context {
+                messages: vec![Message::Assistant(output)],
+                ..Default::default()
+            };
+            let body = build_request(
+                &model,
+                &context,
+                &StreamOptions::default(),
+                &detect_compat(&model),
+            );
+            assert_eq!(body["messages"][0][field], "Think");
+            assert_eq!(body["messages"][0]["content"], "Answer");
+        }
     }
 
     #[test]

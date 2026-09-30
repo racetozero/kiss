@@ -1,6 +1,6 @@
 {
   "openai-responses": {
-    "muse-spark-1.1": {
+    "chat:muse-spark-1.1": {
       "id": "muse-spark-1.1",
       "name": "Muse Spark 1.1",
       "api": "openai-responses",
@@ -8,7 +8,12 @@
       "baseUrl": "https://api.meta.ai/v1",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 1.25, "output": 4.25, "cacheRead": 0.15, "cacheWrite": 0 },
+      "cost": {
+        "input": 1.25,
+        "output": 4.25,
+        "cacheRead": 0.15,
+        "cacheWrite": 0
+      },
       "contextWindow": 1048576,
       "maxTokens": 131072,
       "thinkingLevelMap": {
@@ -22,11 +27,17 @@
       },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "muse-spark-1.2": {
+    "chat:muse-spark-1.2": {
       "id": "muse-spark-1.2",
       "name": "Muse Spark 1.2",
       "api": "openai-responses",
@@ -34,7 +45,12 @@
       "baseUrl": "https://api.meta.ai/v1",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 1.25, "output": 4.25, "cacheRead": 0.15, "cacheWrite": 0 },
+      "cost": {
+        "input": 1.25,
+        "output": 4.25,
+        "cacheRead": 0.15,
+        "cacheWrite": 0
+      },
       "contextWindow": 1048576,
       "maxTokens": 131072,
       "thinkingLevelMap": {
@@ -48,11 +64,17 @@
       },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "muse-spark-1.2-contributor": {
+    "chat:muse-spark-1.2-contributor": {
       "id": "muse-spark-1.2-contributor",
       "name": "Muse Spark 1.2 Contributor",
       "api": "openai-responses",
@@ -60,7 +82,12 @@
       "baseUrl": "https://api.meta.ai/v1",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 0.1, "output": 0.2, "cacheRead": 0.002, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.1,
+        "output": 0.2,
+        "cacheRead": 0.002,
+        "cacheWrite": 0
+      },
       "contextWindow": 1048576,
       "maxTokens": 131072,
       "thinkingLevelMap": {
@@ -74,11 +101,17 @@
       },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "muse-spark-1.3": {
+    "chat:muse-spark-1.3": {
       "id": "muse-spark-1.3",
       "name": "Muse Spark 1.3",
       "api": "openai-responses",
@@ -86,7 +119,12 @@
       "baseUrl": "https://api.meta.ai/v1",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 1.25, "output": 4.25, "cacheRead": 0.15, "cacheWrite": 0 },
+      "cost": {
+        "input": 1.25,
+        "output": 4.25,
+        "cacheRead": 0.15,
+        "cacheWrite": 0
+      },
       "contextWindow": 1048576,
       "maxTokens": 131072,
       "thinkingLevelMap": {
@@ -100,11 +138,17 @@
       },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "muse-spark-1.3-contributor": {
+    "chat:muse-spark-1.3-contributor": {
       "id": "muse-spark-1.3-contributor",
       "name": "Muse Spark 1.3 Contributor",
       "api": "openai-responses",
@@ -112,7 +156,12 @@
       "baseUrl": "https://api.meta.ai/v1",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 0.1, "output": 0.2, "cacheRead": 0.002, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.1,
+        "output": 0.2,
+        "cacheRead": 0.002,
+        "cacheWrite": 0
+      },
       "contextWindow": 1048576,
       "maxTokens": 131072,
       "thinkingLevelMap": {
@@ -126,9 +175,15 @@
       },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     }
   }
 }

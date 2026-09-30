@@ -147,7 +147,8 @@ async fn run_command(args: &Args, command: &Command) -> anyhow::Result<i32> {
             if api_key.is_none()
                 && matches!(
                     provider.as_str(),
-                    "openai-codex"
+                    "openai"
+                        | "openai-codex"
                         | "anthropic"
                         | "github-copilot"
                         | "kimi-coding"
@@ -265,7 +266,7 @@ async fn run_oauth_login(provider: &str, headless: bool) -> anyhow::Result<()> {
     if !headless
         && matches!(
             provider,
-            "openai-codex" | "anthropic" | "openrouter" | "radius"
+            "openai" | "openai-codex" | "anthropic" | "openrouter" | "radius"
         )
     {
         let result = auth_flow::login_browser(provider, &cancel, |url| {

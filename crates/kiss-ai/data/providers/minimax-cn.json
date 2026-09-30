@@ -1,6 +1,6 @@
 {
   "anthropic-messages": {
-    "MiniMax-M2.7": {
+    "chat:MiniMax-M2.7": {
       "id": "MiniMax-M2.7",
       "name": "MiniMax-M2.7",
       "api": "anthropic-messages",
@@ -8,11 +8,17 @@
       "baseUrl": "https://api.minimaxi.com/anthropic",
       "reasoning": true,
       "input": ["text"],
-      "cost": { "input": 0.3, "output": 1.2, "cacheRead": 0.06, "cacheWrite": 0.375 },
+      "cost": {
+        "input": 0.3,
+        "output": 1.2,
+        "cacheRead": 0.06,
+        "cacheWrite": 0.375
+      },
       "contextWindow": 204800,
-      "maxTokens": 131072
+      "maxTokens": 131072,
+      "type": "chat"
     },
-    "MiniMax-M2.7-highspeed": {
+    "chat:MiniMax-M2.7-highspeed": {
       "id": "MiniMax-M2.7-highspeed",
       "name": "MiniMax-M2.7-highspeed",
       "api": "anthropic-messages",
@@ -20,11 +26,17 @@
       "baseUrl": "https://api.minimaxi.com/anthropic",
       "reasoning": true,
       "input": ["text"],
-      "cost": { "input": 0.6, "output": 2.4, "cacheRead": 0.06, "cacheWrite": 0.375 },
+      "cost": {
+        "input": 0.6,
+        "output": 2.4,
+        "cacheRead": 0.06,
+        "cacheWrite": 0.375
+      },
       "contextWindow": 204800,
-      "maxTokens": 131072
+      "maxTokens": 131072,
+      "type": "chat"
     },
-    "MiniMax-M3": {
+    "chat:MiniMax-M3": {
       "id": "MiniMax-M3",
       "name": "MiniMax-M3",
       "api": "anthropic-messages",
@@ -32,14 +44,25 @@
       "baseUrl": "https://api.minimaxi.com/anthropic",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 0.3, "output": 1.2, "cacheRead": 0.06, "cacheWrite": 0 },
-      "contextWindow": 1048576,
+      "cost": {
+        "input": 0.3,
+        "output": 1.2,
+        "cacheRead": 0.06,
+        "cacheWrite": 0
+      },
+      "contextWindow": 1000000,
       "maxTokens": 512000,
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     }
   }
 }

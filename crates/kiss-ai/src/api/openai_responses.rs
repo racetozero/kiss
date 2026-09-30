@@ -96,6 +96,9 @@ fn socket_cache_key(session_id: &str, response_url: &str, api_key: &str) -> Sock
 
 pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, sink: EventSink) {
     let mut builder = PartialBuilder::new(model, sink);
+    if options.fast_mode && model.supports_fast_mode() {
+        builder.set_service_tier("priority");
+    }
     let provider = ResponsesProvider::for_model(model);
     let Some(credential) = options.credential.as_ref() else {
         builder.fail(
@@ -792,6 +795,7 @@ struct DecodeState {
     items: std::collections::HashMap<u64, (usize, ItemKind)>,
     /// Completed output items used by cached WebSocket continuation.
     response_items: Vec<Value>,
+    unfinished_tools: std::collections::HashSet<usize>,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -817,6 +821,20 @@ fn handle_event(event: &SseEvent, builder: &mut PartialBuilder, state: &mut Deco
         .as_deref()
         .or_else(|| data["type"].as_str())
         .unwrap_or("");
+    if matches!(
+        event_type,
+        "response.output_item.added"
+            | "response.output_item.done"
+            | "response.function_call_arguments.delta"
+            | "response.output_text.delta"
+            | "response.reasoning_summary_text.delta"
+            | "response.reasoning_text.delta"
+    ) && data["output_index"].as_u64().is_none()
+    {
+        return Flow::Error(format!(
+            "The Responses server sent `{event_type}` without a valid output_index. Each item event needs a non-negative integer index. Use a compliant server and retry."
+        ));
+    }
     match event_type {
         "response.created" => {
             builder.start();
@@ -858,6 +876,7 @@ fn handle_event(event: &SseEvent, builder: &mut PartialBuilder, state: &mut Deco
                     };
                     let name = item["name"].as_str().unwrap_or_default().to_string();
                     let idx = builder.begin_tool_call(call_id, name);
+                    state.unfinished_tools.insert(idx);
                     state
                         .items
                         .insert(output_index, (idx, ItemKind::FunctionCall));
@@ -910,6 +929,7 @@ fn handle_event(event: &SseEvent, builder: &mut PartialBuilder, state: &mut Deco
                             .as_str()
                             .and_then(|s| serde_json::from_str::<Value>(s).ok());
                         builder.end_tool_call(idx, structured);
+                        state.unfinished_tools.remove(&idx);
                     }
                 }
             }
@@ -922,7 +942,15 @@ fn handle_event(event: &SseEvent, builder: &mut PartialBuilder, state: &mut Deco
             Flow::Continue
         }
         "response.completed" | "response.done" | "response.incomplete" => {
+            if !state.unfinished_tools.is_empty() {
+                return Flow::Error(
+                    "The Responses server ended the stream with an unfinished tool call. Each call needs output_item.done. Use a compliant server and retry.".into(),
+                );
+            }
             let response = &data["response"];
+            if let Some(tier) = response["service_tier"].as_str() {
+                builder.set_service_tier(tier);
+            }
             if let Some(id) = response["id"].as_str() {
                 builder.message.response_id = Some(id.to_string());
             }
@@ -960,18 +988,18 @@ fn handle_event(event: &SseEvent, builder: &mut PartialBuilder, state: &mut Deco
             Flow::Done(reason)
         }
         "response.failed" => {
-            let msg = data["response"]["error"]["message"]
-                .as_str()
-                .unwrap_or("response failed")
-                .to_string();
-            Flow::Error(msg)
+            let error = &data["response"]["error"];
+            let msg = error["message"].as_str().unwrap_or("response failed");
+            Flow::Error(format!(
+                "{}: {msg}",
+                error["code"].as_str().unwrap_or("provider_error")
+            ))
         }
-        "error" => Flow::Error(
-            data["message"]
-                .as_str()
-                .unwrap_or("provider error")
-                .to_string(),
-        ),
+        "error" => Flow::Error(format!(
+            "{}: {}",
+            data["code"].as_str().unwrap_or("provider_error"),
+            data["message"].as_str().unwrap_or("provider error")
+        )),
         _ => Flow::Continue,
     }
 }
@@ -1107,14 +1135,21 @@ pub(crate) fn build_request(model: &Model, context: &Context, options: &StreamOp
     if options.fast_mode && model.supports_fast_mode() {
         body["service_tier"] = json!("priority");
     }
+    let chatgpt = model.provider == "openai"
+        && model.base_url == "https://api.openai.com/v1"
+        && options
+            .credential
+            .as_ref()
+            .is_some_and(|credential| credential.is_bearer());
     if model.api != "openai-codex-responses"
+        && !chatgpt
         && model
             .compat
             .as_ref()
             .and_then(|compat| compat.supports_max_output_tokens)
             .unwrap_or(true)
     {
-        body["max_output_tokens"] = json!(options.max_tokens.unwrap_or(model.max_tokens));
+        body["max_output_tokens"] = json!(options.max_tokens.unwrap_or(model.max_tokens).max(16));
     }
     if let Some(system) = &context.system_prompt {
         body["instructions"] = json!(system);
@@ -1139,7 +1174,7 @@ pub(crate) fn build_request(model: &Model, context: &Context, options: &StreamOp
             body["reasoning"] = json!({"effort": effort, "summary": "auto"});
             body["include"] = json!(["reasoning.encrypted_content"]);
         }
-    } else if let Some(t) = options.temperature {
+    } else if let Some(t) = options.temperature.filter(|_| !chatgpt) {
         body["temperature"] = json!(t);
     }
     if !context.tools.is_empty() {
@@ -1163,6 +1198,9 @@ pub(crate) fn build_request(model: &Model, context: &Context, options: &StreamOp
     }
     if let Some(session) = &options.session_id {
         body["prompt_cache_key"] = json!(session);
+    }
+    for (key, value) in model.sampling_params.iter().chain(&options.sampling_params) {
+        body[key] = value.clone();
     }
     body
 }
@@ -1193,6 +1231,7 @@ mod request_tests {
             compat: None,
             thinking_level_map: BTreeMap::new(),
             headers: BTreeMap::new(),
+            sampling_params: Default::default(),
         }
     }
 
@@ -1234,6 +1273,149 @@ mod request_tests {
         assert_eq!(body["parallel_tool_calls"], true);
         assert_eq!(body["store"], false);
         assert_eq!(body["max_output_tokens"], 100);
+    }
+
+    #[test]
+    fn subscription_requests_omit_unsupported_fields_and_keep_sampling_overrides() {
+        let mut model = model("openai-responses", "https://api.openai.com/v1");
+        model.provider = "openai".into();
+        model.reasoning = false;
+        let mut options = StreamOptions {
+            credential: Some(crate::ResolvedCredential::bearer("token")),
+            temperature: Some(0.5),
+            max_tokens: Some(1),
+            ..Default::default()
+        };
+        let body = build_request(&model, &Context::default(), &options);
+        assert!(body.get("temperature").is_none());
+        assert!(body.get("max_output_tokens").is_none());
+        options.credential = Some(crate::ResolvedCredential::api_key("custom-key"));
+        model.sampling_params = [("top_p".into(), json!(0.8))].into();
+        options.sampling_params = [("top_p".into(), json!(0.2))].into();
+        let body = build_request(&model, &Context::default(), &options);
+        assert_eq!(body["max_output_tokens"], 16);
+        assert_eq!(body["temperature"], 0.5);
+        assert_eq!(body["top_p"], 0.2);
+    }
+
+    #[tokio::test]
+    async fn broken_tool_streams_return_errors_and_valid_parallel_calls_complete() {
+        for (missing_index, unfinished) in [(true, false), (false, true), (false, false)] {
+            let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+            let address = listener.local_addr().unwrap();
+            let server = tokio::spawn(async move {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                let mut request = [0; 8192];
+                assert!(socket.read(&mut request).await.unwrap() > 0);
+                let mut events = Vec::new();
+                for index in 0..2 {
+                    let item = json!({"type":"function_call","id":format!("fc-{index}"),"call_id":format!("call-{index}"),"name":"write","arguments":"{\"path\":\"file\",\"content\":\"text\"}"});
+                    let mut added = json!({"type":"response.output_item.added","output_index":index,"item":item});
+                    if missing_index {
+                        added.as_object_mut().unwrap().remove("output_index");
+                    }
+                    events.push(added);
+                    if !unfinished {
+                        events.push(json!({"type":"response.output_item.done","output_index":index,"item":item}));
+                    }
+                }
+                events.push(json!({"type":"response.completed","response":{"status":"completed"}}));
+                let body: String = events
+                    .into_iter()
+                    .map(|event| format!("data: {event}\n\n"))
+                    .collect();
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                socket.write_all(response.as_bytes()).await.unwrap();
+            });
+            let result = crate::stream_simple(
+                &model("openai-responses", &format!("http://{address}")),
+                &Context::default(),
+                &StreamOptions {
+                    credential: Some(crate::ResolvedCredential::api_key("test")),
+                    transport: Transport::Sse,
+                    ..Default::default()
+                },
+            )
+            .result()
+            .await;
+            server.await.unwrap();
+            if missing_index || unfinished {
+                assert_eq!(result.stop_reason, StopReason::Error);
+                assert!(result.error_message.unwrap().contains(if missing_index {
+                    "output_index"
+                } else {
+                    "unfinished tool call"
+                }));
+            } else {
+                assert_eq!(result.stop_reason, StopReason::ToolUse);
+                let calls: Vec<_> = result.tool_calls().collect();
+                assert_eq!(calls.len(), 2);
+                assert_eq!(calls[0].arguments["path"], "file");
+                assert_eq!(calls[1].arguments["content"], "text");
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn subscription_error_codes_survive_stream_normalization() {
+        for code in [
+            "subscription_sharing_usage_limit_exceeded",
+            "subscription_sharing_usage_unavailable",
+            "subscription_sharing_user_unavailable",
+        ] {
+            for failed in [false, true] {
+                let mut model = model("openai-responses", "https://api.openai.com/v1");
+                model.provider = "openai".into();
+                let (sink, stream) = crate::EventStream::channel();
+                let mut builder = PartialBuilder::new(&model, sink);
+                let data = if failed {
+                    json!({"type":"response.failed","response":{"error":{"code":code,"message":"Request refused"}}})
+                } else {
+                    json!({"type":"error","code":code,"message":"Request refused"})
+                };
+                let event = SseEvent {
+                    event: None,
+                    data: data.to_string(),
+                };
+                let Flow::Error(error) =
+                    handle_event(&event, &mut builder, &mut DecodeState::default())
+                else {
+                    panic!("expected provider error");
+                };
+                builder.fail(error, false, &model);
+                let message = stream.result().await.error_message.unwrap();
+                assert!(message.contains(code));
+                assert_eq!(
+                    message.contains("https://chatgpt.com/settings/usage"),
+                    code.ends_with("limit_exceeded")
+                );
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn reported_service_tier_controls_final_cost() {
+        for (tier, multiplier) in [("fast", 2.0), ("flex", 0.5), ("default", 1.0)] {
+            let mut model = model("openai-responses", "https://api.openai.com/v1");
+            model.provider = "openai".into();
+            model.cost.input = 1.0;
+            model.cost.output = 1.0;
+            let (sink, stream) = crate::EventStream::channel();
+            let mut builder = PartialBuilder::new(&model, sink);
+            builder.set_service_tier("priority");
+            let event = SseEvent { event: None, data: json!({"type":"response.completed","response":{"service_tier":tier,"usage":{"input_tokens":100,"output_tokens":50}}}).to_string() };
+            let Flow::Done(reason) =
+                handle_event(&event, &mut builder, &mut DecodeState::default())
+            else {
+                panic!("expected completion");
+            };
+            builder.finish(reason, &model);
+            let output = stream.result().await;
+            assert!((output.usage.cost.total - 0.00015 * multiplier).abs() < 1e-12);
+        }
     }
 
     #[test]

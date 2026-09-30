@@ -303,6 +303,7 @@ mod tests {
             compat: None,
             thinking_level_map: BTreeMap::new(),
             headers: BTreeMap::new(),
+            sampling_params: Default::default(),
         };
         let context = Context {
             system_prompt: Some("system".into()),

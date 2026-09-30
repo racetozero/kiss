@@ -1918,6 +1918,9 @@ fn cache_refresh_deadline_missed(
 
 fn is_transient(error: &str) -> bool {
     let e = error.to_lowercase();
+    if e.contains("subscription_sharing_usage_limit_exceeded") {
+        return false;
+    }
     let transient_status = [429, 500, 502, 503, 504, 520].iter().any(|status| {
         [
             format!("http {status}"),
@@ -1944,6 +1947,8 @@ fn is_transient(error: &str) -> bool {
             "network error",
             "stream error",
             "request failed",
+            "subscription_sharing_usage_unavailable",
+            "subscription_sharing_user_unavailable",
         ]
         .iter()
         .any(|needle| e.contains(needle))
@@ -1970,6 +1975,7 @@ mod ephemeral_tests {
             compat: None,
             thinking_level_map: BTreeMap::new(),
             headers: BTreeMap::new(),
+            sampling_params: Default::default(),
         }
     }
 
@@ -2045,6 +2051,11 @@ mod ephemeral_tests {
         assert!(is_transient("rate limit exceeded"));
         assert!(!is_transient("model has a 500 token limit"));
         assert!(!is_transient("connection settings are invalid"));
+        assert!(!is_transient(
+            "HTTP 429: subscription_sharing_usage_limit_exceeded"
+        ));
+        assert!(is_transient("subscription_sharing_usage_unavailable"));
+        assert!(is_transient("subscription_sharing_user_unavailable"));
     }
 
     #[test]

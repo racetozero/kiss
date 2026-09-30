@@ -1,6 +1,6 @@
 {
   "openai-completions": {
-    "gpt-oss-120b": {
+    "chat:gpt-oss-120b": {
       "id": "gpt-oss-120b",
       "name": "GPT OSS 120B",
       "api": "openai-completions",
@@ -8,10 +8,18 @@
       "baseUrl": "https://api.cerebras.ai/v1",
       "reasoning": true,
       "input": ["text"],
-      "cost": { "input": 0.35, "output": 0.75, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.35,
+        "output": 0.75,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
       "contextWindow": 131072,
       "maxTokens": 40960,
-      "compat": { "supportsStore": false, "supportsDeveloperRole": false },
+      "compat": {
+        "supportsStore": false,
+        "supportsDeveloperRole": false
+      },
       "thinkingLevelMap": {
         "off": null,
         "minimal": null,
@@ -20,9 +28,10 @@
         "high": "high",
         "xhigh": null,
         "max": null
-      }
+      },
+      "type": "chat"
     },
-    "qwen-3.8-27b": {
+    "chat:qwen-3.8-27b": {
       "id": "qwen-3.8-27b",
       "name": "Qwen3.8 27B",
       "api": "openai-completions",
@@ -30,10 +39,18 @@
       "baseUrl": "https://api.cerebras.ai/v1",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 0.99, "output": 1.49, "cacheRead": 0, "cacheWrite": 0 },
-      "contextWindow": 65536,
-      "maxTokens": 32768,
-      "compat": { "supportsStore": false, "supportsDeveloperRole": false },
+      "cost": {
+        "input": 0.99,
+        "output": 1.49,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
+      "contextWindow": 131072,
+      "maxTokens": 40960,
+      "compat": {
+        "supportsStore": false,
+        "supportsDeveloperRole": false
+      },
       "thinkingLevelMap": {
         "off": "none",
         "minimal": null,
@@ -45,9 +62,15 @@
       },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     }
   }
 }

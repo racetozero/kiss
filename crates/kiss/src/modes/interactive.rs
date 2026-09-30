@@ -2367,10 +2367,9 @@ fn file_completion_prefix(editor: &Editor) -> Option<String> {
     let text = editor.current_line_before_cursor();
     if let Some(start) = text.rfind("@\"")
         && (start == 0
-            || text[..start]
-                .chars()
-                .next_back()
-                .is_some_and(path_token_boundary))
+            || text[..start].chars().next_back().is_some_and(|character| {
+                path_token_boundary(character) || matches!(character, '(' | '[' | '{' | '<' | '`')
+            }))
         && !text[start + 2..].contains('"')
     {
         return Some(text[start..].to_string());
@@ -2382,7 +2381,21 @@ fn file_completion_prefix(editor: &Editor) -> Option<String> {
             path_token_boundary(character).then_some(index + character.len_utf8())
         })
         .unwrap_or(0);
-    let token = &text[start..];
+    let mut token = &text[start..];
+    while let Some(first) = token.chars().next() {
+        let closer = match first {
+            '(' => ')',
+            '[' => ']',
+            '{' => '}',
+            '<' => '>',
+            '`' => '`',
+            _ => break,
+        };
+        if token[1..].contains(closer) {
+            break;
+        }
+        token = &token[1..];
+    }
     token.starts_with('@').then(|| token.to_string())
 }
 
@@ -8638,6 +8651,15 @@ mod tests {
         );
         editor.set_text("mail@example.com");
         assert_eq!(file_completion_prefix(&editor), None);
+        for wrapper in ["(", "[", "{", "<", "`"] {
+            editor.set_text(&format!("review {wrapper}@src/ma"));
+            assert_eq!(file_completion_prefix(&editor).as_deref(), Some("@src/ma"));
+        }
+        editor.set_text("review @app/[slug]/page");
+        assert_eq!(
+            file_completion_prefix(&editor).as_deref(),
+            Some("@app/[slug]/page")
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -9315,7 +9337,7 @@ mod tests {
     }
 
     #[test]
-    fn api_key_login_uses_masked_prompt() {
+    fn openai_login_offers_subscription_and_api_key() {
         let mut app = test_app();
         let session = test_session(kiss_coding::SessionManager::in_memory(
             std::path::Path::new("/tmp/project"),
@@ -9333,8 +9355,14 @@ mod tests {
         assert_eq!(provider, "openai");
         assert!(matches!(
             choices.first(),
-            Some(LoginChoice::Method(kiss_ai::auth::LoginMethod::ApiKey))
+            Some(LoginChoice::Method(
+                kiss_ai::auth::LoginMethod::BrowserOAuth
+            ))
         ));
+        assert!(choices.iter().any(|choice| matches!(
+            choice,
+            LoginChoice::Method(kiss_ai::auth::LoginMethod::ApiKey)
+        )));
     }
 
     #[test]

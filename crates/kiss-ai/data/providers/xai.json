@@ -1,12 +1,14 @@
 {
   "openai-responses": {
-    "grok-4.3": {
+    "chat:grok-4.3": {
       "id": "grok-4.3",
       "name": "Grok 4.3",
       "api": "openai-responses",
       "provider": "xai",
       "baseUrl": "https://api.x.ai/v1",
-      "compat": { "supportsLongCacheRetention": false },
+      "compat": {
+        "supportsLongCacheRetention": false
+      },
       "reasoning": true,
       "input": ["text", "image"],
       "cost": {
@@ -37,17 +39,25 @@
       },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "grok-4.5": {
+    "chat:grok-4.5": {
       "id": "grok-4.5",
       "name": "Grok 4.5",
       "api": "openai-responses",
       "provider": "xai",
       "baseUrl": "https://api.x.ai/v1",
-      "compat": { "supportsLongCacheRetention": false },
+      "compat": {
+        "supportsLongCacheRetention": false
+      },
       "reasoning": true,
       "input": ["text", "image"],
       "cost": {
@@ -78,17 +88,25 @@
       },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "grok-4.6": {
+    "chat:grok-4.6": {
       "id": "grok-4.6",
       "name": "Grok 4.6",
       "api": "openai-responses",
       "provider": "xai",
       "baseUrl": "https://api.x.ai/v1",
-      "compat": { "supportsLongCacheRetention": false },
+      "compat": {
+        "supportsLongCacheRetention": false
+      },
       "reasoning": true,
       "input": ["text", "image"],
       "cost": {
@@ -97,7 +115,13 @@
         "cacheRead": 0.5,
         "cacheWrite": 0,
         "tiers": [
-          { "inputTokensAbove": 200000, "input": 4, "output": 12, "cacheRead": 1, "cacheWrite": 0 }
+          {
+            "inputTokensAbove": 200000,
+            "input": 4,
+            "output": 12,
+            "cacheRead": 1,
+            "cacheWrite": 0
+          }
         ]
       },
       "contextWindow": 500000,
@@ -113,17 +137,25 @@
       },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "grok-4.7": {
+    "chat:grok-4.7": {
       "id": "grok-4.7",
       "name": "Grok 4.7",
       "api": "openai-responses",
       "provider": "xai",
       "baseUrl": "https://api.x.ai/v1",
-      "compat": { "supportsLongCacheRetention": false },
+      "compat": {
+        "supportsLongCacheRetention": false
+      },
       "reasoning": true,
       "input": ["text", "image"],
       "cost": {
@@ -132,7 +164,13 @@
         "cacheRead": 0.5,
         "cacheWrite": 0,
         "tiers": [
-          { "inputTokensAbove": 200000, "input": 4, "output": 12, "cacheRead": 1, "cacheWrite": 0 }
+          {
+            "inputTokensAbove": 200000,
+            "input": 4,
+            "output": 12,
+            "cacheRead": 1,
+            "cacheWrite": 0
+          }
         ]
       },
       "contextWindow": 500000,
@@ -148,9 +186,15 @@
       },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     }
   }
 }

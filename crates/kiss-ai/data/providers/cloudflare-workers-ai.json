@@ -1,6 +1,24 @@
 {
+  "cloudflare-workers-ai-system-one": {
+    "classifier:typesafe/jev": {
+      "type": "classifier",
+      "id": "typesafe/jev",
+      "name": "Jev",
+      "api": "cloudflare-workers-ai-system-one",
+      "provider": "cloudflare-workers-ai",
+      "baseUrl": "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai",
+      "input": ["text"],
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
+      "contextWindow": 32000
+    }
+  },
   "openai-completions": {
-    "@cf/deepseek-ai/deepseek-v4-flash-0731": {
+    "chat:@cf/deepseek-ai/deepseek-v4-flash-0731": {
       "id": "@cf/deepseek-ai/deepseek-v4-flash-0731",
       "name": "DeepSeek V4 Flash 0731",
       "api": "openai-completions",
@@ -8,35 +26,12 @@
       "baseUrl": "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
       "reasoning": true,
       "input": ["text"],
-      "cost": { "input": 0.44, "output": 1.32, "cacheRead": 0.014, "cacheWrite": 0 },
-      "contextWindow": 1310720,
-      "maxTokens": 1048576,
-      "compat": {
-        "supportsStore": false,
-        "supportsDeveloperRole": false,
-        "supportsStrictMode": true,
-        "supportsLongCacheRetention": false,
-        "sendSessionAffinityHeaders": true,
-        "requiresReasoningContentOnAssistantMessages": true,
-        "thinkingFormat": "deepseek"
+      "cost": {
+        "input": 0.44,
+        "output": 1.32,
+        "cacheRead": 0.014,
+        "cacheWrite": 0
       },
-      "thinkingLevelMap": {
-        "minimal": null,
-        "low": null,
-        "medium": null,
-        "high": "high",
-        "max": "max"
-      }
-    },
-    "@cf/deepseek-ai/deepseek-v4-pro-0813": {
-      "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
-      "name": "DeepSeek V4 Pro 0813",
-      "api": "openai-completions",
-      "provider": "cloudflare-workers-ai",
-      "baseUrl": "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
-      "reasoning": true,
-      "input": ["text"],
-      "cost": { "input": 1.32, "output": 3.96, "cacheRead": 0.044, "cacheWrite": 0 },
       "contextWindow": 1048576,
       "maxTokens": 1048576,
       "compat": {
@@ -54,9 +49,44 @@
         "medium": null,
         "high": "high",
         "max": "max"
-      }
+      },
+      "type": "chat"
     },
-    "@cf/google/gemma-4-26b-a4b-it": {
+    "chat:@cf/deepseek-ai/deepseek-v4-pro-0813": {
+      "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+      "name": "DeepSeek V4 Pro 0813",
+      "api": "openai-completions",
+      "provider": "cloudflare-workers-ai",
+      "baseUrl": "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
+      "reasoning": true,
+      "input": ["text"],
+      "cost": {
+        "input": 1.32,
+        "output": 3.96,
+        "cacheRead": 0.044,
+        "cacheWrite": 0
+      },
+      "contextWindow": 1048576,
+      "maxTokens": 1048576,
+      "compat": {
+        "supportsStore": false,
+        "supportsDeveloperRole": false,
+        "supportsStrictMode": true,
+        "supportsLongCacheRetention": false,
+        "sendSessionAffinityHeaders": true,
+        "requiresReasoningContentOnAssistantMessages": true,
+        "thinkingFormat": "deepseek"
+      },
+      "thinkingLevelMap": {
+        "minimal": null,
+        "low": null,
+        "medium": null,
+        "high": "high",
+        "max": "max"
+      },
+      "type": "chat"
+    },
+    "chat:@cf/google/gemma-4-26b-a4b-it": {
       "id": "@cf/google/gemma-4-26b-a4b-it",
       "name": "Gemma 4 26B A4B IT",
       "api": "openai-completions",
@@ -64,7 +94,12 @@
       "baseUrl": "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 0.1, "output": 0.3, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.1,
+        "output": 0.3,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
       "contextWindow": 256000,
       "maxTokens": 16384,
       "compat": {
@@ -85,11 +120,17 @@
       },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "@cf/ibm-granite/granite-4.0-h-micro": {
+    "chat:@cf/ibm-granite/granite-4.0-h-micro": {
       "id": "@cf/ibm-granite/granite-4.0-h-micro",
       "name": "Granite 4.0 H Micro",
       "api": "openai-completions",
@@ -97,7 +138,12 @@
       "baseUrl": "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
       "reasoning": false,
       "input": ["text"],
-      "cost": { "input": 0.017, "output": 0.112, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.017,
+        "output": 0.112,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
       "contextWindow": 131000,
       "maxTokens": 131000,
       "compat": {
@@ -106,9 +152,10 @@
         "supportsStrictMode": true,
         "supportsLongCacheRetention": false,
         "sendSessionAffinityHeaders": true
-      }
+      },
+      "type": "chat"
     },
-    "@cf/meta/llama-3.3-70b-instruct-fp8-fast": {
+    "chat:@cf/meta/llama-3.3-70b-instruct-fp8-fast": {
       "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
       "name": "Llama 3.3 70B Instruct fp8 Fast",
       "api": "openai-completions",
@@ -116,7 +163,12 @@
       "baseUrl": "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
       "reasoning": false,
       "input": ["text"],
-      "cost": { "input": 0.293, "output": 2.253, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.293,
+        "output": 2.253,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
       "contextWindow": 24000,
       "maxTokens": 24000,
       "compat": {
@@ -125,9 +177,10 @@
         "supportsStrictMode": true,
         "supportsLongCacheRetention": false,
         "sendSessionAffinityHeaders": true
-      }
+      },
+      "type": "chat"
     },
-    "@cf/meta/llama-4-scout-17b-16e-instruct": {
+    "chat:@cf/meta/llama-4-scout-17b-16e-instruct": {
       "id": "@cf/meta/llama-4-scout-17b-16e-instruct",
       "name": "Llama 4 Scout 17B 16E Instruct",
       "api": "openai-completions",
@@ -135,7 +188,12 @@
       "baseUrl": "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
       "reasoning": false,
       "input": ["text", "image"],
-      "cost": { "input": 0.27, "output": 0.85, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.27,
+        "output": 0.85,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
       "contextWindow": 131000,
       "maxTokens": 16384,
       "compat": {
@@ -147,11 +205,17 @@
       },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "@cf/mistralai/mistral-small-3.1-24b-instruct": {
+    "chat:@cf/mistralai/mistral-small-3.1-24b-instruct": {
       "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
       "name": "Mistral Small 3.1 24B Instruct",
       "api": "openai-completions",
@@ -159,7 +223,12 @@
       "baseUrl": "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
       "reasoning": false,
       "input": ["text"],
-      "cost": { "input": 0.351, "output": 0.555, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.351,
+        "output": 0.555,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
       "contextWindow": 128000,
       "maxTokens": 128000,
       "compat": {
@@ -168,9 +237,10 @@
         "supportsStrictMode": true,
         "supportsLongCacheRetention": false,
         "sendSessionAffinityHeaders": true
-      }
+      },
+      "type": "chat"
     },
-    "@cf/moonshotai/kimi-k2.6": {
+    "chat:@cf/moonshotai/kimi-k2.6": {
       "id": "@cf/moonshotai/kimi-k2.6",
       "name": "Kimi K2.6",
       "api": "openai-completions",
@@ -178,7 +248,12 @@
       "baseUrl": "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 0.95, "output": 4, "cacheRead": 0.16, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.95,
+        "output": 4,
+        "cacheRead": 0.16,
+        "cacheWrite": 0
+      },
       "contextWindow": 262144,
       "maxTokens": 256000,
       "compat": {
@@ -199,11 +274,17 @@
       },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "@cf/moonshotai/kimi-k2.7-code": {
+    "chat:@cf/moonshotai/kimi-k2.7-code": {
       "id": "@cf/moonshotai/kimi-k2.7-code",
       "name": "Kimi K2.7 Code",
       "api": "openai-completions",
@@ -211,7 +292,12 @@
       "baseUrl": "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 0.95, "output": 4, "cacheRead": 0.19, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.95,
+        "output": 4,
+        "cacheRead": 0.19,
+        "cacheWrite": 0
+      },
       "contextWindow": 262144,
       "maxTokens": 262144,
       "compat": {
@@ -223,11 +309,17 @@
       },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "@cf/nvidia/nemotron-3-120b-a12b": {
+    "chat:@cf/nvidia/nemotron-3-120b-a12b": {
       "id": "@cf/nvidia/nemotron-3-120b-a12b",
       "name": "Nemotron 3 Super 120B",
       "api": "openai-completions",
@@ -235,7 +327,12 @@
       "baseUrl": "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
       "reasoning": true,
       "input": ["text"],
-      "cost": { "input": 0.5, "output": 1.5, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.5,
+        "output": 1.5,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
       "contextWindow": 256000,
       "maxTokens": 256000,
       "compat": {
@@ -253,9 +350,10 @@
         "high": "high",
         "xhigh": null,
         "max": null
-      }
+      },
+      "type": "chat"
     },
-    "@cf/openai/gpt-oss-120b": {
+    "chat:@cf/openai/gpt-oss-120b": {
       "id": "@cf/openai/gpt-oss-120b",
       "name": "GPT OSS 120B",
       "api": "openai-completions",
@@ -263,7 +361,12 @@
       "baseUrl": "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
       "reasoning": true,
       "input": ["text"],
-      "cost": { "input": 0.35, "output": 0.75, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.35,
+        "output": 0.75,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
       "contextWindow": 128000,
       "maxTokens": 16384,
       "compat": {
@@ -281,9 +384,10 @@
         "high": "high",
         "xhigh": null,
         "max": null
-      }
+      },
+      "type": "chat"
     },
-    "@cf/openai/gpt-oss-20b": {
+    "chat:@cf/openai/gpt-oss-20b": {
       "id": "@cf/openai/gpt-oss-20b",
       "name": "GPT OSS 20B",
       "api": "openai-completions",
@@ -291,7 +395,12 @@
       "baseUrl": "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
       "reasoning": true,
       "input": ["text"],
-      "cost": { "input": 0.2, "output": 0.3, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.2,
+        "output": 0.3,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
       "contextWindow": 128000,
       "maxTokens": 16384,
       "compat": {
@@ -300,9 +409,19 @@
         "supportsStrictMode": true,
         "supportsLongCacheRetention": false,
         "sendSessionAffinityHeaders": true
-      }
+      },
+      "thinkingLevelMap": {
+        "off": null,
+        "minimal": null,
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": null,
+        "max": null
+      },
+      "type": "chat"
     },
-    "@cf/qwen/qwen3-30b-a3b-fp8": {
+    "chat:@cf/qwen/qwen3-30b-a3b-fp8": {
       "id": "@cf/qwen/qwen3-30b-a3b-fp8",
       "name": "Qwen3 30B A3b fp8",
       "api": "openai-completions",
@@ -310,7 +429,12 @@
       "baseUrl": "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
       "reasoning": true,
       "input": ["text"],
-      "cost": { "input": 0.0509, "output": 0.335, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.0509,
+        "output": 0.335,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
       "contextWindow": 32768,
       "maxTokens": 32768,
       "compat": {
@@ -319,9 +443,10 @@
         "supportsStrictMode": true,
         "supportsLongCacheRetention": false,
         "sendSessionAffinityHeaders": true
-      }
+      },
+      "type": "chat"
     },
-    "@cf/qwen/qwen3.8-27b": {
+    "chat:@cf/qwen/qwen3.8-27b": {
       "id": "@cf/qwen/qwen3.8-27b",
       "name": "Qwen3.8 27B",
       "api": "openai-completions",
@@ -329,7 +454,12 @@
       "baseUrl": "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 0.45, "output": 3.2, "cacheRead": 0.05, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.45,
+        "output": 3.2,
+        "cacheRead": 0.05,
+        "cacheWrite": 0
+      },
       "contextWindow": 262144,
       "maxTokens": 262144,
       "compat": {
@@ -350,11 +480,17 @@
       },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "@cf/zai-org/glm-4.7-flash": {
+    "chat:@cf/zai-org/glm-4.7-flash": {
       "id": "@cf/zai-org/glm-4.7-flash",
       "name": "GLM-4.7-Flash",
       "api": "openai-completions",
@@ -362,7 +498,12 @@
       "baseUrl": "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
       "reasoning": true,
       "input": ["text"],
-      "cost": { "input": 0.0605, "output": 0.4, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.0605,
+        "output": 0.4,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
       "contextWindow": 131072,
       "maxTokens": 131072,
       "compat": {
@@ -371,9 +512,10 @@
         "supportsStrictMode": true,
         "supportsLongCacheRetention": false,
         "sendSessionAffinityHeaders": true
-      }
+      },
+      "type": "chat"
     },
-    "@cf/zai-org/glm-5.2": {
+    "chat:@cf/zai-org/glm-5.2": {
       "id": "@cf/zai-org/glm-5.2",
       "name": "Glm 5.2",
       "api": "openai-completions",
@@ -381,7 +523,12 @@
       "baseUrl": "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
       "reasoning": true,
       "input": ["text"],
-      "cost": { "input": 1.4, "output": 4.4, "cacheRead": 0.26, "cacheWrite": 0 },
+      "cost": {
+        "input": 1.4,
+        "output": 4.4,
+        "cacheRead": 0.26,
+        "cacheWrite": 0
+      },
       "contextWindow": 262144,
       "maxTokens": 256000,
       "compat": {
@@ -399,9 +546,10 @@
         "high": "high",
         "xhigh": null,
         "max": "max"
-      }
+      },
+      "type": "chat"
     },
-    "@cf/zai-org/glm-5.3": {
+    "chat:@cf/zai-org/glm-5.3": {
       "id": "@cf/zai-org/glm-5.3",
       "name": "Glm 5.3",
       "api": "openai-completions",
@@ -409,8 +557,13 @@
       "baseUrl": "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
       "reasoning": true,
       "input": ["text"],
-      "cost": { "input": 1.4, "output": 4.4, "cacheRead": 0.26, "cacheWrite": 0 },
-      "contextWindow": 1310720,
+      "cost": {
+        "input": 1.4,
+        "output": 4.4,
+        "cacheRead": 0.26,
+        "cacheWrite": 0
+      },
+      "contextWindow": 1048576,
       "maxTokens": 1048576,
       "compat": {
         "supportsStore": false,
@@ -427,9 +580,10 @@
         "high": "high",
         "xhigh": null,
         "max": "max"
-      }
+      },
+      "type": "chat"
     },
-    "@cf/zai-org/glm-5.3-flash": {
+    "chat:@cf/zai-org/glm-5.3-flash": {
       "id": "@cf/zai-org/glm-5.3-flash",
       "name": "Glm 5.3 Flash",
       "api": "openai-completions",
@@ -437,8 +591,13 @@
       "baseUrl": "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 0.15, "output": 0.5, "cacheRead": 0.03, "cacheWrite": 0 },
-      "contextWindow": 1310720,
+      "cost": {
+        "input": 0.15,
+        "output": 0.5,
+        "cacheRead": 0.03,
+        "cacheWrite": 0
+      },
+      "contextWindow": 1048576,
       "maxTokens": 1048576,
       "compat": {
         "supportsStore": false,
@@ -458,9 +617,15 @@
       },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     }
   }
 }

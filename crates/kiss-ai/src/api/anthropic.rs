@@ -606,6 +606,7 @@ mod tests {
             compat: Some(compat),
             thinking_level_map: BTreeMap::new(),
             headers: BTreeMap::new(),
+            sampling_params: Default::default(),
         }
     }
 

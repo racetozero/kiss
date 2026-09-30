@@ -38,30 +38,21 @@ pub struct ReloadedRuntime {
 
 // The tool table lives in kiss-sdk so the command-line program and every SDK
 // surface agree on which tools exist and how they are built.
-pub use kiss_sdk::tools::{ALL_TOOLS, DEFAULT_TOOLS, build_tools};
-
-pub fn selected_tool_names(args: &Args) -> Vec<String> {
-    if args.no_tools {
-        return Vec::new();
-    }
-    let mut names: Vec<String> = if let Some(allow) = &args.tools {
-        Args::split_csv(&Some(allow.clone()))
-    } else {
-        DEFAULT_TOOLS.iter().map(|s| s.to_string()).collect()
-    };
-    names.retain(|name| ALL_TOOLS.contains(&name.as_str()));
-    for excluded in Args::split_csv(&args.exclude_tools) {
-        names.retain(|n| *n != excluded);
-    }
-    names
-}
+pub use kiss_sdk::tools::build_tools;
 
 fn configured_tools(
     args: &Args,
     cwd: &std::path::Path,
     trusted: bool,
+    settings: &Settings,
 ) -> Result<(Vec<String>, Option<McpManager>)> {
-    let mut names = selected_tool_names(args);
+    let allow = args.tools.as_ref().map(|_| Args::split_csv(&args.tools));
+    let mut names = kiss_sdk::tools::select_tool_names(
+        allow.as_deref(),
+        &Args::split_csv(&args.exclude_tools),
+        args.no_tools,
+        settings.default_tools.as_deref(),
+    );
     if args.no_tools {
         return Ok((names, None));
     }
@@ -73,7 +64,11 @@ fn configured_tools(
     let explicitly_excluded = Args::split_csv(&args.exclude_tools)
         .iter()
         .any(|name| name == "mcp");
-    if args.tools.is_none() && !explicitly_excluded {
+    if args.tools.is_none()
+        && settings.default_tools.is_none()
+        && !explicitly_excluded
+        && !names.iter().any(|name| name == "mcp")
+    {
         names.push("mcp".to_string());
     }
     let manager = names
@@ -123,7 +118,7 @@ pub fn reload_runtime(args: &Args, cwd: &std::path::Path) -> Result<ReloadedRunt
     };
 
     let files = context_files::system_prompt_files(cwd);
-    let (tool_names, mcp) = configured_tools(args, cwd, trusted)?;
+    let (tool_names, mcp) = configured_tools(args, cwd, trusted, &settings)?;
     let custom = args.system_prompt.clone().or(files.replace);
     let append = match (&args.append_system_prompt, &files.append) {
         (Some(first), Some(second)) => Some(format!("{first}\n\n{second}")),
@@ -236,6 +231,10 @@ fn startup_model(
 
 fn provider_default(registry: &Registry, provider: &str) -> Option<Model> {
     let preferred = match provider {
+        "openai-codex" => Some("gpt-6.1-sol"),
+        "fireworks" => Some("accounts/fireworks/models/kimi-k3"),
+        "together" => Some("moonshotai/Kimi-K3"),
+        "opencode-go" => Some("kimi-k3"),
         "xai" => Some("grok-4.7"),
         "meta" => Some("muse-spark-1.3"),
         _ => None,
@@ -373,7 +372,7 @@ pub async fn build_startup(
 
     // System prompt.
     let files = context_files::system_prompt_files(&cwd);
-    let (tool_names, mcp) = configured_tools(args, &cwd, trusted)?;
+    let (tool_names, mcp) = configured_tools(args, &cwd, trusted, &settings)?;
     let custom = args.system_prompt.clone().or(files.replace);
     let append = match (&args.append_system_prompt, &files.append) {
         (Some(a), Some(b)) => Some(format!("{a}\n\n{b}")),
@@ -493,24 +492,6 @@ mod tests {
     use clap::Parser as _;
 
     #[test]
-    fn default_tools_match_pi() {
-        let args = Args::parse_from(["kiss"]);
-        assert_eq!(selected_tool_names(&args), DEFAULT_TOOLS);
-    }
-
-    #[test]
-    fn explicit_tools_can_enable_optional_builtins() {
-        let args = Args::parse_from(["kiss", "--tools", "read,grep"]);
-        assert_eq!(selected_tool_names(&args), ["read", "grep"]);
-    }
-
-    #[test]
-    fn exclusions_apply_to_default_tools() {
-        let args = Args::parse_from(["kiss", "--exclude-tools", "bash"]);
-        assert_eq!(selected_tool_names(&args), ["read", "write", "edit"]);
-    }
-
-    #[test]
     fn changed_pi_provider_defaults_are_preferred() {
         let registry = Registry::from_builtin();
         assert_eq!(provider_default(&registry, "xai").unwrap().id, "grok-4.7");
@@ -518,6 +499,14 @@ mod tests {
             provider_default(&registry, "meta").unwrap().id,
             "muse-spark-1.3"
         );
+        for (provider, id) in [
+            ("openai-codex", "gpt-6.1-sol"),
+            ("fireworks", "accounts/fireworks/models/kimi-k3"),
+            ("together", "moonshotai/Kimi-K3"),
+            ("opencode-go", "kimi-k3"),
+        ] {
+            assert_eq!(provider_default(&registry, provider).unwrap().id, id);
+        }
     }
 
     #[test]
@@ -544,11 +533,5 @@ mod tests {
         );
         let args = Args::parse_from(["kiss", "--model", "bad-model"]);
         assert!(startup_model(&args, &registry, true, Err(anyhow::anyhow!("bad model"))).is_err());
-    }
-
-    #[test]
-    fn no_tools_disables_every_builtin() {
-        let args = Args::parse_from(["kiss", "--no-tools"]);
-        assert!(selected_tool_names(&args).is_empty());
     }
 }

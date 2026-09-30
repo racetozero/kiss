@@ -1,15 +1,23 @@
 {
   "anthropic-messages": {
-    "k3": {
+    "chat:k3": {
       "id": "k3",
       "name": "Kimi K3",
       "api": "anthropic-messages",
       "provider": "kimi-coding",
       "baseUrl": "https://api.kimi.com/coding",
-      "compat": { "allowEmptySignature": true, "forceAdaptiveThinking": true },
+      "compat": {
+        "allowEmptySignature": true,
+        "forceAdaptiveThinking": true
+      },
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 0 },
+      "cost": {
+        "input": 3,
+        "output": 15,
+        "cacheRead": 0.3,
+        "cacheWrite": 0
+      },
       "contextWindow": 1048576,
       "maxTokens": 131072,
       "thinkingLevelMap": {
@@ -23,20 +31,33 @@
       },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "k3-256k": {
+    "chat:k3-256k": {
       "id": "k3-256k",
       "name": "Kimi K3-256K",
       "api": "anthropic-messages",
       "provider": "kimi-coding",
       "baseUrl": "https://api.kimi.com/coding",
-      "compat": { "forceAdaptiveThinking": true },
+      "compat": {
+        "forceAdaptiveThinking": true
+      },
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
       "contextWindow": 262144,
       "maxTokens": 131072,
       "thinkingLevelMap": {
@@ -50,20 +71,34 @@
       },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "kimi-for-coding": {
+    "chat:kimi-for-coding": {
       "id": "kimi-for-coding",
       "name": "kimi-for-coding",
       "api": "anthropic-messages",
       "provider": "kimi-coding",
       "baseUrl": "https://api.kimi.com/coding",
-      "compat": { "allowEmptySignature": true, "forceAdaptiveThinking": true },
+      "compat": {
+        "allowEmptySignature": true,
+        "forceAdaptiveThinking": true
+      },
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 0.95, "output": 4, "cacheRead": 0.19, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.95,
+        "output": 4,
+        "cacheRead": 0.19,
+        "cacheWrite": 0
+      },
       "contextWindow": 1048576,
       "maxTokens": 32768,
       "thinkingLevelMap": {
@@ -77,27 +112,46 @@
       },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "kimi-for-coding-highspeed": {
+    "chat:kimi-for-coding-highspeed": {
       "id": "kimi-for-coding-highspeed",
       "name": "Kimi For Coding HighSpeed",
       "api": "anthropic-messages",
       "provider": "kimi-coding",
       "baseUrl": "https://api.kimi.com/coding",
-      "compat": { "forceAdaptiveThinking": true },
+      "compat": {
+        "forceAdaptiveThinking": true
+      },
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 1.9, "output": 8, "cacheRead": 0.38, "cacheWrite": 0 },
+      "cost": {
+        "input": 1.9,
+        "output": 8,
+        "cacheRead": 0.38,
+        "cacheWrite": 0
+      },
       "contextWindow": 262144,
       "maxTokens": 32768,
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     }
   }
 }

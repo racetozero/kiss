@@ -32,7 +32,11 @@ pub struct OAuthCredential {
     pub refresh: String,
     /// Expiration time as Unix milliseconds.
     pub expires: i64,
+    #[serde(default)]
     pub account_id: String,
+    /// Issued public client ID for OpenAI's direct ChatGPT token flow.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub available_model_ids: Option<Vec<String>>,
 }
@@ -145,6 +149,7 @@ pub fn login_methods(provider: &str) -> Vec<LoginMethod> {
     use LoginMethod::*;
     match provider {
         "openai-codex" => vec![BrowserOAuth, DeviceOAuth],
+        "openai" => vec![BrowserOAuth, ApiKey],
         "anthropic" => vec![BrowserOAuth, ManualOAuth, ApiKey],
         "cursor" => vec![BrowserOAuth, ApiKey],
         "github-copilot" | "kimi-coding" | "meta" | "xai" => vec![DeviceOAuth, ApiKey],
@@ -470,7 +475,8 @@ async fn resolve_api_key_async_generic(
             AuthEntry::OAuth(credential)
                 if matches!(
                     provider,
-                    "openai-codex"
+                    "openai"
+                        | "openai-codex"
                         | "anthropic"
                         | "github-copilot"
                         | "kimi-coding"
@@ -499,6 +505,10 @@ async fn resolve_api_key_async_generic(
                 }
                 let refreshed = match provider {
                     "openai-codex" => openai_codex::refresh(&current, &Default::default()).await?,
+                    "openai" => {
+                        openai_codex::refresh(&current, &openai_codex::OAuthConfig::chatgpt(None))
+                            .await?
+                    }
                     "anthropic" => anthropic::refresh(&current, &Default::default()).await?,
                     "github-copilot" => {
                         github_copilot::refresh(&current, &Default::default()).await?
@@ -937,6 +947,7 @@ mod tests {
                     expires: 2_000_000_000_000,
                     account_id: format!("account-{index}"),
                     available_model_ids: None,
+                    client_id: None,
                 }),
             );
         }

@@ -1,6 +1,6 @@
 {
   "openai-completions": {
-    "deepseek-flash": {
+    "chat:deepseek-flash": {
       "id": "deepseek-flash",
       "name": "DeepSeek V4.1 Flash",
       "api": "openai-completions",
@@ -15,7 +15,12 @@
         "max": "max"
       },
       "input": ["text", "image"],
-      "cost": { "input": 0.3, "output": 1.2, "cacheRead": 0.006, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.3,
+        "output": 1.2,
+        "cacheRead": 0.006,
+        "cacheWrite": 0
+      },
       "contextWindow": 1000000,
       "maxTokens": 384000,
       "compat": {
@@ -28,11 +33,17 @@
       },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "deepseek-v4-pro": {
+    "chat:deepseek-v4-pro": {
       "id": "deepseek-v4-pro",
       "name": "DeepSeek V4 Pro",
       "api": "openai-completions",
@@ -40,7 +51,12 @@
       "provider": "deepseek",
       "reasoning": true,
       "input": ["text"],
-      "cost": { "input": 1.32, "output": 3.96, "cacheRead": 0.044, "cacheWrite": 0 },
+      "cost": {
+        "input": 1.32,
+        "output": 3.96,
+        "cacheRead": 0.044,
+        "cacheWrite": 0
+      },
       "contextWindow": 1000000,
       "maxTokens": 384000,
       "compat": {
@@ -58,7 +74,8 @@
         "medium": null,
         "high": "high",
         "max": "max"
-      }
+      },
+      "type": "chat"
     }
   }
 }

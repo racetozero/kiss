@@ -262,6 +262,7 @@ async fn stream_assistant(
     let options = StreamOptions {
         credential,
         temperature: config.temperature,
+        sampling_params: Default::default(),
         max_tokens: config.max_tokens,
         reasoning: config.thinking_level,
         tool_choice: config.tool_choice.clone(),
@@ -651,7 +652,10 @@ async fn run_and_finalize(
         )
         .await;
     let (mut result, mut is_error) = match executed {
-        Ok(r) => (r, false),
+        Ok(r) => {
+            let is_error = r.is_error;
+            (r, is_error)
+        }
         Err(e) => (ToolResult::text(format!("{e:#}")), true),
     };
 
@@ -675,6 +679,7 @@ async fn run_and_finalize(
         }
     }
 
+    result.is_error = is_error;
     FinalizedCall {
         tool_call,
         result,

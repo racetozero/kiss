@@ -71,16 +71,39 @@ pub fn select_tool_names(
     allow: Option<&[String]>,
     exclude: &[String],
     no_tools: bool,
+    defaults: Option<&[String]>,
 ) -> Vec<String> {
     if no_tools {
         return Vec::new();
     }
     let mut names: Vec<String> = match allow {
         Some(allow) => allow.to_vec(),
-        None => DEFAULT_TOOLS.iter().map(|name| name.to_string()).collect(),
+        None => {
+            let entries = defaults.unwrap_or_default();
+            let mut names: Vec<String> = entries
+                .iter()
+                .filter(|name| !name.starts_with(['+', '-']))
+                .cloned()
+                .collect();
+            if defaults.is_none() || (!entries.is_empty() && names.is_empty()) {
+                names = DEFAULT_TOOLS.iter().map(|name| name.to_string()).collect();
+            }
+            for entry in entries {
+                if let Some(name) = entry.strip_prefix('+') {
+                    if !name.is_empty() && !names.iter().any(|existing| existing == name) {
+                        names.push(name.to_string());
+                    }
+                } else if let Some(name) = entry.strip_prefix('-') {
+                    names.retain(|existing| existing != name);
+                }
+            }
+            names
+        }
     };
     names.retain(|name| ALL_TOOLS.contains(&name.as_str()));
     names.retain(|name| !exclude.iter().any(|excluded| excluded == name));
+    let mut seen = std::collections::HashSet::new();
+    names.retain(|name| seen.insert(name.clone()));
     names
 }
 
@@ -90,7 +113,7 @@ mod tests {
 
     #[test]
     fn defaults_match_the_command_line_program() {
-        assert_eq!(select_tool_names(None, &[], false), DEFAULT_TOOLS);
+        assert_eq!(select_tool_names(None, &[], false, None), DEFAULT_TOOLS);
     }
 
     #[test]
@@ -98,7 +121,7 @@ mod tests {
         let allow = ["read".to_string(), "grep".to_string(), "bash".to_string()];
         let exclude = ["bash".to_string()];
         assert_eq!(
-            select_tool_names(Some(&allow), &exclude, false),
+            select_tool_names(Some(&allow), &exclude, false, None),
             ["read", "grep"]
         );
     }
@@ -106,12 +129,34 @@ mod tests {
     #[test]
     fn unknown_names_are_dropped() {
         let allow = ["read".to_string(), "teleport".to_string()];
-        assert_eq!(select_tool_names(Some(&allow), &[], false), ["read"]);
+        assert_eq!(select_tool_names(Some(&allow), &[], false, None), ["read"]);
     }
 
     #[test]
     fn no_tools_wins() {
         let allow = ["read".to_string()];
-        assert!(select_tool_names(Some(&allow), &[], true).is_empty());
+        assert!(select_tool_names(Some(&allow), &[], true, None).is_empty());
+    }
+
+    #[test]
+    fn configured_defaults_and_cli_selection_have_ordered_precedence() {
+        let defaults = ["-bash", "+grep", "+grep", "+bash", "-write"].map(str::to_string);
+        assert_eq!(
+            select_tool_names(None, &[], false, Some(&defaults)),
+            ["read", "edit", "grep", "bash"]
+        );
+        let defaults = ["read", "+grep"].map(str::to_string);
+        let exclude = ["grep".to_string()];
+        assert_eq!(
+            select_tool_names(None, &exclude, false, Some(&defaults)),
+            ["read"]
+        );
+        let allow = ["ls".to_string()];
+        assert_eq!(
+            select_tool_names(Some(&allow), &[], false, Some(&defaults)),
+            ["ls"]
+        );
+        assert!(select_tool_names(None, &[], false, Some(&[])).is_empty());
+        assert!(select_tool_names(Some(&allow), &[], true, Some(&defaults)).is_empty());
     }
 }

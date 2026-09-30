@@ -1,6 +1,6 @@
 {
   "anthropic-messages": {
-    "claude-fable-5": {
+    "chat:claude-fable-5": {
       "id": "claude-fable-5",
       "name": "Claude Fable 5",
       "api": "anthropic-messages",
@@ -8,18 +8,36 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/anthropic",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 10, "output": 50, "cacheRead": 1, "cacheWrite": 12.5 },
+      "cost": {
+        "input": 10,
+        "output": 50,
+        "cacheRead": 1,
+        "cacheWrite": 12.5
+      },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": { "sendSessionAffinityHeaders": true, "forceAdaptiveThinking": true },
-      "thinkingLevelMap": { "off": null, "xhigh": "xhigh", "max": "max" },
+      "compat": {
+        "sendSessionAffinityHeaders": true,
+        "forceAdaptiveThinking": true
+      },
+      "thinkingLevelMap": {
+        "off": null,
+        "xhigh": "xhigh",
+        "max": "max"
+      },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "claude-fable-5.1": {
+    "chat:claude-fable-5.1": {
       "id": "claude-fable-5.1",
       "name": "Claude Fable 5.1",
       "api": "anthropic-messages",
@@ -27,18 +45,36 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/anthropic",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 10, "output": 50, "cacheRead": 0.25, "cacheWrite": 12.5 },
+      "cost": {
+        "input": 10,
+        "output": 50,
+        "cacheRead": 0.25,
+        "cacheWrite": 12.5
+      },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": { "sendSessionAffinityHeaders": true, "forceAdaptiveThinking": true },
-      "thinkingLevelMap": { "off": null, "xhigh": "xhigh", "max": "max" },
+      "compat": {
+        "sendSessionAffinityHeaders": true,
+        "forceAdaptiveThinking": true
+      },
+      "thinkingLevelMap": {
+        "off": null,
+        "xhigh": "xhigh",
+        "max": "max"
+      },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "claude-haiku-4.5": {
+    "chat:claude-haiku-4.5": {
       "id": "claude-haiku-4.5",
       "name": "Claude Haiku 4.5 (latest)",
       "api": "anthropic-messages",
@@ -46,17 +82,30 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/anthropic",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 1, "output": 5, "cacheRead": 0.1, "cacheWrite": 1.25 },
+      "cost": {
+        "input": 1,
+        "output": 5,
+        "cacheRead": 0.1,
+        "cacheWrite": 1.25
+      },
       "contextWindow": 200000,
       "maxTokens": 64000,
-      "compat": { "sendSessionAffinityHeaders": true },
+      "compat": {
+        "sendSessionAffinityHeaders": true
+      },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "claude-opus-4.5": {
+    "chat:claude-opus-4.5": {
       "id": "claude-opus-4.5",
       "name": "Claude Opus 4.5 (latest)",
       "api": "anthropic-messages",
@@ -64,17 +113,30 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/anthropic",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 5, "output": 25, "cacheRead": 0.5, "cacheWrite": 6.25 },
+      "cost": {
+        "input": 5,
+        "output": 25,
+        "cacheRead": 0.5,
+        "cacheWrite": 6.25
+      },
       "contextWindow": 200000,
       "maxTokens": 64000,
-      "compat": { "sendSessionAffinityHeaders": true },
+      "compat": {
+        "sendSessionAffinityHeaders": true
+      },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "claude-opus-4.6": {
+    "chat:claude-opus-4.6": {
       "id": "claude-opus-4.6",
       "name": "Claude Opus 4.6",
       "api": "anthropic-messages",
@@ -82,18 +144,34 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/anthropic",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 5, "output": 25, "cacheRead": 0.5, "cacheWrite": 6.25 },
+      "cost": {
+        "input": 5,
+        "output": 25,
+        "cacheRead": 0.5,
+        "cacheWrite": 6.25
+      },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": { "sendSessionAffinityHeaders": true, "forceAdaptiveThinking": true },
-      "thinkingLevelMap": { "max": "max" },
+      "compat": {
+        "sendSessionAffinityHeaders": true,
+        "forceAdaptiveThinking": true
+      },
+      "thinkingLevelMap": {
+        "max": "max"
+      },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "claude-opus-4.7": {
+    "chat:claude-opus-4.7": {
       "id": "claude-opus-4.7",
       "name": "Claude Opus 4.7",
       "api": "anthropic-messages",
@@ -101,7 +179,12 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/anthropic",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 5, "output": 25, "cacheRead": 0.5, "cacheWrite": 6.25 },
+      "cost": {
+        "input": 5,
+        "output": 25,
+        "cacheRead": 0.5,
+        "cacheWrite": 6.25
+      },
       "contextWindow": 1000000,
       "maxTokens": 128000,
       "compat": {
@@ -109,14 +192,23 @@
         "forceAdaptiveThinking": true,
         "supportsTemperature": false
       },
-      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
+      "thinkingLevelMap": {
+        "xhigh": "xhigh",
+        "max": "max"
+      },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "claude-opus-4.8": {
+    "chat:claude-opus-4.8": {
       "id": "claude-opus-4.8",
       "name": "Claude Opus 4.8",
       "api": "anthropic-messages",
@@ -124,7 +216,12 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/anthropic",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 5, "output": 25, "cacheRead": 0.5, "cacheWrite": 6.25 },
+      "cost": {
+        "input": 5,
+        "output": 25,
+        "cacheRead": 0.5,
+        "cacheWrite": 6.25
+      },
       "contextWindow": 1000000,
       "maxTokens": 128000,
       "compat": {
@@ -132,14 +229,23 @@
         "forceAdaptiveThinking": true,
         "supportsTemperature": false
       },
-      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
+      "thinkingLevelMap": {
+        "xhigh": "xhigh",
+        "max": "max"
+      },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "claude-opus-5": {
+    "chat:claude-opus-5": {
       "id": "claude-opus-5",
       "name": "Claude Opus 5",
       "api": "anthropic-messages",
@@ -147,7 +253,12 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/anthropic",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 5, "output": 25, "cacheRead": 0.5, "cacheWrite": 6.25 },
+      "cost": {
+        "input": 5,
+        "output": 25,
+        "cacheRead": 0.5,
+        "cacheWrite": 6.25
+      },
       "contextWindow": 1000000,
       "maxTokens": 128000,
       "compat": {
@@ -155,14 +266,60 @@
         "forceAdaptiveThinking": true,
         "supportsTemperature": false
       },
-      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
+      "thinkingLevelMap": {
+        "xhigh": "xhigh",
+        "max": "max"
+      },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "claude-sonnet-4.5": {
+    "chat:claude-opus-5.5": {
+      "id": "claude-opus-5.5",
+      "name": "Claude Opus 5.5",
+      "api": "anthropic-messages",
+      "provider": "cloudflare-ai-gateway",
+      "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/anthropic",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": {
+        "input": 4,
+        "output": 20,
+        "cacheRead": 0.2,
+        "cacheWrite": 5
+      },
+      "contextWindow": 1000000,
+      "maxTokens": 128000,
+      "compat": {
+        "sendSessionAffinityHeaders": true,
+        "forceAdaptiveThinking": true,
+        "supportsTemperature": false
+      },
+      "thinkingLevelMap": {
+        "xhigh": "xhigh",
+        "max": "max"
+      },
+      "inputLimits": {
+        "images": {
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
+        }
+      },
+      "type": "chat"
+    },
+    "chat:claude-sonnet-4.5": {
       "id": "claude-sonnet-4.5",
       "name": "Claude Sonnet 4.5 (latest)",
       "api": "anthropic-messages",
@@ -170,17 +327,30 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/anthropic",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 3.75 },
-      "contextWindow": 1000000,
+      "cost": {
+        "input": 3,
+        "output": 15,
+        "cacheRead": 0.3,
+        "cacheWrite": 3.75
+      },
+      "contextWindow": 200000,
       "maxTokens": 64000,
-      "compat": { "sendSessionAffinityHeaders": true },
+      "compat": {
+        "sendSessionAffinityHeaders": true
+      },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "claude-sonnet-4.6": {
+    "chat:claude-sonnet-4.6": {
       "id": "claude-sonnet-4.6",
       "name": "Claude Sonnet 4.6",
       "api": "anthropic-messages",
@@ -188,18 +358,34 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/anthropic",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 3.75 },
+      "cost": {
+        "input": 3,
+        "output": 15,
+        "cacheRead": 0.3,
+        "cacheWrite": 3.75
+      },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": { "sendSessionAffinityHeaders": true, "forceAdaptiveThinking": true },
-      "thinkingLevelMap": { "max": "max" },
+      "compat": {
+        "sendSessionAffinityHeaders": true,
+        "forceAdaptiveThinking": true
+      },
+      "thinkingLevelMap": {
+        "max": "max"
+      },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "claude-sonnet-5": {
+    "chat:claude-sonnet-5": {
       "id": "claude-sonnet-5",
       "name": "Claude Sonnet 5",
       "api": "anthropic-messages",
@@ -207,20 +393,37 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/anthropic",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 2, "output": 10, "cacheRead": 0.2, "cacheWrite": 2.5 },
+      "cost": {
+        "input": 2,
+        "output": 10,
+        "cacheRead": 0.2,
+        "cacheWrite": 2.5
+      },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": { "sendSessionAffinityHeaders": true, "forceAdaptiveThinking": true },
-      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
+      "compat": {
+        "sendSessionAffinityHeaders": true,
+        "forceAdaptiveThinking": true
+      },
+      "thinkingLevelMap": {
+        "xhigh": "xhigh",
+        "max": "max"
+      },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     }
   },
   "openai-completions": {
-    "workers-ai/@cf/deepseek-ai/deepseek-v4-flash-0731": {
+    "chat:workers-ai/@cf/deepseek-ai/deepseek-v4-flash-0731": {
       "id": "workers-ai/@cf/deepseek-ai/deepseek-v4-flash-0731",
       "name": "DeepSeek V4 Flash 0731",
       "api": "openai-completions",
@@ -228,36 +431,12 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
       "reasoning": true,
       "input": ["text"],
-      "cost": { "input": 0.44, "output": 1.32, "cacheRead": 0.014, "cacheWrite": 0 },
-      "contextWindow": 1310720,
-      "maxTokens": 1048576,
-      "compat": {
-        "supportsStore": false,
-        "supportsDeveloperRole": false,
-        "supportsReasoningEffort": false,
-        "maxTokensField": "max_tokens",
-        "supportsLongCacheRetention": false,
-        "sendSessionAffinityHeaders": true,
-        "requiresReasoningContentOnAssistantMessages": true,
-        "thinkingFormat": "deepseek"
+      "cost": {
+        "input": 0.44,
+        "output": 1.32,
+        "cacheRead": 0.014,
+        "cacheWrite": 0
       },
-      "thinkingLevelMap": {
-        "minimal": null,
-        "low": null,
-        "medium": null,
-        "high": "high",
-        "max": "max"
-      }
-    },
-    "workers-ai/@cf/deepseek-ai/deepseek-v4-pro-0813": {
-      "id": "workers-ai/@cf/deepseek-ai/deepseek-v4-pro-0813",
-      "name": "DeepSeek V4 Pro 0813",
-      "api": "openai-completions",
-      "provider": "cloudflare-ai-gateway",
-      "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
-      "reasoning": true,
-      "input": ["text"],
-      "cost": { "input": 1.32, "output": 3.96, "cacheRead": 0.044, "cacheWrite": 0 },
       "contextWindow": 1048576,
       "maxTokens": 1048576,
       "compat": {
@@ -276,9 +455,45 @@
         "medium": null,
         "high": "high",
         "max": "max"
-      }
+      },
+      "type": "chat"
     },
-    "workers-ai/@cf/google/gemma-4-26b-a4b-it": {
+    "chat:workers-ai/@cf/deepseek-ai/deepseek-v4-pro-0813": {
+      "id": "workers-ai/@cf/deepseek-ai/deepseek-v4-pro-0813",
+      "name": "DeepSeek V4 Pro 0813",
+      "api": "openai-completions",
+      "provider": "cloudflare-ai-gateway",
+      "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
+      "reasoning": true,
+      "input": ["text"],
+      "cost": {
+        "input": 1.32,
+        "output": 3.96,
+        "cacheRead": 0.044,
+        "cacheWrite": 0
+      },
+      "contextWindow": 1048576,
+      "maxTokens": 1048576,
+      "compat": {
+        "supportsStore": false,
+        "supportsDeveloperRole": false,
+        "supportsReasoningEffort": false,
+        "maxTokensField": "max_tokens",
+        "supportsLongCacheRetention": false,
+        "sendSessionAffinityHeaders": true,
+        "requiresReasoningContentOnAssistantMessages": true,
+        "thinkingFormat": "deepseek"
+      },
+      "thinkingLevelMap": {
+        "minimal": null,
+        "low": null,
+        "medium": null,
+        "high": "high",
+        "max": "max"
+      },
+      "type": "chat"
+    },
+    "chat:workers-ai/@cf/google/gemma-4-26b-a4b-it": {
       "id": "workers-ai/@cf/google/gemma-4-26b-a4b-it",
       "name": "Gemma 4 26B A4B IT",
       "api": "openai-completions",
@@ -286,7 +501,12 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 0.1, "output": 0.3, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.1,
+        "output": 0.3,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
       "contextWindow": 256000,
       "maxTokens": 16384,
       "compat": {
@@ -299,11 +519,17 @@
       },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "workers-ai/@cf/ibm-granite/granite-4.0-h-micro": {
+    "chat:workers-ai/@cf/ibm-granite/granite-4.0-h-micro": {
       "id": "workers-ai/@cf/ibm-granite/granite-4.0-h-micro",
       "name": "Granite 4.0 H Micro",
       "api": "openai-completions",
@@ -311,7 +537,12 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
       "reasoning": false,
       "input": ["text"],
-      "cost": { "input": 0.017, "output": 0.112, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.017,
+        "output": 0.112,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
       "contextWindow": 131000,
       "maxTokens": 131000,
       "compat": {
@@ -321,9 +552,10 @@
         "maxTokensField": "max_tokens",
         "supportsLongCacheRetention": false,
         "sendSessionAffinityHeaders": true
-      }
+      },
+      "type": "chat"
     },
-    "workers-ai/@cf/meta/llama-3.3-70b-instruct-fp8-fast": {
+    "chat:workers-ai/@cf/meta/llama-3.3-70b-instruct-fp8-fast": {
       "id": "workers-ai/@cf/meta/llama-3.3-70b-instruct-fp8-fast",
       "name": "Llama 3.3 70B Instruct fp8 Fast",
       "api": "openai-completions",
@@ -331,7 +563,12 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
       "reasoning": false,
       "input": ["text"],
-      "cost": { "input": 0.293, "output": 2.253, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.293,
+        "output": 2.253,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
       "contextWindow": 24000,
       "maxTokens": 24000,
       "compat": {
@@ -341,9 +578,10 @@
         "maxTokensField": "max_tokens",
         "supportsLongCacheRetention": false,
         "sendSessionAffinityHeaders": true
-      }
+      },
+      "type": "chat"
     },
-    "workers-ai/@cf/meta/llama-4-scout-17b-16e-instruct": {
+    "chat:workers-ai/@cf/meta/llama-4-scout-17b-16e-instruct": {
       "id": "workers-ai/@cf/meta/llama-4-scout-17b-16e-instruct",
       "name": "Llama 4 Scout 17B 16E Instruct",
       "api": "openai-completions",
@@ -351,7 +589,12 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
       "reasoning": false,
       "input": ["text", "image"],
-      "cost": { "input": 0.27, "output": 0.85, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.27,
+        "output": 0.85,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
       "contextWindow": 131000,
       "maxTokens": 16384,
       "compat": {
@@ -364,11 +607,17 @@
       },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "workers-ai/@cf/mistralai/mistral-small-3.1-24b-instruct": {
+    "chat:workers-ai/@cf/mistralai/mistral-small-3.1-24b-instruct": {
       "id": "workers-ai/@cf/mistralai/mistral-small-3.1-24b-instruct",
       "name": "Mistral Small 3.1 24B Instruct",
       "api": "openai-completions",
@@ -376,7 +625,12 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
       "reasoning": false,
       "input": ["text"],
-      "cost": { "input": 0.351, "output": 0.555, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.351,
+        "output": 0.555,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
       "contextWindow": 128000,
       "maxTokens": 128000,
       "compat": {
@@ -386,9 +640,10 @@
         "maxTokensField": "max_tokens",
         "supportsLongCacheRetention": false,
         "sendSessionAffinityHeaders": true
-      }
+      },
+      "type": "chat"
     },
-    "workers-ai/@cf/moonshotai/kimi-k2.6": {
+    "chat:workers-ai/@cf/moonshotai/kimi-k2.6": {
       "id": "workers-ai/@cf/moonshotai/kimi-k2.6",
       "name": "Kimi K2.6",
       "api": "openai-completions",
@@ -396,7 +651,12 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 0.95, "output": 4, "cacheRead": 0.16, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.95,
+        "output": 4,
+        "cacheRead": 0.16,
+        "cacheWrite": 0
+      },
       "contextWindow": 262144,
       "maxTokens": 256000,
       "compat": {
@@ -409,11 +669,17 @@
       },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "workers-ai/@cf/moonshotai/kimi-k2.7-code": {
+    "chat:workers-ai/@cf/moonshotai/kimi-k2.7-code": {
       "id": "workers-ai/@cf/moonshotai/kimi-k2.7-code",
       "name": "Kimi K2.7 Code",
       "api": "openai-completions",
@@ -421,7 +687,12 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 0.95, "output": 4, "cacheRead": 0.19, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.95,
+        "output": 4,
+        "cacheRead": 0.19,
+        "cacheWrite": 0
+      },
       "contextWindow": 262144,
       "maxTokens": 262144,
       "compat": {
@@ -434,11 +705,17 @@
       },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "workers-ai/@cf/nvidia/nemotron-3-120b-a12b": {
+    "chat:workers-ai/@cf/nvidia/nemotron-3-120b-a12b": {
       "id": "workers-ai/@cf/nvidia/nemotron-3-120b-a12b",
       "name": "Nemotron 3 Super 120B",
       "api": "openai-completions",
@@ -446,7 +723,12 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
       "reasoning": true,
       "input": ["text"],
-      "cost": { "input": 0.5, "output": 1.5, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.5,
+        "output": 1.5,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
       "contextWindow": 256000,
       "maxTokens": 256000,
       "compat": {
@@ -456,9 +738,10 @@
         "maxTokensField": "max_tokens",
         "supportsLongCacheRetention": false,
         "sendSessionAffinityHeaders": true
-      }
+      },
+      "type": "chat"
     },
-    "workers-ai/@cf/openai/gpt-oss-120b": {
+    "chat:workers-ai/@cf/openai/gpt-oss-120b": {
       "id": "workers-ai/@cf/openai/gpt-oss-120b",
       "name": "GPT OSS 120B",
       "api": "openai-completions",
@@ -466,7 +749,12 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
       "reasoning": true,
       "input": ["text"],
-      "cost": { "input": 0.35, "output": 0.75, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.35,
+        "output": 0.75,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
       "contextWindow": 128000,
       "maxTokens": 16384,
       "compat": {
@@ -476,9 +764,10 @@
         "maxTokensField": "max_tokens",
         "supportsLongCacheRetention": false,
         "sendSessionAffinityHeaders": true
-      }
+      },
+      "type": "chat"
     },
-    "workers-ai/@cf/openai/gpt-oss-20b": {
+    "chat:workers-ai/@cf/openai/gpt-oss-20b": {
       "id": "workers-ai/@cf/openai/gpt-oss-20b",
       "name": "GPT OSS 20B",
       "api": "openai-completions",
@@ -486,7 +775,12 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
       "reasoning": true,
       "input": ["text"],
-      "cost": { "input": 0.2, "output": 0.3, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.2,
+        "output": 0.3,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
       "contextWindow": 128000,
       "maxTokens": 16384,
       "compat": {
@@ -496,9 +790,10 @@
         "maxTokensField": "max_tokens",
         "supportsLongCacheRetention": false,
         "sendSessionAffinityHeaders": true
-      }
+      },
+      "type": "chat"
     },
-    "workers-ai/@cf/qwen/qwen3-30b-a3b-fp8": {
+    "chat:workers-ai/@cf/qwen/qwen3-30b-a3b-fp8": {
       "id": "workers-ai/@cf/qwen/qwen3-30b-a3b-fp8",
       "name": "Qwen3 30B A3b fp8",
       "api": "openai-completions",
@@ -506,7 +801,12 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
       "reasoning": true,
       "input": ["text"],
-      "cost": { "input": 0.0509, "output": 0.335, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.0509,
+        "output": 0.335,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
       "contextWindow": 32768,
       "maxTokens": 32768,
       "compat": {
@@ -516,9 +816,10 @@
         "maxTokensField": "max_tokens",
         "supportsLongCacheRetention": false,
         "sendSessionAffinityHeaders": true
-      }
+      },
+      "type": "chat"
     },
-    "workers-ai/@cf/qwen/qwen3.8-27b": {
+    "chat:workers-ai/@cf/qwen/qwen3.8-27b": {
       "id": "workers-ai/@cf/qwen/qwen3.8-27b",
       "name": "Qwen3.8 27B",
       "api": "openai-completions",
@@ -526,7 +827,12 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 0.45, "output": 3.2, "cacheRead": 0.05, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.45,
+        "output": 3.2,
+        "cacheRead": 0.05,
+        "cacheWrite": 0
+      },
       "contextWindow": 262144,
       "maxTokens": 262144,
       "compat": {
@@ -539,11 +845,17 @@
       },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "workers-ai/@cf/zai-org/glm-4.7-flash": {
+    "chat:workers-ai/@cf/zai-org/glm-4.7-flash": {
       "id": "workers-ai/@cf/zai-org/glm-4.7-flash",
       "name": "GLM-4.7-Flash",
       "api": "openai-completions",
@@ -551,7 +863,12 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
       "reasoning": true,
       "input": ["text"],
-      "cost": { "input": 0.0605, "output": 0.4, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.0605,
+        "output": 0.4,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
       "contextWindow": 131072,
       "maxTokens": 131072,
       "compat": {
@@ -561,9 +878,10 @@
         "maxTokensField": "max_tokens",
         "supportsLongCacheRetention": false,
         "sendSessionAffinityHeaders": true
-      }
+      },
+      "type": "chat"
     },
-    "workers-ai/@cf/zai-org/glm-5.2": {
+    "chat:workers-ai/@cf/zai-org/glm-5.2": {
       "id": "workers-ai/@cf/zai-org/glm-5.2",
       "name": "Glm 5.2",
       "api": "openai-completions",
@@ -571,7 +889,12 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
       "reasoning": true,
       "input": ["text"],
-      "cost": { "input": 1.4, "output": 4.4, "cacheRead": 0.26, "cacheWrite": 0 },
+      "cost": {
+        "input": 1.4,
+        "output": 4.4,
+        "cacheRead": 0.26,
+        "cacheWrite": 0
+      },
       "contextWindow": 262144,
       "maxTokens": 256000,
       "compat": {
@@ -581,9 +904,10 @@
         "maxTokensField": "max_tokens",
         "supportsLongCacheRetention": false,
         "sendSessionAffinityHeaders": true
-      }
+      },
+      "type": "chat"
     },
-    "workers-ai/@cf/zai-org/glm-5.3": {
+    "chat:workers-ai/@cf/zai-org/glm-5.3": {
       "id": "workers-ai/@cf/zai-org/glm-5.3",
       "name": "Glm 5.3",
       "api": "openai-completions",
@@ -591,8 +915,13 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
       "reasoning": true,
       "input": ["text"],
-      "cost": { "input": 1.4, "output": 4.4, "cacheRead": 0.26, "cacheWrite": 0 },
-      "contextWindow": 1310720,
+      "cost": {
+        "input": 1.4,
+        "output": 4.4,
+        "cacheRead": 0.26,
+        "cacheWrite": 0
+      },
+      "contextWindow": 1048576,
       "maxTokens": 1048576,
       "compat": {
         "supportsStore": false,
@@ -601,9 +930,10 @@
         "maxTokensField": "max_tokens",
         "supportsLongCacheRetention": false,
         "sendSessionAffinityHeaders": true
-      }
+      },
+      "type": "chat"
     },
-    "workers-ai/@cf/zai-org/glm-5.3-flash": {
+    "chat:workers-ai/@cf/zai-org/glm-5.3-flash": {
       "id": "workers-ai/@cf/zai-org/glm-5.3-flash",
       "name": "Glm 5.3 Flash",
       "api": "openai-completions",
@@ -611,8 +941,13 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 0.15, "output": 0.5, "cacheRead": 0.03, "cacheWrite": 0 },
-      "contextWindow": 1310720,
+      "cost": {
+        "input": 0.15,
+        "output": 0.5,
+        "cacheRead": 0.03,
+        "cacheWrite": 0
+      },
+      "contextWindow": 1048576,
       "maxTokens": 1048576,
       "compat": {
         "supportsStore": false,
@@ -624,13 +959,19 @@
       },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     }
   },
   "openai-responses": {
-    "gpt-4.1": {
+    "chat:gpt-4.1": {
       "id": "gpt-4.1",
       "name": "GPT-4.1",
       "api": "openai-responses",
@@ -638,17 +979,30 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai",
       "reasoning": false,
       "input": ["text", "image"],
-      "cost": { "input": 2, "output": 8, "cacheRead": 0.5, "cacheWrite": 0 },
+      "cost": {
+        "input": 2,
+        "output": 8,
+        "cacheRead": 0.5,
+        "cacheWrite": 0
+      },
       "contextWindow": 1047576,
       "maxTokens": 32768,
-      "compat": { "supportsStrictMode": true },
+      "compat": {
+        "supportsStrictMode": true
+      },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "gpt-4.1-mini": {
+    "chat:gpt-4.1-mini": {
       "id": "gpt-4.1-mini",
       "name": "GPT-4.1 mini",
       "api": "openai-responses",
@@ -656,17 +1010,30 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai",
       "reasoning": false,
       "input": ["text", "image"],
-      "cost": { "input": 0.4, "output": 1.6, "cacheRead": 0.1, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.4,
+        "output": 1.6,
+        "cacheRead": 0.1,
+        "cacheWrite": 0
+      },
       "contextWindow": 1047576,
       "maxTokens": 32768,
-      "compat": { "supportsStrictMode": true },
+      "compat": {
+        "supportsStrictMode": true
+      },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "gpt-4.1-nano": {
+    "chat:gpt-4.1-nano": {
       "id": "gpt-4.1-nano",
       "name": "GPT-4.1 nano",
       "api": "openai-responses",
@@ -674,17 +1041,30 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai",
       "reasoning": false,
       "input": ["text", "image"],
-      "cost": { "input": 0.1, "output": 0.4, "cacheRead": 0.025, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.1,
+        "output": 0.4,
+        "cacheRead": 0.025,
+        "cacheWrite": 0
+      },
       "contextWindow": 1000000,
       "maxTokens": 32768,
-      "compat": { "supportsStrictMode": true },
+      "compat": {
+        "supportsStrictMode": true
+      },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "gpt-4o": {
+    "chat:gpt-4o": {
       "id": "gpt-4o",
       "name": "GPT-4o",
       "api": "openai-responses",
@@ -692,17 +1072,30 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai",
       "reasoning": false,
       "input": ["text", "image"],
-      "cost": { "input": 1.25, "output": 5, "cacheRead": 0.625, "cacheWrite": 0 },
+      "cost": {
+        "input": 1.25,
+        "output": 5,
+        "cacheRead": 0.625,
+        "cacheWrite": 0
+      },
       "contextWindow": 128000,
       "maxTokens": 16384,
-      "compat": { "supportsStrictMode": true },
+      "compat": {
+        "supportsStrictMode": true
+      },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "gpt-4o-mini": {
+    "chat:gpt-4o-mini": {
       "id": "gpt-4o-mini",
       "name": "GPT-4o mini",
       "api": "openai-responses",
@@ -710,17 +1103,30 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai",
       "reasoning": false,
       "input": ["text", "image"],
-      "cost": { "input": 0.075, "output": 0.3, "cacheRead": 0.0375, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.075,
+        "output": 0.3,
+        "cacheRead": 0.0375,
+        "cacheWrite": 0
+      },
       "contextWindow": 128000,
       "maxTokens": 16384,
-      "compat": { "supportsStrictMode": true },
+      "compat": {
+        "supportsStrictMode": true
+      },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "gpt-5": {
+    "chat:gpt-5": {
       "id": "gpt-5",
       "name": "GPT-5",
       "api": "openai-responses",
@@ -728,7 +1134,12 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 1.25, "output": 10, "cacheRead": 0.125, "cacheWrite": 0 },
+      "cost": {
+        "input": 1.25,
+        "output": 10,
+        "cacheRead": 0.125,
+        "cacheWrite": 0
+      },
       "contextWindow": 128000,
       "maxTokens": 128000,
       "thinkingLevelMap": {
@@ -740,14 +1151,23 @@
         "xhigh": null,
         "max": null
       },
-      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
+      "compat": {
+        "supportsStrictMode": true,
+        "supportsOpenAIGrammarTools": true
+      },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "gpt-5-mini": {
+    "chat:gpt-5-mini": {
       "id": "gpt-5-mini",
       "name": "GPT-5 Mini",
       "api": "openai-responses",
@@ -755,7 +1175,12 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 0.25, "output": 2, "cacheRead": 0.025, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.25,
+        "output": 2,
+        "cacheRead": 0.025,
+        "cacheWrite": 0
+      },
       "contextWindow": 128000,
       "maxTokens": 128000,
       "thinkingLevelMap": {
@@ -767,14 +1192,23 @@
         "xhigh": null,
         "max": null
       },
-      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
+      "compat": {
+        "supportsStrictMode": true,
+        "supportsOpenAIGrammarTools": true
+      },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "gpt-5-nano": {
+    "chat:gpt-5-nano": {
       "id": "gpt-5-nano",
       "name": "GPT-5 Nano",
       "api": "openai-responses",
@@ -782,7 +1216,12 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 0.05, "output": 0.4, "cacheRead": 0.005, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.05,
+        "output": 0.4,
+        "cacheRead": 0.005,
+        "cacheWrite": 0
+      },
       "contextWindow": 128000,
       "maxTokens": 128000,
       "thinkingLevelMap": {
@@ -794,14 +1233,23 @@
         "xhigh": null,
         "max": null
       },
-      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
+      "compat": {
+        "supportsStrictMode": true,
+        "supportsOpenAIGrammarTools": true
+      },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "gpt-5.1": {
+    "chat:gpt-5.1": {
       "id": "gpt-5.1",
       "name": "GPT-5.1",
       "api": "openai-responses",
@@ -809,7 +1257,12 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 1.25, "output": 10, "cacheRead": 0.125, "cacheWrite": 0 },
+      "cost": {
+        "input": 1.25,
+        "output": 10,
+        "cacheRead": 0.125,
+        "cacheWrite": 0
+      },
       "contextWindow": 128000,
       "maxTokens": 128000,
       "thinkingLevelMap": {
@@ -821,14 +1274,23 @@
         "xhigh": null,
         "max": null
       },
-      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
+      "compat": {
+        "supportsStrictMode": true,
+        "supportsOpenAIGrammarTools": true
+      },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "gpt-5.4": {
+    "chat:gpt-5.4": {
       "id": "gpt-5.4",
       "name": "GPT-5.4",
       "api": "openai-responses",
@@ -836,7 +1298,12 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 2.5, "output": 15, "cacheRead": 0.25, "cacheWrite": 0 },
+      "cost": {
+        "input": 2.5,
+        "output": 15,
+        "cacheRead": 0.25,
+        "cacheWrite": 0
+      },
       "contextWindow": 1000000,
       "maxTokens": 128000,
       "thinkingLevelMap": {
@@ -848,14 +1315,23 @@
         "xhigh": "xhigh",
         "max": null
       },
-      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
+      "compat": {
+        "supportsStrictMode": true,
+        "supportsOpenAIGrammarTools": true
+      },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "gpt-5.4-mini": {
+    "chat:gpt-5.4-mini": {
       "id": "gpt-5.4-mini",
       "name": "GPT-5.4 mini",
       "api": "openai-responses",
@@ -863,7 +1339,12 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 0.75, "output": 4.5, "cacheRead": 0.075, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.75,
+        "output": 4.5,
+        "cacheRead": 0.075,
+        "cacheWrite": 0
+      },
       "contextWindow": 128000,
       "maxTokens": 128000,
       "thinkingLevelMap": {
@@ -875,14 +1356,23 @@
         "xhigh": "xhigh",
         "max": null
       },
-      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
+      "compat": {
+        "supportsStrictMode": true,
+        "supportsOpenAIGrammarTools": true
+      },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "gpt-5.4-nano": {
+    "chat:gpt-5.4-nano": {
       "id": "gpt-5.4-nano",
       "name": "GPT-5.4 nano",
       "api": "openai-responses",
@@ -890,7 +1380,12 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 0.2, "output": 1.25, "cacheRead": 0.02, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.2,
+        "output": 1.25,
+        "cacheRead": 0.02,
+        "cacheWrite": 0
+      },
       "contextWindow": 128000,
       "maxTokens": 128000,
       "thinkingLevelMap": {
@@ -902,14 +1397,23 @@
         "xhigh": "xhigh",
         "max": null
       },
-      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
+      "compat": {
+        "supportsStrictMode": true,
+        "supportsOpenAIGrammarTools": true
+      },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "gpt-5.4-pro": {
+    "chat:gpt-5.4-pro": {
       "id": "gpt-5.4-pro",
       "name": "GPT-5.4 Pro",
       "api": "openai-responses",
@@ -917,7 +1421,12 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 30, "output": 180, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 30,
+        "output": 180,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
       "contextWindow": 1000000,
       "maxTokens": 128000,
       "thinkingLevelMap": {
@@ -929,14 +1438,23 @@
         "xhigh": "xhigh",
         "max": null
       },
-      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
+      "compat": {
+        "supportsStrictMode": true,
+        "supportsOpenAIGrammarTools": true
+      },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "gpt-5.5": {
+    "chat:gpt-5.5": {
       "id": "gpt-5.5",
       "name": "GPT-5.5",
       "api": "openai-responses",
@@ -944,7 +1462,12 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 5, "output": 30, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 5,
+        "output": 30,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
       "contextWindow": 1000000,
       "maxTokens": 128000,
       "thinkingLevelMap": {
@@ -956,14 +1479,23 @@
         "xhigh": "xhigh",
         "max": null
       },
-      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
+      "compat": {
+        "supportsStrictMode": true,
+        "supportsOpenAIGrammarTools": true
+      },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "gpt-5.5-pro": {
+    "chat:gpt-5.5-pro": {
       "id": "gpt-5.5-pro",
       "name": "GPT-5.5 Pro",
       "api": "openai-responses",
@@ -971,7 +1503,12 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 30, "output": 180, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 30,
+        "output": 180,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
       "contextWindow": 1000000,
       "maxTokens": 128000,
       "thinkingLevelMap": {
@@ -983,14 +1520,23 @@
         "xhigh": "xhigh",
         "max": null
       },
-      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
+      "compat": {
+        "supportsStrictMode": true,
+        "supportsOpenAIGrammarTools": true
+      },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "gpt-5.6-luna": {
+    "chat:gpt-5.6-luna": {
       "id": "gpt-5.6-luna",
       "name": "GPT-5.6 Luna",
       "api": "openai-responses",
@@ -1024,14 +1570,23 @@
         "xhigh": "xhigh",
         "max": "max"
       },
-      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
+      "compat": {
+        "supportsStrictMode": true,
+        "supportsOpenAIGrammarTools": true
+      },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "gpt-5.6-sol": {
+    "chat:gpt-5.6-sol": {
       "id": "gpt-5.6-sol",
       "name": "GPT-5.6 Sol",
       "api": "openai-responses",
@@ -1065,14 +1620,23 @@
         "xhigh": "xhigh",
         "max": "max"
       },
-      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
+      "compat": {
+        "supportsStrictMode": true,
+        "supportsOpenAIGrammarTools": true
+      },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "gpt-5.6-terra": {
+    "chat:gpt-5.6-terra": {
       "id": "gpt-5.6-terra",
       "name": "GPT-5.6 Terra",
       "api": "openai-responses",
@@ -1106,14 +1670,23 @@
         "xhigh": "xhigh",
         "max": "max"
       },
-      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
+      "compat": {
+        "supportsStrictMode": true,
+        "supportsOpenAIGrammarTools": true
+      },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "gpt-6-astra": {
+    "chat:gpt-6-astra": {
       "id": "gpt-6-astra",
       "name": "GPT-6 Astra",
       "api": "openai-responses",
@@ -1147,14 +1720,123 @@
         "xhigh": "xhigh",
         "max": "max"
       },
-      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
+      "compat": {
+        "supportsStrictMode": true,
+        "supportsOpenAIGrammarTools": true
+      },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "o3": {
+    "chat:gpt-6-luna": {
+      "id": "gpt-6-luna",
+      "name": "GPT-6 Luna",
+      "api": "openai-responses",
+      "provider": "cloudflare-ai-gateway",
+      "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": {
+        "input": 0.1,
+        "output": 0.5,
+        "cacheRead": 0.01,
+        "cacheWrite": 0.125,
+        "tiers": [
+          {
+            "inputTokensAbove": 272000,
+            "input": 0.2,
+            "output": 0.75,
+            "cacheRead": 0.02,
+            "cacheWrite": 0.25
+          }
+        ]
+      },
+      "contextWindow": 1050000,
+      "maxTokens": 128000,
+      "thinkingLevelMap": {
+        "off": "none",
+        "minimal": null,
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh",
+        "max": "max"
+      },
+      "compat": {
+        "supportsStrictMode": true,
+        "supportsOpenAIGrammarTools": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
+        }
+      },
+      "type": "chat"
+    },
+    "chat:gpt-6-sol": {
+      "id": "gpt-6-sol",
+      "name": "GPT-6 Sol",
+      "api": "openai-responses",
+      "provider": "cloudflare-ai-gateway",
+      "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": {
+        "input": 2,
+        "output": 10,
+        "cacheRead": 0.2,
+        "cacheWrite": 2.5,
+        "tiers": [
+          {
+            "inputTokensAbove": 272000,
+            "input": 4,
+            "output": 15,
+            "cacheRead": 0.4,
+            "cacheWrite": 5
+          }
+        ]
+      },
+      "contextWindow": 1050000,
+      "maxTokens": 128000,
+      "thinkingLevelMap": {
+        "off": "none",
+        "minimal": null,
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh",
+        "max": "max"
+      },
+      "compat": {
+        "supportsStrictMode": true,
+        "supportsOpenAIGrammarTools": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
+        }
+      },
+      "type": "chat"
+    },
+    "chat:o3": {
       "id": "o3",
       "name": "o3",
       "api": "openai-responses",
@@ -1162,7 +1844,12 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 2, "output": 8, "cacheRead": 0.5, "cacheWrite": 0 },
+      "cost": {
+        "input": 2,
+        "output": 8,
+        "cacheRead": 0.5,
+        "cacheWrite": 0
+      },
       "contextWindow": 200000,
       "maxTokens": 100000,
       "thinkingLevelMap": {
@@ -1174,14 +1861,22 @@
         "xhigh": null,
         "max": null
       },
-      "compat": { "supportsStrictMode": true },
+      "compat": {
+        "supportsStrictMode": true
+      },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "o3-mini": {
+    "chat:o3-mini": {
       "id": "o3-mini",
       "name": "o3-mini",
       "api": "openai-responses",
@@ -1189,7 +1884,12 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai",
       "reasoning": true,
       "input": ["text"],
-      "cost": { "input": 1.1, "output": 4.4, "cacheRead": 0.55, "cacheWrite": 0 },
+      "cost": {
+        "input": 1.1,
+        "output": 4.4,
+        "cacheRead": 0.55,
+        "cacheWrite": 0
+      },
       "contextWindow": 200000,
       "maxTokens": 100000,
       "thinkingLevelMap": {
@@ -1201,9 +1901,12 @@
         "xhigh": null,
         "max": null
       },
-      "compat": { "supportsStrictMode": true }
+      "compat": {
+        "supportsStrictMode": true
+      },
+      "type": "chat"
     },
-    "o4-mini": {
+    "chat:o4-mini": {
       "id": "o4-mini",
       "name": "o4-mini",
       "api": "openai-responses",
@@ -1211,7 +1914,12 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 1.1, "output": 4.4, "cacheRead": 0.275, "cacheWrite": 0 },
+      "cost": {
+        "input": 1.1,
+        "output": 4.4,
+        "cacheRead": 0.275,
+        "cacheWrite": 0
+      },
       "contextWindow": 200000,
       "maxTokens": 100000,
       "thinkingLevelMap": {
@@ -1223,12 +1931,20 @@
         "xhigh": null,
         "max": null
       },
-      "compat": { "supportsStrictMode": true },
+      "compat": {
+        "supportsStrictMode": true
+      },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     }
   }
 }

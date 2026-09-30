@@ -1,6 +1,6 @@
 {
   "openai-completions": {
-    "Ling-2.6-1T": {
+    "chat:Ling-2.6-1T": {
       "id": "Ling-2.6-1T",
       "name": "Ling 2.6 1T",
       "api": "openai-completions",
@@ -8,7 +8,12 @@
       "provider": "ant-ling",
       "reasoning": false,
       "input": ["text"],
-      "cost": { "input": 0.06, "output": 0.25, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.06,
+        "output": 0.25,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
       "contextWindow": 262144,
       "maxTokens": 65536,
       "compat": {
@@ -19,9 +24,10 @@
         "thinkingFormat": "ant-ling",
         "supportsStrictMode": true,
         "supportsLongCacheRetention": false
-      }
+      },
+      "type": "chat"
     },
-    "Ling-2.6-flash": {
+    "chat:Ling-2.6-flash": {
       "id": "Ling-2.6-flash",
       "name": "Ling 2.6 Flash",
       "api": "openai-completions",
@@ -29,7 +35,12 @@
       "provider": "ant-ling",
       "reasoning": false,
       "input": ["text"],
-      "cost": { "input": 0.01, "output": 0.02, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.01,
+        "output": 0.02,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
       "contextWindow": 262144,
       "maxTokens": 65536,
       "compat": {
@@ -40,9 +51,10 @@
         "thinkingFormat": "ant-ling",
         "supportsStrictMode": true,
         "supportsLongCacheRetention": false
-      }
+      },
+      "type": "chat"
     },
-    "Ring-2.6-1T": {
+    "chat:Ring-2.6-1T": {
       "id": "Ring-2.6-1T",
       "name": "Ring 2.6 1T",
       "api": "openai-completions",
@@ -50,7 +62,12 @@
       "provider": "ant-ling",
       "reasoning": true,
       "input": ["text"],
-      "cost": { "input": 0.06, "output": 0.25, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.06,
+        "output": 0.25,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
       "contextWindow": 262144,
       "maxTokens": 65536,
       "compat": {
@@ -69,7 +86,8 @@
         "medium": null,
         "high": "high",
         "xhigh": "xhigh"
-      }
+      },
+      "type": "chat"
     }
   }
 }

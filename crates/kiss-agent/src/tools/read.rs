@@ -54,6 +54,17 @@ impl AgentTool for ReadTool {
         })
     }
 
+    fn prepare_arguments(&self, mut args: Value) -> Value {
+        if let Some(object) = args.as_object_mut() {
+            for name in ["offset", "limit"] {
+                if object.get(name).is_some_and(Value::is_null) {
+                    object.remove(name);
+                }
+            }
+        }
+        args
+    }
+
     async fn execute(
         &self,
         _id: &str,
@@ -249,6 +260,13 @@ mod tests {
         let text = r.output_text();
         assert!(text.starts_with("l2\nl3"));
         assert!(text.contains("Use offset=4 to continue"));
+        let args = t.prepare_arguments(json!({"path":"f.txt", "offset":null, "limit":null}));
+        crate::validate::validate_arguments(&t.parameters(), &args).unwrap();
+        let result = t
+            .execute("2", args, CancellationToken::new(), None)
+            .await
+            .unwrap();
+        assert_eq!(result.output_text(), "l1\nl2\nl3\nl4\nl5");
     }
 
     #[tokio::test]

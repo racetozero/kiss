@@ -8,7 +8,7 @@ use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
-/// Generated model data verified against `@earendil-works/pi-ai` 0.87.1.
+/// Generated model data verified against `@earendil-works/pi-ai` 0.99.1.
 const BUILTIN_PROVIDER_CATALOGS: &[&str] = &[
     include_str!("../data/providers/amazon-bedrock.json"),
     include_str!("../data/providers/ant-ling.json"),
@@ -151,6 +151,8 @@ struct CatalogModel {
     compat: Option<OpenAICompat>,
     #[serde(default)]
     thinking_level_map: BTreeMap<String, Option<String>>,
+    #[serde(default)]
+    sampling_params: BTreeMap<String, serde_json::Value>,
     #[serde(default)]
     base_url: Option<String>,
     #[serde(default)]
@@ -413,6 +415,7 @@ impl Registry {
                 context_window,
                 max_tokens: 16_384,
                 compat: None,
+                sampling_params: Default::default(),
                 thinking_level_map: BTreeMap::new(),
                 headers,
             });
@@ -460,6 +463,7 @@ impl Registry {
                 context_window: model.context_window,
                 max_tokens: model.max_tokens,
                 compat: None,
+                sampling_params: Default::default(),
                 thinking_level_map: BTreeMap::new(),
                 headers: BTreeMap::new(),
             });
@@ -474,16 +478,27 @@ impl Registry {
     }
 
     fn merge_generated_catalog(&mut self, text: &str) -> Result<()> {
-        let catalog: BTreeMap<String, BTreeMap<String, Model>> =
+        let catalog: BTreeMap<String, BTreeMap<String, serde_json::Value>> =
             serde_json::from_str(text).context("parse generated Pi model catalog")?;
         for models in catalog.into_values() {
-            for (_, mut model) in models {
+            for (key, value) in models {
+                // Pi v0.99 uses operation-prefixed keys. Keep image and
+                // classifier entries out of the chat model registry.
+                if value
+                    .get("type")
+                    .and_then(serde_json::Value::as_str)
+                    .is_some_and(|kind| kind != "chat")
+                {
+                    continue;
+                }
+                let mut model: Model = serde_json::from_value(value)
+                    .with_context(|| format!("parse chat model {key}"))?;
                 // Mistral models also support its OpenAI-compatible chat API.
                 // The native Conversations API is not needed by this harness.
                 if model.api == "mistral-conversations" {
                     model.api = "openai-completions".into();
                     model.base_url = "https://api.mistral.ai/v1".into();
-                    if model.id.starts_with("mistral-medium-") || model.id == "zai-glm-5-2" {
+                    if !model.thinking_level_map.is_empty() {
                         model
                             .compat
                             .get_or_insert_default()
@@ -552,6 +567,7 @@ impl Registry {
                         (base, overrides) => overrides.or(base),
                     },
                     thinking_level_map: m.thinking_level_map,
+                    sampling_params: m.sampling_params,
                     headers: if m.headers.is_empty() {
                         provider.headers.clone()
                     } else {
@@ -616,6 +632,16 @@ impl Registry {
         provider: Option<&str>,
     ) -> Option<(Model, Option<ThinkingLevel>)> {
         let (pattern, thinking) = split_thinking_suffix(pattern);
+        // A model ID can contain another provider's name (for example
+        // Together's moonshotai/Kimi-K3). Resolve exact scoped IDs first.
+        if let Some(provider) = provider
+            && let Some(model) = self
+                .models
+                .iter()
+                .find(|model| model.provider == provider && model.id == pattern)
+        {
+            return Some((model.clone(), thinking));
+        }
         let (provider, pattern) = match pattern.split_once('/') {
             Some((p, rest)) if self.models.iter().any(|m| m.provider == p) => (Some(p), rest),
             _ => (provider, pattern),
@@ -758,7 +784,7 @@ mod tests {
     }
 
     #[test]
-    fn pi_0871_catalog_changes_are_present() {
+    fn pi_catalog_changes_are_present() {
         let registry = Registry::from_builtin();
         for provider in ["openai", "openai-codex"] {
             let (model, _) = registry
@@ -814,6 +840,10 @@ mod tests {
         assert!(registry.resolve("openai-codex/gpt-5.4", None).is_none());
 
         for model in [
+            "openai/gpt-6.1-sol",
+            "openai-codex/gpt-6.1-sol",
+            "azure-openai-responses/gpt-6.1-sol",
+            "anthropic/claude-sonnet-5-5",
             "anthropic/claude-opus-5-5",
             "openai/gpt-6-sol",
             "openai-codex/gpt-6-luna",
@@ -823,6 +853,29 @@ mod tests {
         ] {
             assert!(registry.resolve(model, None).is_some(), "missing {model}");
         }
+    }
+
+    #[test]
+    fn generated_catalog_keeps_chat_models_and_skips_other_operations() {
+        let mut registry = Registry::from_builtin();
+        let count = registry.all().len();
+        registry
+            .merge_generated_catalog(
+                r#"{"api": {
+            "classifier:classify": {"type":"classifier","id":"classify"},
+            "image:paint": {"type":"image","id":"paint"},
+            "unknown:future": {"type":"future","id":"future"}
+        }}"#,
+            )
+            .unwrap();
+        assert_eq!(registry.all().len(), count);
+        // Non-chat entries need not have the fields of a chat model.
+        assert!(
+            registry
+                .all()
+                .iter()
+                .all(|model| model.api != "typesafe-system-one")
+        );
     }
 
     #[test]

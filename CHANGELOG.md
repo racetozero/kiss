@@ -2,7 +2,25 @@
 
 ## Unreleased
 
+### Added
+
+- Added OpenAI ChatGPT browser login and refresh, configured `defaultTools`,
+  and RPC `started` or `queued` input disposition.
+
+### Fixed
+
+- Reject incomplete Responses tool streams, preserve MCP error details, and
+  keep OpenAI-compatible reasoning separate from answer text on replay.
+- Apply model sampling defaults and request overrides. Use reported OpenAI
+  service tiers for cost. Handle subscription usage errors and browser denials.
+- Accept null read limits, opening wrappers in file completion, and `#rgb`
+  theme colors.
+
 ### Changed
+
+- Updated the Pi baseline and chat catalog to v0.99.1, including GPT-6.1 Sol,
+  Claude Sonnet 5.5, and current Kimi defaults. See `PI_UPSTREAM.md` for the
+  codemode decision and remaining differences.
 
 - Made Jev compaction and dynamic reasoning generally available. Removed their
   experimental labels. Both features remain opt-in through `/settings` and

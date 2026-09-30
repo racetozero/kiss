@@ -1,6 +1,6 @@
 {
   "openai-completions": {
-    "kimi-k2.6": {
+    "chat:kimi-k2.6": {
       "id": "kimi-k2.6",
       "name": "Kimi K2.6",
       "api": "openai-completions",
@@ -8,7 +8,12 @@
       "baseUrl": "https://api.moonshot.cn/v1",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 0.95, "output": 4, "cacheRead": 0.16, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.95,
+        "output": 4,
+        "cacheRead": 0.16,
+        "cacheWrite": 0
+      },
       "contextWindow": 262144,
       "maxTokens": 262144,
       "compat": {
@@ -22,11 +27,17 @@
       },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "kimi-k2.7-code": {
+    "chat:kimi-k2.7-code": {
       "id": "kimi-k2.7-code",
       "name": "Kimi K2.7 Code",
       "api": "openai-completions",
@@ -34,7 +45,12 @@
       "baseUrl": "https://api.moonshot.cn/v1",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 0.95, "output": 4, "cacheRead": 0.19, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.95,
+        "output": 4,
+        "cacheRead": 0.19,
+        "cacheWrite": 0
+      },
       "contextWindow": 262144,
       "maxTokens": 262144,
       "compat": {
@@ -46,14 +62,22 @@
         "thinkingFormat": "deepseek",
         "supportsMidConvoSystemMessages": true
       },
-      "thinkingLevelMap": { "off": null },
+      "thinkingLevelMap": {
+        "off": null
+      },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "kimi-k2.7-code-highspeed": {
+    "chat:kimi-k2.7-code-highspeed": {
       "id": "kimi-k2.7-code-highspeed",
       "name": "Kimi K2.7 Code HighSpeed",
       "api": "openai-completions",
@@ -61,7 +85,12 @@
       "baseUrl": "https://api.moonshot.cn/v1",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 1.9, "output": 8, "cacheRead": 0.38, "cacheWrite": 0 },
+      "cost": {
+        "input": 1.9,
+        "output": 8,
+        "cacheRead": 0.38,
+        "cacheWrite": 0
+      },
       "contextWindow": 262144,
       "maxTokens": 262144,
       "compat": {
@@ -73,14 +102,22 @@
         "thinkingFormat": "deepseek",
         "supportsMidConvoSystemMessages": true
       },
-      "thinkingLevelMap": { "off": null },
+      "thinkingLevelMap": {
+        "off": null
+      },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "kimi-k3": {
+    "chat:kimi-k3": {
       "id": "kimi-k3",
       "name": "Kimi K3",
       "api": "openai-completions",
@@ -88,9 +125,14 @@
       "baseUrl": "https://api.moonshot.cn/v1",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 0 },
+      "cost": {
+        "input": 3,
+        "output": 15,
+        "cacheRead": 0.3,
+        "cacheWrite": 0
+      },
       "contextWindow": 1048576,
-      "maxTokens": 131072,
+      "maxTokens": 1048576,
       "compat": {
         "supportsStore": false,
         "supportsDeveloperRole": false,
@@ -113,9 +155,15 @@
       },
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     }
   }
 }

@@ -402,6 +402,7 @@ fn parse_tool_result(value: JsValue) -> Result<ToolResult, String> {
             },
             details: object.details,
             usage: None,
+            is_error: object.is_error,
             terminate: object.terminate,
         },
     };

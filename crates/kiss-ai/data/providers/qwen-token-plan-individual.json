@@ -1,6 +1,6 @@
 {
   "openai-completions": {
-    "deepseek-v4-flash-0731": {
+    "chat:deepseek-v4-flash-0731": {
       "id": "deepseek-v4-flash-0731",
       "name": "DeepSeek V4 Flash 0731",
       "api": "openai-completions",
@@ -24,11 +24,17 @@
       },
       "reasoning": true,
       "input": ["text"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
       "contextWindow": 1000000,
-      "maxTokens": 384000
+      "maxTokens": 384000,
+      "type": "chat"
     },
-    "deepseek-v4-pro": {
+    "chat:deepseek-v4-pro": {
       "id": "deepseek-v4-pro",
       "name": "DeepSeek V4 Pro",
       "api": "openai-completions",
@@ -52,11 +58,17 @@
       },
       "reasoning": true,
       "input": ["text"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
       "contextWindow": 1000000,
-      "maxTokens": 384000
+      "maxTokens": 384000,
+      "type": "chat"
     },
-    "deepseek-v4-pro-0813": {
+    "chat:deepseek-v4-pro-0813": {
       "id": "deepseek-v4-pro-0813",
       "name": "DeepSeek V4 Pro 0813",
       "api": "openai-completions",
@@ -80,11 +92,17 @@
       },
       "reasoning": true,
       "input": ["text"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
       "contextWindow": 1000000,
-      "maxTokens": 384000
+      "maxTokens": 384000,
+      "type": "chat"
     },
-    "glm-5.2": {
+    "chat:glm-5.2": {
       "id": "glm-5.2",
       "name": "GLM-5.2",
       "api": "openai-completions",
@@ -108,11 +126,17 @@
       },
       "reasoning": true,
       "input": ["text"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
       "contextWindow": 1000000,
-      "maxTokens": 131072
+      "maxTokens": 131072,
+      "type": "chat"
     },
-    "qwen3.6-flash": {
+    "chat:qwen3.6-flash": {
       "id": "qwen3.6-flash",
       "name": "Qwen3.6 Flash",
       "api": "openai-completions",
@@ -127,16 +151,27 @@
       },
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
       "contextWindow": 1000000,
       "maxTokens": 65536,
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "qwen3.7-max": {
+    "chat:qwen3.7-max": {
       "id": "qwen3.7-max",
       "name": "Qwen3.7 Max",
       "api": "openai-completions",
@@ -151,11 +186,17 @@
       },
       "reasoning": true,
       "input": ["text"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
       "contextWindow": 1000000,
-      "maxTokens": 131072
+      "maxTokens": 131072,
+      "type": "chat"
     },
-    "qwen3.7-plus": {
+    "chat:qwen3.7-plus": {
       "id": "qwen3.7-plus",
       "name": "Qwen3.7 Plus",
       "api": "openai-completions",
@@ -170,16 +211,27 @@
       },
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
       "contextWindow": 1000000,
       "maxTokens": 65536,
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "qwen3.8-flash": {
+    "chat:qwen3.8-flash": {
       "id": "qwen3.8-flash",
       "name": "Qwen3.8 Flash",
       "api": "openai-completions",
@@ -203,16 +255,27 @@
       },
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
       "contextWindow": 1000000,
       "maxTokens": 131072,
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "qwen3.8-max": {
+    "chat:qwen3.8-max": {
       "id": "qwen3.8-max",
       "name": "Qwen3.8 Max",
       "api": "openai-completions",
@@ -236,14 +299,25 @@
       },
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
       "contextWindow": 1000000,
       "maxTokens": 131072,
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     }
   }
 }

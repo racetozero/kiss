@@ -157,6 +157,7 @@ async fn a_prompt_streams_events_and_ends_with_agent_settled() {
     assert_eq!(acceptance["command"], "prompt");
     assert_eq!(acceptance["success"], true);
     assert_eq!(acceptance["id"], "1");
+    assert_eq!(acceptance["data"]["disposition"], "started");
 
     let types: Vec<&str> = lines
         .iter()

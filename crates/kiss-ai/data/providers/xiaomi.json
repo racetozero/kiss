@@ -1,6 +1,6 @@
 {
   "openai-completions": {
-    "mimo-v2.5": {
+    "chat:mimo-v2.5": {
       "id": "mimo-v2.5",
       "name": "MiMo-V2.5",
       "api": "openai-completions",
@@ -13,16 +13,27 @@
       },
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 0.14, "output": 0.28, "cacheRead": 0.0028, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.14,
+        "output": 0.28,
+        "cacheRead": 0.0028,
+        "cacheWrite": 0
+      },
       "contextWindow": 1048576,
       "maxTokens": 131072,
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "mimo-v2.5-pro": {
+    "chat:mimo-v2.5-pro": {
       "id": "mimo-v2.5-pro",
       "name": "MiMo-V2.5-Pro",
       "api": "openai-completions",
@@ -35,11 +46,17 @@
       },
       "reasoning": true,
       "input": ["text"],
-      "cost": { "input": 0.435, "output": 0.87, "cacheRead": 0.0036, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.435,
+        "output": 0.87,
+        "cacheRead": 0.0036,
+        "cacheWrite": 0
+      },
       "contextWindow": 1048576,
-      "maxTokens": 131072
+      "maxTokens": 131072,
+      "type": "chat"
     },
-    "mimo-v2.5-pro-ultraspeed": {
+    "chat:mimo-v2.5-pro-ultraspeed": {
       "id": "mimo-v2.5-pro-ultraspeed",
       "name": "MiMo-V2.5-Pro-UltraSpeed",
       "api": "openai-completions",
@@ -52,11 +69,17 @@
       },
       "reasoning": true,
       "input": ["text"],
-      "cost": { "input": 1.305, "output": 2.61, "cacheRead": 0.0108, "cacheWrite": 0 },
+      "cost": {
+        "input": 1.305,
+        "output": 2.61,
+        "cacheRead": 0.0108,
+        "cacheWrite": 0
+      },
       "contextWindow": 1048576,
-      "maxTokens": 131072
+      "maxTokens": 131072,
+      "type": "chat"
     },
-    "mimo-v2.6-flash": {
+    "chat:mimo-v2.6-flash": {
       "id": "mimo-v2.6-flash",
       "name": "MiMo-V2.6-Flash",
       "api": "openai-completions",
@@ -69,16 +92,27 @@
       },
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 0.14, "output": 0.28, "cacheRead": 0.0028, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.14,
+        "output": 0.28,
+        "cacheRead": 0.0028,
+        "cacheWrite": 0
+      },
       "contextWindow": 1048576,
       "maxTokens": 131072,
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "mimo-v2.6-pro": {
+    "chat:mimo-v2.6-pro": {
       "id": "mimo-v2.6-pro",
       "name": "MiMo-V2.6-Pro",
       "api": "openai-completions",
@@ -91,16 +125,27 @@
       },
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 0.435, "output": 0.87, "cacheRead": 0.0036, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.435,
+        "output": 0.87,
+        "cacheRead": 0.0036,
+        "cacheWrite": 0
+      },
       "contextWindow": 1048576,
       "maxTokens": 131072,
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "mimo-v2.6-pro-ultraspeed": {
+    "chat:mimo-v2.6-pro-ultraspeed": {
       "id": "mimo-v2.6-pro-ultraspeed",
       "name": "MiMo-V2.6-Pro-UltraSpeed",
       "api": "openai-completions",
@@ -113,14 +158,25 @@
       },
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 4.35, "output": 8.7, "cacheRead": 0.036, "cacheWrite": 0 },
+      "cost": {
+        "input": 4.35,
+        "output": 8.7,
+        "cacheRead": 0.036,
+        "cacheWrite": 0
+      },
       "contextWindow": 1048576,
       "maxTokens": 131072,
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     }
   }
 }

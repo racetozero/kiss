@@ -141,6 +141,9 @@ pub struct Model {
     /// Extra headers sent with every request for this model.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub headers: BTreeMap<String, String>,
+    /// Model request defaults. Per-request sampling values take precedence.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub sampling_params: BTreeMap<String, serde_json::Value>,
 }
 
 fn default_input() -> Vec<String> {
@@ -264,6 +267,7 @@ mod tests {
             input: vec!["text".into()],
             cost: ModelCost::default(),
             prompt_cache: None,
+            sampling_params: Default::default(),
             context_window: 1_000,
             max_tokens: 100,
             compat: None,

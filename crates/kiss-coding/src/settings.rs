@@ -229,6 +229,7 @@ pub struct Settings {
     pub shell_command_prefix: Option<String>,
     pub session_dir: Option<String>,
     pub enabled_models: Option<Vec<String>>,
+    pub default_tools: Option<Vec<String>>,
     pub external_editor: Option<String>,
     pub skills: Vec<String>,
     pub prompts: Vec<String>,
@@ -294,7 +295,22 @@ fn merged_settings(mut global: Value, project: Option<Value>) -> Settings {
         .cloned()
         .and_then(|value| serde_json::from_value(value).ok())
         .unwrap_or_default();
-    if let Some(project) = project {
+    if let Some(mut project) = project {
+        if let Some(object) = project.as_object_mut() {
+            object.remove("deviceId");
+        }
+        if let Some(entries) = project.get("defaultTools").and_then(Value::as_array)
+            && entries.iter().all(|entry| {
+                entry
+                    .as_str()
+                    .is_some_and(|name| name.starts_with(['+', '-']))
+            })
+            && let Some(base) = global.get("defaultTools").and_then(Value::as_array)
+        {
+            let mut combined = base.clone();
+            combined.extend(entries.iter().cloned());
+            project["defaultTools"] = Value::Array(combined);
+        }
         deep_merge(&mut global, project);
     }
     let mut settings: Settings = serde_json::from_value(global).unwrap_or_default();
@@ -310,6 +326,38 @@ fn merged_settings(mut global: Value, project: Option<Value>) -> Settings {
 }
 
 impl Settings {
+    /// Read only user settings when creating the installation ID.
+    pub fn get_or_create_device_id() -> anyhow::Result<String> {
+        let path = global_settings_path().ok_or_else(|| anyhow::anyhow!(
+            "ChatGPT login has no user settings path. A home directory is required. Set HOME and run login again."
+        ))?;
+        let mut settings: Value = match std::fs::read_to_string(&path) {
+            Ok(text) => serde_json::from_str(&text).map_err(|_| anyhow::anyhow!(
+                "ChatGPT login cannot read {}. Settings must contain a JSON object. Correct the JSON and run login again.", path.display()
+            ))?,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => serde_json::json!({}),
+            Err(error) => return Err(error.into()),
+        };
+        if !settings.is_object() {
+            anyhow::bail!(
+                "ChatGPT login cannot update {}. Settings must contain a JSON object. Correct the JSON and run login again.",
+                path.display()
+            );
+        }
+        if let Some(id) = settings.get("deviceId").and_then(Value::as_str)
+            && uuid::Uuid::parse_str(id).is_ok()
+        {
+            return Ok(id.to_string());
+        }
+        let id = uuid::Uuid::new_v4().to_string();
+        settings["deviceId"] = Value::String(id.clone());
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(path, serde_json::to_string_pretty(&settings)?)?;
+        Ok(id)
+    }
+
     pub fn auto_recap_enabled(&self) -> bool {
         self.auto_recap.unwrap_or(true)
     }
@@ -330,7 +378,11 @@ impl Settings {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        std::fs::write(&path, serde_json::to_string_pretty(self)?)?;
+        let mut value = serde_json::to_value(self)?;
+        if let Some(id) = read_json(&path).and_then(|disk| disk.get("deviceId").cloned()) {
+            value["deviceId"] = id;
+        }
+        std::fs::write(&path, serde_json::to_string_pretty(&value)?)?;
         Ok(())
     }
 }
@@ -339,6 +391,26 @@ impl Settings {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn project_tool_modifiers_preserve_user_selection() {
+        let user = json!({"defaultTools":["read", "+grep"]});
+        let settings =
+            merged_settings(user.clone(), Some(json!({"defaultTools":["-read", "+ls"]})));
+        assert_eq!(
+            settings.default_tools.unwrap(),
+            ["read", "+grep", "-read", "+ls"]
+        );
+        let settings = merged_settings(user.clone(), Some(json!({"defaultTools":["bash"]})));
+        assert_eq!(settings.default_tools.unwrap(), ["bash"]);
+        let settings = merged_settings(user, Some(json!({"defaultTools":[]})));
+        assert_eq!(settings.default_tools.unwrap(), ["read", "+grep"]);
+        let settings = merged_settings(
+            json!({"deviceId":"user-id"}),
+            Some(json!({"deviceId":"project-id"})),
+        );
+        assert_eq!(settings.extra["deviceId"], "user-id");
+    }
 
     #[test]
     fn project_cannot_enable_cloud_voice() {

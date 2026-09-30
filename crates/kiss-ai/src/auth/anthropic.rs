@@ -148,6 +148,7 @@ fn credential_from_token(token: TokenResponse) -> OAuthCredential {
             - 5 * 60 * 1000,
         account_id: String::new(),
         available_model_ids: None,
+        client_id: None,
     }
 }
 
@@ -213,10 +214,25 @@ pub async fn login_browser(
         .port_or_known_default()
         .context("Anthropic callback URL has no port")?;
     let callback_path = redirect.path().to_string();
-    let listener = TcpListener::bind((config.callback_host.as_str(), port))
-        .await
-        .with_context(|| format!("listen for Anthropic OAuth callback on port {port}"))?;
-    let pending = start_authorization(config)?;
+    let listener = match TcpListener::bind((config.callback_host.as_str(), port)).await {
+        Ok(listener) => listener,
+        Err(error) if error.kind() == std::io::ErrorKind::AddrInUse => {
+            TcpListener::bind((config.callback_host.as_str(), 0)).await?
+        }
+        Err(error) => {
+            return Err(error)
+                .with_context(|| format!("listen for Anthropic OAuth callback on port {port}"));
+        }
+    };
+    let mut redirect = redirect;
+    redirect.set_port(Some(listener.local_addr()?.port())).map_err(|_| anyhow::anyhow!(
+        "Anthropic login has an invalid callback URL. Use an HTTP loopback URL with a port and retry login."
+    ))?;
+    let callback_config = OAuthConfig {
+        redirect_uri: redirect.into(),
+        ..config.clone()
+    };
+    let pending = start_authorization(&callback_config)?;
     show_url(&pending.authorization_url);
 
     let deadline = tokio::time::sleep(config.timeout);
@@ -228,7 +244,11 @@ pub async fn login_browser(
             _ = &mut deadline => anyhow::bail!("Anthropic browser login timed out"),
         };
         let mut request = vec![0_u8; 8192];
-        let count = socket.read(&mut request).await?;
+        let count = tokio::select! {
+            count = socket.read(&mut request) => count?,
+            _ = cancel.cancelled() => anyhow::bail!("login cancelled"),
+            _ = &mut deadline => anyhow::bail!("Anthropic browser login timed out"),
+        };
         let request = String::from_utf8_lossy(&request[..count]);
         let target = request
             .lines()
@@ -240,7 +260,18 @@ pub async fn login_browser(
         let valid_path = parsed
             .as_ref()
             .is_some_and(|url| url.path() == callback_path);
-        let credential = if valid_path {
+        let valid_state = parsed.as_ref().is_some_and(|url| {
+            url.query_pairs()
+                .any(|(name, value)| name == "state" && value == pending.state)
+        });
+        let authorization_error = parsed
+            .as_ref()
+            .is_some_and(|url| url.query_pairs().any(|(name, _)| name == "error"));
+        let credential = if valid_path && valid_state && authorization_error {
+            Err(anyhow::anyhow!(
+                "Anthropic browser login was refused. Successful authorization is required. Run login again and approve access."
+            ))
+        } else if valid_path && valid_state {
             finish_authorization(config, &pending, input, cancel).await
         } else {
             Err(anyhow::anyhow!("invalid callback path"))
@@ -262,7 +293,7 @@ pub async fn login_browser(
             page.len()
         );
         socket.write_all(response.as_bytes()).await?;
-        if accepted {
+        if accepted || (valid_path && valid_state) {
             return credential;
         }
     }
@@ -367,6 +398,44 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn occupied_callback_port_and_provider_denial_finish_promptly() {
+        let occupied = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let port = occupied.local_addr().unwrap().port();
+        let config = OAuthConfig {
+            redirect_uri: format!("http://127.0.0.1:{port}/callback"),
+            timeout: Duration::from_secs(10),
+            ..Default::default()
+        };
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        let login = tokio::spawn(async move {
+            login_browser(&config, &CancellationToken::new(), |url| {
+                sender.send(url.to_string()).unwrap();
+            })
+            .await
+        });
+        let url = Url::parse(&receiver.await.unwrap()).unwrap();
+        let query: std::collections::BTreeMap<_, _> = url.query_pairs().into_owned().collect();
+        let mut callback = Url::parse(&query["redirect_uri"]).unwrap();
+        assert_ne!(callback.port().unwrap(), port);
+        callback
+            .query_pairs_mut()
+            .append_pair("state", &query["state"])
+            .append_pair("error", "access_denied");
+        let response = crate::stream::http_client()
+            .get(callback)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), reqwest::StatusCode::BAD_REQUEST);
+        let error = tokio::time::timeout(Duration::from_secs(2), login)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap_err();
+        assert!(error.to_string().contains("refused"));
+    }
+
+    #[tokio::test]
     async fn manual_flow_exchanges_json_and_builds_refreshable_credential() {
         let (token_url, server) = token_server(
             "200 OK",
@@ -423,6 +492,7 @@ mod tests {
             expires: 0,
             account_id: String::new(),
             available_model_ids: None,
+            client_id: None,
         };
         let error = refresh(
             &credential,

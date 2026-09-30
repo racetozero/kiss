@@ -33,13 +33,28 @@ impl Color {
         if value.is_empty() {
             return Some(Color::Default);
         }
-        if let Some(hex) = value.strip_prefix('#')
-            && hex.len() == 6
-        {
-            let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
-            let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
-            let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
-            return Some(Color::Rgb(r, g, b));
+        if let Some(hex) = value.strip_prefix('#') {
+            // Validate ASCII digits before slicing, including malformed UTF-8
+            // boundaries in user-supplied color strings.
+            if !hex.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+                return None;
+            }
+            if hex.len() == 3 {
+                let mut channels = hex
+                    .chars()
+                    .map(|digit| digit.to_digit(16).unwrap() as u8 * 17);
+                return Some(Color::Rgb(
+                    channels.next()?,
+                    channels.next()?,
+                    channels.next()?,
+                ));
+            }
+            if hex.len() == 6 {
+                let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
+                let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
+                let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
+                return Some(Color::Rgb(r, g, b));
+            }
         }
         value.parse::<u8>().ok().map(Color::Indexed)
     }
@@ -207,13 +222,15 @@ mod tests {
         let json = r##"{
             "name": "my-theme",
             "vars": {"primary": "#00aaff", "secondary": 242},
-            "colors": {"accent": "primary", "muted": "secondary", "error": "#ff0000", "text": ""}
+            "colors": {"accent": "primary", "muted": "secondary", "error": "#ff0000", "text": "", "short":"#3af", "invalid":"#a😃b"}
         }"##;
         let theme = Theme::parse(json).unwrap();
         assert_eq!(theme.color("accent"), Color::Rgb(0, 0xaa, 0xff));
         assert_eq!(theme.color("muted"), Color::Indexed(242));
         assert_eq!(theme.color("error"), Color::Rgb(255, 0, 0));
         assert_eq!(theme.color("text"), Color::Default);
+        assert_eq!(theme.color("short"), Color::Rgb(0x33, 0xaa, 0xff));
+        assert_eq!(theme.color("invalid"), Color::Default);
     }
 
     #[test]

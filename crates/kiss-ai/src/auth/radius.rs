@@ -132,6 +132,7 @@ async fn token_request(
         expires: chrono::Utc::now().timestamp_millis() + expires.saturating_mul(1000) - 60_000,
         account_id: String::new(),
         available_model_ids: None,
+        client_id: None,
     })
 }
 

@@ -1,6 +1,6 @@
 {
   "google-vertex": {
-    "gemini-2.5-flash": {
+    "chat:gemini-2.5-flash": {
       "id": "gemini-2.5-flash",
       "name": "Gemini 2.5 Flash",
       "api": "google-vertex",
@@ -8,16 +8,27 @@
       "baseUrl": "https://{location}-aiplatform.googleapis.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 0.3, "output": 2.5, "cacheRead": 0.03, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.3,
+        "output": 2.5,
+        "cacheRead": 0.03,
+        "cacheWrite": 0
+      },
       "contextWindow": 1048576,
       "maxTokens": 65536,
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "gemini-2.5-flash-lite": {
+    "chat:gemini-2.5-flash-lite": {
       "id": "gemini-2.5-flash-lite",
       "name": "Gemini 2.5 Flash-Lite",
       "api": "google-vertex",
@@ -25,16 +36,27 @@
       "baseUrl": "https://{location}-aiplatform.googleapis.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 0.1, "output": 0.4, "cacheRead": 0.01, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.1,
+        "output": 0.4,
+        "cacheRead": 0.01,
+        "cacheWrite": 0
+      },
       "contextWindow": 1048576,
-      "maxTokens": 65536,
+      "maxTokens": 65535,
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "gemini-2.5-pro": {
+    "chat:gemini-2.5-pro": {
       "id": "gemini-2.5-pro",
       "name": "Gemini 2.5 Pro",
       "api": "google-vertex",
@@ -42,16 +64,27 @@
       "baseUrl": "https://{location}-aiplatform.googleapis.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 1.25, "output": 10, "cacheRead": 0.125, "cacheWrite": 0 },
+      "cost": {
+        "input": 1.25,
+        "output": 10,
+        "cacheRead": 0.125,
+        "cacheWrite": 0
+      },
       "contextWindow": 1048576,
       "maxTokens": 65536,
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "gemini-3-flash-preview": {
+    "chat:gemini-3-flash-preview": {
       "id": "gemini-3-flash-preview",
       "name": "Gemini 3 Flash Preview",
       "api": "google-vertex",
@@ -68,16 +101,27 @@
         "max": null
       },
       "input": ["text", "image"],
-      "cost": { "input": 0.5, "output": 3, "cacheRead": 0.05, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.5,
+        "output": 3,
+        "cacheRead": 0.05,
+        "cacheWrite": 0
+      },
       "contextWindow": 1048576,
       "maxTokens": 65536,
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "gemini-3.1-flash-lite": {
+    "chat:gemini-3.1-flash-lite": {
       "id": "gemini-3.1-flash-lite",
       "name": "Gemini 3.1 Flash Lite",
       "api": "google-vertex",
@@ -94,16 +138,27 @@
         "max": null
       },
       "input": ["text", "image"],
-      "cost": { "input": 0.25, "output": 1.5, "cacheRead": 0.025, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.25,
+        "output": 1.5,
+        "cacheRead": 0.025,
+        "cacheWrite": 0
+      },
       "contextWindow": 1048576,
       "maxTokens": 65536,
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "gemini-3.1-pro-preview": {
+    "chat:gemini-3.1-pro-preview": {
       "id": "gemini-3.1-pro-preview",
       "name": "Gemini 3.1 Pro Preview",
       "api": "google-vertex",
@@ -120,16 +175,27 @@
         "max": null
       },
       "input": ["text", "image"],
-      "cost": { "input": 2, "output": 12, "cacheRead": 0.2, "cacheWrite": 0 },
+      "cost": {
+        "input": 2,
+        "output": 12,
+        "cacheRead": 0.2,
+        "cacheWrite": 0
+      },
       "contextWindow": 1048576,
       "maxTokens": 65536,
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "gemini-3.1-pro-preview-customtools": {
+    "chat:gemini-3.1-pro-preview-customtools": {
       "id": "gemini-3.1-pro-preview-customtools",
       "name": "Gemini 3.1 Pro Preview Custom Tools",
       "api": "google-vertex",
@@ -146,16 +212,27 @@
         "max": null
       },
       "input": ["text", "image"],
-      "cost": { "input": 2, "output": 12, "cacheRead": 0.2, "cacheWrite": 0 },
+      "cost": {
+        "input": 2,
+        "output": 12,
+        "cacheRead": 0.2,
+        "cacheWrite": 0
+      },
       "contextWindow": 1048576,
       "maxTokens": 65536,
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "gemini-3.5-flash": {
+    "chat:gemini-3.5-flash": {
       "id": "gemini-3.5-flash",
       "name": "Gemini 3.5 Flash",
       "api": "google-vertex",
@@ -172,16 +249,27 @@
         "max": null
       },
       "input": ["text", "image"],
-      "cost": { "input": 1.5, "output": 9, "cacheRead": 0.15, "cacheWrite": 0 },
+      "cost": {
+        "input": 1.5,
+        "output": 9,
+        "cacheRead": 0.15,
+        "cacheWrite": 0
+      },
       "contextWindow": 1048576,
       "maxTokens": 65536,
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "gemini-3.5-flash-lite": {
+    "chat:gemini-3.5-flash-lite": {
       "id": "gemini-3.5-flash-lite",
       "name": "Gemini 3.5 Flash Lite",
       "api": "google-vertex",
@@ -198,16 +286,27 @@
         "max": null
       },
       "input": ["text", "image"],
-      "cost": { "input": 0.3, "output": 2.5, "cacheRead": 0.03, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.3,
+        "output": 2.5,
+        "cacheRead": 0.03,
+        "cacheWrite": 0
+      },
       "contextWindow": 1048576,
       "maxTokens": 65536,
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "gemini-3.6-flash": {
+    "chat:gemini-3.6-flash": {
       "id": "gemini-3.6-flash",
       "name": "Gemini 3.6 Flash",
       "api": "google-vertex",
@@ -224,16 +323,27 @@
         "max": null
       },
       "input": ["text", "image"],
-      "cost": { "input": 0.75, "output": 3.75, "cacheRead": 0.075, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.75,
+        "output": 3.75,
+        "cacheRead": 0.075,
+        "cacheWrite": 0
+      },
       "contextWindow": 1048576,
       "maxTokens": 65536,
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "gemini-3.7-flash": {
+    "chat:gemini-3.7-flash": {
       "id": "gemini-3.7-flash",
       "name": "Gemini 3.7 Flash",
       "api": "google-vertex",
@@ -250,16 +360,27 @@
         "max": null
       },
       "input": ["text", "image"],
-      "cost": { "input": 0.75, "output": 3.75, "cacheRead": 0.075, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.75,
+        "output": 3.75,
+        "cacheRead": 0.075,
+        "cacheWrite": 0
+      },
       "contextWindow": 1048576,
       "maxTokens": 65536,
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "gemini-3.8-flash": {
+    "chat:gemini-3.8-flash": {
       "id": "gemini-3.8-flash",
       "name": "Gemini 3.8 Flash",
       "api": "google-vertex",
@@ -276,16 +397,27 @@
         "max": null
       },
       "input": ["text", "image"],
-      "cost": { "input": 0.75, "output": 3.75, "cacheRead": 0.075, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.75,
+        "output": 3.75,
+        "cacheRead": 0.075,
+        "cacheWrite": 0
+      },
       "contextWindow": 1048576,
       "maxTokens": 65536,
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "gemini-flash-latest": {
+    "chat:gemini-flash-latest": {
       "id": "gemini-flash-latest",
       "name": "Gemini Flash Latest",
       "api": "google-vertex",
@@ -302,16 +434,27 @@
         "max": null
       },
       "input": ["text", "image"],
-      "cost": { "input": 1.5, "output": 9, "cacheRead": 0.15, "cacheWrite": 0 },
+      "cost": {
+        "input": 1.5,
+        "output": 9,
+        "cacheRead": 0.15,
+        "cacheWrite": 0
+      },
       "contextWindow": 1048576,
       "maxTokens": 65536,
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     },
-    "gemini-flash-lite-latest": {
+    "chat:gemini-flash-lite-latest": {
       "id": "gemini-flash-lite-latest",
       "name": "Gemini Flash-Lite Latest",
       "api": "google-vertex",
@@ -328,14 +471,25 @@
         "max": null
       },
       "input": ["text", "image"],
-      "cost": { "input": 0.25, "output": 1.5, "cacheRead": 0.025, "cacheWrite": 0 },
+      "cost": {
+        "input": 0.25,
+        "output": 1.5,
+        "cacheRead": 0.025,
+        "cacheWrite": 0
+      },
       "contextWindow": 1048576,
       "maxTokens": 65536,
       "inputLimits": {
         "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
         }
-      }
+      },
+      "type": "chat"
     }
   }
 }

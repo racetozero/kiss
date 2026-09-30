@@ -161,6 +161,7 @@ async fn copilot_token(
             String::new()
         },
         available_model_ids: None,
+        client_id: None,
     };
     credential.available_model_ids = Some(sync_account_models(&credential, cancel).await?);
     Ok(credential)

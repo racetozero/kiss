@@ -97,6 +97,7 @@ impl ToolChoice {
 pub struct StreamOptions {
     pub credential: Option<ResolvedCredential>,
     pub temperature: Option<f64>,
+    pub sampling_params: std::collections::BTreeMap<String, serde_json::Value>,
     pub max_tokens: Option<u64>,
     pub reasoning: ThinkingLevel,
     pub tool_choice: Option<ToolChoice>,

@@ -793,7 +793,7 @@ options. Custom themes live in `~/.kiss/agent/settings.json`.
 
 ## Compatibility
 
-KISS tracks [Pi v0.87.1](https://github.com/earendil-works/pi/releases/tag/v0.87.1).
+KISS tracks [Pi v0.99.1](https://github.com/earendil-works/pi/releases/tag/v0.99.1).
 It keeps Pi-compatible session files, model data, core commands, compaction,
 and OpenAI Responses WebSocket transport. `Cargo.toml` records the tracked
 release.
@@ -827,3 +827,14 @@ release workflow.
 MIT. The name follows the
 [Keep it simple, stupid](https://en.wikipedia.org/wiki/KISS_principle)
 principle. KISS is inspired by Pi, which is also licensed under MIT.
+
+The OpenAI provider supports `kiss login openai` for ChatGPT browser login.
+API-key login remains available. The OpenAI Codex provider retains its legacy
+subscription flow.
+
+Set `defaultTools` in global or trusted project settings to select tools.
+A list such as `["read", "bash"]` replaces the defaults. A list such as
+`["+grep", "-write"]` changes the defaults. Project modifier lists apply after
+user settings. `--tools`, `--exclude-tools`, and `--no-tools` take precedence.
+Use `+mcp` to include configured MCP servers when you set `defaultTools`.
+KISS does not provide Pi's JavaScript codemode; see [the parity audit](PI_UPSTREAM.md).

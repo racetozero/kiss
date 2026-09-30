@@ -196,6 +196,7 @@ async fn prompting_while_streaming_requires_an_explicit_behavior() {
         })
         .await;
     assert!(queued.success, "{queued:?}");
+    assert_eq!(queued.data.unwrap()["disposition"], "queued");
 
     session.abort();
     session.wait_idle().await;

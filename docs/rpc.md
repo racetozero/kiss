@@ -28,11 +28,13 @@ protocol-safe. Buffer bytes and split on `\n`.
 Every command may include `id`. Its response echoes it. Events normally have no
 id. A `bash_execution_update` event echoes the id of its direct `bash` command.
 A successful `prompt` response means accepted, not finished. Wait for
-`agent_settled`.
+`agent_settled`. Successful `prompt` responses include `data.disposition`:
+`started` means a new turn started; `queued` means the input entered the steering
+or follow-up queue. Successful `steer` and `follow_up` responses report `queued`.
 
 ```json
 {"id":"1","type":"prompt","message":"List files"}
-{"type":"response","id":"1","command":"prompt","success":true}
+{"type":"response","id":"1","command":"prompt","success":true,"data":{"disposition":"started"}}
 {"type":"agent_start"}
 {"type":"message_update","assistantMessageEvent":{"type":"text_delta","contentIndex":0,"delta":"Here"}}
 {"type":"agent_settled"}

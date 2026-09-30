@@ -538,6 +538,7 @@ mod tests {
             compat: None,
             thinking_level_map: Default::default(),
             headers: Default::default(),
+            sampling_params: Default::default(),
         }
     }
 
