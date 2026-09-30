@@ -2,28 +2,36 @@
 
 ## Unreleased
 
+## 0.0.23 - 2026-09-30
+
 ### Added
 
-- Added OpenAI ChatGPT browser login and refresh, configured `defaultTools`,
-  and RPC `started` or `queued` input disposition.
-
-### Fixed
-
-- Reject incomplete Responses tool streams, preserve MCP error details, and
-  keep OpenAI-compatible reasoning separate from answer text on replay.
-- Apply model sampling defaults and request overrides. Use reported OpenAI
-  service tiers for cost. Handle subscription usage errors and browser denials.
-- Accept null read limits, opening wrappers in file completion, and `#rgb`
-  theme colors.
+- Sign in with a ChatGPT subscription through `kiss login openai`. KISS saves
+  the login and refreshes it when needed. Legacy Codex login remains available.
+- Choose session tools with `defaultTools`. Replace the defaults or adjust
+  them with `+name` and `-name` entries in user and trusted project settings.
+- RPC prompt responses now report whether input started a turn or entered a
+  queue. Steering and follow-up responses report queued input.
 
 ### Changed
 
-- Updated the Pi baseline and chat catalog to v0.99.1, including GPT-6.1 Sol,
-  Claude Sonnet 5.5, and current Kimi defaults.
+- Updated the Pi baseline and model catalog to v0.99.1. Added GPT-6.1 Sol and
+  Claude Sonnet 5.5, selected GPT-6.1 Sol as the Codex default, and updated
+  Fireworks, Together, and OpenCode Go to Kimi K3.
+- Made Jev compaction and dynamic reasoning generally available. Both remain
+  opt-in through `/settings` and require TypeSafe credentials.
+- Updated the README with clearer login, tool selection, and setup guidance.
 
-- Made Jev compaction and dynamic reasoning generally available. Removed their
-  experimental labels. Both features remain opt-in through `/settings` and
-  require TypeSafe credentials.
+### Fixed
+
+- Reject incomplete Responses tool streams before tools run. Keep MCP error
+  content and details, and preserve reasoning separately from answer text.
+- Apply model sampling defaults and request overrides. Calculate OpenAI costs
+  from the reported service tier.
+- Stop browser login after an authorization denial. Show the ChatGPT usage
+  page for subscription limits and retry temporary subscription errors.
+- Accept null optional read limits, opening wrappers in file completion, and
+  short `#rgb` theme colors.
 
 ## 0.0.22 - 2026-09-28
 
