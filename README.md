@@ -541,12 +541,25 @@ KISS provides SDKs for Rust, Python 3.11+, TypeScript on Node, Bun, and Deno,
 and browser applications through WebAssembly. All SDKs use the same streaming
 event protocol.
 
+### Rust
+
 ```rust
 let session = kiss_sdk::Session::builder().tools(["read", "bash"]).build().await?;
 session.prompt("What files are here?").await?;
 ```
 
+### Python
+
+Install the [Python SDK from PyPI](https://pypi.org/project/kiss-agent-sdk/).
+It requires Python 3.11 or later.
+
+```bash
+uv add kiss-agent-sdk
+```
+
 ```python
+import kiss_sdk
+
 async with await kiss_sdk.Session.create(tools=[kiss_sdk.ToolName.READ]) as session:
     await session.prompt('What files are here?')
     stats = await session.session_stats()
@@ -557,16 +570,36 @@ async with await kiss_sdk.Session.create(tools=[kiss_sdk.ToolName.READ]) as sess
     )
 ```
 
+### Node, Bun, and Deno
+
+Install the [native JavaScript SDK from npm](https://www.npmjs.com/package/kiss-agent-sdk)
+to use KISS in a Node, Bun, or Deno application.
+
+```bash
+npm install kiss-agent-sdk
+```
+
 ```typescript
+import { Session } from "kiss-agent-sdk"
+
 const session = await Session.create({ tools: ["read", "bash"] })
 await session.prompt("What files are here?")
 const stats = await session.sessionStats()
 console.log(stats.tokens.cacheRead, stats.tokens.cacheWrite, stats.tokens.cacheWrite1h)
 ```
 
-`kiss-agent-sdk-wasm` runs the full agent and model/tool loop in a browser. It
-does not need a KISS server. `@kiss-sdk/wasm` is the remote client for
-applications that need native filesystem and shell tools.
+### Browser WebAssembly
+
+Install the [browser SDK from npm](https://www.npmjs.com/package/kiss-agent-sdk-wasm)
+to run the agent and model/tool loop in your browser without a KISS server.
+
+```bash
+npm install kiss-agent-sdk-wasm
+```
+
+For applications that need native filesystem and shell tools, use the
+`@kiss-sdk/wasm` remote client. See the [SDK guide](docs/sdk.md#remote-native-agent)
+for its build and connection instructions.
 
 Use cached-token totals in product analytics, cost dashboards, or alerts.
 Python, Node, and RPC WASM return cumulative totals through session statistics.
