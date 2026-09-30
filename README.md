@@ -2,21 +2,16 @@
 
 <img width="766" height="244" alt="image" src="https://github.com/user-attachments/assets/08e96d6e-7409-419b-b9db-0149f2465083" />
 
-A [ridiculously fast](#performance) terminal coding agent that keeps the interface simple and gives you
-control of the model, tools, sessions, and automation.
+A terminal coding agent built in Rust. Choose your model, tools, sessions,
+and automation. See the [performance results](#performance) for local benchmarks.
 
-KISS has 44 built-in providers. These include OpenAI Codex (ChatGPT
-subscription), OpenAI API, Anthropic OAuth (Claude subscription), Anthropic
-API, Meta Muse, Cursor, Google, OpenRouter, Bedrock, Databricks, Snowflake,
-and GitHub Copilot.
+KISS supports OpenAI and Anthropic subscriptions and API keys, Meta Muse,
+Cursor, Google, OpenRouter, Bedrock, Databricks, Snowflake, GitHub Copilot,
+and other built-in providers.
 
 You can also add OpenAI-compatible providers.
 
-KISS is built in Rust and based on
-[Pi](https://github.com/earendil-works/pi).
-
-KISS takes its name and product philosophy from [Keep It Simple, Stupid](https://en.wikipedia.org/wiki/KISS_principle).
-Why? Because I am stupid :)
+KISS is based on [Pi](https://github.com/earendil-works/pi).
 
 ## Why KISS
 
@@ -71,11 +66,11 @@ kiss update
 Sign in with a ChatGPT subscription and open KISS:
 
 ```bash
-kiss login openai-codex
+kiss login openai
 kiss
 ```
 
-For a server or SSH session:
+For a server or SSH session, use the legacy Codex device login:
 
 ```bash
 kiss login openai-codex --device-auth
@@ -151,13 +146,9 @@ refresh is expected to save money. This is automatic.
 To change this behavior, set `cacheWarming` to `off` to disable refreshes, or
 to `idle` to protect the cache while you decide what to do next.
 
-Model-aware context management and bounded retry delays keep long sessions
-responsive without routine tuning.
-
 ### Jev options
 
-The two [Jev](https://typesafe.ai/) features are generally available.
-To use them, select them in `/settings`:
+Enable the [Jev](https://typesafe.ai/) features in `/settings`:
 
 - **Compaction method → Jev:** Selects which older tool interactions to keep,
   shorten, or remove.
@@ -295,12 +286,20 @@ KISS supports browser and headless OAuth, API keys, environment variables, and
 cloud credentials. It can import compatible credentials from OpenAI Codex,
 Claude Code, Pi, OpenCode, OpenClaw, and Hermes.
 
+Use your ChatGPT subscription with `kiss login openai`. Complete the login in
+your browser, then select an OpenAI model. KISS saves the login and refreshes
+it automatically when needed.
+
+You can also use an OpenAI API key. For a server or SSH session, use
+`kiss login openai-codex --device-auth` to sign in through the legacy Codex
+provider.
+
 ```bash
-kiss login openai-codex
+kiss login openai
 kiss login anthropic --device-auth
 kiss login anthropic --api-key YOUR_KEY
 kiss auth
-kiss logout openai-codex
+kiss logout openai
 kiss --list-models
 kiss --model sonnet:high
 ```
@@ -357,9 +356,7 @@ KISS also accepts a URL that ends in `/api/v2/cortex` or
 `/api/v2/aigateways/SNOWFLAKE`. You can set `SNOWFLAKE_PAT` and
 `SNOWFLAKE_CORTEX_BASE_URL` instead of saving a login.
 
-The built-in catalog contains all 34 text-generation models in the current
-Cortex REST API model availability table. Account and region rules can reduce
-the models that you can use.
+Account and region rules determine which Snowflake models you can use.
 
 ### Your own OpenAI-compatible provider
 
@@ -389,9 +386,9 @@ kiss login openai-codex
 kiss provider add codex-lb \
   --base-url http://127.0.0.1:2455/backend-api/codex \
   --api codex \
-  --model gpt-5.6-sol \
+  --model gpt-6.1-sol \
   --reasoning
-kiss --model codex-lb/gpt-5.6-sol
+kiss --model codex-lb/gpt-6.1-sol
 ```
 
 Use `--api-key-env CODEX_LB_API_KEY` when CodexLB needs its own key. Repeat
@@ -419,7 +416,7 @@ the changed model catalog.
 Add local or remote MCP servers:
 
 ```bash
-kiss mcp add local -- npx -y @modelcontextprotocol/server-everything
+kiss mcp add local -- bunx @modelcontextprotocol/server-everything
 kiss mcp add remote --url https://example.com/mcp --auth oauth
 kiss mcp login remote
 kiss mcp list
@@ -596,17 +593,17 @@ See the [SDK guide](docs/sdk.md), [RPC protocol](docs/rpc.md), and
 ## Performance
 
 KISS benchmarks local work, not model or network latency. Results below are
-from the latest full release benchmark run.
+from a recorded full release benchmark run.
 
 ### Startup and memory
 
-| Measure                     |            Mean |
+| Measure                     | Mean            |
 | --------------------------- | --------------: |
-| Warm time to first frame    |        5.037 ms |
-| Warm time to first input    |        5.094 ms |
-| One idle session            |  15.802 MiB RSS |
+| Warm time to first frame    | 5.037 ms        |
+| Warm time to first input    | 5.094 ms        |
+| One idle session            | 15.802 MiB RSS  |
 | Ten idle sessions           | 159.010 MiB RSS |
-| Extra RSS per added session |      15.912 MiB |
+| Extra RSS per added session | 15.912 MiB      |
 
 Startup results use ten launches after one warm-up. Memory results use three
 trials. RSS is the resident memory reported by macOS. Do not compare these
@@ -614,27 +611,27 @@ values directly with Linux proportional set size.
 
 ### Core operations
 
-| User action              | Test size                         |      Mean |       p95 |
+| User action              | Test size                         | Mean      | p95       |
 | ------------------------ | --------------------------------- | --------: | --------: |
-| File search              | 100,000 files, three warm queries |  4.606 ms |  4.889 ms |
-| File search              | 500,000 files, three warm queries |  7.110 ms |  7.690 ms |
-| SSE parsing              | 10,000 events                     |  0.931 ms |  0.973 ms |
-| Grep                     | 1,000 files and 200 matches       |  6.933 ms |  8.340 ms |
+| File search              | 100,000 files, three warm queries | 4.606 ms  | 4.889 ms  |
+| File search              | 500,000 files, three warm queries | 7.110 ms  | 7.690 ms  |
+| SSE parsing              | 10,000 events                     | 0.931 ms  | 0.973 ms  |
+| Grep                     | 1,000 files and 200 matches       | 6.933 ms  | 8.340 ms  |
 | Incremental Markdown     | 200 streaming prefix renders      | 12.427 ms | 12.576 ms |
-| Rust syntax highlighting | One 200-line fence                |  5.830 ms |  6.165 ms |
-| Unchanged frame          | 10,000 logical rows               |  0.876 ms |  0.885 ms |
+| Rust syntax highlighting | One 200-line fence                | 5.830 ms  | 6.165 ms  |
+| Unchanged frame          | 10,000 logical rows               | 0.876 ms  | 0.885 ms  |
 
 ### SDK, RPC, and browser WebAssembly
 
 These tests use an immediate local model or `ping`. They do not call an
 external model.
 
-| Surface      | Work                                              |      Mean |
+| Surface      | Work                                              | Mean      |
 | ------------ | ------------------------------------------------- | --------: |
-| Native SDK   | Shared in-process command dispatch                |    113 ns |
+| Native SDK   | Shared in-process command dispatch                | 113 ns    |
 | JSONL RPC    | Encode, decode, in-memory transport, and dispatch | 14.439 us |
-| Browser WASM | Warm full-agent prompt, 100 samples               |  0.077 ms |
-| Browser WASM | 25 isolated agents in parallel, 11 batches        |  0.749 ms |
+| Browser WASM | Warm full-agent prompt, 100 samples               | 0.077 ms  |
+| Browser WASM | 25 isolated agents in parallel, 11 batches        | 0.749 ms  |
 
 Fresh WebAssembly module initialization averaged 11.269 ms per Deno process.
 The release module is 574,734 bytes raw and 209,375 bytes gzip. It starts with
@@ -645,19 +642,19 @@ The release module is 574,734 bytes raw and 209,375 bytes gzip. It starts with
 Subagents are off by default. Session setup had no measured slowdown when they
 were enabled. Their six control tools added 71 ns to request preparation.
 
-| Measure                    | State or size         |       Mean |        p95 |
+| Measure                    | State or size         | Mean       | p95        |
 | -------------------------- | --------------------- | ---------: | ---------: |
 | Subagent session setup     | Off                   | 358.845 us | 364.466 us |
 | Subagent session setup     | On                    | 358.352 us | 361.740 us |
-| Request preparation        | Subagents off         |     171 ns |     177 ns |
-| Request preparation        | Subagents on          |     242 ns |     249 ns |
-| Workflow script parsing    | 200 lines             |  57.884 us |  59.922 us |
-| Workflow interpreter       | 1,000 agent calls     |   2.185 ms |   2.423 ms |
-| Workflow progress snapshot | 500 agents, 5 phases  |  43.075 us |  64.816 us |
-| Workflow phase view        | 500 agents, 5 phases  |  11.298 us |  12.207 us |
-| Workflow agent detail      | One prompt and result |   4.886 us |   5.021 us |
-| Workflow unchanged view    | 500 agents, cached    |     311 ns |     317 ns |
-| Job detail view            | Long goal and result  |  45.193 us |  46.595 us |
+| Request preparation        | Subagents off         | 171 ns     | 177 ns     |
+| Request preparation        | Subagents on          | 242 ns     | 249 ns     |
+| Workflow script parsing    | 200 lines             | 57.884 us  | 59.922 us  |
+| Workflow interpreter       | 1,000 agent calls     | 2.185 ms   | 2.423 ms   |
+| Workflow progress snapshot | 500 agents, 5 phases  | 43.075 us  | 64.816 us  |
+| Workflow phase view        | 500 agents, 5 phases  | 11.298 us  | 12.207 us  |
+| Workflow agent detail      | One prompt and result | 4.886 us   | 5.021 us   |
+| Workflow unchanged view    | 500 agents, cached    | 311 ns     | 317 ns     |
+| Job detail view            | Long goal and result  | 45.193 us  | 46.595 us  |
 
 The workflow interpreter used 2.185 us per agent call. Arming a workflow added
 651 ns to request preparation and kept the total below 1 us. Loop and
@@ -666,7 +663,7 @@ events.
 
 ### TUI rendering and resize
 
-| Measure                   | Test size           |     Mean |      p95 |
+| Measure                   | Test size           | Mean     | p95      |
 | ------------------------- | ------------------- | -------: | -------: |
 | Full renderer             | 1,800 logical rows  | 0.398 ms | 0.436 ms |
 | Unchanged renderer        | 10,000 logical rows | 0.876 ms | 0.885 ms |
@@ -680,12 +677,12 @@ change. The full resize test wrote 178,231 bytes.
 
 ### Profile-guided release builds
 
-| Measure                | Standard build | Optimized build |         Change |
+| Measure                | Standard build | Optimized build | Change         |
 | ---------------------- | -------------: | --------------: | -------------: |
-| `kiss --help` startup  |       3.696 ms |        3.676 ms |   0.52% faster |
-| Geometric mean latency |         1.000x |          0.985x |   1.51% faster |
-| Executable size        |      17.16 MiB |       14.87 MiB | 13.37% smaller |
-| gzip size              |       8.17 MiB |        7.36 MiB |  9.94% smaller |
+| `kiss --help` startup  | 3.696 ms       | 3.676 ms        | 0.52% faster   |
+| Geometric mean latency | 1.000x         | 0.985x          | 1.51% faster   |
+| Executable size        | 17.16 MiB      | 14.87 MiB       | 13.37% smaller |
+| gzip size              | 8.17 MiB       | 7.36 MiB        | 9.94% smaller  |
 
 ### Method
 
@@ -751,24 +748,24 @@ not send audio to another backend without your selection.
 
 The default microphone input depends on your system:
 
-| System  | Audio source         | Default input   |
-| ------- | -------------------- | --------------- |
-| macOS   | avfoundation         | `:0`            |
-| Linux   | PulseAudio           | `default`       |
-| Windows | DirectShow           | `audio=default` |
+| System  | Audio source | Default input   |
+| ------- | ------------ | --------------- |
+| macOS   | avfoundation | `:0`            |
+| Linux   | PulseAudio   | `default`       |
+| Windows | DirectShow   | `audio=default` |
 
 If the default input is not your microphone, set `KISS_VOICE_INPUT` to the
 ffmpeg device name. Use these commands to find devices:
 
-| System  | Command                                                 |
-| ------- | ------------------------------------------------------- |
-| macOS   | `ffmpeg -f avfoundation -list_devices true -i ""`         |
-| Linux   | `pactl list sources short`                              |
-| Windows | `ffmpeg -list_devices true -f dshow -i dummy`             |
+| System  | Command                                           |
+| ------- | ------------------------------------------------- |
+| macOS   | `ffmpeg -f avfoundation -list_devices true -i ""` |
+| Linux   | `pactl list sources short`                        |
+| Windows | `ffmpeg -list_devices true -f dshow -i dummy`     |
 
 Give your terminal microphone permission if your system requires it.
 
-Use `/config voice-language es` to select Spanish. The default is `en`;
+Use `/config voice-language es` to select Spanish. The default is `en`.
 `auto` is also available. KISS saves the language in user settings.
 
 ## Configuration
@@ -791,12 +788,30 @@ configuration only after you trust the project.
 Open `/settings` for common TUI settings. Run `kiss --help` for all command-line
 options. Custom themes live in `~/.kiss/agent/settings.json`.
 
+### Tool selection
+
+Choose which tools are available when a session starts with `defaultTools` in
+your settings. For example, `["read", "bash"]` starts sessions with only those
+two tools.
+
+To adjust the default selection, use `+` to add a tool and `-` to remove one.
+For example, `["+grep", "-write"]` adds search and removes the write tool. Add
+`"+mcp"` to keep access to your configured MCP servers.
+
+Save this selection in your user settings to use it across projects. A trusted
+project can provide its own selection or adjust yours with `+` and `-` entries.
+For a single run, `--tools` selects the tools, `--exclude-tools` removes tools,
+and `--no-tools` disables them all. These options override your saved selection.
+
 ## Compatibility
 
 KISS tracks [Pi v0.99.1](https://github.com/earendil-works/pi/releases/tag/v0.99.1).
-It keeps Pi-compatible session files, model data, core commands, compaction,
-and OpenAI Responses WebSocket transport. `Cargo.toml` records the tracked
-release.
+You can continue compatible Pi sessions and use the updated model catalog,
+core commands, and conversation compaction. KISS also supports OpenAI
+Responses over WebSocket.
+
+KISS does not include Pi's TypeScript extension runtime or JavaScript codemode.
+The tracked Pi release is recorded in `Cargo.toml`.
 
 ## Development
 
@@ -827,14 +842,3 @@ release workflow.
 MIT. The name follows the
 [Keep it simple, stupid](https://en.wikipedia.org/wiki/KISS_principle)
 principle. KISS is inspired by Pi, which is also licensed under MIT.
-
-The OpenAI provider supports `kiss login openai` for ChatGPT browser login.
-API-key login remains available. The OpenAI Codex provider retains its legacy
-subscription flow.
-
-Set `defaultTools` in global or trusted project settings to select tools.
-A list such as `["read", "bash"]` replaces the defaults. A list such as
-`["+grep", "-write"]` changes the defaults. Project modifier lists apply after
-user settings. `--tools`, `--exclude-tools`, and `--no-tools` take precedence.
-Use `+mcp` to include configured MCP servers when you set `defaultTools`.
-KISS does not provide Pi's JavaScript codemode; see [the parity audit](PI_UPSTREAM.md).

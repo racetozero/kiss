@@ -19,8 +19,7 @@
 ### Changed
 
 - Updated the Pi baseline and chat catalog to v0.99.1, including GPT-6.1 Sol,
-  Claude Sonnet 5.5, and current Kimi defaults. See `PI_UPSTREAM.md` for the
-  codemode decision and remaining differences.
+  Claude Sonnet 5.5, and current Kimi defaults.
 
 - Made Jev compaction and dynamic reasoning generally available. Removed their
   experimental labels. Both features remain opt-in through `/settings` and
