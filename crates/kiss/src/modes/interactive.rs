@@ -4467,7 +4467,7 @@ fn settings_picker(
             label: "Compaction method".into(),
             detail: Some(match settings.compaction.mode {
                 CompactionMode::Summary => "summary".into(),
-                CompactionMode::Jev if typesafe_available(session) => "Jev (experimental)".into(),
+                CompactionMode::Jev if typesafe_available(session) => "Jev".into(),
                 CompactionMode::Jev => "Jev unavailable · /login typesafe".into(),
             }),
             value: 15,
@@ -4477,7 +4477,7 @@ fn settings_picker(
             detail: Some(match settings.reasoning_effort.mode {
                 ReasoningEffortMode::Fixed => "fixed".into(),
                 ReasoningEffortMode::Jev if typesafe_available(session) => {
-                    "Jev (experimental · reasoning models)".into()
+                    "Jev (reasoning models)".into()
                 }
                 ReasoningEffortMode::Jev => "Jev unavailable · /login typesafe".into(),
             }),

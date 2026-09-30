@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Made Jev compaction and dynamic reasoning generally available. Removed their
+  experimental labels. Both features remain opt-in through `/settings` and
+  require TypeSafe credentials.
+
 ## 0.0.22 - 2026-09-28
 
 ### Fixed
@@ -69,7 +77,7 @@ remove the already published PyPI and crates.io 0.0.21 packages.
 
 ### Changed
 
-- Expanded experimental TypeSafe Jev reasoning-effort selection to every
+- Expanded TypeSafe Jev reasoning-effort selection to every
   reasoning model and provider, using each model's supported effort levels and
   existing provider-native mappings.
 
@@ -77,7 +85,7 @@ remove the already published PyPI and crates.io 0.0.21 packages.
 
 ### Added
 
-- Added experimental TypeSafe Jev reasoning-effort selection for GPT-6 Astra,
+- Added TypeSafe Jev reasoning-effort selection for GPT-6 Astra,
   with bounded runtime context, reusable generation leases, early reassessment
   after tool failures or new user input, and safe fixed-effort fallback.
 - Added colored conversation-pane notices when Jev changes reasoning effort,
@@ -137,7 +145,7 @@ remove the already published PyPI and crates.io 0.0.21 packages.
 
 ### Added
 
-- Added experimental TypeSafe Jev compaction, with TypeSafe API-key login,
+- Added TypeSafe Jev compaction, with TypeSafe API-key login,
   credential-gated opt-in settings, verbatim tool-history filtering, and safe
   fallback to summary compaction.
 

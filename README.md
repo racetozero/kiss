@@ -140,9 +140,9 @@ refresh is expected to save money. This is automatic. Set `cacheWarming` to
 what to do next. Model-aware context management and bounded retry delays keep
 long sessions responsive without routine tuning.
 
-### Experimental Jev options
+### Jev options
 
-KISS also offers two opt-in [Jev](https://typesafe.ai/) features in `/settings`:
+KISS offers two generally available, opt-in [Jev](https://typesafe.ai/) features in `/settings`:
 **Compaction method → Jev** selects older tool interactions to keep, truncate,
 or remove instead of using summary compaction. **Dynamic reasoning → Jev**
 selects reasoning effort for supported reasoning models instead of using a
