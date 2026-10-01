@@ -370,6 +370,10 @@ pub struct Args {
     #[arg(long)]
     pub no_session: bool,
 
+    /// Let the model edit its live conversation through a context file (experimental).
+    #[arg(long)]
+    pub experimental_context_file: bool,
+
     /// Set session display name at startup.
     #[arg(short = 'n', long)]
     pub name: Option<String>,
@@ -500,6 +504,26 @@ mod tests {
     fn parses_update_command() {
         let args = Args::try_parse_from(["kiss", "update"]).unwrap();
         assert!(matches!(args.command, Some(Command::Update)));
+    }
+
+    #[test]
+    fn parses_experimental_context_file() {
+        let args = Args::try_parse_from([
+            "kiss",
+            "--experimental-context-file",
+            "--no-session",
+            "-p",
+            "test",
+        ])
+        .unwrap();
+        assert!(args.experimental_context_file);
+        assert!(args.no_session);
+        assert_eq!(args.messages, ["test"]);
+        assert!(
+            !Args::try_parse_from(["kiss"])
+                .unwrap()
+                .experimental_context_file
+        );
     }
 
     #[test]

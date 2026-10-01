@@ -163,6 +163,7 @@ pub struct AgentSession {
     running: Mutex<bool>,
     totals: Mutex<Usage>,
     context_usage_cache: Mutex<Option<(u64, u64)>>,
+    context_file: Mutex<Option<crate::context_file::ContextFile>>,
     api_key_override: Option<(String, String)>,
     sink: SessionEventSink,
     subagents_allowed: bool,
@@ -284,6 +285,7 @@ impl AgentSession {
             running: Mutex::new(false),
             totals: Mutex::new(totals),
             context_usage_cache: Default::default(),
+            context_file: Mutex::new(None),
             api_key_override,
             sink,
             subagents_allowed,
@@ -347,6 +349,7 @@ impl AgentSession {
     }
 
     pub fn update_settings(&self, settings: Settings) {
+        *self.context_usage_cache.lock().unwrap() = None;
         let was_enabled = self.subagents_enabled();
         let workflows_were_enabled = self.workflows_enabled();
         let cache_warming = settings.cache_warming;
@@ -367,6 +370,7 @@ impl AgentSession {
 
     /// Replace resources used by the next model request.
     pub fn reload_runtime(&self, settings: Settings, system_prompt: String, tools: Vec<DynTool>) {
+        *self.context_usage_cache.lock().unwrap() = None;
         let was_enabled = self.subagents_enabled();
         let workflows_were_enabled = self.workflows_enabled();
         let cache_warming = settings.cache_warming;
@@ -524,6 +528,7 @@ impl AgentSession {
     /// Switch the active session without appending synthetic history.
     pub fn replace_manager(&self, manager: SessionManager) {
         self.cache_warm_cancel.lock().unwrap().cancel();
+        *self.context_file.lock().unwrap() = None;
         if let Some(runtime) = self.subagents.get() {
             runtime.reset();
         }
@@ -830,6 +835,7 @@ impl AgentSession {
             let active_prompt_mode = prompt_mode_for_reasoning.clone();
             Box::pin(async move {
                 let settings = session.settings();
+                let context_file_changed = session.sync_context_file();
                 let model = session.model();
                 let saved_effort = session.thinking_level();
                 let dynamic_enabled =
@@ -839,13 +845,25 @@ impl AgentSession {
                     run.checkpoint(&model, saved_effort, current_effort, dynamic_enabled)
                 };
                 let mut update = TurnUpdate {
-                    context: model_changed
+                    context: (model_changed
+                        || context_file_changed
+                        || settings.experimental_context_file)
                         .then(|| session.build_context_for(*active_prompt_mode.lock().unwrap())),
                     model: model_changed.then(|| model.clone()),
                     thinking_level: Some(saved_effort),
                     fast_mode: Some(session.fast_mode()),
                     ..Default::default()
                 };
+                if settings.experimental_context_file
+                    && let Some(context) = &mut update.context
+                {
+                    // A retry must not put the failed answer back in the
+                    // provider request when the file refreshes the context.
+                    while matches!(context.messages.last(), Some(AgentMessage::Assistant(assistant)) if assistant.stop_reason == StopReason::Error)
+                    {
+                        context.messages.pop();
+                    }
+                }
                 if !dynamic_enabled {
                     return Some(update);
                 }
@@ -955,7 +973,8 @@ impl AgentSession {
                     before != *active
                 };
 
-                let mut context_changed = mode_changed;
+                let context_file_changed = session.sync_context_file();
+                let mut context_changed = mode_changed || context_file_changed;
                 if has_tool_results {
                     let settings = session.settings();
                     let cancel = session.cancel.lock().unwrap().clone();
@@ -1004,6 +1023,50 @@ impl AgentSession {
         config
     }
 
+    fn sync_context_file(&self) -> bool {
+        let mut file = self.context_file.lock().unwrap();
+        if !self.settings().experimental_context_file {
+            return file.take().is_some();
+        }
+        let mut manager = self.manager.lock().unwrap();
+        let result = (|| {
+            if file.is_none() {
+                *file = Some(crate::context_file::ContextFile::new().context(
+                    "Cannot create a context file. A writable temporary directory is required. Set TMPDIR to a writable directory and restart KISS",
+                )?);
+            }
+            file.as_mut().unwrap().sync(&mut manager)
+        })();
+        match result {
+            Ok(changed) => {
+                if changed {
+                    *self.context_usage_cache.lock().unwrap() = None;
+                    self.cache_warm_cancel.lock().unwrap().cancel();
+                }
+                changed
+            }
+            Err(error) => {
+                let message = AgentMessage::Custom(kiss_agent::CustomMessage {
+                    custom_type: "context_file_error".into(),
+                    content: kiss_ai::UserContent::Text(format!("{error:#}")),
+                    display: true,
+                    details: None,
+                    timestamp: kiss_ai::now_ms(),
+                });
+                if manager.append_message(message.clone()).is_err() {
+                    return false;
+                }
+                drop(manager);
+                drop(file);
+                (self.sink)(SessionEvent::Agent(Box::new(AgentEvent::MessageEnd {
+                    message,
+                })));
+                *self.context_usage_cache.lock().unwrap() = None;
+                true
+            }
+        }
+    }
+
     fn build_context(&self) -> AgentContext {
         self.build_context_for(PromptMode::Ordinary)
     }
@@ -1011,16 +1074,36 @@ impl AgentSession {
     fn build_context_for(&self, prompt_mode: PromptMode) -> AgentContext {
         let model = self.model();
         let manager = self.manager.lock().unwrap();
-        let (openai_responses_input, messages) =
-            if kiss_ai::api::openai_compaction::supports_remote_compaction(&model)
-                && let Some(remote) = manager.build_openai_compaction_context(&model)
-            {
-                (Some(remote.replacement_history), remote.messages)
-            } else {
-                (None, manager.build_session_context().messages)
-            };
+        let (openai_responses_input, messages) = if !self.settings().experimental_context_file
+            && kiss_ai::api::openai_compaction::supports_remote_compaction(&model)
+            && let Some(remote) = manager.build_openai_compaction_context(&model)
+        {
+            (Some(remote.replacement_history), remote.messages)
+        } else {
+            (None, manager.build_session_context().messages)
+        };
         drop(manager);
         let mut system_prompt = self.system_prompt.lock().unwrap().clone();
+        if self.settings().experimental_context_file
+            && let Some(file) = self.context_file.lock().unwrap().as_ref()
+        {
+            system_prompt.push_str(&format!(
+                "\n\nExperimental context file: {}\n\
+                 This JSON array contains your live KISS conversation, without system instructions. \
+                 Use your normal file tools to edit it. Changes apply after the tool batch and before the next model request. \
+                 New user messages, your current answer, and tool results are added automatically. \
+                 Keep important task instructions, exact facts, progress, and next steps. Replace stale output with useful notes. \
+                 Keep complete assistant tool-call/result groups, or replace the whole group with a user note. \
+                 A user note has the form {{\"role\":\"user\",\"content\":\"Notes here\",\"timestamp\":0}}. \
+                 Preserve fields of messages you keep, including image and reasoning data. \
+                 The file must be a valid JSON array at most 16 MiB. Invalid edits leave the live conversation unchanged; repair the file after an error. \
+                 Read only the parts you need, because the conversation is already in your context. \
+                 Your model context window is {} tokens. Manage the file before it fills; automatic compaction remains an emergency fallback. \
+                 Batch edits: changing early text can require the provider to process all later text again. \
+                 The full session record remains separate from this editable file.",
+                file.path().display(), model.context_window
+            ));
+        }
         if self.subagents_enabled() {
             system_prompt.push_str("\n\n");
             system_prompt.push_str(SUBAGENT_SYSTEM_PROMPT);
@@ -1758,7 +1841,15 @@ impl AgentSession {
         {
             tokens
         } else {
-            let tokens = estimate_context_tokens(&manager.build_session_context().messages);
+            let messages = manager.build_session_context().messages;
+            let tokens = if self.settings().experimental_context_file {
+                messages
+                    .iter()
+                    .map(compaction::estimate_message_tokens)
+                    .sum()
+            } else {
+                estimate_context_tokens(&messages)
+            };
             *self.context_usage_cache.lock().unwrap() = Some((revision, tokens));
             tokens
         };
@@ -1897,7 +1988,16 @@ fn auto_compaction_needed(
         && !cancelled
         && model.context_window > 0
         && should_compact(
-            estimate_context_tokens(messages),
+            if settings.experimental_context_file {
+                // Usage in retained assistant messages describes the old
+                // request, not the conversation after a model-owned edit.
+                messages
+                    .iter()
+                    .map(compaction::estimate_message_tokens)
+                    .sum()
+            } else {
+                estimate_context_tokens(messages)
+            },
             model.context_window,
             reserve_tokens,
         )
@@ -1958,6 +2058,7 @@ fn is_transient(error: &str) -> bool {
 mod ephemeral_tests {
     use super::*;
     use std::collections::BTreeMap;
+    use std::path::Path;
 
     fn openai_model() -> Model {
         Model {
@@ -1977,6 +2078,220 @@ mod ephemeral_tests {
             headers: BTreeMap::new(),
             sampling_params: Default::default(),
         }
+    }
+
+    #[tokio::test]
+    async fn context_file_bash_edits_reach_next_request_and_survive_resume() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut manager =
+            SessionManager::create(directory.path(), Some(directory.path().join("sessions")))
+                .unwrap();
+        manager
+            .append_message(AgentMessage::user("obsolete output"))
+            .unwrap();
+        manager
+            .append_compaction(
+                "portable summary".into(),
+                100,
+                vec![AgentMessage::user("obsolete output")],
+                None,
+                Some(serde_json::json!({"remoteCompaction": {
+                    "version": 2,
+                    "provider": "openai-responses-compaction",
+                    "modelKey": "openai:openai-responses:gpt-test",
+                    "replacementHistory": [{"type": "compaction", "encrypted_content": "opaque"}]
+                }})),
+            )
+            .unwrap();
+        assert!(
+            manager
+                .build_openai_compaction_context(&openai_model())
+                .is_some()
+        );
+        let session_path = manager.session_file().unwrap().to_path_buf();
+        let settings = Settings {
+            experimental_context_file: true,
+            compaction: crate::settings::CompactionSettings {
+                enabled: false,
+                ..Default::default()
+            },
+            retry: crate::settings::RetrySettings {
+                base_delay_ms: 0,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let saved_events = events.clone();
+        let session = AgentSession::new(
+            manager,
+            vec![Arc::new(kiss_agent::tools::bash::BashTool::new(
+                directory.path().to_path_buf(),
+            ))],
+            Registry::load(None),
+            settings,
+            "test".into(),
+            openai_model(),
+            ThinkingLevel::Off,
+            None,
+            Arc::new(move |event| saved_events.lock().unwrap().push(event)),
+        );
+        let weak = Arc::downgrade(&session);
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let observed_calls = calls.clone();
+        session.set_stream_fn(Some(Arc::new(move |_, context, _| {
+            let step = observed_calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let prompt = context.system_prompt.as_ref().unwrap();
+            let path = prompt.lines().find_map(|line| line.strip_prefix("Experimental context file: ")).unwrap();
+            assert!(Path::new(path).is_file());
+            assert!(context.openai_responses_input.is_none());
+            let mut message = kiss_ai::AssistantMessage::empty("openai-responses", "openai", "gpt-test");
+            let replacement = match step {
+                0 => {
+                    weak.upgrade().unwrap().queue_steering(AgentMessage::user("new instruction"));
+                    Some(r#"[{"role":"user","content":"saved notes","timestamp":0}]"#)
+                }
+                1 => {
+                    let text = serde_json::to_string(&context.messages).unwrap();
+                    assert!(text.contains("saved notes"));
+                    assert!(!text.contains("obsolete output"));
+                    assert!(text.contains("new instruction"));
+                    assert!(context.messages.iter().any(|message| matches!(message, kiss_ai::Message::ToolResult(result) if result.tool_call_id == "edit_0" && !result.is_error)));
+                    Some("invalid JSON")
+                }
+                2 => {
+                    let text = serde_json::to_string(&context.messages).unwrap();
+                    assert!(text.contains("saved notes"));
+                    assert!(text.contains("Repair the file"));
+                    assert_eq!(std::fs::read_to_string(path).unwrap(), "invalid JSON");
+                    Some(r#"[{"role":"user","content":"repaired notes","timestamp":0}]"#)
+                }
+                3 => {
+                    let text = serde_json::to_string(&context.messages).unwrap();
+                    assert!(text.contains("repaired notes"));
+                    assert!(context.messages.iter().any(|message| matches!(message, kiss_ai::Message::User(user) if user.content.as_text() == "repaired notes")));
+                    assert!(context.messages.iter().any(|message| matches!(message, kiss_ai::Message::ToolResult(result) if result.tool_call_id == "edit_2" && !result.is_error)));
+                    None
+                }
+                4 => {
+                    assert!(!matches!(context.messages.last(), Some(kiss_ai::Message::Assistant(assistant)) if assistant.stop_reason == StopReason::Error));
+                    assert!(context.messages.iter().any(|message| matches!(message, kiss_ai::Message::User(user) if user.content.as_text() == "repaired notes")));
+                    None
+                }
+                _ => panic!("unexpected model request"),
+            };
+            if let Some(replacement) = replacement {
+                let quoted_path = path.replace('\'', "'\\''");
+                message.content.push(kiss_ai::ContentBlock::ToolCall(kiss_ai::ToolCall {
+                    id: format!("edit_{step}"),
+                    name: "bash".into(),
+                    arguments: serde_json::json!({"command": format!("printf '%s' '{replacement}' > '{quoted_path}'")}),
+                    thought_signature: None,
+                }));
+                message.stop_reason = StopReason::ToolUse;
+            } else if step == 3 {
+                message.stop_reason = StopReason::Error;
+                message.error_message = Some("HTTP 503".into());
+            } else {
+                message.content.push(kiss_ai::ContentBlock::text("done"));
+                message.stop_reason = StopReason::Stop;
+            }
+            let (sink, stream) = kiss_ai::EventStream::channel();
+            sink.send(kiss_ai::AssistantEvent::Start { partial: message.clone() });
+            if message.stop_reason == StopReason::Error {
+                sink.error(message);
+            } else {
+                sink.done(message);
+            }
+            stream
+        })));
+        session
+            .prompt(vec![AgentMessage::user("manage context")])
+            .await;
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 5);
+        let context = session
+            .manager
+            .lock()
+            .unwrap()
+            .build_session_context()
+            .messages;
+        assert_eq!(
+            SessionManager::open(&session_path)
+                .unwrap()
+                .build_session_context()
+                .messages,
+            context
+        );
+        assert!(
+            std::fs::read_to_string(session_path)
+                .unwrap()
+                .contains("obsolete output")
+        );
+        let errors = events.lock().unwrap().iter().filter(|event| matches!(event, SessionEvent::Agent(event) if matches!(event.as_ref(), AgentEvent::MessageEnd { message: AgentMessage::Custom(custom) } if custom.custom_type == "context_file_error"))).count();
+        assert_eq!(errors, 1);
+    }
+
+    #[test]
+    fn context_file_lifecycle_is_opt_in_and_session_local() {
+        let session = AgentSession::new(
+            SessionManager::in_memory(Path::new("/test")),
+            Vec::new(),
+            Registry::load(None),
+            Settings::default(),
+            "test".into(),
+            openai_model(),
+            ThinkingLevel::Off,
+            None,
+            Arc::new(|_| {}),
+        );
+        assert!(!session.sync_context_file());
+        assert!(session.context_file.lock().unwrap().is_none());
+        assert_eq!(session.build_context().system_prompt, "test");
+        let mut settings = session.settings();
+        settings.experimental_context_file = true;
+        session.update_settings(settings);
+        session.sync_context_file();
+        let path = session
+            .context_file
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .path()
+            .to_path_buf();
+        let child = session
+            .create_subagent_session("task", "/root/task", ForkTurns::None, None, None)
+            .unwrap();
+        child.sync_context_file();
+        let child_path = child
+            .context_file
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .path()
+            .to_path_buf();
+        assert_ne!(path, child_path);
+        assert!(child_path.is_file());
+        session.replace_manager(SessionManager::in_memory(Path::new("/other")));
+        assert!(!path.exists());
+        assert!(session.context_file.lock().unwrap().is_none());
+        session.sync_context_file();
+        let new_path = session
+            .context_file
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .path()
+            .to_path_buf();
+        assert_ne!(new_path, child_path);
+        let mut settings = session.settings();
+        settings.experimental_context_file = false;
+        session.update_settings(settings);
+        assert!(session.sync_context_file());
+        assert!(!new_path.exists());
+        assert_eq!(session.build_context().system_prompt, "test");
     }
 
     #[test]
@@ -2542,6 +2857,19 @@ mod ephemeral_tests {
         assert!(!auto_compaction_needed(&settings, &messages, &model, true));
         settings.compaction.enabled = false;
         assert!(!auto_compaction_needed(&settings, &messages, &model, false));
+        settings.compaction.enabled = true;
+        let mut assistant = kiss_ai::AssistantMessage::empty("test", "test", "test");
+        assistant.usage.input = 1000;
+        assistant
+            .content
+            .push(kiss_ai::ContentBlock::text("short note"));
+        let edited = vec![
+            AgentMessage::user("task"),
+            AgentMessage::Assistant(assistant),
+        ];
+        assert!(auto_compaction_needed(&settings, &edited, &model, false));
+        settings.experimental_context_file = true;
+        assert!(!auto_compaction_needed(&settings, &edited, &model, false));
     }
 
     #[test]

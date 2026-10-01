@@ -848,6 +848,35 @@ project can provide its own selection or adjust yours with `+` and `-` entries.
 For a single run, `--tools` selects the tools, `--exclude-tools` removes tools,
 and `--no-tools` disables them all. These options override your saved selection.
 
+## Experimental context file
+
+For long tasks, let the model decide which conversation details to keep.
+This experimental mode gives it an editable context file, so it can replace
+old logs and failed attempts with task notes as it works.
+
+Enable it for one run:
+
+```bash
+kiss --experimental-context-file
+```
+
+Ask the model to keep important facts, current progress, and remaining checks
+in its context file. KISS applies valid edits before the next model request
+and keeps new user messages and tool results. If an edit is invalid, KISS
+keeps the previous context and asks the model to repair it. Automatic
+compaction remains available.
+
+Saved sessions retain the full conversation record and restore accepted
+context edits when you resume. Use `--no-session` to work without saving.
+
+The default is off. Set `"experimentalContextFile": true` in
+`~/.kiss/agent/settings.json` to enable it for future sessions. Project
+settings cannot change this choice.
+
+The method comes from [Context Language Models](https://arxiv.org/abs/2609.37725).
+Benefits over the KISS baseline have not been measured. Context edits can
+reduce provider cache reuse and increase cost.
+
 ## Compatibility
 
 KISS tracks [Pi v0.99.1](https://github.com/earendil-works/pi/releases/tag/v0.99.1).

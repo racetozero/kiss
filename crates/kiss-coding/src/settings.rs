@@ -218,6 +218,8 @@ pub struct Settings {
     pub quiet_startup: bool,
     pub default_project_trust: ProjectTrustDefault,
     pub compaction: CompactionSettings,
+    /// Let the model edit its live conversation through a private JSON file.
+    pub experimental_context_file: bool,
     pub reasoning_effort: ReasoningEffortSettings,
     pub retry: RetrySettings,
     pub cache_warming: CacheWarmingMode,
@@ -277,6 +279,10 @@ fn deep_merge(base: &mut Value, overlay: Value) {
 }
 
 fn merged_settings(mut global: Value, project: Option<Value>) -> Settings {
+    let experimental_context_file = global
+        .get("experimentalContextFile")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     let subagents_enabled = global
         .pointer("/subagents/enabled")
         .and_then(Value::as_bool)
@@ -317,6 +323,7 @@ fn merged_settings(mut global: Value, project: Option<Value>) -> Settings {
     // Subagents are a user-level authority choice. A repository must not turn
     // them on through a trusted project settings file.
     settings.subagents.enabled = subagents_enabled;
+    settings.experimental_context_file = experimental_context_file;
     // Workflows spend the user's tokens many agents at a time, so the same rule
     // applies: only the user's own settings file decides whether they are on.
     settings.workflows.enabled = workflows_enabled;
@@ -437,6 +444,7 @@ mod tests {
     fn defaults_match_pi() {
         let s = Settings::default();
         assert_eq!(s.compaction.mode, CompactionMode::Summary);
+        assert!(!s.experimental_context_file);
         assert_eq!(s.compaction.reserve_tokens, 16_384);
         assert_eq!(s.compaction.keep_recent_tokens, 20_000);
         assert_eq!(s.reasoning_effort.mode, ReasoningEffortMode::Fixed);
@@ -568,6 +576,21 @@ mod tests {
             Some(json!({"cacheWarming": "idle"})),
         );
         assert_eq!(settings.cache_warming, CacheWarmingMode::Off);
+    }
+
+    #[test]
+    fn experimental_context_file_is_a_user_setting() {
+        for enabled in [false, true] {
+            let settings = merged_settings(
+                json!({"experimentalContextFile": enabled}),
+                Some(json!({"experimentalContextFile": !enabled})),
+            );
+            assert_eq!(settings.experimental_context_file, enabled);
+            assert_eq!(
+                serde_json::to_value(settings).unwrap()["experimentalContextFile"],
+                enabled
+            );
+        }
     }
 
     #[test]

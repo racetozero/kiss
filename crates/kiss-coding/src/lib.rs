@@ -4,6 +4,7 @@
 
 mod child_turn;
 pub mod compaction;
+mod context_file;
 pub mod context_files;
 pub mod iterative;
 mod jev;
