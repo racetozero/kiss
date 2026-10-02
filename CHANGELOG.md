@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.0.27 - 2026-10-02
+
+### Added
+
+- Test all built-in providers through a TLS proxy that accepts only
+  HTTP/1.1 in ALPN. Check that Cursor still sends HTTP/2.
+
 ### Fixed
 
 - Accept TLS proxies that select HTTP/1.1 through ALPN while keeping Cursor
