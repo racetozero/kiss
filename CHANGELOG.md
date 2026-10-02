@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Fixed
+
+- Open an HTTP/2 connection for Cursor model runs and model lists. Prevent the
+  HTTP client from selecting HTTP/1 and failing with `UserUnsupportedVersion`.
+
 ## 0.0.25 - 2026-10-02
 
 ### Fixed

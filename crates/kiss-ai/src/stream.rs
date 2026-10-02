@@ -181,7 +181,7 @@ pub fn http_client() -> &'static reqwest::Client {
 }
 
 #[cfg(feature = "native")]
-fn ensure_tls_crypto_provider() {
+pub(crate) fn ensure_tls_crypto_provider() {
     static INSTALL: std::sync::Once = std::sync::Once::new();
     INSTALL.call_once(|| {
         if rustls::crypto::CryptoProvider::get_default().is_none() {

@@ -82,6 +82,7 @@ uuid = { workspace = true, optional = true }
 xxhash-rust = { workspace = true, optional = true }
 
 [dev-dependencies]
+h2 = "0.4"
 kiss-bench.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = ["test-util"] }

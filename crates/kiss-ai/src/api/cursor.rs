@@ -121,7 +121,7 @@ async fn run(
     });
     let body = reqwest::Body::wrap_stream(body_stream);
     let url = format!("{}{}", cursor_url(&model.base_url), RUN_PATH);
-    let request = cursor_request(crate::stream::http_client().post(&url), token, true).body(body);
+    let request = cursor_request(&url, token, true).body(body);
     let response = tokio::select! {
         response = request.send() => response.with_context(|| format!("connect to {url}"))?,
         _ = initial_options.cancel.cancelled() => anyhow::bail!("request cancelled"),
@@ -324,12 +324,20 @@ fn end_thinking(builder: &mut PartialBuilder, index: &mut Option<usize>) {
     }
 }
 
-fn cursor_request(
-    request: reqwest::RequestBuilder,
-    token: &str,
-    streaming: bool,
-) -> reqwest::RequestBuilder {
-    request
+fn cursor_request(url: &str, token: &str, streaming: bool) -> reqwest::RequestBuilder {
+    crate::stream::ensure_tls_crypto_provider();
+    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+    let client = CLIENT.get_or_init(|| {
+        reqwest::Client::builder()
+            // Cursor requires HTTP/2, including when ALPN does not select it.
+            .http2_prior_knowledge()
+            .connect_timeout(Duration::from_secs(30))
+            .pool_idle_timeout(Duration::from_secs(90))
+            .build()
+            .expect("Cursor HTTP/2 client")
+    });
+    client
+        .post(url)
         .version(http::Version::HTTP_2)
         .header(
             "content-type",
@@ -779,7 +787,7 @@ fn decode_arguments(args: HashMap<String, Vec<u8>>) -> Result<serde_json::Value>
 /// Fetch the account model list with Cursor's unary native RPC.
 pub async fn discover_models(access_token: &str) -> Result<Vec<Model>> {
     let url = format!("{}{}", cursor_url(DEFAULT_URL), MODELS_PATH);
-    let response = cursor_request(crate::stream::http_client().post(&url), access_token, false)
+    let response = cursor_request(&url, access_token, false)
         .body(wire::GetUsableModelsRequest::default().encode_to_vec())
         .send()
         .await
@@ -1021,15 +1029,42 @@ mod tests {
         assert_eq!(output.result().await.text(), "continued");
     }
 
+    #[tokio::test]
+    async fn transport_uses_http2_without_protocol_negotiation() {
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .unwrap();
+        let url = format!("http://{}/run", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            let (socket, _) = listener.accept().await.unwrap();
+            let mut connection = h2::server::handshake(socket).await.unwrap();
+            while let Some(request) = connection.accept().await {
+                let (request, mut response) = request.unwrap();
+                assert_eq!(request.version(), http::Version::HTTP_2);
+                assert_eq!(request.headers()["authorization"], "Bearer secret");
+                response
+                    .send_response(http::Response::new(()), true)
+                    .unwrap();
+            }
+        });
+        for streaming in [false, true] {
+            let response = cursor_request(&url, "secret", streaming)
+                .body(Vec::new())
+                .timeout(Duration::from_secs(5))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(response.version(), http::Version::HTTP_2);
+            assert_eq!(response.status(), http::StatusCode::OK);
+        }
+        server.abort();
+    }
+
     #[test]
     fn transport_requires_http2_and_native_connect_headers() {
-        let request = cursor_request(
-            reqwest::Client::new().post("https://cursor.example/run"),
-            "secret",
-            true,
-        )
-        .build()
-        .unwrap();
+        let request = cursor_request("https://cursor.example/run", "secret", true)
+            .build()
+            .unwrap();
         assert_eq!(request.version(), http::Version::HTTP_2);
         assert_eq!(
             request.headers()["content-type"],
