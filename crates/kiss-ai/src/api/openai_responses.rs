@@ -13,19 +13,18 @@ use sha2::{Digest as _, Sha256};
 use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
-use tokio::net::TcpStream;
 use tokio::sync::{Mutex, OwnedMutexGuard};
+use tokio_tungstenite::WebSocketStream;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::http::{HeaderName, HeaderValue};
 use tokio_tungstenite::tungstenite::{Error as WebSocketError, Message as WebSocketMessage};
-use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async};
 
 const CODEX_WEBSOCKET_BETA: &str = "responses_websockets=2026-02-06";
 const WEBSOCKET_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 const WEBSOCKET_IDLE_TTL: Duration = Duration::from_secs(5 * 60);
 const WEBSOCKET_MAX_AGE: Duration = Duration::from_secs(55 * 60);
 
-type ResponsesSocket = WebSocketStream<MaybeTlsStream<TcpStream>>;
+type ResponsesSocket = WebSocketStream<reqwest::Upgraded>;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ResponsesProvider {
@@ -430,17 +429,88 @@ async fn connect_websocket(
         insert_websocket_header(request.headers_mut(), "session-id", request_id)?;
     }
 
+    let requested_protocols = request.headers().get("sec-websocket-protocol").cloned();
+    let key = request.headers()["sec-websocket-key"].as_bytes();
+    let expected_accept = tokio_tungstenite::tungstenite::handshake::derive_accept_key(key);
+    let mut url = url::Url::parse(&websocket_url)
+        .map_err(|error| WebSocketFailure::protocol(error.to_string()))?;
+    url.set_scheme(if url.scheme() == "wss" {
+        "https"
+    } else {
+        "http"
+    })
+    .map_err(|_| WebSocketFailure::protocol("cannot make Responses HTTP upgrade URL"))?;
+    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+    crate::stream::ensure_tls_crypto_provider();
+    let client = CLIENT.get_or_init(|| {
+        reqwest::Client::builder()
+            .http1_only()
+            .redirect(reqwest::redirect::Policy::none())
+            .connect_timeout(WEBSOCKET_CONNECT_TIMEOUT)
+            .build()
+            .expect("Responses WebSocket HTTP client")
+    });
     let connect = async {
-        tokio::select! {
-            result = connect_async(request) => result
-                .map(|(socket, _)| socket)
-                .map_err(|error| WebSocketFailure::transport(format_websocket_error(&error))),
-            _ = options.cancel.cancelled() => Err(WebSocketFailure::aborted()),
+        let response = client
+            .get(url)
+            .headers(request.into_parts().0.headers)
+            .send()
+            .await;
+        let response = response.map_err(|error| WebSocketFailure::transport(format!("Responses WebSocket connection failed: {error:#}. Check the endpoint, proxy settings, and trusted root certificates")))?;
+        if response.status() != http::StatusCode::SWITCHING_PROTOCOLS {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(WebSocketFailure::transport(format!(
+                "Responses WebSocket upgrade returned HTTP {status}: {}. Check that the endpoint and proxy permit WebSocket upgrades",
+                crate::truncate_err(&body)
+            )));
         }
+        let headers = response.headers();
+        let upgrade = headers.get("upgrade").and_then(|value| value.to_str().ok());
+        let connection = headers
+            .get("connection")
+            .and_then(|value| value.to_str().ok());
+        let protocol = headers.get("sec-websocket-protocol");
+        let valid_protocol = match (requested_protocols.as_ref(), protocol) {
+            (None, None) => true,
+            (Some(requested), Some(selected)) => requested
+                .to_str()
+                .ok()
+                .zip(selected.to_str().ok())
+                .is_some_and(|(requested, selected)| {
+                    requested.split(',').any(|value| value.trim() == selected)
+                }),
+            _ => false,
+        };
+        if !upgrade.is_some_and(|value| value.eq_ignore_ascii_case("websocket"))
+            || !connection.is_some_and(|value| {
+                value
+                    .split(',')
+                    .any(|token| token.trim().eq_ignore_ascii_case("upgrade"))
+            })
+            || !headers
+                .get("sec-websocket-accept")
+                .is_some_and(|value| value == expected_accept.as_str())
+            || headers.contains_key("sec-websocket-extensions")
+            || !valid_protocol
+        {
+            return Err(WebSocketFailure::protocol(
+                "The server returned an invalid WebSocket upgrade. Use a server and proxy that support the standard WebSocket handshake",
+            ));
+        }
+        let socket = response.upgrade().await.map_err(|error| WebSocketFailure::transport(format!("Responses WebSocket upgrade failed: {error:#}. Check that the endpoint and proxy permit WebSocket upgrades")))?;
+        Ok(WebSocketStream::from_raw_socket(
+            socket,
+            tokio_tungstenite::tungstenite::protocol::Role::Client,
+            None,
+        )
+        .await)
     };
-    tokio::time::timeout(WEBSOCKET_CONNECT_TIMEOUT, connect)
-        .await
-        .map_err(|_| WebSocketFailure::transport("WebSocket connection timed out"))?
+    tokio::select! {
+        result = tokio::time::timeout(WEBSOCKET_CONNECT_TIMEOUT, connect) => result
+            .map_err(|_| WebSocketFailure::transport("WebSocket connection timed out"))?,
+        _ = options.cancel.cancelled() => Err(WebSocketFailure::aborted()),
+    }
 }
 
 fn format_websocket_error(error: &WebSocketError) -> String {
@@ -1969,6 +2039,66 @@ mod request_tests {
         assert_eq!(requests[1]["previous_response_id"], "resp-1");
         assert_eq!(requests[1]["input"].as_array().unwrap().len(), 1);
         assert_eq!(requests[1]["input"][0]["content"][0]["text"], "again");
+    }
+
+    #[tokio::test]
+    async fn websocket_upgrade_validates_accept_key_and_subprotocol() {
+        for (valid_key, requested, selected, valid) in [
+            (false, None, None, false),
+            (true, None, Some("unexpected"), false),
+            (true, Some("first, second"), Some("second"), true),
+            (true, Some("first"), Some("second"), false),
+            (true, Some("first"), None, false),
+        ] {
+            let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+            let address = listener.local_addr().unwrap();
+            let server = tokio::spawn(async move {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                let mut request = Vec::new();
+                while !request.ends_with(b"\r\n\r\n") {
+                    request.push(socket.read_u8().await.unwrap());
+                }
+                let request = String::from_utf8(request).unwrap();
+                let key = request
+                    .lines()
+                    .find_map(|line| {
+                        let (name, value) = line.split_once(':')?;
+                        name.eq_ignore_ascii_case("sec-websocket-key")
+                            .then_some(value.trim())
+                    })
+                    .unwrap();
+                let accept = if valid_key {
+                    tokio_tungstenite::tungstenite::handshake::derive_accept_key(key.as_bytes())
+                } else {
+                    "invalid".into()
+                };
+                let protocol = selected
+                    .map(|value| format!("Sec-WebSocket-Protocol: {value}\r\n"))
+                    .unwrap_or_default();
+                socket.write_all(format!("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {accept}\r\n{protocol}\r\n").as_bytes()).await.unwrap();
+            });
+            let mut model = model("openai-responses", &format!("http://{address}"));
+            if let Some(protocols) = requested {
+                model
+                    .headers
+                    .insert("sec-websocket-protocol".into(), protocols.into());
+            }
+            let result = connect_websocket(
+                &model,
+                &format!("http://{address}/responses"),
+                "test-key",
+                "",
+                "test-request",
+                &StreamOptions::default(),
+            )
+            .await;
+            assert_eq!(
+                result.is_ok(),
+                valid,
+                "key={valid_key} requested={requested:?} selected={selected:?}"
+            );
+            server.await.unwrap();
+        }
     }
 
     #[tokio::test]

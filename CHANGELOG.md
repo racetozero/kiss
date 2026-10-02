@@ -2,10 +2,19 @@
 
 ## Unreleased
 
+### Added
+
+- Test every built-in provider/API pair with direct TLS, a TLS interception
+  proxy without ALPN, proxy bypass, and an untrusted proxy certificate.
+  Check actual Responses WebSocket upgrades as well as HTTP requests.
+
 ### Fixed
 
 - Use HTTP/2 for Cursor runs when corporate TLS proxies omit ALPN. Keep model
   discovery on `api2.cursor.sh` with HTTP/1.1 support.
+- Use proxy settings and trusted root certificates for OpenAI, Codex, and
+  Azure Responses WebSocket connections.
+- Use the configured base URL for Google Vertex requests.
 
 ## 0.0.25 - 2026-10-02
 

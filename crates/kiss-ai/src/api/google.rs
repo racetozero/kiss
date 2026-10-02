@@ -144,8 +144,14 @@ fn google_url(model: &Model) -> anyhow::Result<String> {
 }
 
 fn vertex_url(model: &Model, project: &str, location: &str) -> String {
+    let base_url = if model.base_url.is_empty() {
+        format!("https://{location}-aiplatform.googleapis.com")
+    } else {
+        model.base_url.replace("{location}", location)
+    };
     format!(
-        "https://{location}-aiplatform.googleapis.com/v1/projects/{project}/locations/{location}/publishers/google/models/{}:streamGenerateContent?alt=sse",
+        "{}/v1/projects/{project}/locations/{location}/publishers/google/models/{}:streamGenerateContent?alt=sse",
+        base_url.trim_end_matches('/'),
         model.id
     )
 }
