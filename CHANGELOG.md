@@ -2,9 +2,11 @@
 
 ## Unreleased
 
+## 0.0.26 - 2026-10-02
+
 ### Added
 
-- Test every built-in provider/API pair with direct TLS, a TLS interception
+- Test all 44 built-in providers with direct TLS, a TLS interception
   proxy without ALPN, proxy bypass, and an untrusted proxy certificate.
   Check actual Responses WebSocket upgrades as well as HTTP requests.
 
