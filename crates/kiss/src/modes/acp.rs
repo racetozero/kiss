@@ -1088,9 +1088,10 @@ mod tests {
 
     #[test]
     fn tool_paths_are_absolute_and_kinds_are_specific() {
-        let cwd = Path::new("/work/project");
-        let locations = tool_locations(&json!({"path": "src/main.rs"}), cwd);
-        assert_eq!(locations[0].path, Path::new("/work/project/src/main.rs"));
+        let cwd = std::env::current_dir().unwrap().join("work/project");
+        let locations = tool_locations(&json!({"path": "src/main.rs"}), &cwd);
+        assert!(locations[0].path.is_absolute());
+        assert_eq!(locations[0].path, cwd.join("src/main.rs"));
         assert_eq!(tool_kind("read"), ToolKind::Read);
         assert_eq!(tool_kind("edit"), ToolKind::Edit);
         assert_eq!(tool_kind("bash"), ToolKind::Execute);
@@ -1136,8 +1137,9 @@ mod tests {
 
     #[test]
     fn mcp_declarations_map_without_losing_environment_or_headers() {
+        let command = std::env::current_exe().unwrap();
         let servers = acp_mcp_servers(vec![McpServer::Stdio(
-            agent_client_protocol::schema::v1::McpServerStdio::new("local", "/bin/tool")
+            agent_client_protocol::schema::v1::McpServerStdio::new("local", command.clone())
                 .args(vec!["serve".into()])
                 .env(vec![agent_client_protocol::schema::v1::EnvVariable::new(
                     "TOKEN", "value",
@@ -1145,7 +1147,7 @@ mod tests {
         )])
         .unwrap();
         let server = &servers["local"];
-        assert_eq!(server.command.as_deref(), Some("/bin/tool"));
+        assert_eq!(server.command.as_deref(), command.to_str());
         assert_eq!(server.args, ["serve"]);
         assert_eq!(server.env["TOKEN"], "value");
     }
@@ -1155,15 +1157,22 @@ mod tests {
         let relative = McpServer::Stdio(agent_client_protocol::schema::v1::McpServerStdio::new(
             "local", "tool",
         ));
-        assert!(acp_mcp_servers(vec![relative]).is_err());
+        assert_eq!(
+            acp_mcp_servers(vec![relative]).unwrap_err().data,
+            Some(json!("MCP command must be absolute: tool"))
+        );
 
+        let command = std::env::current_exe().unwrap();
         let server = || {
             McpServer::Stdio(agent_client_protocol::schema::v1::McpServerStdio::new(
                 "local",
-                "/bin/tool",
+                command.clone(),
             ))
         };
-        assert!(acp_mcp_servers(vec![server(), server()]).is_err());
+        assert_eq!(
+            acp_mcp_servers(vec![server(), server()]).unwrap_err().data,
+            Some(json!("duplicate MCP server name: local"))
+        );
     }
 
     #[tokio::test]

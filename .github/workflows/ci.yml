@@ -53,7 +53,7 @@ jobs:
       - name: Clippy on Windows
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Test on Windows
-        run: cargo nextest run --workspace
+        run: cargo nextest run --workspace --no-fail-fast
       - name: Documentation tests on Windows
         run: cargo test --workspace --doc
 
