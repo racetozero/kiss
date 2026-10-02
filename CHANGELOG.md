@@ -2,11 +2,14 @@
 
 ## Unreleased
 
+## 0.0.25 - 2026-10-02
+
 ### Fixed
 
 - Send a current Cursor CLI version for model requests and model lists. The
   old version could cause Cursor to reject model requests after a successful
   sign-in.
+- Use native absolute paths in ACP test inputs so the tests can run on Windows.
 
 ## 0.0.24 - 2026-10-01
 
