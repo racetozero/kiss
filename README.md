@@ -332,7 +332,7 @@ interception proxy.
 
 #### Cursor
 
-Use a Cursor subscription through KISS's native HTTP/2 provider:
+Use a Cursor subscription through KISS's native provider:
 
 ```bash
 kiss login cursor
@@ -347,10 +347,33 @@ You can set `CURSOR_ACCESS_TOKEN` instead of saving a login.
 When you select Cursor, KISS refreshes the model list for your account. It uses
 the built-in list if model discovery is not available.
 
-Behind a corporate TLS proxy, Cursor runs use HTTP/2 even if the proxy omits
-ALPN or selects HTTP/1.1 during TLS setup. Model discovery uses `api2.cursor.sh`
-and can use HTTP/1.1. KISS uses the system proxy settings and `HTTPS_PROXY`. The corporate root certificate must
-be in your operating system's trusted certificate store.
+KISS selects the Cursor transport before it sends your prompt. By default,
+normal TLS ALPN negotiation selects HTTP/2 `Run` when H2 is available.
+If the connection uses HTTP/1.1, including when ALPN is absent, KISS selects
+HTTP/1 `RunSSE` and `BidiAppend`. It keeps the selection for that endpoint
+until KISS exits. Model discovery supplies the selection when possible;
+otherwise KISS makes one model-list request that contains no prompt.
+
+Set `KISS_CURSOR_TRANSPORT` to control this behavior:
+
+| Value | Behavior |
+| --- | --- |
+| `auto` (default) | Select H2 or HTTP/1 before sending input. |
+| `http1` | Always use HTTP/1, equivalent to Cursor CLI's `network.useHttp1ForAgent: true`. |
+| `http2` | Require H2 through normal ALPN negotiation. Report an error if H2 is unavailable. |
+
+Some corporate proxies select H2 but then close the agent connection. For
+these proxies, select `http1`. In PowerShell, run:
+
+```powershell
+$env:KISS_CURSOR_TRANSPORT = "http1"
+kiss
+```
+
+On Linux or macOS, run `KISS_CURSOR_TRANSPORT=http1 kiss`.
+KISS does not retry a prompt or tool result after submission. It uses normal
+proxy settings and trusted root certificates. No Cursor CLI configuration
+or separate provider is required.
 
 #### Databricks
 

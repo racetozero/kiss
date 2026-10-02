@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Fixed
+
+- Select Cursor's HTTP/2 `Run` or HTTP/1 `RunSSE` and `BidiAppend` transport
+  through normal ALPN negotiation before sending input. Add
+  `KISS_CURSOR_TRANSPORT=auto|http1|http2` for an explicit transport choice.
+  Do not retry submitted prompts or tool results. Remove the custom TLS ALPN
+  configuration and direct certificate loader.
+
 ## 0.0.27 - 2026-10-02
 
 ### Added

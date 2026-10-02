@@ -5,6 +5,7 @@ use kiss_ai::{
     Context, Message, Registry, ResolvedCredential, StopReason, StreamOptions, Transport,
     UserContent, UserMessage,
 };
+use prost::Message as _;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex};
@@ -22,30 +23,85 @@ struct Probe {
 
 #[tokio::test]
 async fn providers_use_direct_tls() {
-    check_providers(false, false, true, None).await;
+    check_providers(false, false, true, None, "auto", false).await;
 }
 
 #[tokio::test]
 async fn providers_use_tls_interception_proxy_without_alpn() {
-    check_providers(true, false, true, None).await;
+    check_providers(true, false, true, None, "auto", false).await;
 }
 
 #[tokio::test]
 async fn providers_respect_proxy_bypass() {
-    check_providers(false, true, true, None).await;
+    check_providers(false, true, true, None, "auto", false).await;
 }
 
 #[tokio::test]
 async fn providers_reject_untrusted_proxy_certificates() {
-    check_providers(true, false, false, None).await;
+    check_providers(true, false, false, None, "auto", false).await;
 }
 
 #[tokio::test]
 async fn providers_use_tls_interception_proxy_with_http1_alpn() {
-    check_providers(true, false, true, Some(b"http/1.1")).await;
+    check_providers(true, false, true, Some(b"http/1.1"), "auto", false).await;
 }
 
-async fn check_providers(proxy: bool, bypass: bool, trusted: bool, proxy_alpn: Option<&[u8]>) {
+#[tokio::test]
+async fn cursor_transport_overrides_and_no_retry_after_input() {
+    for mode in ["http1", "http2", "invalid"] {
+        check_providers(false, false, true, None, mode, false).await;
+    }
+    check_providers(true, false, true, Some(b"http/1.1"), "http2", false).await;
+    check_providers(false, false, true, None, "auto", true).await;
+}
+
+// Independent upstream field numbers check the H2 streaming-body contract.
+#[derive(Clone, PartialEq, prost::Message)]
+struct CursorInitial {
+    #[prost(message, optional, tag = "1")]
+    run: Option<CursorRun>,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+struct CursorRun {
+    #[prost(message, optional, tag = "9")]
+    model: Option<CursorModel>,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+struct CursorModel {
+    #[prost(string, tag = "1")]
+    id: String,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+struct CursorReply {
+    #[prost(message, optional, tag = "1")]
+    update: Option<CursorUpdate>,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+struct CursorUpdate {
+    #[prost(message, optional, tag = "1")]
+    text: Option<CursorText>,
+    #[prost(bytes = "vec", optional, tag = "14")]
+    ended: Option<Vec<u8>>,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+struct CursorText {
+    #[prost(string, tag = "1")]
+    text: String,
+}
+
+async fn check_providers(
+    proxy: bool,
+    bypass: bool,
+    trusted: bool,
+    proxy_alpn: Option<&[u8]>,
+    cursor_transport: &str,
+    cursor_disconnect: bool,
+) {
     let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
     let certificate = rcgen::generate_simple_self_signed(vec![
         "localhost".into(),
@@ -89,8 +145,9 @@ async fn check_providers(proxy: bool, bypass: bool, trusted: bool, proxy_alpn: O
         .await
         .unwrap();
     let address = listener.local_addr().unwrap();
-    let received = Arc::new(Mutex::new(BTreeSet::new()));
+    let received = Arc::new(Mutex::new(BTreeMap::new()));
     let receipts = Arc::clone(&received);
+    let cursor_http2 = cursor_transport == "http2" || (cursor_transport == "auto" && !proxy);
     let server = tokio::spawn(async move {
         loop {
             let (mut socket, _) = listener.accept().await.unwrap();
@@ -139,31 +196,118 @@ async fn check_providers(proxy: bool, bypass: bool, trusted: bool, proxy_alpn: O
                 let Ok(socket) = handshake.into_stream(Arc::clone(acceptor.config())).await else {
                     return;
                 };
-                // Cursor sends HTTP/2 even when ALPN is absent or selects http/1.1.
+                // Read the wire preface because this fixture serves both HTTP versions.
                 let mut socket = tokio::io::BufReader::new(socket);
-                let http2 = socket
-                    .fill_buf()
-                    .await
-                    .unwrap()
-                    .starts_with(b"PRI * HTTP/2.0");
+                // A forced H2 request can stop after TLS selects H1, before
+                // any application bytes are sent.
+                let Ok(preface) = socket.fill_buf().await else {
+                    return;
+                };
+                if preface.is_empty() {
+                    return;
+                }
+                let http2 = preface.starts_with(b"PRI * HTTP/2.0");
                 let body =
                     br#"{"message":"KISS_PROXY_REACHED","error":{"message":"KISS_PROXY_REACHED"}}"#;
                 if http2 {
                     let mut connection = h2::server::handshake(socket).await.unwrap();
-                    while let Some(request) = connection.accept().await {
+                    let (disconnect_tx, mut disconnect_rx) = tokio::sync::mpsc::unbounded_channel();
+                    while let Some(request) = tokio::select! {
+                        request = connection.accept() => request,
+                        _ = disconnect_rx.recv() => None,
+                    } {
                         let (request, mut response) = request.unwrap();
-                        record_receipt(request.headers(), request.uri().path(), true, &receipts);
-                        let response_headers = http::Response::builder()
-                            .status(400)
-                            .header("content-type", "application/json")
-                            .header("x-amzn-errortype", "ValidationException")
-                            .body(())
-                            .unwrap();
-                        response
-                            .send_response(response_headers, false)
-                            .unwrap()
-                            .send_data(body.to_vec().into(), true)
-                            .unwrap();
+                        record_receipt(
+                            request.headers(),
+                            request.uri().path(),
+                            true,
+                            &receipts,
+                            cursor_http2,
+                        );
+                        if request.uri().path().ends_with("/agent.v1.AgentService/Run") {
+                            let disconnect_tx = disconnect_tx.clone();
+                            tokio::spawn(async move {
+                                let mut input = request.into_body();
+                                let mut bytes = Vec::new();
+                                loop {
+                                    let chunk = input.data().await.unwrap().unwrap();
+                                    input.flow_control().release_capacity(chunk.len()).unwrap();
+                                    bytes.extend_from_slice(&chunk);
+                                    assert!(bytes.len() < 65536);
+                                    if bytes.len() >= 5 {
+                                        let length =
+                                            u32::from_be_bytes(bytes[1..5].try_into().unwrap())
+                                                as usize;
+                                        if bytes.len() >= 5 + length {
+                                            assert_eq!(bytes[0], 0);
+                                            let initial =
+                                                CursorInitial::decode(&bytes[5..5 + length])
+                                                    .unwrap();
+                                            assert!(
+                                                initial
+                                                    .run
+                                                    .unwrap()
+                                                    .model
+                                                    .unwrap()
+                                                    .id
+                                                    .starts_with("proxy-case-")
+                                            );
+                                            break;
+                                        }
+                                    }
+                                }
+                                if cursor_disconnect {
+                                    // Close only after the server receives the initial prompt.
+                                    // Any RunSSE/BidiAppend retry must fail the receipt checks.
+                                    disconnect_tx.send(()).unwrap();
+                                    return;
+                                }
+                                let response_headers = http::Response::builder()
+                                    .status(200)
+                                    .header("content-type", "application/connect+proto")
+                                    .body(())
+                                    .unwrap();
+                                let mut output =
+                                    response.send_response(response_headers, false).unwrap();
+                                for update in [
+                                    CursorUpdate {
+                                        text: Some(CursorText {
+                                            text: "KISS_PROXY_REACHED".into(),
+                                        }),
+                                        ended: None,
+                                    },
+                                    CursorUpdate {
+                                        text: None,
+                                        ended: Some(Vec::new()),
+                                    },
+                                ] {
+                                    let payload = CursorReply {
+                                        update: Some(update),
+                                    }
+                                    .encode_to_vec();
+                                    let frame = [
+                                        vec![0],
+                                        (payload.len() as u32).to_be_bytes().to_vec(),
+                                        payload,
+                                    ]
+                                    .concat();
+                                    output.send_data(frame.into(), false).unwrap();
+                                }
+                                output.send_data(Vec::new().into(), true).unwrap();
+                            });
+                        } else {
+                            let response_headers = http::Response::builder()
+                                .status(400)
+                                .header("content-type", "application/json")
+                                .header("x-amzn-errortype", "ValidationException")
+                                .body(())
+                                .unwrap();
+                            response
+                                .send_response(response_headers, false)
+                                .unwrap()
+                                .send_data(body.to_vec().into(), true)
+                                .unwrap();
+                        }
                     }
                 } else {
                     let mut request = Vec::new();
@@ -180,7 +324,13 @@ async fn check_providers(proxy: bool, bypass: bool, trusted: bool, proxy_alpn: O
                             http::HeaderValue::from_str(value.trim()).unwrap(),
                         );
                     }
-                    record_receipt(&headers, request.lines().next().unwrap(), false, &receipts);
+                    record_receipt(
+                        &headers,
+                        request.lines().next().unwrap(),
+                        false,
+                        &receipts,
+                        cursor_http2,
+                    );
                     if headers.contains_key("upgrade") {
                         use futures::SinkExt as _;
                         use tokio_tungstenite::tungstenite::{
@@ -210,9 +360,12 @@ async fn check_providers(proxy: bool, bypass: bool, trusted: bool, proxy_alpn: O
                         "HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\nx-amzn-errortype: ValidationException\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
                         body.len()
                     );
-                    socket.write_all(response.as_bytes()).await.unwrap();
-                    socket.write_all(body).await.unwrap();
-                    socket.shutdown().await.unwrap();
+                    // Cursor can cancel RunSSE when the append request fails.
+                    // The parent checks the client's result and request counts.
+                    let _ = socket
+                        .write_all(&[response.as_bytes(), body].concat())
+                        .await;
+                    let _ = socket.shutdown().await;
                 }
             });
         }
@@ -230,6 +383,7 @@ async fn check_providers(proxy: bool, bypass: bool, trusted: bool, proxy_alpn: O
             },
         )
         .env("KISS_PROXY_TEST_OUTPUT", &output_path)
+        .env("KISS_CURSOR_TRANSPORT", cursor_transport)
         .env("SSL_CERT_FILE", cert_path)
         .env("SSL_CERT_DIR", directory.path())
         .env("AWS_EC2_METADATA_DISABLED", "true")
@@ -277,12 +431,28 @@ async fn check_providers(proxy: bool, bypass: bool, trusted: bool, proxy_alpn: O
     let failed: Vec<_> = probes
         .iter()
         .filter(|probe| {
+            if probe.provider == "cursor" && trusted {
+                if cursor_transport == "invalid" {
+                    return receipts.keys().any(|(case, _)| *case == probe.case)
+                        || !probe.error.contains("Use auto, http1, or http2");
+                }
+                if cursor_transport == "http2" && proxy && proxy_alpn != Some(b"h2") {
+                    return receipts.keys().any(|(case, _)| *case == probe.case)
+                        || !probe.error.contains("KISS_CURSOR_TRANSPORT=http1");
+                }
+                if cursor_http2 && receipts.get(&(probe.case, false)) != Some(&1) {
+                    return true;
+                }
+                if cursor_disconnect {
+                    return !probe.error.contains("Cursor connection failed");
+                }
+            }
             if trusted {
-                !receipts.contains(&(probe.case, probe.websocket))
+                !receipts.contains_key(&(probe.case, probe.websocket))
                     || (probe.api != "bedrock-converse-stream"
                         && !probe.error.contains("KISS_PROXY_REACHED"))
             } else {
-                receipts.iter().any(|(case, _)| *case == probe.case)
+                receipts.keys().any(|(case, _)| *case == probe.case)
                     || probe.error == "request timed out"
             }
         })
@@ -308,13 +478,11 @@ fn record_receipt(
     headers: &http::HeaderMap,
     path: &str,
     http2: bool,
-    receipts: &Mutex<BTreeSet<(usize, bool)>>,
+    receipts: &Mutex<BTreeMap<(usize, bool), usize>>,
+    cursor_http2: bool,
 ) {
-    if path.contains("/agent.v1.AgentService/Run") {
-        assert!(
-            http2,
-            "Cursor runs must use HTTP/2 even if ALPN selects HTTP/1.1"
-        );
+    if path.contains("/agent.v1.AgentService/GetUsableModels") {
+        return;
     }
     let case = headers
         .get("x-kiss-proxy-case")
@@ -329,10 +497,24 @@ fn record_receipt(
                 .ok()
         })
         .expect("provider request must contain its test case ID");
-    receipts
+    *receipts
         .lock()
         .unwrap()
-        .insert((case, headers.contains_key("upgrade")));
+        .entry((case, headers.contains_key("upgrade")))
+        .or_default() += 1;
+    if path.contains("/aiserver.v1.BidiService/BidiAppend") {
+        assert!(!cursor_http2, "do not retry H2 input through BidiAppend");
+    }
+    if path.contains("/agent.v1.AgentService/Run") {
+        assert!(
+            path.contains("/agent.v1.AgentService/RunSSE") != cursor_http2,
+            "Cursor must select Run or RunSSE from the negotiated HTTP version"
+        );
+        assert_eq!(
+            http2, cursor_http2,
+            "Cursor must use the negotiated HTTP version"
+        );
+    }
 }
 
 #[tokio::test]
@@ -398,8 +580,13 @@ async fn provider_probe() {
             let events = kiss_ai::stream_simple(&model, &context, &options);
             let error = match tokio::time::timeout(Duration::from_secs(3), events.result()).await {
                 Ok(result) => {
-                    assert_eq!(result.stop_reason, StopReason::Error);
-                    result.error_message.unwrap_or_default()
+                    if model.provider == "cursor" && result.stop_reason == StopReason::Stop {
+                        assert_eq!(result.text(), "KISS_PROXY_REACHED");
+                        result.text()
+                    } else {
+                        assert_eq!(result.stop_reason, StopReason::Error);
+                        result.error_message.unwrap_or_default()
+                    }
                 }
                 Err(_) => {
                     options.cancel.cancel();

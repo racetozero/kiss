@@ -1,4 +1,4 @@
-//! Cursor Agent provider over native HTTP/2 Connect and Protobuf.
+//! Cursor Agent provider over HTTP/2 Run or HTTP/1 RunSSE and BidiAppend.
 
 use super::PartialBuilder;
 use super::cursor_protocol as wire;
@@ -8,12 +8,11 @@ use crate::stream::StreamOptions;
 use crate::types::{ContentBlock, Context, Message, StopReason, ToolDef, ToolResultMessage};
 use anyhow::{Context as _, Result};
 use base64::Engine as _;
-use futures::{StreamExt as _, stream};
+use futures::{StreamExt as _, future::Either, stream};
 use prost::Message as _;
 use prost_types::{ListValue, Struct, Value, value};
 use sha2::{Digest as _, Sha256};
 use std::collections::{BTreeMap, HashMap};
-use std::io;
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
@@ -21,15 +20,89 @@ use uuid::Uuid;
 
 const PROVIDER: &str = "cursor";
 const API: &str = "cursor-agent";
-const DEFAULT_URL: &str = "https://agentn.us.api5.cursor.sh";
-const DISCOVERY_URL: &str = "https://api2.cursor.sh";
+const DEFAULT_URL: &str = "https://api2.cursor.sh";
 // Cursor gates model access by client version. Track https://cursor.com/install.
 const DEFAULT_CLIENT_VERSION: &str = "cli-2026.10.01-e373342";
 const RUN_PATH: &str = "/agent.v1.AgentService/Run";
+const RUN_SSE_PATH: &str = "/agent.v1.AgentService/RunSSE";
+const APPEND_PATH: &str = "/aiserver.v1.BidiService/BidiAppend";
 const MODELS_PATH: &str = "/agent.v1.AgentService/GetUsableModels";
 const RESUME_TIMEOUT: Duration = Duration::from_secs(60 * 60);
 
-type RequestSender = mpsc::UnboundedSender<std::result::Result<Vec<u8>, io::Error>>;
+type RequestSender = mpsc::UnboundedSender<Vec<u8>>;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CursorTransport {
+    Auto,
+    Http1,
+    Http2,
+}
+
+impl CursorTransport {
+    fn from_env() -> Result<Self> {
+        match std::env::var("KISS_CURSOR_TRANSPORT") {
+            Err(std::env::VarError::NotPresent) => Ok(Self::Auto),
+            Ok(value) => match value.as_str() {
+                "auto" => Ok(Self::Auto),
+                "http1" => Ok(Self::Http1),
+                "http2" => Ok(Self::Http2),
+                _ => anyhow::bail!(
+                    "KISS_CURSOR_TRANSPORT is '{value}'. Use auto, http1, or http2. Set KISS_CURSOR_TRANSPORT to one of these values or remove it to use auto"
+                ),
+            },
+            Err(_) => anyhow::bail!(
+                "KISS_CURSOR_TRANSPORT is not valid text. Use auto, http1, or http2. Remove the variable to use auto"
+            ),
+        }
+    }
+}
+
+fn negotiated_transports() -> &'static Mutex<HashMap<String, CursorTransport>> {
+    static TRANSPORTS: OnceLock<Mutex<HashMap<String, CursorTransport>>> = OnceLock::new();
+    TRANSPORTS.get_or_init(Default::default)
+}
+
+async fn select_transport(base_url: &str, token: &str) -> Result<CursorTransport> {
+    let mode = CursorTransport::from_env()?;
+    if mode != CursorTransport::Auto {
+        return Ok(mode);
+    }
+    if let Some(transport) = negotiated_transports()
+        .lock()
+        .unwrap()
+        .get(base_url)
+        .copied()
+    {
+        return Ok(transport);
+    }
+    // This unary request contains no agent input. Its HTTP version lets us
+    // select a transport without retrying a submitted prompt.
+    let response = cursor_request(
+        &format!("{base_url}{MODELS_PATH}"),
+        token,
+        false,
+        CursorTransport::Auto,
+    )
+    .body(wire::GetUsableModelsRequest::default().encode_to_vec())
+    .timeout(Duration::from_secs(30))
+    .send()
+    .await
+    .context("Cursor transport selection failed before sending input. Check your connection and trusted proxy certificate, or set KISS_CURSOR_TRANSPORT=http1 if your proxy cannot negotiate HTTP/2")?;
+    let transport = if response.version() == http::Version::HTTP_2 {
+        CursorTransport::Http2
+    } else {
+        CursorTransport::Http1
+    };
+    response
+        .bytes()
+        .await
+        .context("read Cursor transport probe response")?;
+    negotiated_transports()
+        .lock()
+        .unwrap()
+        .insert(base_url.into(), transport);
+    Ok(transport)
+}
 
 struct Resume {
     context: Context,
@@ -43,7 +116,7 @@ fn pending() -> &'static Mutex<HashMap<String, oneshot::Sender<Resume>>> {
 }
 
 /// Stream one Cursor turn. A call after a KISS tool result resumes the saved
-/// HTTP/2 request instead of opening a second request.
+/// response stream instead of opening a second run.
 pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, sink: EventSink) {
     if let Some(sender) = take_resume(context, options) {
         if sender
@@ -75,7 +148,7 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
     if let Err(error) = run(model, context, options, sink.clone(), token).await {
         PartialBuilder::new(model, sink).fail(
             format!("Cursor request failed: {error:#}"),
-            false,
+            options.cancel.is_cancelled(),
             model,
         );
     }
@@ -113,18 +186,82 @@ async fn run(
         .session_id
         .clone()
         .unwrap_or_else(|| response_id.clone());
-    let (request_tx, request_rx) = mpsc::unbounded_channel();
-    request_tx
-        .send(Ok(wire::frame(&built.message)))
-        .map_err(|_| anyhow::anyhow!("could not start Cursor request body"))?;
-    let body_stream = stream::unfold(request_rx, |mut receiver| async move {
-        receiver.recv().await.map(|item| (item, receiver))
-    });
-    let body = reqwest::Body::wrap_stream(body_stream);
-    let url = format!("{}{}", cursor_url(&model.base_url), RUN_PATH);
-    let request = cursor_request(&url, token, true).body(body);
+    let base_url = cursor_url(&model.base_url);
+    let transport = tokio::select! {
+        transport = select_transport(&base_url, token) => transport?,
+        _ = initial_options.cancel.cancelled() => anyhow::bail!("request cancelled"),
+    };
+    let (request_tx, mut request_rx) = mpsc::unbounded_channel();
+    send(&request_tx, built.message)?;
+    let (request, uploads) = if transport == CursorTransport::Http1 {
+        let request_id = wire::BidiRequestId {
+            request_id: Uuid::new_v4().to_string(),
+        };
+        let append_url = format!("{base_url}{APPEND_PATH}");
+        let append_id = request_id.clone();
+        let append_token = token.to_owned();
+        let uploads = tokio_util::task::AbortOnDropHandle::new(tokio::spawn(async move {
+            let mut sequence = 0;
+            while let Some(data_binary) = request_rx.recv().await {
+                let request = wire::BidiAppendRequest {
+                    request_id: Some(append_id.clone()),
+                    append_seqno: sequence,
+                    data_binary,
+                };
+                let response =
+                    cursor_request(&append_url, &append_token, false, CursorTransport::Http1)
+                        .header("x-cursor-streaming", "true")
+                        .header("x-request-id", &append_id.request_id)
+                        .body(request.encode_to_vec())
+                        .timeout(Duration::from_secs(60))
+                        .send()
+                        .await
+                        .with_context(|| format!("send Cursor input to {append_url}"))?;
+                let status = response.status();
+                let body = response
+                    .bytes()
+                    .await
+                    .context("read Cursor BidiAppend response")?;
+                if !status.is_success() {
+                    anyhow::bail!(
+                        "Cursor BidiAppend returned HTTP {status}: {}. Check that the endpoint and proxy permit Cursor HTTP/1 requests",
+                        crate::truncate_err(&String::from_utf8_lossy(&body))
+                    );
+                }
+                sequence += 1;
+            }
+            Ok::<(), anyhow::Error>(())
+        }));
+        let request = cursor_request(&format!("{base_url}{RUN_SSE_PATH}"), token, true, transport)
+            .header("x-cursor-streaming", "true")
+            .header("x-request-id", &request_id.request_id)
+            .body(wire::frame(&request_id));
+        (
+            request,
+            Either::Left(async move {
+                uploads
+                    .await
+                    .context("Cursor message upload task stopped")?
+            }),
+        )
+    } else {
+        let body_stream = stream::unfold(request_rx, |mut receiver| async move {
+            receiver
+                .recv()
+                .await
+                .map(|bytes| (Ok::<_, std::io::Error>(wire::frame_bytes(&bytes)), receiver))
+        });
+        let request = cursor_request(&format!("{base_url}{RUN_PATH}"), token, true, transport)
+            .body(reqwest::Body::wrap_stream(body_stream));
+        (request, Either::Right(std::future::pending::<Result<()>>()))
+    };
+    tokio::pin!(uploads);
     let response = tokio::select! {
-        response = request.send() => response.with_context(|| format!("connect to {url}"))?,
+        response = request.send() => response.context("Cursor connection failed. Check the endpoint and proxy. Set KISS_CURSOR_TRANSPORT=http1 if your proxy cannot carry HTTP/2")?,
+        result = &mut uploads => {
+            result?;
+            anyhow::bail!("Cursor message upload ended before the run completed");
+        }
         _ = initial_options.cancel.cancelled() => anyhow::bail!("request cancelled"),
     };
     let status = response.status();
@@ -147,6 +284,10 @@ async fn run(
     loop {
         let chunk = tokio::select! {
             chunk = response_stream.next() => chunk,
+            result = &mut uploads => {
+                result?;
+                anyhow::bail!("Cursor message upload ended before the run completed");
+            }
             _ = heartbeat.tick() => {
                 send(&request_tx, wire::AgentClientMessage {
                     message: Some(wire::agent_client_message::Message::ClientHeartbeat(
@@ -260,6 +401,10 @@ async fn run(
                     builder.take().unwrap().finish(StopReason::ToolUse, model);
                     let resumed = tokio::select! {
                         result = resume_rx => result.context("Cursor tool continuation was dropped")?,
+                        result = &mut uploads => {
+                            result?;
+                            anyhow::bail!("Cursor message upload ended before the run completed");
+                        }
                         _ = tokio::time::sleep(RESUME_TIMEOUT) => {
                             pending().lock().unwrap().remove(&resume_key);
                             anyhow::bail!("Cursor tool continuation timed out")
@@ -292,7 +437,11 @@ async fn run(
     if let Err(error) = drive_result
         && let Some(builder) = builder
     {
-        builder.fail(format!("Cursor request failed: {error:#}"), false, model);
+        builder.fail(
+            format!("Cursor request failed: {error:#}"),
+            options.cancel.is_cancelled(),
+            model,
+        );
     }
     Ok(())
 }
@@ -325,33 +474,41 @@ fn end_thinking(builder: &mut PartialBuilder, index: &mut Option<usize>) {
     }
 }
 
-fn cursor_request(url: &str, token: &str, streaming: bool) -> reqwest::RequestBuilder {
-    let client = if streaming {
-        static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
-        CLIENT.get_or_init(|| {
-            crate::stream::ensure_tls_crypto_provider();
-            let mut roots = rustls::RootCertStore::empty();
-            roots.add_parsable_certificates(rustls_native_certs::load_native_certs().certs);
-            let mut tls = rustls::ClientConfig::builder()
-                .with_root_certificates(roots)
-                .with_no_client_auth();
-            // Some corporate proxies accept only http/1.1 in ALPN, or strip
-            // ALPN entirely. Match the Node bridge handshake, then still send
-            // HTTP/2 prior knowledge for Cursor's bidirectional Run RPC.
-            tls.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
-            reqwest::Client::builder()
-                .use_preconfigured_tls(tls)
-                .http2_prior_knowledge()
-                .connect_timeout(Duration::from_secs(30))
-                .pool_idle_timeout(Duration::from_secs(90))
-                .build()
-                .expect("Cursor HTTP/2 client")
-        })
+fn cursor_request(
+    url: &str,
+    token: &str,
+    streaming: bool,
+    transport: CursorTransport,
+) -> reqwest::RequestBuilder {
+    static HTTP1: OnceLock<reqwest::Client> = OnceLock::new();
+    static NEGOTIATED: OnceLock<reqwest::Client> = OnceLock::new();
+    crate::stream::ensure_tls_crypto_provider();
+    let slot = if transport == CursorTransport::Http1 {
+        &HTTP1
     } else {
-        crate::stream::http_client()
+        &NEGOTIATED
     };
-    client
-        .post(url)
+    let client = slot.get_or_init(|| {
+        let builder = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .connect_timeout(Duration::from_secs(30))
+            .pool_idle_timeout(Duration::from_secs(90));
+        let builder = if transport == CursorTransport::Http1 {
+            builder.http1_only()
+        } else {
+            builder
+        };
+        builder.build().expect("Cursor HTTP client")
+    });
+    let request = client.post(url);
+    // Hyper rejects an H1 connection before sending an H2-only request.
+    // Never send the bidirectional Run body through HTTP/1.
+    let request = if transport == CursorTransport::Http2 {
+        request.version(http::Version::HTTP_2)
+    } else {
+        request
+    };
+    request
         .header(
             "content-type",
             if streaming {
@@ -389,8 +546,8 @@ fn cursor_url(model_url: &str) -> String {
 
 fn send(sender: &RequestSender, message: wire::AgentClientMessage) -> Result<()> {
     sender
-        .send(Ok(wire::frame(&message)))
-        .map_err(|_| anyhow::anyhow!("Cursor request body closed"))
+        .send(message.encode_to_vec())
+        .map_err(|_| anyhow::anyhow!("Cursor message upload closed"))
 }
 
 fn send_exec_throw(sender: &RequestSender, id: u32, error: &str) -> Result<()> {
@@ -799,14 +956,27 @@ fn decode_arguments(args: HashMap<String, Vec<u8>>) -> Result<serde_json::Value>
 
 /// Fetch the account model list with Cursor's unary native RPC.
 pub async fn discover_models(access_token: &str) -> Result<Vec<Model>> {
-    let url = format!("{}{}", cursor_url(DISCOVERY_URL), MODELS_PATH);
-    let response = cursor_request(&url, access_token, false)
+    let base_url = cursor_url(DEFAULT_URL);
+    let url = format!("{base_url}{MODELS_PATH}");
+    let mode = CursorTransport::from_env()?;
+    let response = cursor_request(&url, access_token, false, mode)
         .body(wire::GetUsableModelsRequest::default().encode_to_vec())
         .send()
         .await
         .with_context(|| format!("request Cursor models from {url}"))?;
+    let transport = if response.version() == http::Version::HTTP_2 {
+        CursorTransport::Http2
+    } else {
+        CursorTransport::Http1
+    };
     let status = response.status();
     let bytes = response.bytes().await?;
+    if mode == CursorTransport::Auto {
+        negotiated_transports()
+            .lock()
+            .unwrap()
+            .insert(base_url, transport);
+    }
     if !status.is_success() {
         anyhow::bail!(
             "Cursor models returned HTTP {status}: {}",
@@ -952,10 +1122,8 @@ mod tests {
             &sender,
         )
         .unwrap();
-        let bytes = receiver.blocking_recv().unwrap().unwrap();
-        let mut decoder = wire::FrameDecoder::default();
-        let payload = decoder.push(&bytes).unwrap().pop().unwrap().1;
-        let message = wire::AgentClientMessage::decode(payload.as_slice()).unwrap();
+        let bytes = receiver.blocking_recv().unwrap();
+        let message = wire::AgentClientMessage::decode(bytes.as_slice()).unwrap();
         let Some(wire::agent_client_message::Message::KvClientMessage(reply)) = message.message
         else {
             panic!("KV reply");
@@ -979,10 +1147,8 @@ mod tests {
             timestamp: now_ms(),
         };
         send_tool_result(&sender, 9, "exec-9".into(), &result).unwrap();
-        let bytes = receiver.blocking_recv().unwrap().unwrap();
-        let mut decoder = wire::FrameDecoder::default();
-        let payload = decoder.push(&bytes).unwrap().pop().unwrap().1;
-        let message = wire::AgentClientMessage::decode(payload.as_slice()).unwrap();
+        let bytes = receiver.blocking_recv().unwrap();
+        let message = wire::AgentClientMessage::decode(bytes.as_slice()).unwrap();
         let Some(wire::agent_client_message::Message::ExecClientMessage(reply)) = message.message
         else {
             panic!("exec reply");
@@ -1042,6 +1208,183 @@ mod tests {
         assert_eq!(output.result().await.text(), "continued");
     }
 
+    // These fixture types use the upstream field numbers independently of the
+    // production transport structs, so a wire-format regression fails here.
+    #[derive(Clone, PartialEq, prost::Message)]
+    struct FixtureRequestId {
+        #[prost(string, tag = "1")]
+        request_id: String,
+    }
+
+    #[derive(Clone, PartialEq, prost::Message)]
+    struct FixtureAppend {
+        #[prost(message, optional, tag = "2")]
+        request_id: Option<FixtureRequestId>,
+        #[prost(int64, tag = "3")]
+        seqno: i64,
+        #[prost(bytes = "vec", tag = "4")]
+        data: Vec<u8>,
+    }
+
+    #[tokio::test]
+    async fn http1_runs_preserve_tools_append_errors_and_cancellation() {
+        use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+        use tokio::net::TcpListener;
+        use tokio_util::task::AbortOnDropHandle;
+
+        for mode in ["tools", "append-error", "cancel"] {
+            tokio::time::timeout(Duration::from_secs(5), async {
+                let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+                let mut model = model();
+                model.base_url = format!("http://{}", listener.local_addr().unwrap());
+                let (requests_tx, mut requests_rx) = mpsc::unbounded_channel();
+                let _listener = AbortOnDropHandle::new(tokio::spawn(async move {
+                    loop {
+                        let (mut socket, _) = listener.accept().await.unwrap();
+                        let requests_tx = requests_tx.clone();
+                        tokio::spawn(async move {
+                            let mut bytes = Vec::new();
+                            while !bytes.ends_with(b"\r\n\r\n") {
+                                bytes.push(socket.read_u8().await.unwrap());
+                                assert!(bytes.len() < 8192);
+                            }
+                            let headers = String::from_utf8(bytes).unwrap().to_ascii_lowercase();
+                            assert!(headers.lines().next().unwrap().ends_with("http/1.1"), "{headers}");
+                            let length: usize = headers.lines().find_map(|line| line.strip_prefix("content-length: ")).unwrap_or("0").parse().unwrap();
+                            let mut body = vec![0; length];
+                            socket.read_exact(&mut body).await.unwrap();
+                            requests_tx.send((socket, headers, body)).unwrap();
+                        });
+                    }
+                }));
+                let (initial_tx, initial_rx) = oneshot::channel();
+                let mut server = AbortOnDropHandle::new(tokio::spawn(async move {
+                    let mut run_socket = None;
+                    let mut run_id = None;
+                    let mut append_id = None;
+                    let mut seqno = 0;
+                    let mut initial_seen = false;
+                    let mut tool_sent = false;
+                    let mut initial_tx = Some(initial_tx);
+                    while let Some((mut socket, headers, body)) = requests_rx.recv().await {
+                        assert!(headers.contains("authorization: bearer test-key"));
+                        if headers.starts_with("post /agent.v1.agentservice/getusablemodels ") {
+                            assert!(body.is_empty());
+                            socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").await.unwrap();
+                            continue;
+                        }
+                        assert!(headers.contains("x-cursor-streaming: true"));
+                        if headers.starts_with("post /agent.v1.agentservice/runsse ") {
+                            assert!(run_socket.is_none(), "tool continuation opened another run");
+                            assert_eq!(body[0], 0);
+                            assert_eq!(u32::from_be_bytes(body[1..5].try_into().unwrap()) as usize, body.len() - 5);
+                            run_id = Some(FixtureRequestId::decode(&body[5..]).unwrap());
+                            socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/connect+proto\r\nTransfer-Encoding: chunked\r\n\r\n").await.unwrap();
+                            run_socket = Some(socket);
+                        } else {
+                            assert!(headers.starts_with("post /aiserver.v1.bidiservice/bidiappend "));
+                            assert!(headers.contains("content-type: application/proto\r\n"));
+                            let append = FixtureAppend::decode(body.as_slice()).unwrap();
+                            assert_eq!(append.seqno, seqno);
+                            seqno += 1;
+                            if let Some(previous) = append_id.as_ref() {
+                                assert_eq!(append.request_id.as_ref(), Some(previous));
+                            }
+                            append_id = append.request_id;
+                            let message = wire::AgentClientMessage::decode(append.data.as_slice()).unwrap();
+                            let status = if mode == "append-error" { "400 Bad Request" } else { "200 OK" };
+                            socket.write_all(format!("HTTP/1.1 {status}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").as_bytes()).await.unwrap();
+                            match message.message.unwrap() {
+                                wire::agent_client_message::Message::RunRequest(run) => {
+                                    assert_eq!(seqno, 1);
+                                    assert_eq!(run.requested_model.unwrap().model_id, "auto");
+                                    initial_seen = true;
+                                }
+                                wire::agent_client_message::Message::ClientHeartbeat(_) => {}
+                                wire::agent_client_message::Message::ExecClientMessage(reply) => {
+                                    assert_eq!(reply.id, 9);
+                                    assert_eq!(reply.exec_id, "exec-9");
+                                    let Some(wire::exec_client_message::Message::McpResult(result)) = reply.message else { panic!("MCP result") };
+                                    let Some(wire::mcp_result::Result::Success(success)) = result.result else { panic!("MCP success") };
+                                    assert_eq!(success.content[0].content, Some(wire::mcp_tool_result_content_item::Content::Text(wire::McpTextContent { text: "file data".into() })));
+                                    let response = wire::frame(&wire::AgentServerMessage {
+                                        message: Some(wire::agent_server_message::Message::InteractionUpdate(wire::InteractionUpdate {
+                                            message: Some(wire::interaction_update::Message::TextDelta(wire::TextDeltaUpdate { text: "http1 ok".into() })),
+                                        })),
+                                    });
+                                    let ended = wire::frame(&wire::AgentServerMessage {
+                                        message: Some(wire::agent_server_message::Message::InteractionUpdate(wire::InteractionUpdate {
+                                            message: Some(wire::interaction_update::Message::TurnEnded(wire::TurnEndedUpdate {})),
+                                        })),
+                                    });
+                                    let body = [response, ended].concat();
+                                    let run = run_socket.as_mut().unwrap();
+                                    run.write_all(format!("{:x}\r\n", body.len()).as_bytes()).await.unwrap();
+                                    run.write_all(&body).await.unwrap();
+                                    run.write_all(b"\r\n0\r\n\r\n").await.unwrap();
+                                    return;
+                                }
+                                _ => panic!("unexpected client message"),
+                            }
+                        }
+                        if initial_seen && !tool_sent && let Some(run) = run_socket.as_mut() {
+                            assert_eq!(run_id, append_id);
+                            if mode == "tools" {
+                                let frame = wire::frame(&wire::AgentServerMessage {
+                                    message: Some(wire::agent_server_message::Message::ExecServerMessage(wire::ExecServerMessage {
+                                        id: 9,
+                                        exec_id: "exec-9".into(),
+                                        message: Some(wire::exec_server_message::Message::McpArgs(wire::McpArgs {
+                                            name: "read".into(),
+                                            tool_call_id: "call-1".into(),
+                                            ..Default::default()
+                                        })),
+                                    })),
+                                });
+                                run.write_all(format!("{:x}\r\n", frame.len()).as_bytes()).await.unwrap();
+                                run.write_all(&frame).await.unwrap();
+                                run.write_all(b"\r\n").await.unwrap();
+                            }
+                            initial_tx.take().unwrap().send(()).unwrap();
+                            tool_sent = true;
+                        }
+                    }
+                }));
+                let options = StreamOptions {
+                    credential: Some(crate::ResolvedCredential::api_key("test-key")),
+                    ..Default::default()
+                };
+                let mut context = Context {
+                    messages: vec![Message::User(UserMessage { content: UserContent::Text("hi".into()), timestamp: 0 })],
+                    tools: vec![ToolDef { name: "read".into(), description: "Read a file".into(), parameters: serde_json::json!({"type":"object","properties":{}}) }],
+                    ..Default::default()
+                };
+                let output = crate::stream_simple(&model, &context, &options);
+                if mode == "cancel" {
+                    initial_rx.await.unwrap();
+                    options.cancel.cancel();
+                }
+                let result = output.result().await;
+                if mode == "tools" {
+                    assert_eq!(result.stop_reason, StopReason::ToolUse);
+                    context.messages.push(Message::Assistant(result));
+                    context.messages.push(Message::ToolResult(ToolResultMessage {
+                        tool_call_id: "call-1".into(), tool_name: "read".into(), content: vec![ContentBlock::text("file data")], details: None, usage: None, is_error: false, timestamp: 0,
+                    }));
+                    let continued = crate::stream_simple(&model, &context, &options).result().await;
+                    assert_eq!(continued.stop_reason, StopReason::Stop);
+                    assert_eq!(continued.text(), "http1 ok");
+                    (&mut server).await.unwrap();
+                } else if mode == "append-error" {
+                    assert_eq!(result.stop_reason, StopReason::Error);
+                    assert!(result.error_message.unwrap().contains("BidiAppend"));
+                } else {
+                    assert_eq!(result.stop_reason, StopReason::Aborted);
+                }
+            }).await.unwrap_or_else(|_| panic!("HTTP/1 fixture timed out: {mode}"));
+        }
+    }
+
     #[tokio::test]
     async fn discovery_accepts_http1() {
         use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
@@ -1065,7 +1408,7 @@ mod tests {
                 .await
                 .unwrap();
         });
-        let response = cursor_request(&url, "secret", false)
+        let response = cursor_request(&url, "secret", false, CursorTransport::Auto)
             .body(Vec::new())
             .timeout(Duration::from_secs(5))
             .send()
@@ -1078,9 +1421,14 @@ mod tests {
 
     #[test]
     fn transport_uses_native_connect_headers() {
-        let request = cursor_request("https://cursor.example/run", "secret", true)
-            .build()
-            .unwrap();
+        let request = cursor_request(
+            "https://cursor.example/run",
+            "secret",
+            true,
+            CursorTransport::Http2,
+        )
+        .build()
+        .unwrap();
         assert_eq!(
             request.headers()["content-type"],
             "application/connect+proto"

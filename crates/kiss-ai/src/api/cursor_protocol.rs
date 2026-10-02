@@ -52,6 +52,22 @@ impl FrameDecoder {
 }
 
 #[derive(Clone, PartialEq, Message)]
+pub struct BidiRequestId {
+    #[prost(string, tag = "1")]
+    pub request_id: String,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct BidiAppendRequest {
+    #[prost(message, optional, tag = "2")]
+    pub request_id: Option<BidiRequestId>,
+    #[prost(int64, tag = "3")]
+    pub append_seqno: i64,
+    #[prost(bytes = "vec", tag = "4")]
+    pub data_binary: Vec<u8>,
+}
+
+#[derive(Clone, PartialEq, Message)]
 pub struct AgentClientMessage {
     #[prost(oneof = "agent_client_message::Message", tags = "1, 2, 3, 5, 7")]
     pub message: Option<agent_client_message::Message>,
