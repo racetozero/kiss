@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.0.28 - 2026-10-02
+
 ### Fixed
 
 - Select Cursor's HTTP/2 `Run` or HTTP/1 `RunSSE` and `BidiAppend` transport
