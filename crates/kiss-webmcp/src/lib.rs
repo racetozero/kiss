@@ -742,10 +742,7 @@ fn limit_text(mut text: String) -> String {
     if text.len() <= MAX_TEXT_BYTES {
         return text;
     }
-    let mut end = MAX_TEXT_BYTES;
-    while !text.is_char_boundary(end) {
-        end -= 1;
-    }
+    let end = text.floor_char_boundary(MAX_TEXT_BYTES);
     text.truncate(end);
     text.push_str("\n\n[WebMCP output was truncated by KISS.]");
     text

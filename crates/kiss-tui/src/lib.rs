@@ -15,6 +15,8 @@ pub mod select_list;
 pub mod terminal;
 pub mod text;
 pub mod theme;
+#[cfg(windows)]
+mod windows_console;
 
 pub use component::{Component, Spacer, TextBlock};
 pub use editor::{Editor, EditorSubmission};

@@ -635,7 +635,24 @@ async fn connect(
     credential_path: Option<PathBuf>,
 ) -> Result<Client> {
     if let Some(command) = &server.command {
-        let mut process = Command::new(expand_env(command));
+        let command = expand_env(command);
+        let cwd = server
+            .cwd
+            .as_deref()
+            .map(|value| expand_home(&expand_env(value)));
+        #[cfg(windows)]
+        let command = {
+            let path = server
+                .env
+                .iter()
+                .find(|(name, _)| name.eq_ignore_ascii_case("PATH"))
+                .map(|(_, value)| std::ffi::OsString::from(expand_env(value)))
+                .or_else(|| std::env::var_os("PATH"));
+            // Rust only supplies .exe automatically. Resolve .cmd launchers as well.
+            let search_cwd = std::path::absolute(cwd.as_deref().unwrap_or(Path::new(".")))?;
+            which::which_in(&command, path, search_cwd).unwrap_or_else(|_| PathBuf::from(command))
+        };
+        let mut process = Command::new(command);
         process.args(server.args.iter().map(|value| expand_env(value)));
         process.envs(
             server
@@ -643,8 +660,8 @@ async fn connect(
                 .iter()
                 .map(|(key, value)| (key, expand_env(value))),
         );
-        if let Some(cwd) = &server.cwd {
-            process.current_dir(expand_home(&expand_env(cwd)));
+        if let Some(cwd) = cwd {
+            process.current_dir(cwd);
         }
         let transport = TokioChildProcess::new(process)
             .with_context(|| format!("start MCP server `{server_name}`"))?;
@@ -769,8 +786,9 @@ fn expand_env(value: &str) -> String {
 }
 
 fn expand_home(value: &str) -> PathBuf {
-    value
-        .strip_prefix("~/")
+    Path::new(value)
+        .strip_prefix("~")
+        .ok()
         .and_then(|rest| dirs::home_dir().map(|home| home.join(rest)))
         .unwrap_or_else(|| PathBuf::from(value))
 }
@@ -853,7 +871,6 @@ mod tests {
         assert!(!marker.exists());
     }
 
-    #[cfg(unix)]
     #[tokio::test]
     async fn stdio_fixture_lists_and_calls_a_tool() {
         let temp = tempfile::tempdir().unwrap();
@@ -868,20 +885,48 @@ while IFS= read -r line; do
       printf '{"jsonrpc":"2.0","id":%s,"result":{"tools":[{"name":"echo","description":"Echo text","inputSchema":{"type":"object"}}]}}\n' "$id"
       ;;
     *'"method":"tools/call"'*)
-      printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"hello from stdio"}],"isError":false}}\n' "$id"
+      printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"%s"}],"isError":false}}\n' "$id" "$1"
       ;;
   esac
 done
 "#;
+        let text = "https://cursor.com/loginDeepControl?challenge=test&uuid=test&mode=login";
+        let mut server = ServerEntry {
+            command: Some("sh".to_string()),
+            args: vec![
+                "-c".to_string(),
+                script.to_string(),
+                "fixture".into(),
+                text.into(),
+            ],
+            ..Default::default()
+        };
+        if cfg!(windows) {
+            let shell = kiss_agent::tools::shell::command(None, "", None);
+            let script_path = temp.path().join("fixture with spaces.sh");
+            std::fs::write(&script_path, script).unwrap();
+            std::fs::write(
+                temp.path().join("mcp-fixture.cmd"),
+                format!(
+                    "@echo off\r\n@\"{}\" \"{}\" %*\r\n",
+                    shell.as_std().get_program().to_string_lossy(),
+                    script_path.display().to_string().replace('\\', "/")
+                ),
+            )
+            .unwrap();
+            server.command = Some("mcp-fixture".into());
+            server.args = vec![text.into()];
+            let path = std::env::join_paths(std::iter::once(temp.path().to_path_buf()).chain(
+                std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()),
+            ))
+            .unwrap();
+            server
+                .env
+                .insert("PATH".into(), path.to_string_lossy().into_owned());
+            server.cwd = Some(temp.path().display().to_string());
+        }
         let manager = McpManager::with_paths(
-            loaded(
-                &temp,
-                ServerEntry {
-                    command: Some("sh".to_string()),
-                    args: vec!["-c".to_string(), script.to_string()],
-                    ..Default::default()
-                },
-            ),
+            loaded(&temp, server),
             temp.path().join("cache.json"),
             Some(temp.path().join("oauth.json")),
         );
@@ -892,10 +937,7 @@ done
             .call_tool("demo", "echo", Value::Null, &cancel)
             .await
             .unwrap();
-        assert_eq!(
-            result.content[0].as_text().unwrap().text,
-            "hello from stdio"
-        );
+        assert_eq!(result.content[0].as_text().unwrap().text, text);
         manager.disconnect_all().await;
     }
 

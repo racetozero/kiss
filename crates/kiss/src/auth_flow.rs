@@ -40,6 +40,13 @@ pub async fn login_browser(
 }
 
 pub fn open_browser(url: &str) -> bool {
+    #[cfg(target_os = "windows")]
+    if std::env::var_os("SSH_CONNECTION").is_some()
+        || std::env::var_os("SSH_TTY").is_some()
+        || std::env::var("SESSIONNAME").is_ok_and(|name| name.eq_ignore_ascii_case("Services"))
+    {
+        return false;
+    }
     #[cfg(target_os = "macos")]
     let mut command = std::process::Command::new("open");
     #[cfg(target_os = "linux")]
@@ -51,8 +58,9 @@ pub fn open_browser(url: &str) -> bool {
     };
     #[cfg(target_os = "windows")]
     let mut command = {
-        let mut command = std::process::Command::new("cmd");
-        command.args(["/C", "start", ""]);
+        // Avoid cmd.exe: it treats '&' in authentication URLs as command separators.
+        let mut command = std::process::Command::new("rundll32.exe");
+        command.arg("url.dll,FileProtocolHandler");
         command
     };
     #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]

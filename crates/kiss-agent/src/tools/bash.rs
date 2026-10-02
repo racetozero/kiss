@@ -10,7 +10,6 @@ use std::path::PathBuf;
 use std::process::Stdio;
 use std::time::Duration;
 use tokio::io::AsyncReadExt;
-use tokio::process::Command;
 use tokio_util::sync::CancellationToken;
 
 const UPDATE_THROTTLE: Duration = Duration::from_millis(100);
@@ -71,19 +70,13 @@ impl AgentTool for BashTool {
         {
             anyhow::bail!("Invalid timeout: must be a finite number of seconds");
         }
-        let full_command = match &self.command_prefix {
-            Some(prefix) => format!("{prefix}\n{command}"),
-            None => command.clone(),
-        };
-        let shell = self
-            .shell_path
-            .clone()
-            .unwrap_or_else(|| "bash".to_string());
-
-        let mut cmd = Command::new(&shell);
-        cmd.arg("-c")
-            .arg(&full_command)
-            .current_dir(&self.cwd)
+        let mut cmd = super::shell::command(
+            self.shell_path.as_deref(),
+            &command,
+            self.command_prefix.as_deref(),
+        );
+        let shell = cmd.as_std().get_program().to_string_lossy().into_owned();
+        cmd.current_dir(&self.cwd)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -93,7 +86,7 @@ impl AgentTool for BashTool {
 
         let mut child = cmd
             .spawn()
-            .map_err(|e| anyhow::anyhow!("failed to spawn {shell}: {e}"))?;
+            .map_err(|e| anyhow::anyhow!("Could not start shell {shell}: {e}. Install Bash or set shellPath to an installed Bash, PowerShell, or cmd.exe executable."))?;
         #[cfg(unix)]
         let pgid = child.id().map(|pid| pid as i32);
         #[cfg(not(unix))]

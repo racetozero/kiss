@@ -178,18 +178,65 @@ fn token_expiry(token: &str) -> i64 {
 mod tests {
     use super::*;
 
-    #[test]
-    fn authorization_url_has_cursor_pkce_fields() {
-        let pending = start_authorization(&OAuthConfig::default()).unwrap();
-        let url = Url::parse(&pending.url).unwrap();
-        let query = url
-            .query_pairs()
-            .into_owned()
-            .collect::<std::collections::BTreeMap<_, _>>();
-        assert_eq!(query["uuid"], pending.id);
-        assert_eq!(query["mode"], "login");
-        assert_eq!(query["redirectTarget"], "cli");
-        assert!(!query["challenge"].is_empty());
+    #[tokio::test]
+    async fn sign_in_completes_with_only_a_printed_url() {
+        use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let (url_tx, url_rx) = tokio::sync::oneshot::channel::<String>();
+        let server = tokio::spawn(async move {
+            let url = Url::parse(&url_rx.await.unwrap()).unwrap();
+            let login = url
+                .query_pairs()
+                .into_owned()
+                .collect::<std::collections::BTreeMap<_, _>>();
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut request = Vec::new();
+            let mut buffer = [0_u8; 1024];
+            while !request.windows(4).any(|bytes| bytes == b"\r\n\r\n") {
+                let count = socket.read(&mut buffer).await.unwrap();
+                assert_ne!(count, 0);
+                request.extend_from_slice(&buffer[..count]);
+            }
+            let request = String::from_utf8(request).unwrap();
+            let target = request
+                .lines()
+                .next()
+                .unwrap()
+                .split_whitespace()
+                .nth(1)
+                .unwrap();
+            let poll = Url::parse(&format!("http://{address}{target}")).unwrap();
+            let poll = poll
+                .query_pairs()
+                .into_owned()
+                .collect::<std::collections::BTreeMap<_, _>>();
+            assert_eq!(login["uuid"], poll["uuid"]);
+            assert_eq!(login["mode"], "login");
+            assert_eq!(login["redirectTarget"], "cli");
+            assert_eq!(
+                login["challenge"],
+                base64::engine::general_purpose::URL_SAFE_NO_PAD
+                    .encode(Sha256::digest(poll["verifier"].as_bytes()))
+            );
+            let body = r#"{"accessToken":"test-access","refreshToken":"test-refresh"}"#;
+            socket.write_all(format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes()).await.unwrap();
+        });
+        let config = OAuthConfig {
+            poll_url: format!("http://{address}/auth/poll"),
+            poll_interval: Duration::from_millis(1),
+            timeout: Duration::from_secs(10),
+            ..Default::default()
+        };
+        let credential = login_browser(&config, &CancellationToken::new(), |url| {
+            url_tx.send(url.to_string()).unwrap();
+        })
+        .await
+        .unwrap();
+        assert_eq!(credential.access, "test-access");
+        assert_eq!(credential.refresh, "test-refresh");
+        server.await.unwrap();
     }
 
     #[test]

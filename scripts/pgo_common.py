@@ -6,6 +6,7 @@ import gzip
 import json
 import os
 import platform
+import statistics
 import subprocess
 import threading
 from collections.abc import Iterable
@@ -291,7 +292,4 @@ def geometric_mean(values: Iterable[float]) -> float:
     values = tuple(values)
     if not values or any(value <= 0 for value in values):
         raise ValueError('geometric mean needs positive values')
-    product = 1.0
-    for value in values:
-        product *= value
-    return product ** (1.0 / len(values))
+    return statistics.geometric_mean(values)

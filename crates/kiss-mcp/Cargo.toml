@@ -27,5 +27,8 @@ tokio.workspace = true
 tokio-util.workspace = true
 url.workspace = true
 
+[target.'cfg(windows)'.dependencies]
+which = "8"
+
 [dev-dependencies]
 tempfile.workspace = true

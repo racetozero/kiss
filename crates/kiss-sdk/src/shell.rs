@@ -30,16 +30,13 @@ pub async fn run(
     cancel: CancellationToken,
     on_update: UpdateSink,
 ) -> Result<crate::session::BashResult> {
-    let shell = shell_path.unwrap_or("bash");
-    let full_command = match command_prefix {
-        Some(prefix) => format!("{prefix}\n{command}"),
-        None => command.to_string(),
-    };
-
-    let mut spawner = tokio::process::Command::new(shell);
+    let mut spawner = kiss_agent::tools::shell::command(shell_path, command, command_prefix);
+    let shell = spawner
+        .as_std()
+        .get_program()
+        .to_string_lossy()
+        .into_owned();
     spawner
-        .arg("-c")
-        .arg(&full_command)
         .current_dir(cwd)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -47,7 +44,7 @@ pub async fn run(
         .kill_on_drop(true);
     let mut child = spawner
         .spawn()
-        .with_context(|| format!("failed to start {shell}"))?;
+        .with_context(|| format!("Could not start shell {shell}. Install Bash or set shellPath to an installed Bash, PowerShell, or cmd.exe executable."))?;
 
     let mut stdout = child.stdout.take().expect("piped stdout");
     let mut stderr = child.stderr.take().expect("piped stderr");
@@ -92,11 +89,7 @@ pub async fn run(
     let text = String::from_utf8_lossy(&collected).into_owned();
     let (output, truncated, full_output_path) = if collected.len() > MAX_INLINE_BYTES {
         let path = spill(&collected);
-        let start = text.len().saturating_sub(MAX_INLINE_BYTES);
-        // Cut on a character boundary so the JSON payload stays valid UTF-8.
-        let start = (start..text.len())
-            .find(|index| text.is_char_boundary(*index))
-            .unwrap_or(text.len());
+        let start = text.ceil_char_boundary(text.len().saturating_sub(MAX_INLINE_BYTES));
         let tail = text[start..].to_string();
         let notice = match &path {
             Some(path) => format!("\n\n[output truncated. Full output: {path}]"),

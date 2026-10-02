@@ -4,12 +4,10 @@ use std::path::{Path, PathBuf};
 
 /// Resolve a tool-supplied path against `cwd`, expanding a leading `~`.
 pub fn resolve(cwd: &Path, path: &str) -> PathBuf {
-    let expanded: PathBuf = if let Some(rest) = path.strip_prefix("~/") {
+    let expanded: PathBuf = if let Ok(rest) = Path::new(path).strip_prefix("~") {
         dirs::home_dir()
             .map(|h| h.join(rest))
             .unwrap_or_else(|| PathBuf::from(path))
-    } else if path == "~" {
-        dirs::home_dir().unwrap_or_else(|| PathBuf::from(path))
     } else {
         PathBuf::from(path)
     };

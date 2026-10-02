@@ -66,6 +66,8 @@ fn write_title(
 
 pub struct Terminal {
     raw: bool,
+    #[cfg(windows)]
+    windows_console: Option<crate::windows_console::WindowsConsole>,
     title_frame: u8,
     session_title: String,
     title_dirty: bool,
@@ -74,7 +76,19 @@ pub struct Terminal {
 
 impl Terminal {
     pub fn new() -> anyhow::Result<Self> {
+        #[cfg(windows)]
+        let windows_console = Some(crate::windows_console::WindowsConsole::new()?);
         terminal::enable_raw_mode()?;
+        let terminal = Terminal {
+            raw: true,
+            #[cfg(windows)]
+            windows_console,
+            title_frame: 0,
+            session_title: String::new(),
+            title_dirty: false,
+            progress_enabled: std::env::var_os("TERM_PROGRAM")
+                .is_none_or(|value| value != "ghostty"),
+        };
         let mut out = std::io::stdout();
         // Bracketed paste and modified-key reporting on. The latter lets
         // supporting terminals report Shift+Enter separately from Enter.
@@ -83,14 +97,7 @@ impl Terminal {
         write_title(&mut out, 0, "")?;
         out.write_all(PROGRESS_IDLE_SEQUENCE)?;
         out.flush()?;
-        Ok(Terminal {
-            raw: true,
-            title_frame: 0,
-            session_title: String::new(),
-            title_dirty: false,
-            progress_enabled: std::env::var_os("TERM_PROGRAM")
-                .is_none_or(|value| value != "ghostty"),
-        })
+        Ok(terminal)
     }
 
     pub fn size() -> (usize, usize) {
@@ -150,16 +157,24 @@ impl Terminal {
             let mut out = std::io::stdout();
             let _ = write_control_sequence(&mut out, RESTORE_SEQUENCE);
             let _ = terminal::disable_raw_mode();
+            #[cfg(windows)]
+            self.windows_console.take();
         }
     }
 
-    /// Install a panic hook that restores the terminal before unwinding.
+    /// Install before terminal setup. Restore modes even when a panic aborts.
     pub fn install_panic_hook() {
+        #[cfg(windows)]
+        let windows_console = crate::windows_console::WindowsConsole::snapshot().ok();
         let default = std::panic::take_hook();
         std::panic::set_hook(Box::new(move |info| {
             let mut out = std::io::stdout();
             let _ = write_control_sequence(&mut out, RESTORE_SEQUENCE);
             let _ = terminal::disable_raw_mode();
+            #[cfg(windows)]
+            if let Some(modes) = &windows_console {
+                crate::windows_console::WindowsConsole::restore(modes);
+            }
             default(info);
         }));
     }
@@ -175,9 +190,80 @@ impl Drop for Terminal {
 mod tests {
     use super::*;
 
+    #[cfg(windows)]
+    #[test]
+    fn windows_panic_restores_console_modes_before_abort() {
+        use crate::windows_console::WindowsConsole;
+
+        #[link(name = "kernel32")]
+        unsafe extern "system" {
+            fn AllocConsole() -> i32;
+            fn FreeConsole() -> i32;
+            fn SetErrorMode(mode: u32) -> u32;
+        }
+
+        let role = std::env::var("KISS_TEST_PANIC_CONSOLE").unwrap_or_default();
+        if role == "abort" {
+            // Suppress Windows crash dialogs in the child process.
+            unsafe {
+                SetErrorMode(0x0001 | 0x0002);
+            }
+            std::panic::set_hook(Box::new(|_| std::process::abort()));
+            Terminal::install_panic_hook();
+            let _terminal = Terminal::new().unwrap();
+            println!("terminal ready to panic");
+            std::io::stdout().flush().unwrap();
+            panic!("intentional console cleanup check");
+        }
+
+        if role == "observer" {
+            // Give the observer and aborting child a console separate from the test runner.
+            unsafe {
+                FreeConsole();
+                assert_ne!(AllocConsole(), 0);
+            }
+            let mut original = WindowsConsole::snapshot().unwrap();
+            for ((mode, saved), flag) in original.iter_mut().zip([0x0200, 0x0004]) {
+                *saved &= !flag;
+                mode.set_mode(*saved).unwrap();
+            }
+            let child = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "terminal::tests::windows_panic_restores_console_modes_before_abort",
+                    "--nocapture",
+                ])
+                .env("KISS_TEST_PANIC_CONSOLE", "abort")
+                .output()
+                .unwrap();
+            assert!(!child.status.success());
+            assert!(
+                String::from_utf8_lossy(&child.stdout).contains("terminal ready to panic"),
+                "{child:?}"
+            );
+            for (mode, saved) in original {
+                assert_eq!(mode.mode().unwrap(), saved);
+            }
+            return;
+        }
+
+        let observer = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "terminal::tests::windows_panic_restores_console_modes_before_abort",
+                "--nocapture",
+            ])
+            .env("KISS_TEST_PANIC_CONSOLE", "observer")
+            .output()
+            .unwrap();
+        assert!(observer.status.success(), "{observer:?}");
+    }
+
     fn terminal() -> Terminal {
         Terminal {
             raw: true,
+            #[cfg(windows)]
+            windows_console: None,
             title_frame: 0,
             session_title: String::new(),
             title_dirty: false,

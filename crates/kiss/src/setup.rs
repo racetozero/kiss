@@ -257,7 +257,7 @@ pub fn session_dir(args: &Args, settings: &Settings) -> PathBuf {
         .or_else(|| std::env::var("KISS_SESSION_DIR").ok())
         .or_else(|| settings.session_dir.clone())
         .map(|p| {
-            if let Some(rest) = p.strip_prefix("~/") {
+            if let Ok(rest) = std::path::Path::new(&p).strip_prefix("~") {
                 dirs::home_dir()
                     .map(|h| h.join(rest))
                     .unwrap_or_else(|| PathBuf::from(&p))

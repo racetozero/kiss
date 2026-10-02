@@ -560,18 +560,26 @@ fn has_google_application_credentials() -> bool {
     let path = std::env::var_os("GOOGLE_APPLICATION_CREDENTIALS")
         .map(PathBuf::from)
         .or_else(|| {
-            dirs::home_dir()
-                .map(|home| home.join(".config/gcloud/application_default_credentials.json"))
+            let directory = if cfg!(windows) {
+                std::env::var_os("APPDATA").map(PathBuf::from)
+            } else {
+                dirs::home_dir().map(|home| home.join(".config"))
+            };
+            directory.map(|directory| directory.join("gcloud/application_default_credentials.json"))
         });
     path.is_some_and(|path| path.is_file())
 }
 
 async fn google_application_access_token() -> Result<String> {
-    let output = tokio::process::Command::new("gcloud")
-        .args(["auth", "application-default", "print-access-token"])
-        .output()
-        .await
-        .context("run gcloud for Google Application Default Credentials")?;
+    let output = tokio::process::Command::new(if cfg!(windows) {
+        "gcloud.cmd"
+    } else {
+        "gcloud"
+    })
+    .args(["auth", "application-default", "print-access-token"])
+    .output()
+    .await
+    .context("run gcloud for Google Application Default Credentials")?;
     if !output.status.success() {
         anyhow::bail!("gcloud could not create a Google access token");
     }

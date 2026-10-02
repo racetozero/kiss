@@ -36,6 +36,8 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Test
         run: cargo nextest run --workspace
+      - name: Documentation tests
+        run: cargo test --workspace --doc
 
   windows-check:
     runs-on: windows-latest
@@ -45,8 +47,15 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
       - name: Clippy on Windows
         run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Test on Windows
+        run: cargo nextest run --workspace
+      - name: Documentation tests on Windows
+        run: cargo test --workspace --doc
 
   wasm-agent:
     name: Browser WASM agent

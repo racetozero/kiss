@@ -25,5 +25,8 @@ unicode-segmentation.workspace = true
 unicode-width.workspace = true
 url.workspace = true
 
+[target.'cfg(windows)'.dependencies]
+crossterm_winapi = "0.9.1"
+
 [dev-dependencies]
 kiss-bench.workspace = true

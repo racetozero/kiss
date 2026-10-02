@@ -97,7 +97,7 @@ pub fn truncate_tail(content: &str, max_lines: usize, max_bytes: usize) -> Trunc
     if let Some(last) = lines.last()
         && last.len() > max_bytes
     {
-        let boundary = ceil_char_boundary(last, last.len() - max_bytes);
+        let boundary = last.ceil_char_boundary(last.len() - max_bytes);
         let piece = &last[boundary..];
         return TruncationResult {
             content: piece.to_string(),
@@ -173,13 +173,6 @@ pub fn format_size(bytes: usize) -> String {
     } else {
         format!("{bytes}B")
     }
-}
-
-fn ceil_char_boundary(s: &str, mut index: usize) -> usize {
-    while index < s.len() && !s.is_char_boundary(index) {
-        index += 1;
-    }
-    index
 }
 
 #[cfg(test)]

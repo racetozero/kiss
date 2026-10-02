@@ -119,10 +119,7 @@ const SESSION_TITLE_PROMPT_MAX_BYTES: usize = 960;
 
 fn bounded_session_title_prompt(prompt: &str) -> &str {
     let prompt = prompt.trim();
-    let mut end = prompt.len().min(SESSION_TITLE_PROMPT_MAX_BYTES);
-    while !prompt.is_char_boundary(end) {
-        end -= 1;
-    }
+    let end = prompt.floor_char_boundary(SESSION_TITLE_PROMPT_MAX_BYTES);
     &prompt[..end]
 }
 

@@ -242,10 +242,11 @@ pub enum Command {
         #[arg(default_value = "openai-codex")]
         provider: String,
 
-        /// Use a headless flow. OpenAI uses a device code. Anthropic accepts a pasted callback.
+        /// Use a headless flow. Cursor prints a sign-in link; OpenAI Codex uses a device code.
         #[arg(
             long = "device-auth",
             alias = "device-code",
+            visible_alias = "no-browser",
             conflicts_with = "browser"
         )]
         device_auth: bool,
@@ -473,6 +474,14 @@ mod tests {
                 ..
             }) if provider == "openai-codex"
         ));
+    }
+
+    #[test]
+    fn parses_cursor_login_without_a_browser() {
+        let args = Args::try_parse_from(["kiss", "login", "cursor", "--no-browser"]).unwrap();
+        assert!(
+            matches!(args.command, Some(Command::Login { provider, device_auth: true, .. }) if provider == "cursor")
+        );
     }
 
     #[test]

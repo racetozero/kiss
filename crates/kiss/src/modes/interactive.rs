@@ -3697,8 +3697,11 @@ fn start_shell_passthrough(
     let shell = settings
         .shell_path
         .filter(|value| !value.trim().is_empty())
-        .or_else(|| std::env::var("SHELL").ok())
-        .unwrap_or_else(|| "bash".into());
+        .or_else(|| {
+            std::env::var("SHELL")
+                .ok()
+                .filter(|path| !cfg!(windows) || std::path::Path::new(path).is_file())
+        });
     let command = settings
         .shell_command_prefix
         .filter(|value| !value.trim().is_empty())
@@ -3715,7 +3718,8 @@ fn start_shell_passthrough(
     let tx = command_tx.clone();
     let session = session.clone();
     tokio::spawn(async move {
-        let result = run_shell_command(&shell, &command, &cwd, exclude, &cancel, &tx).await;
+        let result =
+            run_shell_command(shell.as_deref(), &command, &cwd, exclude, &cancel, &tx).await;
         if let Ok(result) = &result {
             let message = AgentMessage::BashExecution(kiss_agent::BashExecutionMessage {
                 command: result.command.clone(),
@@ -3734,17 +3738,20 @@ fn start_shell_passthrough(
 }
 
 async fn run_shell_command(
-    shell: &str,
+    shell: Option<&str>,
     command: &str,
     cwd: &std::path::Path,
     exclude_from_context: bool,
     cancel: &CancellationToken,
     tx: &mpsc::UnboundedSender<CommandEvent>,
 ) -> std::result::Result<ShellRunResult, String> {
-    let mut process = tokio::process::Command::new(shell);
+    let mut process = kiss_agent::tools::shell::command(shell, command, None);
+    let shell = process
+        .as_std()
+        .get_program()
+        .to_string_lossy()
+        .into_owned();
     process
-        .arg("-c")
-        .arg(command)
         .current_dir(cwd)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
@@ -3754,7 +3761,7 @@ async fn run_shell_command(
         use std::os::unix::process::CommandExt as _;
         process.as_std_mut().process_group(0);
     }
-    let mut child = process.spawn().map_err(|error| error.to_string())?;
+    let mut child = process.spawn().map_err(|error| format!("Could not start shell {shell}: {error}. Install Bash or set shellPath to an installed Bash, PowerShell, or cmd.exe executable."))?;
     let mut stdout = child.stdout.take().ok_or("shell stdout is not available")?;
     let mut stderr = child.stderr.take().ok_or("shell stderr is not available")?;
     let mut stdout_done = false;
@@ -7380,7 +7387,7 @@ fn normalize_recap(text: &str) -> String {
 }
 
 fn expand_user_path(value: &str) -> PathBuf {
-    if let Some(rest) = value.strip_prefix("~/")
+    if let Ok(rest) = std::path::Path::new(value).strip_prefix("~")
         && let Some(home) = dirs::home_dir()
     {
         return home.join(rest);
@@ -9424,6 +9431,23 @@ mod tests {
     }
 
     #[test]
+    fn expands_native_home_paths_and_keeps_literal_names() {
+        let home = dirs::home_dir().unwrap();
+        assert_eq!(expand_user_path("~"), home);
+        assert_eq!(
+            expand_user_path("~/sessions with spaces"),
+            home.join("sessions with spaces")
+        );
+        if cfg!(windows) {
+            assert_eq!(
+                expand_user_path("~\\sessions with spaces"),
+                home.join("sessions with spaces")
+            );
+        }
+        assert_eq!(expand_user_path("~alice"), PathBuf::from("~alice"));
+    }
+
+    #[test]
     #[ignore = "release-mode performance benchmark"]
     fn benchmark_performance_transcript_and_context() {
         let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
@@ -9480,7 +9504,7 @@ mod tests {
         let cancel = CancellationToken::new();
         let (tx, _rx) = mpsc::unbounded_channel();
         let result = run_shell_command(
-            "sh",
+            Some("sh"),
             "printf stdout; printf stderr >&2; exit 7",
             temp.path(),
             true,
@@ -9540,7 +9564,7 @@ mod tests {
         let cancel = CancellationToken::new();
         let (tx, _rx) = mpsc::unbounded_channel();
         let future = run_shell_command(
-            "sh",
+            Some("sh"),
             "printf started; sleep 30",
             temp.path(),
             false,

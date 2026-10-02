@@ -23,6 +23,7 @@ mod workflow_ui;
 
 use args::{Args, Command};
 use clap::Parser;
+use kiss_ai::auth::{LoginMethod, login_methods};
 use std::io::{IsTerminal as _, Write as _};
 use std::process::ExitCode;
 
@@ -145,18 +146,14 @@ async fn run_command(args: &Args, command: &Command) -> anyhow::Result<i32> {
                 );
             }
             if api_key.is_none()
-                && matches!(
-                    provider.as_str(),
-                    "openai"
-                        | "openai-codex"
-                        | "anthropic"
-                        | "github-copilot"
-                        | "kimi-coding"
-                        | "meta"
-                        | "openrouter"
-                        | "radius"
-                        | "xai"
-                )
+                && login_methods(provider).iter().any(|method| {
+                    matches!(
+                        method,
+                        LoginMethod::BrowserOAuth
+                            | LoginMethod::DeviceOAuth
+                            | LoginMethod::ManualOAuth
+                    )
+                })
             {
                 run_oauth_login(provider, *device_auth).await?;
                 println!("Saved OAuth credentials for {provider}.");
@@ -263,15 +260,12 @@ async fn run_oauth_login(provider: &str, headless: bool) -> anyhow::Result<()> {
             signal_cancel.cancel();
         }
     });
-    if !headless
-        && matches!(
-            provider,
-            "openai" | "openai-codex" | "anthropic" | "openrouter" | "radius"
-        )
+    if (!headless || provider == "cursor")
+        && login_methods(provider).contains(&LoginMethod::BrowserOAuth)
     {
         let result = auth_flow::login_browser(provider, &cancel, |url| {
             println!("Open this URL to sign in:\n{url}");
-            if !auth_flow::open_browser(url) {
+            if !headless && !auth_flow::open_browser(url) {
                 eprintln!("The browser did not open. Open the URL manually.");
             }
         })
