@@ -336,6 +336,11 @@ You can set `CURSOR_ACCESS_TOKEN` instead of saving a login.
 When you select Cursor, KISS refreshes the model list for your account. It uses
 the built-in list if model discovery is not available.
 
+Behind a corporate TLS proxy, Cursor runs use HTTP/2 even if the proxy omits
+ALPN. Model discovery uses `api2.cursor.sh` and can use HTTP/1.1. KISS uses the
+system proxy settings and `HTTPS_PROXY`. The corporate root certificate must
+be in your operating system's trusted certificate store.
+
 #### Databricks
 
 Use Databricks Unity Gateway with a workspace token and URL:

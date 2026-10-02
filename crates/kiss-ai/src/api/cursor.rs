@@ -22,6 +22,7 @@ use uuid::Uuid;
 const PROVIDER: &str = "cursor";
 const API: &str = "cursor-agent";
 const DEFAULT_URL: &str = "https://agentn.us.api5.cursor.sh";
+const DISCOVERY_URL: &str = "https://api2.cursor.sh";
 // Cursor gates model access by client version. Track https://cursor.com/install.
 const DEFAULT_CLIENT_VERSION: &str = "cli-2026.10.01-e373342";
 const RUN_PATH: &str = "/agent.v1.AgentService/Run";
@@ -324,21 +325,28 @@ fn end_thinking(builder: &mut PartialBuilder, index: &mut Option<usize>) {
     }
 }
 
-fn cursor_request(url: &str, token: &str, streaming: bool) -> reqwest::RequestBuilder {
+fn cursor_client_builder() -> reqwest::ClientBuilder {
     crate::stream::ensure_tls_crypto_provider();
-    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
-    let client = CLIENT.get_or_init(|| {
-        reqwest::Client::builder()
-            // Cursor requires HTTP/2, including when ALPN does not select it.
-            .http2_prior_knowledge()
-            .connect_timeout(Duration::from_secs(30))
-            .pool_idle_timeout(Duration::from_secs(90))
-            .build()
-            .expect("Cursor HTTP/2 client")
-    });
+    reqwest::Client::builder()
+        // Corporate TLS proxies can omit ALPN. The agent host still accepts HTTP/2.
+        .http2_prior_knowledge()
+        .connect_timeout(Duration::from_secs(30))
+        .pool_idle_timeout(Duration::from_secs(90))
+}
+
+fn cursor_request(url: &str, token: &str, streaming: bool) -> reqwest::RequestBuilder {
+    let client = if streaming {
+        static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+        CLIENT.get_or_init(|| {
+            cursor_client_builder()
+                .build()
+                .expect("Cursor HTTP/2 client")
+        })
+    } else {
+        crate::stream::http_client()
+    };
     client
         .post(url)
-        .version(http::Version::HTTP_2)
         .header(
             "content-type",
             if streaming {
@@ -786,7 +794,7 @@ fn decode_arguments(args: HashMap<String, Vec<u8>>) -> Result<serde_json::Value>
 
 /// Fetch the account model list with Cursor's unary native RPC.
 pub async fn discover_models(access_token: &str) -> Result<Vec<Model>> {
-    let url = format!("{}{}", cursor_url(DEFAULT_URL), MODELS_PATH);
+    let url = format!("{}{}", cursor_url(DISCOVERY_URL), MODELS_PATH);
     let response = cursor_request(&url, access_token, false)
         .body(wire::GetUsableModelsRequest::default().encode_to_vec())
         .send()
@@ -1030,42 +1038,117 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn transport_uses_http2_without_protocol_negotiation() {
+    async fn run_uses_http2_through_tls_proxy_without_alpn() {
+        use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+
+        let certificate =
+            rcgen::generate_simple_self_signed(vec!["cursor-proxy.test".into()]).unwrap();
         let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
             .await
             .unwrap();
-        let url = format!("http://{}/run", listener.local_addr().unwrap());
+        let client = cursor_client_builder()
+            .proxy(
+                reqwest::Proxy::https(format!("http://{}", listener.local_addr().unwrap()))
+                    .unwrap(),
+            )
+            .add_root_certificate(reqwest::Certificate::from_der(certificate.cert.der()).unwrap())
+            .build()
+            .unwrap();
+        let config = rustls::ServerConfig::builder()
+            .with_no_client_auth()
+            .with_single_cert(
+                vec![certificate.cert.der().clone()],
+                rustls::pki_types::PrivatePkcs8KeyDer::from(
+                    certificate.signing_key.serialize_der(),
+                )
+                .into(),
+            )
+            .unwrap();
         let server = tokio::spawn(async move {
-            let (socket, _) = listener.accept().await.unwrap();
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut connect = Vec::new();
+            while !connect.ends_with(b"\r\n\r\n") {
+                connect.push(socket.read_u8().await.unwrap());
+                assert!(connect.len() < 4096);
+            }
+            assert!(connect.starts_with(b"CONNECT cursor-proxy.test:443 HTTP/1.1\r\n"));
+            socket
+                .write_all(b"HTTP/1.1 200 Connection established\r\n\r\n")
+                .await
+                .unwrap();
+            let socket = tokio_rustls::TlsAcceptor::from(std::sync::Arc::new(config))
+                .accept(socket)
+                .await
+                .unwrap();
+            assert_eq!(socket.get_ref().1.alpn_protocol(), None);
             let mut connection = h2::server::handshake(socket).await.unwrap();
             while let Some(request) = connection.accept().await {
                 let (request, mut response) = request.unwrap();
                 assert_eq!(request.version(), http::Version::HTTP_2);
-                assert_eq!(request.headers()["authorization"], "Bearer secret");
                 response
                     .send_response(http::Response::new(()), true)
                     .unwrap();
             }
         });
-        for streaming in [false, true] {
-            let response = cursor_request(&url, "secret", streaming)
-                .body(Vec::new())
-                .timeout(Duration::from_secs(5))
-                .send()
-                .await
-                .unwrap();
-            assert_eq!(response.version(), http::Version::HTTP_2);
-            assert_eq!(response.status(), http::StatusCode::OK);
-        }
+        let (sender, receiver) = mpsc::unbounded_channel();
+        sender.send(Ok::<_, io::Error>(vec![0; 5])).unwrap();
+        let body =
+            reqwest::Body::wrap_stream(stream::unfold(receiver, |mut receiver| async move {
+                receiver.recv().await.map(|item| (item, receiver))
+            }));
+        let response = client
+            .post("https://cursor-proxy.test/run")
+            .version(http::Version::HTTP_2)
+            .body(body)
+            .timeout(Duration::from_secs(5))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.version(), http::Version::HTTP_2);
+        assert_eq!(response.status(), http::StatusCode::OK);
+        drop(sender);
         server.abort();
     }
 
+    #[tokio::test]
+    async fn discovery_accepts_http1() {
+        use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .unwrap();
+        let url = format!("http://{}{}", listener.local_addr().unwrap(), MODELS_PATH);
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut headers = Vec::new();
+            while !headers.ends_with(b"\r\n\r\n") {
+                headers.push(socket.read_u8().await.unwrap());
+                assert!(headers.len() < 4096);
+            }
+            assert!(
+                headers.starts_with(b"POST /agent.v1.AgentService/GetUsableModels HTTP/1.1\r\n")
+            );
+            socket
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n")
+                .await
+                .unwrap();
+        });
+        let response = cursor_request(&url, "secret", false)
+            .body(Vec::new())
+            .timeout(Duration::from_secs(5))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.version(), http::Version::HTTP_11);
+        assert_eq!(response.status(), http::StatusCode::OK);
+        server.await.unwrap();
+    }
+
     #[test]
-    fn transport_requires_http2_and_native_connect_headers() {
+    fn transport_uses_native_connect_headers() {
         let request = cursor_request("https://cursor.example/run", "secret", true)
             .build()
             .unwrap();
-        assert_eq!(request.version(), http::Version::HTTP_2);
         assert_eq!(
             request.headers()["content-type"],
             "application/connect+proto"

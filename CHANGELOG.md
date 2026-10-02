@@ -4,8 +4,8 @@
 
 ### Fixed
 
-- Open an HTTP/2 connection for Cursor model runs and model lists. Prevent the
-  HTTP client from selecting HTTP/1 and failing with `UserUnsupportedVersion`.
+- Use HTTP/2 for Cursor runs when corporate TLS proxies omit ALPN. Keep model
+  discovery on `api2.cursor.sh` with HTTP/1.1 support.
 
 ## 0.0.25 - 2026-10-02
 
