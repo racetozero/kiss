@@ -2,6 +2,36 @@
 
 ## Unreleased
 
+## 0.0.24 - 2026-10-01
+
+### Added
+
+- Sign in to Cursor from the CLI. Use `kiss login cursor --no-browser` on a
+  server or SSH session, then open the printed URL on another computer.
+- Let the model edit its conversation context with
+  `--experimental-context-file`. Valid edits are saved in session checkpoints.
+  The default is off.
+
+### Fixed
+
+- Keep complete Windows sign-in URLs. Do not treat URL query fields such as
+  `uuid` as shell commands.
+- Find Git Bash on Windows and use the correct arguments for Bash, PowerShell,
+  and `cmd.exe` in agent tools, the SDK, and the TUI.
+- Start Windows MCP servers that use `.cmd` launchers. Resolve their commands
+  against the configured path and working directory.
+- Expand native home paths, enable Windows terminal input, and restore the
+  original console modes after normal exit or a panic.
+- Use the Windows Google credential directory and `gcloud.cmd` for Google
+  Application Default Credentials.
+
+### Changed
+
+- Use the shared provider login methods in the CLI. Replace manual UTF-8
+  boundary checks and the Python mean calculation with standard functions.
+- Run nextest on Windows, Linux, and macOS. Run documentation tests separately
+  and add a Windows panic-cleanup regression check.
+
 ## 0.0.23 - 2026-09-30
 
 ### Added
