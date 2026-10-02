@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Fixed
+
+- Send a current Cursor CLI version for model requests and model lists. The
+  old version could cause Cursor to reject model requests after a successful
+  sign-in.
+
 ## 0.0.24 - 2026-10-01
 
 ### Added

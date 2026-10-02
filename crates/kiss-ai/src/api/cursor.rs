@@ -22,7 +22,8 @@ use uuid::Uuid;
 const PROVIDER: &str = "cursor";
 const API: &str = "cursor-agent";
 const DEFAULT_URL: &str = "https://agentn.us.api5.cursor.sh";
-const DEFAULT_CLIENT_VERSION: &str = "cli-2026.07.23-e383d2b";
+// Cursor gates model access by client version. Track https://cursor.com/install.
+const DEFAULT_CLIENT_VERSION: &str = "cli-2026.10.01-e373342";
 const RUN_PATH: &str = "/agent.v1.AgentService/Run";
 const MODELS_PATH: &str = "/agent.v1.AgentService/GetUsableModels";
 const RESUME_TIMEOUT: Duration = Duration::from_secs(60 * 60);
