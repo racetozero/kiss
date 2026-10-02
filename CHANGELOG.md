@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Fixed
+
+- Accept TLS proxies that select HTTP/1.1 through ALPN while keeping Cursor
+  model runs on HTTP/2. Proxies could close the connection when KISS offered
+  only HTTP/2 during TLS setup.
+
 ## 0.0.26 - 2026-10-02
 
 ### Added

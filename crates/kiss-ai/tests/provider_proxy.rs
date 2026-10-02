@@ -22,25 +22,30 @@ struct Probe {
 
 #[tokio::test]
 async fn providers_use_direct_tls() {
-    check_providers(false, false, true).await;
+    check_providers(false, false, true, None).await;
 }
 
 #[tokio::test]
 async fn providers_use_tls_interception_proxy_without_alpn() {
-    check_providers(true, false, true).await;
+    check_providers(true, false, true, None).await;
 }
 
 #[tokio::test]
 async fn providers_respect_proxy_bypass() {
-    check_providers(false, true, true).await;
+    check_providers(false, true, true, None).await;
 }
 
 #[tokio::test]
 async fn providers_reject_untrusted_proxy_certificates() {
-    check_providers(true, false, false).await;
+    check_providers(true, false, false, None).await;
 }
 
-async fn check_providers(proxy: bool, bypass: bool, trusted: bool) {
+#[tokio::test]
+async fn providers_use_tls_interception_proxy_with_http1_alpn() {
+    check_providers(true, false, true, Some(b"http/1.1")).await;
+}
+
+async fn check_providers(proxy: bool, bypass: bool, trusted: bool, proxy_alpn: Option<&[u8]>) {
     let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
     let certificate = rcgen::generate_simple_self_signed(vec![
         "localhost".into(),
@@ -76,6 +81,8 @@ async fn check_providers(proxy: bool, bypass: bool, trusted: bool) {
         .unwrap();
     if !proxy {
         config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+    } else if let Some(protocol) = proxy_alpn {
+        config.alpn_protocols = vec![protocol.to_vec()];
     }
     let acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(config));
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
@@ -102,10 +109,37 @@ async fn check_providers(proxy: bool, bypass: bool, trusted: bool) {
                         .await
                         .unwrap();
                 }
-                let Ok(socket) = acceptor.accept(socket).await else {
+                let Ok(handshake) = tokio_rustls::LazyConfigAcceptor::new(
+                    rustls::server::Acceptor::default(),
+                    socket,
+                )
+                .await
+                else {
                     return;
                 };
-                // Cursor sends the HTTP/2 preface without ALPN, including on direct TLS.
+                if proxy
+                    && !acceptor.config().alpn_protocols.is_empty()
+                    && handshake
+                        .client_hello()
+                        .alpn()
+                        .is_some_and(|mut protocols| {
+                            !protocols.any(|protocol| {
+                                acceptor
+                                    .config()
+                                    .alpn_protocols
+                                    .iter()
+                                    .any(|supported| supported == protocol)
+                            })
+                        })
+                {
+                    // Some TLS interception proxies close TCP without a TLS alert
+                    // when the client does not offer an accepted ALPN protocol.
+                    return;
+                }
+                let Ok(socket) = handshake.into_stream(Arc::clone(acceptor.config())).await else {
+                    return;
+                };
+                // Cursor sends HTTP/2 even when ALPN is absent or selects http/1.1.
                 let mut socket = tokio::io::BufReader::new(socket);
                 let http2 = socket
                     .fill_buf()
@@ -118,7 +152,7 @@ async fn check_providers(proxy: bool, bypass: bool, trusted: bool) {
                     let mut connection = h2::server::handshake(socket).await.unwrap();
                     while let Some(request) = connection.accept().await {
                         let (request, mut response) = request.unwrap();
-                        record_receipt(request.headers(), request.uri().path(), &receipts);
+                        record_receipt(request.headers(), request.uri().path(), true, &receipts);
                         let response_headers = http::Response::builder()
                             .status(400)
                             .header("content-type", "application/json")
@@ -146,7 +180,7 @@ async fn check_providers(proxy: bool, bypass: bool, trusted: bool) {
                             http::HeaderValue::from_str(value.trim()).unwrap(),
                         );
                     }
-                    record_receipt(&headers, request.lines().next().unwrap(), &receipts);
+                    record_receipt(&headers, request.lines().next().unwrap(), false, &receipts);
                     if headers.contains_key("upgrade") {
                         use futures::SinkExt as _;
                         use tokio_tungstenite::tungstenite::{
@@ -273,8 +307,15 @@ async fn check_providers(proxy: bool, bypass: bool, trusted: bool) {
 fn record_receipt(
     headers: &http::HeaderMap,
     path: &str,
+    http2: bool,
     receipts: &Mutex<BTreeSet<(usize, bool)>>,
 ) {
+    if path.contains("/agent.v1.AgentService/Run") {
+        assert!(
+            http2,
+            "Cursor runs must use HTTP/2 even if ALPN selects HTTP/1.1"
+        );
+    }
     let case = headers
         .get("x-kiss-proxy-case")
         .and_then(|value| value.to_str().ok())

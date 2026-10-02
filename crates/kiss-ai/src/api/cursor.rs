@@ -325,20 +325,25 @@ fn end_thinking(builder: &mut PartialBuilder, index: &mut Option<usize>) {
     }
 }
 
-fn cursor_client_builder() -> reqwest::ClientBuilder {
-    crate::stream::ensure_tls_crypto_provider();
-    reqwest::Client::builder()
-        // Corporate TLS proxies can omit ALPN. The agent host still accepts HTTP/2.
-        .http2_prior_knowledge()
-        .connect_timeout(Duration::from_secs(30))
-        .pool_idle_timeout(Duration::from_secs(90))
-}
-
 fn cursor_request(url: &str, token: &str, streaming: bool) -> reqwest::RequestBuilder {
     let client = if streaming {
         static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
         CLIENT.get_or_init(|| {
-            cursor_client_builder()
+            crate::stream::ensure_tls_crypto_provider();
+            let mut roots = rustls::RootCertStore::empty();
+            roots.add_parsable_certificates(rustls_native_certs::load_native_certs().certs);
+            let mut tls = rustls::ClientConfig::builder()
+                .with_root_certificates(roots)
+                .with_no_client_auth();
+            // Some corporate proxies accept only http/1.1 in ALPN, or strip
+            // ALPN entirely. Match the Node bridge handshake, then still send
+            // HTTP/2 prior knowledge for Cursor's bidirectional Run RPC.
+            tls.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+            reqwest::Client::builder()
+                .use_preconfigured_tls(tls)
+                .http2_prior_knowledge()
+                .connect_timeout(Duration::from_secs(30))
+                .pool_idle_timeout(Duration::from_secs(90))
                 .build()
                 .expect("Cursor HTTP/2 client")
         })
@@ -1035,79 +1040,6 @@ mod tests {
         builder.end_text(index);
         builder.finish(StopReason::Stop, &model());
         assert_eq!(output.result().await.text(), "continued");
-    }
-
-    #[tokio::test]
-    async fn run_uses_http2_through_tls_proxy_without_alpn() {
-        use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
-
-        let certificate =
-            rcgen::generate_simple_self_signed(vec!["cursor-proxy.test".into()]).unwrap();
-        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
-            .await
-            .unwrap();
-        let client = cursor_client_builder()
-            .proxy(
-                reqwest::Proxy::https(format!("http://{}", listener.local_addr().unwrap()))
-                    .unwrap(),
-            )
-            .add_root_certificate(reqwest::Certificate::from_der(certificate.cert.der()).unwrap())
-            .build()
-            .unwrap();
-        let config = rustls::ServerConfig::builder()
-            .with_no_client_auth()
-            .with_single_cert(
-                vec![certificate.cert.der().clone()],
-                rustls::pki_types::PrivatePkcs8KeyDer::from(
-                    certificate.signing_key.serialize_der(),
-                )
-                .into(),
-            )
-            .unwrap();
-        let server = tokio::spawn(async move {
-            let (mut socket, _) = listener.accept().await.unwrap();
-            let mut connect = Vec::new();
-            while !connect.ends_with(b"\r\n\r\n") {
-                connect.push(socket.read_u8().await.unwrap());
-                assert!(connect.len() < 4096);
-            }
-            assert!(connect.starts_with(b"CONNECT cursor-proxy.test:443 HTTP/1.1\r\n"));
-            socket
-                .write_all(b"HTTP/1.1 200 Connection established\r\n\r\n")
-                .await
-                .unwrap();
-            let socket = tokio_rustls::TlsAcceptor::from(std::sync::Arc::new(config))
-                .accept(socket)
-                .await
-                .unwrap();
-            assert_eq!(socket.get_ref().1.alpn_protocol(), None);
-            let mut connection = h2::server::handshake(socket).await.unwrap();
-            while let Some(request) = connection.accept().await {
-                let (request, mut response) = request.unwrap();
-                assert_eq!(request.version(), http::Version::HTTP_2);
-                response
-                    .send_response(http::Response::new(()), true)
-                    .unwrap();
-            }
-        });
-        let (sender, receiver) = mpsc::unbounded_channel();
-        sender.send(Ok::<_, io::Error>(vec![0; 5])).unwrap();
-        let body =
-            reqwest::Body::wrap_stream(stream::unfold(receiver, |mut receiver| async move {
-                receiver.recv().await.map(|item| (item, receiver))
-            }));
-        let response = client
-            .post("https://cursor-proxy.test/run")
-            .version(http::Version::HTTP_2)
-            .body(body)
-            .timeout(Duration::from_secs(5))
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(response.version(), http::Version::HTTP_2);
-        assert_eq!(response.status(), http::StatusCode::OK);
-        drop(sender);
-        server.abort();
     }
 
     #[tokio::test]
