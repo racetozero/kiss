@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Fixed
+
+- Accept keyboard repeat events so held arrow keys move through TUI menus
+  and model pickers in terminals that use the Kitty keyboard protocol.
+
 ## 0.0.29 - 2026-10-03
 
 ### Added

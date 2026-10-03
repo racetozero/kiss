@@ -306,9 +306,6 @@ impl InputDecoder {
             .as_ref()
             .and_then(|parts| parts.get(1))
             .and_then(|event_type| event_type.parse::<u8>().ok());
-        if event_type == Some(2) {
-            return Some((None, consumed)); // keyboard auto-repeat
-        }
         if let Some(m) = modifier_parts
             .as_ref()
             .and_then(|parts| parts.first())
@@ -369,6 +366,10 @@ impl InputDecoder {
             }
             _ => return Some((None, consumed)),
         };
+        // Repeated Space must not toggle voice recording.
+        if event_type == Some(2) && event.key == Key::Char(' ') {
+            return Some((None, consumed));
+        }
         let input = if event_type == Some(3) {
             InputEvent::KeyRelease(event)
         } else {
@@ -538,7 +539,28 @@ mod tests {
     }
 
     #[test]
-    fn kitty_protocol_reports_release_and_ignores_repeat() {
+    fn kitty_protocol_reports_release_and_repeats_except_voice_space() {
+        assert_eq!(
+            decode(b"\x1b[1;1:1B\x1b[1;1:2B\x1b[1;1:2B\x1b[1;1:3B"),
+            vec![
+                InputEvent::Key(KeyEvent::parse("down").unwrap()),
+                InputEvent::Key(KeyEvent::parse("down").unwrap()),
+                InputEvent::Key(KeyEvent::parse("down").unwrap()),
+                InputEvent::KeyRelease(KeyEvent::parse("down").unwrap()),
+            ]
+        );
+        for (bytes, spec) in [
+            (b"\x1b[1;1:2A".as_slice(), "up"),
+            (b"\x1b[1;1:2C".as_slice(), "right"),
+            (b"\x1b[1;1:2D".as_slice(), "left"),
+            (b"\x1b[1;5:2A".as_slice(), "ctrl+up"),
+            (b"\x1b[97;1:2u".as_slice(), "a"),
+        ] {
+            assert_eq!(
+                decode(bytes),
+                vec![InputEvent::Key(KeyEvent::parse(spec).unwrap())]
+            );
+        }
         assert_eq!(
             decode(b"\x1b[32;1:3u"),
             vec![InputEvent::KeyRelease(KeyEvent::char(' '))]
