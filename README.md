@@ -20,8 +20,6 @@ Why? Because I am stupid :)
 
 ## Why KISS
 
-- **Private by design.** The KISS harness runs locally and collects no
-  telemetry.
 - **Start quickly.** The native terminal interface reaches its first warm frame
   in about 5 ms.
 - **Keep your work.** Resume, branch, compact, import, and export persistent
@@ -34,6 +32,8 @@ Why? Because I am stupid :)
   servers.
 - **Build on it.** Embed KISS through Rust, Python, TypeScript, WebAssembly,
   JSONL RPC, or WebSocket RPC.
+- **Private by design.** The KISS harness runs locally and collects no
+  telemetry.
 
 KISS uses four focused tools by default: `read`, `write`, `edit`, and `bash`.
 Catppuccin Mocha is the default dark theme.
