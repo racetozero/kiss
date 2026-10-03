@@ -255,28 +255,24 @@ impl Registry {
         }
     }
 
-    /// Load Cursor's authenticated account model catalog when Cursor is the
-    /// selected provider. The embedded fallback remains available if this
-    /// request fails.
-    pub async fn refresh_cursor(&mut self) {
-        let Ok(Some(access_token)) =
-            crate::auth::resolve_api_key_async("cursor", &self.declared_keys).await
+    /// Load Cursor's authenticated account model catalog. Keep the current
+    /// catalog if discovery fails, and let the caller report the error.
+    pub async fn refresh_cursor(&mut self) -> Result<()> {
+        let Some(access_token) =
+            crate::auth::resolve_api_key_async("cursor", &self.declared_keys).await?
         else {
-            return;
+            return Ok(());
         };
-        match crate::api::cursor::discover_models(&access_token).await {
-            Ok(models) => {
-                let model_ids = models
-                    .iter()
-                    .map(|model| model.id.clone())
-                    .collect::<Vec<_>>();
-                self.retain_provider_models("cursor", &model_ids);
-                for model in models {
-                    self.upsert(model);
-                }
-            }
-            Err(error) => eprintln!("warning: could not refresh Cursor models: {error:#}"),
+        let models = crate::api::cursor::discover_models(&access_token).await?;
+        let model_ids = models
+            .iter()
+            .map(|model| model.id.clone())
+            .collect::<Vec<_>>();
+        self.retain_provider_models("cursor", &model_ids);
+        for model in models {
+            self.upsert(model);
         }
+        Ok(())
     }
 
     /// Load all built-in model services visible in a Databricks workspace.

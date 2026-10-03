@@ -10,6 +10,11 @@
 
 ### Fixed
 
+- Refresh Cursor's account model list when the TUI opens the model picker or
+  selects a Cursor model, including after login in the same session. Use the
+  discovered model entry for selection instead of the startup fallback list,
+  and show discovery errors in the TUI. Reuse a successful discovery for the
+  active session; clear the cache on Cursor login or logout.
 - Replace the Cursor fallback roster after account model discovery so stale
   built-in names cannot override the account's actual model IDs. Preserve
   Cursor's declared `auto` alias.

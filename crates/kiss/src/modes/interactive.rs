@@ -81,6 +81,7 @@ struct App {
     terminal_title_dirty: bool,
     title_generation_pending: bool,
     picker: Option<Picker>,
+    model_catalog: Option<Arc<kiss_ai::Registry>>,
     command_menu: Option<CommandCompletion>,
     file_menu: Option<FileCompletion>,
     file_search_request: Option<u64>,
@@ -144,7 +145,7 @@ struct BtwPanel {
 }
 
 enum PickerKind {
-    Model,
+    Model(Vec<kiss_ai::Model>),
     Thinking,
     ScopedModels,
     Session(Vec<SessionRecord>, bool),
@@ -303,6 +304,10 @@ enum CommandEvent {
         url: String,
         code: String,
         opened: bool,
+    },
+    ModelCatalog {
+        result: std::result::Result<Arc<kiss_ai::Registry>, String>,
+        pattern: Option<String>,
     },
     LlamaModels(std::result::Result<Vec<LlamaModel>, String>),
     LlamaActionFinished(std::result::Result<String, String>),
@@ -1316,6 +1321,7 @@ pub async fn run(args: &Args) -> Result<i32> {
         terminal_title_dirty: true,
         title_generation_pending: false,
         picker: None,
+        model_catalog: None,
         command_menu: None,
         file_menu: None,
         file_search_request: None,
@@ -1802,6 +1808,9 @@ fn handle_command_event(
             app.command_cancel = None;
             match result {
                 Ok(()) => {
+                    if provider == "cursor" {
+                        app.model_catalog = None;
+                    }
                     if provider == "github-copilot"
                         && let Some(ids) = kiss_ai::auth::stored_oauth_model_ids(&provider)
                     {
@@ -1828,6 +1837,31 @@ fn handle_command_event(
                 "{} {url} and enter code {code}",
                 if opened { "Use" } else { "Open" }
             )));
+        }
+        CommandEvent::ModelCatalog { result, pattern } => {
+            app.command_status = None;
+            app.command_cancel = None;
+            match result {
+                Ok(registry) => {
+                    if let Some((model, thinking)) = pattern
+                        .as_deref()
+                        .filter(|pattern| *pattern != "cursor")
+                        .and_then(|pattern| {
+                            registry.resolve(pattern, Some(&session.model().provider))
+                        })
+                    {
+                        session.set_model(model);
+                        if let Some(thinking) = thinking {
+                            session.set_thinking_level(thinking);
+                            update_thinking_border(app, thinking);
+                        }
+                    } else {
+                        open_model_picker_with_filter(app, &registry, pattern.as_deref());
+                    }
+                    app.model_catalog = Some(registry);
+                }
+                Err(error) => app.cells.push(Cell::Error(error)),
+            }
         }
         CommandEvent::LlamaModels(result) => {
             app.command_status = None;
@@ -2983,7 +3017,7 @@ fn handle_input(
                 return Flow::Continue;
             }
             Some(Action::SelectModel) => {
-                open_model_picker(app, session);
+                open_model_picker(app, session, None, command_tx);
                 return Flow::Continue;
             }
             Some(Action::CycleThinking) => {
@@ -3215,9 +3249,14 @@ fn handle_secret_prompt(
                     match prompt.kind {
                         SecretPromptKind::ApiKey(provider) => {
                             match kiss_ai::auth::store_api_key(&provider, key) {
-                                Ok(()) => app
-                                    .cells
-                                    .push(Cell::Notice(format!("saved API key for {provider}"))),
+                                Ok(()) => {
+                                    if provider == "cursor" {
+                                        app.model_catalog = None;
+                                    }
+                                    app.cells.push(Cell::Notice(format!(
+                                        "saved API key for {provider}"
+                                    )));
+                                }
                                 Err(error) => app.cells.push(Cell::Error(format!(
                                     "could not save API key: {error:#}"
                                 ))),
@@ -3926,8 +3965,38 @@ fn start_tree_navigation(
     });
 }
 
-fn open_model_picker(app: &mut App, session: &Arc<kiss_coding::AgentSession>) {
-    open_model_picker_with_filter(app, session, None);
+fn open_model_picker(
+    app: &mut App,
+    session: &Arc<kiss_coding::AgentSession>,
+    pattern: Option<&str>,
+    command_tx: &mpsc::UnboundedSender<CommandEvent>,
+) {
+    let pattern = pattern.map(str::to_owned);
+    if let Some(registry) = &app.model_catalog {
+        let _ = command_tx.send(CommandEvent::ModelCatalog {
+            result: Ok(Arc::clone(registry)),
+            pattern,
+        });
+        return;
+    }
+    let mut registry = (*session.registry).clone();
+    let cancel = CancellationToken::new();
+    app.command_cancel = Some(cancel.clone());
+    app.command_status = Some("reading account models".into());
+    let tx = command_tx.clone();
+    tokio::spawn(async move {
+        let result = tokio::select! {
+            result = tokio::time::timeout(Duration::from_secs(30), registry.refresh_cursor()) => {
+                match result {
+                    Ok(Ok(())) => Ok(Arc::new(registry)),
+                    Ok(Err(error)) => Err(format!("Cursor model discovery failed: {error:#}. Check your connection or use /login cursor, then run /model again")),
+                    Err(_) => Err("Cursor model discovery timed out. Check your connection, then run /model again".into()),
+                }
+            }
+            _ = cancel.cancelled() => return,
+        };
+        let _ = tx.send(CommandEvent::ModelCatalog { result, pattern });
+    });
 }
 
 fn save_default_hint(keybindings: &Keybindings) -> String {
@@ -3939,15 +4008,19 @@ fn save_default_hint(keybindings: &Keybindings) -> String {
 
 fn open_model_picker_with_filter(
     app: &mut App,
-    session: &Arc<kiss_coding::AgentSession>,
+    registry: &kiss_ai::Registry,
     filter: Option<&str>,
 ) {
     let copilot_models = kiss_ai::auth::stored_oauth_model_ids("github-copilot");
-    let items: Vec<SelectItem> = session
-        .registry
+    let models: Vec<kiss_ai::Model> = registry
         .available_models()
         .into_iter()
         .filter(|(_, model)| account_allows_model(model, copilot_models.as_deref()))
+        .map(|(_, model)| model.clone())
+        .collect();
+    let items: Vec<SelectItem> = models
+        .iter()
+        .enumerate()
         .map(|(value, model)| SelectItem {
             label: format!("{}/{}", model.provider, model.id),
             detail: Some(model.display_name().to_string()),
@@ -3967,7 +4040,7 @@ fn open_model_picker_with_filter(
         list.set_filter(filter.to_string());
     }
     app.picker = Some(Picker {
-        kind: PickerKind::Model,
+        kind: PickerKind::Model(models),
         list,
     });
 }
@@ -5661,7 +5734,7 @@ fn handle_picker_key(
         && key.key == Key::Char(' ')
         && !key.ctrl
         && !key.alt;
-    let saves_default = matches!(&picker.kind, PickerKind::Model | PickerKind::Thinking)
+    let saves_default = matches!(&picker.kind, PickerKind::Model(_) | PickerKind::Thinking)
         && matches!(app.keybindings.action_for(key), Some(Action::SaveDefault));
     if key.key == Key::Enter || activates_settings || saves_default {
         let mut picker = app.picker.take().expect("picker is present");
@@ -5718,8 +5791,8 @@ fn apply_picker_selection(
         filter,
     } = selection;
     match kind {
-        PickerKind::Model => {
-            if let Some(model) = session.registry.all().get(value) {
+        PickerKind::Model(models) => {
+            if let Some(model) = models.get(value) {
                 session.set_model(model.clone());
                 if save_default {
                     resources.settings.default_provider = Some(model.provider.clone());
@@ -5864,6 +5937,9 @@ fn apply_picker_selection(
         }
         PickerKind::Logout(providers) => {
             if let Some(provider) = providers.get(value) {
+                if provider == "cursor" {
+                    app.model_catalog = None;
+                }
                 match kiss_ai::auth::remove_api_key(provider) {
                     Ok(true) => app.cells.push(Cell::Notice(format!(
                         "removed stored credentials for {provider}"
@@ -6759,8 +6835,17 @@ fn run_slash_command(
             ));
         }
         "model" => {
-            if rest.is_empty() {
-                open_model_picker(app, session);
+            if rest.is_empty()
+                || rest == "cursor"
+                || rest.starts_with("cursor/")
+                || (session.model().provider == "cursor" && !rest.contains('/'))
+            {
+                open_model_picker(
+                    app,
+                    session,
+                    (!rest.is_empty()).then_some(rest.as_str()),
+                    command_tx,
+                );
             } else if let Some((model, thinking)) = session.registry.resolve(&rest, None) {
                 let copilot_models = kiss_ai::auth::stored_oauth_model_ids("github-copilot");
                 if account_allows_model(&model, copilot_models.as_deref()) {
@@ -6775,7 +6860,7 @@ fn run_slash_command(
                     )));
                 }
             } else {
-                open_model_picker_with_filter(app, session, Some(&rest));
+                open_model_picker_with_filter(app, &session.registry, Some(&rest));
             }
         }
         "thinking" => {
@@ -7076,6 +7161,9 @@ fn run_slash_command(
             if rest.is_empty() {
                 open_logout_picker(app);
             } else {
+                if rest == "cursor" {
+                    app.model_catalog = None;
+                }
                 match kiss_ai::auth::remove_api_key(&rest) {
                     Ok(true) => app.cells.push(Cell::Notice(format!(
                         "removed stored credentials for {rest}"
@@ -7681,6 +7769,7 @@ mod tests {
             terminal_title_dirty: false,
             title_generation_pending: false,
             picker: None,
+            model_catalog: None,
             command_menu: None,
             file_menu: None,
             file_search_request: None,
@@ -8327,13 +8416,117 @@ mod tests {
 
         run_command_for_test(&mut app, &session, &mut resources, "model missing-model");
         let picker = app.picker.as_ref().expect("filtered model picker");
-        assert!(matches!(picker.kind, PickerKind::Model));
+        assert!(matches!(picker.kind, PickerKind::Model(_)));
         assert_eq!(picker.list.filter, "missing-model");
 
         run_command_for_test(&mut app, &session, &mut resources, "login missing-provider");
         let picker = app.picker.as_ref().expect("filtered login picker");
         assert!(matches!(picker.kind, PickerKind::LoginProviders(_)));
         assert_eq!(picker.list.filter, "missing-provider");
+    }
+
+    #[tokio::test]
+    async fn refreshed_model_picker_selects_account_model_instead_of_startup_catalog() {
+        let directory = tempfile::tempdir().unwrap();
+        let catalog = directory.path().join("models.json");
+        std::fs::write(
+            &catalog,
+            r#"{"providers":{"cursor":{"baseUrl":"http://localhost","api":"cursor-agent","models":[{"id":"gpt-5.5-high"},{"id":"cursor-grok-4.7-high"}]}}}"#,
+        ).unwrap();
+        let registry = kiss_ai::Registry::load(Some(&catalog));
+        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
+            "/synthetic",
+        )));
+        let (file_tx, _file_rx) = mpsc::unbounded_channel();
+        let mut file_search = FileSearchService::new(file_tx);
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let initial_model = session.model();
+        for pattern in [None, Some("cursor/gpt-5.5-high")] {
+            session.set_model(initial_model.clone());
+            let mut app = test_app();
+            let mut resources = test_resources();
+            handle_command_event(
+                &mut app,
+                CommandEvent::ModelCatalog {
+                    result: Ok(Arc::new(registry.clone())),
+                    pattern: pattern.map(str::to_owned),
+                },
+                &mut resources,
+                &mut file_search,
+                &session,
+            );
+            if pattern.is_none() {
+                let picker = app.picker.take().unwrap();
+                let PickerKind::Model(models) = &picker.kind else {
+                    panic!("model picker")
+                };
+                assert!(
+                    models
+                        .iter()
+                        .any(|model| model.id == "cursor-grok-4.7-high")
+                );
+                let value = models
+                    .iter()
+                    .position(|model| model.id == "gpt-5.5-high")
+                    .unwrap();
+                apply_picker_selection(
+                    &mut app,
+                    &session,
+                    PickerSelection {
+                        kind: picker.kind,
+                        value,
+                        filter: String::new(),
+                    },
+                    false,
+                    &mut resources,
+                    &tx,
+                );
+            }
+            assert_eq!(session.model().provider, "cursor");
+            assert_eq!(session.model().id, "gpt-5.5-high");
+            for _ in 0..3 {
+                open_model_picker(&mut app, &session, Some("cursor"), &tx);
+                let event = rx
+                    .try_recv()
+                    .expect("cached model list must be ready without waiting for discovery");
+                handle_command_event(&mut app, event, &mut resources, &mut file_search, &session);
+                assert!(app.command_status.is_none());
+                let picker = app.picker.as_ref().unwrap();
+                let PickerKind::Model(models) = &picker.kind else {
+                    panic!("model picker")
+                };
+                assert!(models.iter().any(|model| model.id == "gpt-5.5-high"));
+                assert_eq!(picker.list.filter, "cursor");
+            }
+            handle_command_event(
+                &mut app,
+                CommandEvent::BrowserLoginFinished {
+                    provider: "cursor".into(),
+                    result: Ok(()),
+                },
+                &mut resources,
+                &mut file_search,
+                &session,
+            );
+            assert!(
+                app.model_catalog.is_none(),
+                "a new login must clear the previous account's list"
+            );
+            handle_command_event(
+                &mut app,
+                CommandEvent::ModelCatalog {
+                    result: Err("discovery failed".into()),
+                    pattern: None,
+                },
+                &mut resources,
+                &mut file_search,
+                &session,
+            );
+            assert!(
+                app.model_catalog.is_none(),
+                "failed discovery must remain eligible for retry"
+            );
+        }
     }
 
     #[test]

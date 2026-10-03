@@ -314,8 +314,8 @@ pub async fn build_startup(
             .as_deref()
             .is_some_and(|model| model.starts_with("cursor/"))
         || settings.default_provider.as_deref() == Some("cursor");
-    if cursor_selected {
-        registry.refresh_cursor().await;
+    if cursor_selected && let Err(error) = registry.refresh_cursor().await {
+        eprintln!("warning: could not refresh Cursor models: {error:#}");
     }
     let databricks_selected = args.provider.as_deref() == Some("databricks-unity-gateway")
         || args
