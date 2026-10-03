@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.0.29 - 2026-10-03
+
 ### Added
 
 - Test Cursor through TLS interception proxies with automatic and forced H2,
