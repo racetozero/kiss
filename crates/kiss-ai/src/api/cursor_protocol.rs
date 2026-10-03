@@ -97,6 +97,8 @@ pub struct AgentRunRequest {
     pub conversation_state: Option<ConversationStateStructure>,
     #[prost(message, optional, tag = "2")]
     pub action: Option<ConversationAction>,
+    #[prost(message, optional, tag = "3")]
+    pub model_details: Option<ModelDetails>,
     #[prost(message, optional, tag = "4")]
     pub mcp_tools: Option<McpTools>,
     #[prost(string, optional, tag = "5")]
@@ -310,7 +312,7 @@ pub struct ExecServerMessage {
     pub id: u32,
     #[prost(string, tag = "15")]
     pub exec_id: String,
-    #[prost(oneof = "exec_server_message::Message", tags = "11")]
+    #[prost(oneof = "exec_server_message::Message", tags = "10, 11")]
     pub message: Option<exec_server_message::Message>,
 }
 
@@ -319,6 +321,8 @@ pub mod exec_server_message {
 
     #[derive(Clone, PartialEq, Oneof)]
     pub enum Message {
+        #[prost(message, tag = "10")]
+        RequestContextArgs(RequestContextArgs),
         #[prost(message, tag = "11")]
         McpArgs(McpArgs),
     }
@@ -344,7 +348,7 @@ pub struct ExecClientMessage {
     pub id: u32,
     #[prost(string, tag = "15")]
     pub exec_id: String,
-    #[prost(oneof = "exec_client_message::Message", tags = "11")]
+    #[prost(oneof = "exec_client_message::Message", tags = "10, 11")]
     pub message: Option<exec_client_message::Message>,
 }
 
@@ -353,10 +357,56 @@ pub mod exec_client_message {
 
     #[derive(Clone, PartialEq, Oneof)]
     pub enum Message {
+        #[prost(message, tag = "10")]
+        RequestContextResult(RequestContextResult),
         #[prost(message, tag = "11")]
         McpResult(McpResult),
     }
 }
+
+#[derive(Clone, PartialEq, Message)]
+pub struct RequestContextArgs {}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct RequestContextResult {
+    #[prost(message, optional, tag = "1")]
+    pub success: Option<RequestContextSuccess>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct RequestContextSuccess {
+    #[prost(message, optional, tag = "1")]
+    pub request_context: Option<RequestContext>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct RequestContext {
+    #[prost(message, repeated, tag = "2")]
+    pub rules: Vec<CursorRule>,
+    #[prost(message, repeated, tag = "7")]
+    pub tools: Vec<McpToolDefinition>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct CursorRule {
+    #[prost(string, tag = "1")]
+    pub full_path: String,
+    #[prost(string, tag = "2")]
+    pub content: String,
+    #[prost(message, optional, tag = "3")]
+    pub rule_type: Option<CursorRuleType>,
+    #[prost(int32, tag = "4")]
+    pub source: i32,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct CursorRuleType {
+    #[prost(message, optional, tag = "1")]
+    pub global: Option<CursorRuleTypeGlobal>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct CursorRuleTypeGlobal {}
 
 #[derive(Clone, PartialEq, Message)]
 pub struct McpResult {
@@ -525,6 +575,12 @@ pub struct GetUsableModelsResponse {
 }
 
 #[derive(Clone, PartialEq, Message)]
+pub struct GetDefaultModelForCliResponse {
+    #[prost(message, optional, tag = "1")]
+    pub model: Option<ModelDetails>,
+}
+
+#[derive(Clone, PartialEq, Message)]
 pub struct ModelDetails {
     #[prost(string, tag = "1")]
     pub model_id: String,
@@ -534,8 +590,12 @@ pub struct ModelDetails {
     pub display_name: String,
     #[prost(string, tag = "5")]
     pub display_name_short: String,
+    #[prost(string, repeated, tag = "6")]
+    pub aliases: Vec<String>,
     #[prost(message, optional, tag = "2")]
     pub thinking_details: Option<ThinkingDetails>,
+    #[prost(bool, optional, tag = "7")]
+    pub max_mode: Option<bool>,
 }
 
 #[derive(Clone, Copy, PartialEq, Message)]

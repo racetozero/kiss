@@ -346,6 +346,13 @@ You can set `CURSOR_ACCESS_TOKEN` instead of saving a login.
 
 When you select Cursor, KISS refreshes the model list for your account. It uses
 the built-in list if model discovery is not available.
+`cursor/auto` resolves to the account's current default model before KISS
+sends input. It does not send `auto` as a backend model name. KISS sends its
+tools and system instructions through Cursor's request-context handshake.
+Cursor also supplies its own agent prompt and native tool list. Those tools
+can appear in model answers, but KISS only executes its registered tools.
+KISS instructions are sent as Cursor rules, not as a replacement for the
+Cursor system prompt.
 
 KISS selects the Cursor transport before it sends your prompt. By default,
 normal TLS ALPN negotiation selects HTTP/2 `Run` when H2 is available.

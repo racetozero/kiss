@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### Added
+
+- Test Cursor through TLS interception proxies with automatic and forced H2,
+  forced H1 with and without ALPN, and forced H2 rejection without ALPN
+  before sending input.
+
+### Fixed
+
+- Replace the Cursor fallback roster after account model discovery so stale
+  built-in names cannot override the account's actual model IDs. Preserve
+  Cursor's declared `auto` alias.
+- Resolve `cursor/auto` through Cursor's account-default model API before
+  sending input, and send both model selection fields required by Cursor.
+- Answer Cursor's request-context handshake with KISS tools and system
+  instructions instead of rejecting it as an unsupported native tool.
+- Stop retrying permanent model and protocol errors merely because the
+  message contains `request failed`. Respect Cursor's `isRetryable: false`.
+
 ## 0.0.28 - 2026-10-02
 
 ### Fixed

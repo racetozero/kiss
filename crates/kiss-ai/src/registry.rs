@@ -266,6 +266,11 @@ impl Registry {
         };
         match crate::api::cursor::discover_models(&access_token).await {
             Ok(models) => {
+                let model_ids = models
+                    .iter()
+                    .map(|model| model.id.clone())
+                    .collect::<Vec<_>>();
+                self.retain_provider_models("cursor", &model_ids);
                 for model in models {
                     self.upsert(model);
                 }

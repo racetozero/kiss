@@ -2015,6 +2015,30 @@ fn cache_refresh_deadline_missed(
 
 fn is_transient(error: &str) -> bool {
     let e = error.to_lowercase();
+    if let Some(value) = error
+        .find('{')
+        .and_then(|start| serde_json::from_str::<serde_json::Value>(&error[start..]).ok())
+    {
+        let detail = value.get("error").unwrap_or(&value);
+        if detail
+            .get("isRetryable")
+            .and_then(serde_json::Value::as_bool)
+            == Some(false)
+            || detail
+                .get("details")
+                .and_then(serde_json::Value::as_array)
+                .is_some_and(|details| {
+                    details.iter().any(|detail| {
+                        detail
+                            .pointer("/debug/details/isRetryable")
+                            .and_then(serde_json::Value::as_bool)
+                            == Some(false)
+                    })
+                })
+        {
+            return false;
+        }
+    }
     if e.contains("subscription_sharing_usage_limit_exceeded") {
         return false;
     }
@@ -2043,7 +2067,6 @@ fn is_transient(error: &str) -> bool {
             "failed to connect",
             "network error",
             "stream error",
-            "request failed",
             "subscription_sharing_usage_unavailable",
             "subscription_sharing_user_unavailable",
         ]
@@ -2368,6 +2391,15 @@ mod ephemeral_tests {
         ));
         assert!(is_transient("subscription_sharing_usage_unavailable"));
         assert!(is_transient("subscription_sharing_user_unavailable"));
+        assert!(!is_transient(
+            r#"Cursor request failed: stream ended: {"error":{"code":"not_found","message":"Model name is not valid: auto"}}"#
+        ));
+        assert!(!is_transient(
+            r#"Cursor request failed: stream ended: {"error":{"code":"internal","message":"KISS does not run Cursor-native tools"}}"#
+        ));
+        assert!(!is_transient(
+            r#"Cursor request failed: stream ended: {"error":{"details":[{"debug":{"details":{"isRetryable":false,"detail":"rate limit exceeded"}}}]}}"#
+        ));
     }
 
     #[test]

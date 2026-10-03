@@ -26,6 +26,7 @@ const DEFAULT_CLIENT_VERSION: &str = "cli-2026.10.01-e373342";
 const RUN_PATH: &str = "/agent.v1.AgentService/Run";
 const RUN_SSE_PATH: &str = "/agent.v1.AgentService/RunSSE";
 const APPEND_PATH: &str = "/aiserver.v1.BidiService/BidiAppend";
+const DEFAULT_MODEL_PATH: &str = "/agent.v1.AgentService/GetDefaultModelForCli";
 const MODELS_PATH: &str = "/agent.v1.AgentService/GetUsableModels";
 const RESUME_TIMEOUT: Duration = Duration::from_secs(60 * 60);
 
@@ -180,7 +181,6 @@ async fn run(
     sink: EventSink,
     token: &str,
 ) -> Result<()> {
-    let built = build_request(model, context, initial_options)?;
     let response_id = format!("cursor:{}", Uuid::new_v4());
     let resume_key = initial_options
         .session_id
@@ -191,6 +191,30 @@ async fn run(
         transport = select_transport(&base_url, token) => transport?,
         _ = initial_options.cancel.cancelled() => anyhow::bail!("request cancelled"),
     };
+    let mut request_model = model.clone();
+    let default_details = if model.id == "auto" {
+        let details = tokio::select! {
+            details = default_model(&base_url, token, transport) => details?,
+            _ = initial_options.cancel.cancelled() => anyhow::bail!("request cancelled"),
+        };
+        request_model.id = details.model_id.clone();
+        if !details.display_name.is_empty() {
+            request_model.name = details.display_name.clone();
+        }
+        Some(details)
+    } else {
+        None
+    };
+    let mut built = build_request(&request_model, context, initial_options)?;
+    if let Some(details) = default_details
+        && let Some(wire::agent_client_message::Message::RunRequest(request)) =
+            &mut built.message.message
+    {
+        if let Some(model) = &mut request.requested_model {
+            model.max_mode |= details.max_mode.unwrap_or(false);
+        }
+        request.model_details = Some(details);
+    }
     let (request_tx, mut request_rx) = mpsc::unbounded_channel();
     send(&request_tx, built.message)?;
     let (request, uploads) = if transport == CursorTransport::Http1 {
@@ -361,6 +385,29 @@ async fn run(
                     handle_kv(message, &mut blobs, &request_tx)?;
                 }
                 Some(wire::agent_server_message::Message::ExecServerMessage(exec)) => {
+                    if matches!(exec.message, Some(wire::exec_server_message::Message::RequestContextArgs(_))) {
+                        let rules = context.system_prompt.as_deref().filter(|prompt| !prompt.trim().is_empty()).map(|prompt| wire::CursorRule {
+                            full_path: "/kiss/system-prompt.mdc".into(),
+                            content: prompt.into(),
+                            rule_type: Some(wire::CursorRuleType { global: Some(wire::CursorRuleTypeGlobal {}) }),
+                            source: 2, // CursorRuleSource.USER
+                        }).into_iter().collect();
+                        send(&request_tx, wire::AgentClientMessage {
+                            message: Some(wire::agent_client_message::Message::ExecClientMessage(wire::ExecClientMessage {
+                                id: exec.id,
+                                exec_id: exec.exec_id,
+                                message: Some(wire::exec_client_message::Message::RequestContextResult(wire::RequestContextResult {
+                                    success: Some(wire::RequestContextSuccess {
+                                        request_context: Some(wire::RequestContext {
+                                            rules,
+                                            tools: context.tools.iter().map(mcp_tool).collect::<Result<Vec<_>>>()?,
+                                        }),
+                                    }),
+                                })),
+                            })),
+                        })?;
+                        continue;
+                    }
                     let Some(wire::exec_server_message::Message::McpArgs(args)) = exec.message
                     else {
                         send_exec_throw(
@@ -444,6 +491,35 @@ async fn run(
         );
     }
     Ok(())
+}
+
+async fn default_model(
+    base_url: &str,
+    token: &str,
+    transport: CursorTransport,
+) -> Result<wire::ModelDetails> {
+    let response = cursor_request(&format!("{base_url}{DEFAULT_MODEL_PATH}"), token, false, transport)
+        .body(Vec::new())
+        .timeout(Duration::from_secs(30))
+        .send()
+        .await
+        .context("Cursor default model lookup failed before sending input. Check your connection or choose a concrete Cursor model with /model")?;
+    let status = response.status();
+    let bytes = response
+        .bytes()
+        .await
+        .context("read Cursor default model response")?;
+    if !status.is_success() {
+        anyhow::bail!(
+            "Cursor default model lookup returned HTTP {status}: {}. Choose a concrete Cursor model with /model",
+            crate::truncate_err(&String::from_utf8_lossy(&bytes))
+        );
+    }
+    wire::GetDefaultModelForCliResponse::decode(bytes.as_ref())
+        .context("decode Cursor default model response")?
+        .model
+        .filter(|model| !model.model_id.trim().is_empty() && model.model_id != "auto")
+        .context("Cursor returned no valid default model for cursor/auto. Choose a concrete Cursor model with /model")
 }
 
 fn new_builder(model: &Model, sink: EventSink, response_id: &str) -> PartialBuilder {
@@ -768,6 +844,13 @@ fn build_request(
         }),
         mcp_tools: Some(wire::McpTools { mcp_tools: tools }),
         conversation_id: Some(Uuid::new_v4().to_string()),
+        model_details: Some(wire::ModelDetails {
+            model_id: model.id.clone(),
+            display_model_id: model.id.clone(),
+            display_name: model.name.clone(),
+            max_mode: matches!(options.reasoning, crate::ThinkingLevel::Max).then_some(true),
+            ..Default::default()
+        }),
         requested_model: Some(requested_model(model, options)),
         custom_system_prompt: None,
     };
@@ -998,7 +1081,11 @@ pub async fn discover_models(access_token: &str) -> Result<Vec<Model>> {
         .find(|value| !value.trim().is_empty())
         .unwrap_or_else(|| item.model_id.clone());
         models.push(Model {
-            id: item.model_id,
+            id: if item.aliases.iter().any(|alias| alias == "auto") {
+                "auto".into()
+            } else {
+                item.model_id
+            },
             name,
             api: API.into(),
             provider: PROVIDER.into(),
@@ -1226,16 +1313,101 @@ mod tests {
         data: Vec<u8>,
     }
 
+    #[derive(Clone, PartialEq, prost::Message)]
+    struct FixtureDefaultModel {
+        #[prost(message, optional, tag = "1")]
+        model: Option<FixtureModel>,
+    }
+
+    #[derive(Clone, PartialEq, prost::Message)]
+    struct FixtureModel {
+        #[prost(string, tag = "1")]
+        id: String,
+    }
+
+    #[derive(Clone, PartialEq, prost::Message)]
+    struct FixtureInitialRun {
+        #[prost(message, optional, tag = "1")]
+        run: Option<FixtureModelSelection>,
+    }
+
+    #[derive(Clone, PartialEq, prost::Message)]
+    struct FixtureModelSelection {
+        #[prost(message, optional, tag = "3")]
+        details: Option<FixtureModel>,
+        #[prost(message, optional, tag = "9")]
+        requested: Option<FixtureModel>,
+    }
+
+    #[derive(Clone, PartialEq, prost::Message)]
+    struct FixtureSetupReply {
+        #[prost(message, optional, tag = "2")]
+        exec: Option<FixtureSetupExec>,
+    }
+
+    #[derive(Clone, PartialEq, prost::Message)]
+    struct FixtureSetupExec {
+        #[prost(uint32, tag = "1")]
+        id: u32,
+        #[prost(string, tag = "15")]
+        exec_id: String,
+        #[prost(message, optional, tag = "10")]
+        result: Option<FixtureSetupResult>,
+    }
+
+    #[derive(Clone, PartialEq, prost::Message)]
+    struct FixtureSetupResult {
+        #[prost(message, optional, tag = "1")]
+        success: Option<FixtureSetupSuccess>,
+    }
+
+    #[derive(Clone, PartialEq, prost::Message)]
+    struct FixtureSetupSuccess {
+        #[prost(message, optional, tag = "1")]
+        context: Option<FixtureSetupContext>,
+    }
+
+    #[derive(Clone, PartialEq, prost::Message)]
+    struct FixtureSetupContext {
+        #[prost(message, repeated, tag = "2")]
+        rules: Vec<FixtureRule>,
+        #[prost(message, repeated, tag = "7")]
+        tools: Vec<wire::McpToolDefinition>,
+    }
+
+    #[derive(Clone, PartialEq, prost::Message)]
+    struct FixtureRule {
+        #[prost(string, tag = "2")]
+        content: String,
+        #[prost(message, optional, tag = "3")]
+        rule_type: Option<FixtureGlobalRule>,
+        #[prost(int32, tag = "4")]
+        source: i32,
+    }
+
+    #[derive(Clone, PartialEq, prost::Message)]
+    struct FixtureGlobalRule {
+        #[prost(bytes = "vec", optional, tag = "1")]
+        global: Option<Vec<u8>>,
+    }
+
     #[tokio::test]
     async fn http1_runs_preserve_tools_append_errors_and_cancellation() {
         use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
         use tokio::net::TcpListener;
         use tokio_util::task::AbortOnDropHandle;
 
-        for mode in ["tools", "append-error", "cancel"] {
+        for mode in [
+            "context-only",
+            "tools",
+            "append-error",
+            "cancel",
+            "missing-default",
+        ] {
             tokio::time::timeout(Duration::from_secs(5), async {
                 let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
                 let mut model = model();
+                if mode == "context-only" { model.id = "cursor-grok-4.5-high".into(); }
                 model.base_url = format!("http://{}", listener.local_addr().unwrap());
                 let (requests_tx, mut requests_rx) = mpsc::unbounded_channel();
                 let _listener = AbortOnDropHandle::new(tokio::spawn(async move {
@@ -1273,6 +1445,14 @@ mod tests {
                             socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").await.unwrap();
                             continue;
                         }
+                        if headers.starts_with("post /agent.v1.agentservice/getdefaultmodelforcli ") {
+                            assert!(body.is_empty());
+                            let body = FixtureDefaultModel { model: if mode == "missing-default" { None } else { Some(FixtureModel { id: "cursor-grok-4.5-high".into() }) } }.encode_to_vec();
+                            socket.write_all(format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len()).as_bytes()).await.unwrap();
+                            socket.write_all(&body).await.unwrap();
+                            continue;
+                        }
+                        assert!(mode != "missing-default", "do not submit input without a valid account default");
                         assert!(headers.contains("x-cursor-streaming: true"));
                         if headers.starts_with("post /agent.v1.agentservice/runsse ") {
                             assert!(run_socket.is_none(), "tool continuation opened another run");
@@ -1291,13 +1471,40 @@ mod tests {
                                 assert_eq!(append.request_id.as_ref(), Some(previous));
                             }
                             append_id = append.request_id;
+                            if let Some(reply) = FixtureSetupReply::decode(append.data.as_slice()).unwrap().exec
+                                && let Some(result) = reply.result
+                            {
+                                assert_eq!(reply.id, 8);
+                                assert_eq!(reply.exec_id, "context-8");
+                                let context = result.success.unwrap().context.unwrap();
+                                assert_eq!(context.tools[0].tool_name, "read");
+                                assert_eq!(context.rules[0].content, "Follow KISS instructions");
+                                assert_eq!(context.rules[0].source, 2);
+                                assert_eq!(context.rules[0].rule_type.as_ref().unwrap().global, Some(Vec::new()));
+                                socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").await.unwrap();
+                                let frame = wire::frame(&wire::AgentServerMessage {
+                                    message: Some(wire::agent_server_message::Message::ExecServerMessage(wire::ExecServerMessage {
+                                        id: 9, exec_id: "exec-9".into(), message: Some(wire::exec_server_message::Message::McpArgs(wire::McpArgs {
+                                            name: "read".into(), tool_call_id: "call-1".into(), ..Default::default()
+                                        })),
+                                    })),
+                                });
+                                let run = run_socket.as_mut().unwrap();
+                                run.write_all(format!("{:x}\r\n", frame.len()).as_bytes()).await.unwrap();
+                                run.write_all(&frame).await.unwrap();
+                                run.write_all(b"\r\n").await.unwrap();
+                                continue;
+                            }
                             let message = wire::AgentClientMessage::decode(append.data.as_slice()).unwrap();
                             let status = if mode == "append-error" { "400 Bad Request" } else { "200 OK" };
                             socket.write_all(format!("HTTP/1.1 {status}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").as_bytes()).await.unwrap();
                             match message.message.unwrap() {
                                 wire::agent_client_message::Message::RunRequest(run) => {
+                                    let selection = FixtureInitialRun::decode(append.data.as_slice()).unwrap().run.unwrap();
+                                    assert_eq!(selection.details.unwrap().id, "cursor-grok-4.5-high");
+                                    assert_eq!(selection.requested.unwrap().id, "cursor-grok-4.5-high");
                                     assert_eq!(seqno, 1);
-                                    assert_eq!(run.requested_model.unwrap().model_id, "auto");
+                                    assert_eq!(run.requested_model.unwrap().model_id, "cursor-grok-4.5-high");
                                     initial_seen = true;
                                 }
                                 wire::agent_client_message::Message::ClientHeartbeat(_) => {}
@@ -1329,18 +1536,11 @@ mod tests {
                         }
                         if initial_seen && !tool_sent && let Some(run) = run_socket.as_mut() {
                             assert_eq!(run_id, append_id);
-                            if mode == "tools" {
-                                let frame = wire::frame(&wire::AgentServerMessage {
-                                    message: Some(wire::agent_server_message::Message::ExecServerMessage(wire::ExecServerMessage {
-                                        id: 9,
-                                        exec_id: "exec-9".into(),
-                                        message: Some(wire::exec_server_message::Message::McpArgs(wire::McpArgs {
-                                            name: "read".into(),
-                                            tool_call_id: "call-1".into(),
-                                            ..Default::default()
-                                        })),
-                                    })),
-                                });
+                            if mode == "tools" || mode == "context-only" {
+                                // Upstream ExecServerMessage tag 10 is a context request,
+                                // not a model-requested native tool. id=8, execId=context-8.
+                                let payload = b"\x12\x0f\x08\x08\x7a\x09context-8\x52\x00";
+                                let frame = wire::frame_bytes(payload);
                                 run.write_all(format!("{:x}\r\n", frame.len()).as_bytes()).await.unwrap();
                                 run.write_all(&frame).await.unwrap();
                                 run.write_all(b"\r\n").await.unwrap();
@@ -1355,6 +1555,7 @@ mod tests {
                     ..Default::default()
                 };
                 let mut context = Context {
+                    system_prompt: Some("Follow KISS instructions".into()),
                     messages: vec![Message::User(UserMessage { content: UserContent::Text("hi".into()), timestamp: 0 })],
                     tools: vec![ToolDef { name: "read".into(), description: "Read a file".into(), parameters: serde_json::json!({"type":"object","properties":{}}) }],
                     ..Default::default()
@@ -1365,7 +1566,7 @@ mod tests {
                     options.cancel.cancel();
                 }
                 let result = output.result().await;
-                if mode == "tools" {
+                if mode == "tools" || mode == "context-only" {
                     assert_eq!(result.stop_reason, StopReason::ToolUse);
                     context.messages.push(Message::Assistant(result));
                     context.messages.push(Message::ToolResult(ToolResultMessage {
@@ -1378,6 +1579,9 @@ mod tests {
                 } else if mode == "append-error" {
                     assert_eq!(result.stop_reason, StopReason::Error);
                     assert!(result.error_message.unwrap().contains("BidiAppend"));
+                } else if mode == "missing-default" {
+                    assert_eq!(result.stop_reason, StopReason::Error);
+                    assert!(result.error_message.unwrap().contains("default model"));
                 } else {
                     assert_eq!(result.stop_reason, StopReason::Aborted);
                 }

@@ -47,6 +47,25 @@ async fn providers_use_tls_interception_proxy_with_http1_alpn() {
 }
 
 #[tokio::test]
+async fn cursor_uses_http1_through_tls_interception_proxy() {
+    for alpn in [None, Some(b"http/1.1".as_slice())] {
+        check_providers(true, false, true, alpn, "http1", false).await;
+    }
+}
+
+#[tokio::test]
+async fn cursor_uses_http2_through_tls_interception_proxy_with_h2_alpn() {
+    for mode in ["auto", "http2"] {
+        check_providers(true, false, true, Some(b"h2"), mode, false).await;
+    }
+}
+
+#[tokio::test]
+async fn cursor_forced_http2_without_proxy_alpn_rejects_before_input() {
+    check_providers(true, false, true, None, "http2", false).await;
+}
+
+#[tokio::test]
 async fn cursor_transport_overrides_and_no_retry_after_input() {
     for mode in ["http1", "http2", "invalid"] {
         check_providers(false, false, true, None, mode, false).await;
@@ -139,6 +158,9 @@ async fn check_providers(
         config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
     } else if let Some(protocol) = proxy_alpn {
         config.alpn_protocols = vec![protocol.to_vec()];
+        if protocol == b"h2" {
+            config.alpn_protocols.push(b"http/1.1".to_vec());
+        }
     }
     let acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(config));
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
@@ -147,7 +169,8 @@ async fn check_providers(
     let address = listener.local_addr().unwrap();
     let received = Arc::new(Mutex::new(BTreeMap::new()));
     let receipts = Arc::clone(&received);
-    let cursor_http2 = cursor_transport == "http2" || (cursor_transport == "auto" && !proxy);
+    let cursor_http2 = cursor_transport == "http2"
+        || (cursor_transport == "auto" && (!proxy || proxy_alpn == Some(b"h2")));
     let server = tokio::spawn(async move {
         loop {
             let (mut socket, _) = listener.accept().await.unwrap();
