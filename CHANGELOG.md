@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.0.30 - 2026-10-03
+
 ### Fixed
 
 - Accept keyboard repeat events so held arrow keys move through TUI menus
