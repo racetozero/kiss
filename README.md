@@ -20,6 +20,8 @@ Why? Because I am stupid :)
 
 ## Why KISS
 
+- **Private by design.** The KISS harness runs locally and collects no
+  telemetry.
 - **Start quickly.** The native terminal interface reaches its first warm frame
   in about 5 ms.
 - **Keep your work.** Resume, branch, compact, import, and export persistent
