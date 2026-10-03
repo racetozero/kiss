@@ -669,6 +669,20 @@ See the [SDK guide](docs/sdk.md), [RPC protocol](docs/rpc.md), and
 KISS benchmarks local work, not model or network latency. Results below are
 from a recorded full release benchmark run.
 
+### Startup and memory
+
+| Measure                     |            Mean |
+| --------------------------- | --------------: |
+| Warm time to first frame    |        5.037 ms |
+| Warm time to first input    |        5.094 ms |
+| One idle session            |  15.802 MiB RSS |
+| Ten idle sessions           | 159.010 MiB RSS |
+| Extra RSS per added session |      15.912 MiB |
+
+Startup results use ten launches after one warm-up. Memory results use three
+trials. RSS is the resident memory reported by macOS. Do not compare these
+values directly with Linux proportional set size.
+
 ### Core operations
 
 | User action              | Test size                         |       p95 |
@@ -681,14 +695,26 @@ from a recorded full release benchmark run.
 | Rust syntax highlighting | One 200-line fence                |  6.165 ms |
 | Unchanged frame          | 10,000 logical rows               |  0.885 ms |
 
-### Browser WebAssembly size
+### SDK, RPC, and browser WebAssembly
 
+These tests use an immediate local model or `ping`. They do not call an
+external model.
+
+| Surface      | Work                                              |      Mean |
+| ------------ | ------------------------------------------------- | --------: |
+| Native SDK   | Shared in-process command dispatch                |    113 ns |
+| JSONL RPC    | Encode, decode, in-memory transport, and dispatch | 14.439 us |
+| Browser WASM | Warm full-agent prompt, 100 samples               |  0.077 ms |
+| Browser WASM | 25 isolated agents in parallel, 11 batches        |  0.749 ms |
+
+Fresh WebAssembly module initialization averaged 11.269 ms per Deno process.
 The release module is 574,734 bytes raw and 209,375 bytes gzip. It starts with
 17 linear-memory pages, or 1,114,112 bytes.
 
 ### Agent automation
 
-Subagents are off by default.
+Subagents are off by default. Session setup had no measured slowdown when they
+were enabled. Their six control tools added 71 ns to request preparation.
 
 | Measure                    | State or size         |        p95 |
 | -------------------------- | --------------------- | ---------: |
@@ -704,8 +730,10 @@ Subagents are off by default.
 | Workflow unchanged view    | 500 agents, cached    |     317 ns |
 | Job detail view            | Long goal and result  |  46.595 us |
 
-Loop and autoresearch jobs sleep between model turns and update the TUI
-through small events.
+The workflow interpreter used 2.185 us per agent call. Arming a workflow added
+651 ns to request preparation and kept the total below 1 us. Loop and
+autoresearch jobs sleep between model turns and update the TUI through small
+events.
 
 ### TUI rendering and resize
 
@@ -725,13 +753,19 @@ change. The full resize test wrote 178,231 bytes.
 
 | Measure                | Standard build | Optimized build |         Change |
 | ---------------------- | -------------: | --------------: | -------------: |
+| `kiss --help` startup  |       3.696 ms |        3.676 ms |   0.52% faster |
+| Geometric mean latency |         1.000x |          0.985x |   1.51% faster |
 | Executable size        |      17.16 MiB |       14.87 MiB | 13.37% smaller |
 | gzip size              |       8.17 MiB |        7.36 MiB |  9.94% smaller |
 
 ### Method
 
-The tests use release builds and local deterministic fixtures on an Apple M4.
-Latency tables report p95. Lower is better.
+The tests use release builds and local deterministic fixtures. The startup
+test used a 160 by 40 terminal and `kiss --no-session` on macOS 26.5.1 with an
+Apple M4. Startup values are the mean of ten warm launches. Memory values are
+the mean of three idle samples. Core, SDK, RPC, and WebAssembly tests also ran
+on the Apple M4. Profile-guided results use separate held-out runs. Lower is
+better.
 
 Run the complete native and browser suite with `just bench`. It requires
 cargo-nextest, wasm-pack, Deno, and Node. Harness results are written to
