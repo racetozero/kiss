@@ -1,7 +1,11 @@
 # KISS
 
-[![Downloads](https://img.shields.io/github/downloads/racetozero/kiss/total)](https://github.com/racetozero/kiss/releases)
 [![Rust](https://img.shields.io/badge/Rust-stable-orange?logo=rust)](https://github.com/racetozero/kiss/blob/main/rust-toolchain.toml)
+[![Downloads](https://img.shields.io/github/downloads/racetozero/kiss/total)](https://github.com/racetozero/kiss/releases)
+[![PyPI downloads](https://img.shields.io/pypi/dm/kiss-agent-sdk?label=PyPI%20downloads)](https://pypi.org/project/kiss-agent-sdk/)
+[![npm SDK downloads](https://img.shields.io/npm/dm/kiss-agent-sdk?label=npm%20SDK%20downloads)](https://www.npmjs.com/package/kiss-agent-sdk)
+[![npm WASM downloads](https://img.shields.io/npm/dm/kiss-agent-sdk-wasm?label=npm%20WASM%20downloads)](https://www.npmjs.com/package/kiss-agent-sdk-wasm)
+[![crates.io SDK downloads](https://img.shields.io/crates/d/kiss-agent-sdk?label=crates.io%20SDK%20downloads)](https://crates.io/crates/kiss-agent-sdk)
 
 <img width="766" height="244" alt="image" src="https://github.com/user-attachments/assets/08e96d6e-7409-419b-b9db-0149f2465083" />
 
@@ -665,82 +669,54 @@ See the [SDK guide](docs/sdk.md), [RPC protocol](docs/rpc.md), and
 KISS benchmarks local work, not model or network latency. Results below are
 from a recorded full release benchmark run.
 
-### Startup and memory
-
-| Measure                     |            Mean |
-| --------------------------- | --------------: |
-| Warm time to first frame    |        5.037 ms |
-| Warm time to first input    |        5.094 ms |
-| One idle session            |  15.802 MiB RSS |
-| Ten idle sessions           | 159.010 MiB RSS |
-| Extra RSS per added session |      15.912 MiB |
-
-Startup results use ten launches after one warm-up. Memory results use three
-trials. RSS is the resident memory reported by macOS. Do not compare these
-values directly with Linux proportional set size.
-
 ### Core operations
 
-| User action              | Test size                         |      Mean |       p95 |
-| ------------------------ | --------------------------------- | --------: | --------: |
-| File search              | 100,000 files, three warm queries |  4.606 ms |  4.889 ms |
-| File search              | 500,000 files, three warm queries |  7.110 ms |  7.690 ms |
-| SSE parsing              | 10,000 events                     |  0.931 ms |  0.973 ms |
-| Grep                     | 1,000 files and 200 matches       |  6.933 ms |  8.340 ms |
-| Incremental Markdown     | 200 streaming prefix renders      | 12.427 ms | 12.576 ms |
-| Rust syntax highlighting | One 200-line fence                |  5.830 ms |  6.165 ms |
-| Unchanged frame          | 10,000 logical rows               |  0.876 ms |  0.885 ms |
+| User action              | Test size                         |       p95 |
+| ------------------------ | --------------------------------- | --------: |
+| File search              | 100,000 files, three warm queries |  4.889 ms |
+| File search              | 500,000 files, three warm queries |  7.690 ms |
+| SSE parsing              | 10,000 events                     |  0.973 ms |
+| Grep                     | 1,000 files and 200 matches       |  8.340 ms |
+| Incremental Markdown     | 200 streaming prefix renders      | 12.576 ms |
+| Rust syntax highlighting | One 200-line fence                |  6.165 ms |
+| Unchanged frame          | 10,000 logical rows               |  0.885 ms |
 
-### SDK, RPC, and browser WebAssembly
+### Browser WebAssembly size
 
-These tests use an immediate local model or `ping`. They do not call an
-external model.
-
-| Surface      | Work                                              |      Mean |
-| ------------ | ------------------------------------------------- | --------: |
-| Native SDK   | Shared in-process command dispatch                |    113 ns |
-| JSONL RPC    | Encode, decode, in-memory transport, and dispatch | 14.439 us |
-| Browser WASM | Warm full-agent prompt, 100 samples               |  0.077 ms |
-| Browser WASM | 25 isolated agents in parallel, 11 batches        |  0.749 ms |
-
-Fresh WebAssembly module initialization averaged 11.269 ms per Deno process.
 The release module is 574,734 bytes raw and 209,375 bytes gzip. It starts with
 17 linear-memory pages, or 1,114,112 bytes.
 
 ### Agent automation
 
-Subagents are off by default. Session setup had no measured slowdown when they
-were enabled. Their six control tools added 71 ns to request preparation.
+Subagents are off by default.
 
-| Measure                    | State or size         |       Mean |        p95 |
-| -------------------------- | --------------------- | ---------: | ---------: |
-| Subagent session setup     | Off                   | 358.845 us | 364.466 us |
-| Subagent session setup     | On                    | 358.352 us | 361.740 us |
-| Request preparation        | Subagents off         |     171 ns |     177 ns |
-| Request preparation        | Subagents on          |     242 ns |     249 ns |
-| Workflow script parsing    | 200 lines             |  57.884 us |  59.922 us |
-| Workflow interpreter       | 1,000 agent calls     |   2.185 ms |   2.423 ms |
-| Workflow progress snapshot | 500 agents, 5 phases  |  43.075 us |  64.816 us |
-| Workflow phase view        | 500 agents, 5 phases  |  11.298 us |  12.207 us |
-| Workflow agent detail      | One prompt and result |   4.886 us |   5.021 us |
-| Workflow unchanged view    | 500 agents, cached    |     311 ns |     317 ns |
-| Job detail view            | Long goal and result  |  45.193 us |  46.595 us |
+| Measure                    | State or size         |        p95 |
+| -------------------------- | --------------------- | ---------: |
+| Subagent session setup     | Off                   | 364.466 us |
+| Subagent session setup     | On                    | 361.740 us |
+| Request preparation        | Subagents off         |     177 ns |
+| Request preparation        | Subagents on          |     249 ns |
+| Workflow script parsing    | 200 lines             |  59.922 us |
+| Workflow interpreter       | 1,000 agent calls     |   2.423 ms |
+| Workflow progress snapshot | 500 agents, 5 phases  |  64.816 us |
+| Workflow phase view        | 500 agents, 5 phases  |  12.207 us |
+| Workflow agent detail      | One prompt and result |   5.021 us |
+| Workflow unchanged view    | 500 agents, cached    |     317 ns |
+| Job detail view            | Long goal and result  |  46.595 us |
 
-The workflow interpreter used 2.185 us per agent call. Arming a workflow added
-651 ns to request preparation and kept the total below 1 us. Loop and
-autoresearch jobs sleep between model turns and update the TUI through small
-events.
+Loop and autoresearch jobs sleep between model turns and update the TUI
+through small events.
 
 ### TUI rendering and resize
 
-| Measure                   | Test size           |     Mean |      p95 |
-| ------------------------- | ------------------- | -------: | -------: |
-| Full renderer             | 1,800 logical rows  | 0.398 ms | 0.436 ms |
-| Unchanged renderer        | 10,000 logical rows | 0.876 ms | 0.885 ms |
-| Last-row update           | 10,000 logical rows | 0.895 ms | 0.916 ms |
-| Cached transcript render  | 2,885 logical rows  | 0.058 ms | 0.063 ms |
-| Spinner transcript render | 2,885 logical rows  | 0.055 ms | 0.057 ms |
-| Full resize redraw        | 1,800 logical rows  | 0.435 ms | 0.477 ms |
+| Measure                   | Test size           |      p95 |
+| ------------------------- | ------------------- | -------: |
+| Full renderer             | 1,800 logical rows  | 0.436 ms |
+| Unchanged renderer        | 10,000 logical rows | 0.885 ms |
+| Last-row update           | 10,000 logical rows | 0.916 ms |
+| Cached transcript render  | 2,885 logical rows  | 0.063 ms |
+| Spinner transcript render | 2,885 logical rows  | 0.057 ms |
+| Full resize redraw        | 1,800 logical rows  | 0.477 ms |
 
 KISS combines rapid resize events and redraws once 75 ms after the final
 change. The full resize test wrote 178,231 bytes.
@@ -749,19 +725,13 @@ change. The full resize test wrote 178,231 bytes.
 
 | Measure                | Standard build | Optimized build |         Change |
 | ---------------------- | -------------: | --------------: | -------------: |
-| `kiss --help` startup  |       3.696 ms |        3.676 ms |   0.52% faster |
-| Geometric mean latency |         1.000x |          0.985x |   1.51% faster |
 | Executable size        |      17.16 MiB |       14.87 MiB | 13.37% smaller |
 | gzip size              |       8.17 MiB |        7.36 MiB |  9.94% smaller |
 
 ### Method
 
-The tests use release builds and local deterministic fixtures. The startup
-test used a 160 by 40 terminal and `kiss --no-session` on macOS 26.5.1 with an
-Apple M4. Startup values are the mean of ten warm launches. Memory values are
-the mean of three idle samples. Core, SDK, RPC, and WebAssembly tests also ran
-on the Apple M4. Profile-guided results use separate held-out runs. Lower is
-better.
+The tests use release builds and local deterministic fixtures on an Apple M4.
+Latency tables report p95. Lower is better.
 
 Run the complete native and browser suite with `just bench`. It requires
 cargo-nextest, wasm-pack, Deno, and Node. Harness results are written to
