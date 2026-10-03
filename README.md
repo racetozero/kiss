@@ -2,7 +2,6 @@
 
 [![Rust](https://img.shields.io/badge/Rust-stable-orange?logo=rust)](https://github.com/racetozero/kiss/blob/main/rust-toolchain.toml)
 [![Downloads](https://img.shields.io/github/downloads/racetozero/kiss/total)](https://github.com/racetozero/kiss/releases)
-[![PyPI downloads](https://img.shields.io/pypi/dm/kiss-agent-sdk?label=PyPI%20downloads)](https://pypi.org/project/kiss-agent-sdk/)
 [![npm SDK downloads](https://img.shields.io/npm/dm/kiss-agent-sdk?label=npm%20SDK%20downloads)](https://www.npmjs.com/package/kiss-agent-sdk)
 [![npm WASM downloads](https://img.shields.io/npm/dm/kiss-agent-sdk-wasm?label=npm%20WASM%20downloads)](https://www.npmjs.com/package/kiss-agent-sdk-wasm)
 [![crates.io SDK downloads](https://img.shields.io/crates/d/kiss-agent-sdk?label=crates.io%20SDK%20downloads)](https://crates.io/crates/kiss-agent-sdk)
@@ -612,7 +611,7 @@ Install the [native JavaScript SDK from npm](https://www.npmjs.com/package/kiss-
 to use KISS in a Node, Bun, or Deno application.
 
 ```bash
-npm install kiss-agent-sdk
+bun add kiss-agent-sdk
 ```
 
 ```typescript
@@ -630,7 +629,7 @@ Install the [browser SDK from npm](https://www.npmjs.com/package/kiss-agent-sdk-
 to run the agent and model/tool loop in your browser without a KISS server.
 
 ```bash
-npm install kiss-agent-sdk-wasm
+bun add kiss-agent-sdk-wasm
 ```
 
 For applications that need native filesystem and shell tools, use the
