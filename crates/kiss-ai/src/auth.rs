@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 use std::time::SystemTime;
 
+pub mod accounts;
 pub mod anthropic;
 mod azure;
 pub mod cursor;
@@ -263,14 +264,24 @@ fn read_auth_file() -> AuthFile {
 }
 
 fn write_auth_file_at(path: &Path, auth: &AuthFile) -> Result<()> {
+    write_json_at(path, auth)?;
+    update_auth_cache(path, auth);
+    Ok(())
+}
+
+/// Atomically replace a private (mode 600) JSON file.
+fn write_json_at<T: Serialize>(path: &Path, value: &T) -> Result<()> {
     let parent = path
         .parent()
-        .ok_or_else(|| anyhow::anyhow!("auth path has no parent"))?;
+        .ok_or_else(|| anyhow::anyhow!("credential path has no parent"))?;
     std::fs::create_dir_all(parent)
-        .with_context(|| format!("create auth directory {}", parent.display()))?;
+        .with_context(|| format!("create credential directory {}", parent.display()))?;
 
     let temp_name = format!(
-        ".auth.json.tmp-{}-{}",
+        ".{}.tmp-{}-{}",
+        path.file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("credentials"),
         std::process::id(),
         chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
     );
@@ -285,19 +296,17 @@ fn write_auth_file_at(path: &Path, auth: &AuthFile) -> Result<()> {
         }
         let mut file = options
             .open(&temp_path)
-            .with_context(|| format!("create temporary auth file {}", temp_path.display()))?;
-        let text = serde_json::to_string_pretty(auth)?;
+            .with_context(|| format!("create temporary file {}", temp_path.display()))?;
+        let text = serde_json::to_string_pretty(value)?;
         file.write_all(text.as_bytes())?;
         file.write_all(b"\n")?;
         file.sync_all()?;
-        std::fs::rename(&temp_path, path)
-            .with_context(|| format!("replace auth file {}", path.display()))?;
+        std::fs::rename(&temp_path, path).with_context(|| format!("replace {}", path.display()))?;
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt as _;
             std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
         }
-        update_auth_cache(path, auth);
         Ok(())
     })();
     if result.is_err() {
@@ -306,11 +315,10 @@ fn write_auth_file_at(path: &Path, auth: &AuthFile) -> Result<()> {
     result
 }
 
-fn update_auth_file_at<T>(
-    path: &Path,
-    update: impl FnOnce(&mut AuthFile) -> Result<T>,
-) -> Result<T> {
-    let parent = path
+/// Run `f` while holding the credential lock beside `auth_path`. Every
+/// writer of `auth.json` and `accounts.json` takes this lock.
+fn with_auth_lock<T>(auth_path: &Path, f: impl FnOnce() -> Result<T>) -> Result<T> {
+    let parent = auth_path
         .parent()
         .ok_or_else(|| anyhow::anyhow!("auth path has no parent"))?;
     std::fs::create_dir_all(parent)
@@ -327,12 +335,23 @@ fn update_auth_file_at<T>(
         .open(&lock_path)
         .with_context(|| format!("open auth lock {}", lock_path.display()))?;
     fs2::FileExt::lock_exclusive(&lock)
-        .with_context(|| format!("lock auth file {}", path.display()))?;
-    let mut auth = read_auth_file_at(path);
-    let result = update(&mut auth)?;
-    write_auth_file_at(path, &auth)?;
-    fs2::FileExt::unlock(&lock).with_context(|| format!("unlock auth file {}", path.display()))?;
+        .with_context(|| format!("lock auth file {}", auth_path.display()))?;
+    let result = f()?;
+    fs2::FileExt::unlock(&lock)
+        .with_context(|| format!("unlock auth file {}", auth_path.display()))?;
     Ok(result)
+}
+
+fn update_auth_file_at<T>(
+    path: &Path,
+    update: impl FnOnce(&mut AuthFile) -> Result<T>,
+) -> Result<T> {
+    with_auth_lock(path, || {
+        let mut auth = read_auth_file_at(path);
+        let result = update(&mut auth)?;
+        write_auth_file_at(path, &auth)?;
+        Ok(result)
+    })
 }
 
 fn update_auth_file<T>(update: impl FnOnce(&mut AuthFile) -> Result<T>) -> Result<T> {
@@ -748,9 +767,10 @@ pub fn store_oauth(provider: &str, credential: OAuthCredential) -> Result<()> {
 }
 
 /// Remove a stored credential. Returns true when an entry existed.
+/// Every account in the provider's multi-account pool is removed as well.
 pub fn remove_api_key(provider: &str) -> Result<bool> {
     let path = auth_file_path().ok_or_else(|| anyhow::anyhow!("no home directory"))?;
-    update_auth_file_at(&path, |file| Ok(file.entries.remove(provider).is_some()))
+    accounts::forget_at(&path, provider)
 }
 
 #[cfg(test)]
