@@ -114,13 +114,7 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
         }
     };
     if !response.status().is_success() {
-        let status = response.status();
-        let text = response.text().await.unwrap_or_default();
-        builder.fail(
-            format!("HTTP {status}: {}", crate::truncate_err(&text)),
-            false,
-            model,
-        );
+        builder.fail(super::http_error(response).await, false, model);
         return;
     }
 
@@ -341,9 +335,11 @@ fn handle_event(event: &SseEvent, builder: &mut PartialBuilder, state: &mut Deco
         "error" => {
             let msg = data["error"]["message"]
                 .as_str()
-                .unwrap_or("provider error")
-                .to_string();
-            Flow::Error(msg)
+                .unwrap_or("provider error");
+            Flow::Error(match data["error"]["type"].as_str() {
+                Some(kind) => format!("{kind}: {msg}"),
+                None => msg.to_string(),
+            })
         }
         _ => Flow::Continue,
     }

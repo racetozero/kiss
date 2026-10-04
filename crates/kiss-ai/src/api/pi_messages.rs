@@ -59,13 +59,7 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
         }
     };
     if !response.status().is_success() {
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        builder.fail(
-            format!("HTTP {status}: {}", crate::truncate_err(&body)),
-            false,
-            model,
-        );
+        builder.fail(super::http_error(response).await, false, model);
         return;
     }
 

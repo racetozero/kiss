@@ -19,6 +19,38 @@ use crate::model::Model;
 use crate::types::{AssistantMessage, ContentBlock, Cost, StopReason, ToolCall, Usage};
 use crate::types::{Context, Message};
 
+/// Read a failed HTTP response into `HTTP <status>: <body>`. A 429 also
+/// carries the provider's reset hint as ` (retry-after: Ns)` so account
+/// failover can record when the rate-limited account becomes usable again.
+pub(crate) async fn http_error(response: reqwest::Response) -> String {
+    let status = response.status();
+    let hint = (status.as_u16() == 429)
+        .then(|| retry_after_seconds(response.headers()))
+        .flatten()
+        .map(|seconds| format!(" (retry-after: {seconds}s)"))
+        .unwrap_or_default();
+    let body = response.text().await.unwrap_or_default();
+    format!("HTTP {status}: {}{hint}", crate::truncate_err(&body))
+}
+
+fn retry_after_seconds(headers: &reqwest::header::HeaderMap) -> Option<u64> {
+    let header = |name: &str| {
+        headers
+            .get(name)
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.trim().parse::<f64>().ok())
+            .filter(|value| value.is_finite() && *value >= 0.0)
+    };
+    header("retry-after")
+        .or_else(|| {
+            // Claude subscription limits report the reset as Unix seconds.
+            header("anthropic-ratelimit-unified-reset")
+                .map(|reset| reset - chrono::Utc::now().timestamp() as f64)
+        })
+        .filter(|seconds| *seconds > 0.0)
+        .map(|seconds| seconds.ceil() as u64)
+}
+
 /// Maps a tool call id onto Anthropic/Bedrock's `^[a-zA-Z0-9_-]+$` (max 64)
 /// pattern. Ids from other providers (e.g. OpenAI Responses `call_x|fc_y`)
 /// otherwise get rejected after a mid-session model switch.
@@ -433,6 +465,22 @@ pub fn apply_provider_headers(
 #[cfg(test)]
 mod provider_header_tests {
     use super::*;
+
+    #[test]
+    fn rate_limit_reset_headers_become_retry_hints() {
+        let mut headers = reqwest::header::HeaderMap::new();
+        assert_eq!(retry_after_seconds(&headers), None);
+        headers.insert("retry-after", "42".parse().unwrap());
+        assert_eq!(retry_after_seconds(&headers), Some(42));
+        headers.clear();
+        let reset = chrono::Utc::now().timestamp() + 600;
+        headers.insert(
+            "anthropic-ratelimit-unified-reset",
+            reset.to_string().parse().unwrap(),
+        );
+        let seconds = retry_after_seconds(&headers).unwrap();
+        assert!((598..=601).contains(&seconds), "{seconds}");
+    }
 
     #[test]
     fn copilot_token_selects_its_account_endpoint() {

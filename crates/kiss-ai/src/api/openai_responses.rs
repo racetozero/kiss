@@ -230,13 +230,7 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
         }
     };
     if !response.status().is_success() {
-        let status = response.status();
-        let text = response.text().await.unwrap_or_default();
-        builder.fail(
-            format!("HTTP {status}: {}", crate::truncate_err(&text)),
-            false,
-            model,
-        );
+        builder.fail(super::http_error(response).await, false, model);
         return;
     }
 
@@ -713,29 +707,45 @@ fn websocket_json(message: WebSocketMessage) -> Result<Option<Value>, WebSocketF
 
 fn websocket_event_error(data: &Value) -> Option<(String, String)> {
     let event_type = data["type"].as_str()?;
-    match event_type {
-        "error" => {
-            let code = data["code"]
+    let error = match event_type {
+        "error" if data["error"].is_object() => &data["error"],
+        "error" => data,
+        "response.failed" => &data["response"]["error"],
+        _ => return None,
+    };
+    let code = error["code"]
+        .as_str()
+        .or_else(|| error["type"].as_str())
+        .or_else(|| data["code"].as_str())
+        .unwrap_or(if event_type == "error" {
+            "provider_error"
+        } else {
+            "response_failed"
+        });
+    let message = error["message"]
+        .as_str()
+        .or_else(|| data["message"].as_str())
+        .unwrap_or(code);
+    // ChatGPT reports an exhausted account as an error frame with an HTTP
+    // status and reset fields. Keep them so account failover can see them.
+    let status = data["status"]
+        .as_u64()
+        .or_else(|| data["status_code"].as_u64())
+        .map(|status| format!("HTTP {status} "))
+        .unwrap_or_default();
+    let reset = error["resets_in_seconds"]
+        .as_u64()
+        .or_else(|| {
+            data["headers"]["retry-after"]
                 .as_str()
-                .or_else(|| data["error"]["code"].as_str())
-                .unwrap_or("provider_error");
-            let message = data["message"]
-                .as_str()
-                .or_else(|| data["error"]["message"].as_str())
-                .unwrap_or(code);
-            Some((code.to_string(), message.to_string()))
-        }
-        "response.failed" => {
-            let code = data["response"]["error"]["code"]
-                .as_str()
-                .unwrap_or("response_failed");
-            let message = data["response"]["error"]["message"]
-                .as_str()
-                .unwrap_or(code);
-            Some((code.to_string(), message.to_string()))
-        }
-        _ => None,
-    }
+                .and_then(|value| value.trim().parse().ok())
+        })
+        .map(|seconds| format!(" (retry-after: {seconds}s)"))
+        .unwrap_or_default();
+    Some((
+        code.to_string(),
+        format!("{status}{code}: {message}{reset}"),
+    ))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1057,19 +1067,11 @@ fn handle_event(event: &SseEvent, builder: &mut PartialBuilder, state: &mut Deco
             };
             Flow::Done(reason)
         }
-        "response.failed" => {
-            let error = &data["response"]["error"];
-            let msg = error["message"].as_str().unwrap_or("response failed");
-            Flow::Error(format!(
-                "{}: {msg}",
-                error["code"].as_str().unwrap_or("provider_error")
-            ))
-        }
-        "error" => Flow::Error(format!(
-            "{}: {}",
-            data["code"].as_str().unwrap_or("provider_error"),
-            data["message"].as_str().unwrap_or("provider error")
-        )),
+        "response.failed" | "error" => Flow::Error(
+            websocket_event_error(&data)
+                .map(|(_, message)| message)
+                .unwrap_or_else(|| "provider_error: provider error".into()),
+        ),
         _ => Flow::Continue,
     }
 }
@@ -1427,6 +1429,40 @@ mod request_tests {
                 assert_eq!(calls[1].arguments["content"], "text");
             }
         }
+    }
+
+    #[test]
+    fn exhausted_chatgpt_websocket_frame_keeps_status_type_and_reset() {
+        let frame = json!({
+            "type": "error",
+            "status": 429,
+            "error": {
+                "type": "usage_limit_reached",
+                "message": "The usage limit has been reached",
+                "resets_in_seconds": 3600
+            },
+            "headers": {"retry-after": "3600"}
+        });
+        let (code, message) = websocket_event_error(&frame).unwrap();
+        assert_eq!(code, "usage_limit_reached");
+        assert_eq!(
+            message,
+            "HTTP 429 usage_limit_reached: The usage limit has been reached (retry-after: 3600s)"
+        );
+        let hint = crate::auth::accounts::rate_limit_retry_after(&message).unwrap();
+        assert_eq!(hint, Some(std::time::Duration::from_secs(3600)));
+
+        let failed = json!({"type":"response.failed","response":{"error":{"code":"rate_limit_exceeded","message":"slow down"}}});
+        assert_eq!(
+            websocket_event_error(&failed).unwrap().1,
+            "rate_limit_exceeded: slow down"
+        );
+        let continuation =
+            json!({"type":"error","code":"previous_response_not_found","message":"gone"});
+        assert_eq!(
+            websocket_event_error(&continuation).unwrap().0,
+            "previous_response_not_found"
+        );
     }
 
     #[tokio::test]

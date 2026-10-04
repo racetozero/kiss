@@ -288,10 +288,8 @@ async fn run(
         }
         _ = initial_options.cancel.cancelled() => anyhow::bail!("request cancelled"),
     };
-    let status = response.status();
-    if !status.is_success() {
-        let body = response.text().await.unwrap_or_default();
-        anyhow::bail!("HTTP {status}: {}", crate::truncate_err(&body));
+    if !response.status().is_success() {
+        anyhow::bail!("{}", super::http_error(response).await);
     }
 
     let mut response_stream = response.bytes_stream();
