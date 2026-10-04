@@ -1771,18 +1771,15 @@ fn handle_session_event(
                 .push(format!("verified workflow{run} `{name}` {result}"));
         }
         SessionEvent::Iterative { .. } => {}
-        SessionEvent::AccountSwitched {
-            provider,
-            from,
-            to,
-            index,
-            total,
-            retry_after_secs,
-        } => {
+        SessionEvent::AccountSwitched(switch) => {
             app.cells.push(Cell::Notice(format!(
-                "{provider}: {from} hit its rate limit (ready again in {}); switched to account {}/{total} ({to})",
-                format_duration_secs(retry_after_secs),
-                index + 1,
+                "{}: {} hit its rate limit (ready again in {}); switched to account {}/{} ({})",
+                switch.provider,
+                switch.from,
+                format_duration_secs(switch.retry_after_secs),
+                switch.index + 1,
+                switch.total,
+                switch.to,
             )));
         }
     }
@@ -1995,19 +1992,11 @@ fn complete_account_add(app: &mut App, provider: &str, succeeded: bool) {
         return;
     }
     match kiss_ai::auth::accounts::finish_add(provider, label.as_deref()) {
-        Ok(Some(added)) => {
-            let pool = kiss_ai::auth::accounts::pool(provider);
-            let total = pool.as_ref().map_or(1, |pool| pool.accounts.len());
-            let active = pool
-                .as_ref()
-                .and_then(|pool| pool.active().map(|account| account.label.clone()))
-                .unwrap_or_default();
-            app.cells.push(Cell::Notice(format!(
-                "{provider}: added account {}/{total} ({}). Active: {active}",
-                added.index + 1,
-                added.label
-            )));
-        }
+        Ok(Some(added)) => app
+            .cells
+            .push(Cell::Notice(kiss_ai::auth::accounts::added_message(
+                provider, &added,
+            ))),
         Ok(None) => app.cells.push(Cell::Notice(format!(
             "{provider}: that account is already in the pool"
         ))),

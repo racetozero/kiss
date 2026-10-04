@@ -70,6 +70,21 @@ impl PoolInfo {
     }
 }
 
+/// User-facing result of `finish_add`, shared by the CLI and the TUI.
+pub fn added_message(provider: &str, added: &AccountInfo) -> String {
+    let pool = pool(provider);
+    let total = pool.as_ref().map_or(1, |pool| pool.accounts.len());
+    let active = pool
+        .as_ref()
+        .and_then(|pool| pool.active().map(|account| account.label.clone()))
+        .unwrap_or_default();
+    format!(
+        "{provider}: added account {}/{total} ({}). Active: {active}",
+        added.index + 1,
+        added.label
+    )
+}
+
 /// A completed rotation away from a rate-limited account.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AccountSwitch {

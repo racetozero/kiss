@@ -195,16 +195,10 @@ pub fn session_event_json(event: &SessionEvent) -> Option<Value> {
         SessionEvent::Iterative { job, version } => {
             json!({"type": "iterative_progress", "job": job, "version": version})
         }
-        SessionEvent::AccountSwitched {
-            provider,
-            from,
-            to,
-            index,
-            total,
-            retry_after_secs,
-        } => json!({
-            "type": "account_switched", "provider": provider, "from": from, "to": to,
-            "index": index, "total": total, "retryAfterSecs": retry_after_secs,
+        SessionEvent::AccountSwitched(switch) => json!({
+            "type": "account_switched", "provider": switch.provider, "from": switch.from,
+            "to": switch.to, "index": switch.index, "total": switch.total,
+            "retryAfterSecs": switch.retry_after_secs,
         }),
     })
 }

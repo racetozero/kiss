@@ -201,17 +201,10 @@ async fn run_command(args: &Args, command: &Command) -> anyhow::Result<i32> {
             if *add_account {
                 match kiss_ai::auth::accounts::finish_add(provider, account_label.as_deref())? {
                     Some(added) => {
-                        let pool = kiss_ai::auth::accounts::pool(provider);
-                        let total = pool.as_ref().map_or(1, |pool| pool.accounts.len());
-                        let active = pool
-                            .as_ref()
-                            .and_then(|pool| pool.active().map(|account| account.label.clone()))
-                            .unwrap_or_default();
                         println!(
-                            "Added account {}/{total} ({}) for {provider}. Active account: {active}.",
-                            added.index + 1,
-                            added.label
-                        );
+                            "{}",
+                            kiss_ai::auth::accounts::added_message(provider, &added)
+                        )
                     }
                     None => println!("That {provider} account is already in the pool."),
                 }

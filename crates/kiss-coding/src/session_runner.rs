@@ -74,14 +74,7 @@ pub enum SessionEvent {
     },
     /// A pooled account hit its rate limit and the request moved to the
     /// next account. `index` is zero-based; `total` is the pool size.
-    AccountSwitched {
-        provider: String,
-        from: String,
-        to: String,
-        index: usize,
-        total: usize,
-        retry_after_secs: u64,
-    },
+    AccountSwitched(kiss_ai::auth::accounts::AccountSwitch),
 }
 
 pub type SessionEventSink = Arc<dyn Fn(SessionEvent) + Send + Sync>;
@@ -1031,16 +1024,7 @@ impl AgentSession {
         config.stream_fn = crate::account_failover::wrap(
             config.stream_fn,
             self.registry.clone(),
-            Arc::new(move |switch| {
-                sink(SessionEvent::AccountSwitched {
-                    provider: switch.provider,
-                    from: switch.from,
-                    to: switch.to,
-                    index: switch.index,
-                    total: switch.total,
-                    retry_after_secs: switch.retry_after_secs,
-                })
-            }),
+            Arc::new(move |switch| sink(SessionEvent::AccountSwitched(switch))),
         );
         config
     }
