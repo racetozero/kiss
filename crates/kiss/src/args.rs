@@ -266,6 +266,16 @@ pub enum Command {
         /// Use the Microsoft Entra default credential chain (Azure OpenAI).
         #[arg(long = "entra-id", conflicts_with_all = ["api_key", "browser", "device_auth"])]
         entra_id: bool,
+
+        /// Add this login as another account in the provider's pool instead
+        /// of replacing the saved one. KISS switches to the next pooled
+        /// account when the active one is rate limited.
+        #[arg(long = "add-account", conflicts_with = "entra_id")]
+        add_account: bool,
+
+        /// Label for the added account (default: its e-mail or "account N").
+        #[arg(long = "account-label", value_name = "LABEL", requires = "add_account")]
+        account_label: Option<String>,
     },
 
     /// Remove saved credentials for a provider.
@@ -474,6 +484,27 @@ mod tests {
                 ..
             }) if provider == "openai-codex"
         ));
+    }
+
+    #[test]
+    fn parses_add_account_login() {
+        let args = Args::try_parse_from([
+            "kiss",
+            "login",
+            "openai-codex",
+            "--add-account",
+            "--account-label",
+            "work",
+        ])
+        .unwrap();
+        assert!(matches!(
+            args.command,
+            Some(Command::Login { provider, add_account: true, account_label: Some(label), .. })
+                if provider == "openai-codex" && label == "work"
+        ));
+        assert!(
+            Args::try_parse_from(["kiss", "login", "anthropic", "--account-label", "x"]).is_err()
+        );
     }
 
     #[test]

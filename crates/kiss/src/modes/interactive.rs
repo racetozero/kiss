@@ -116,6 +116,9 @@ struct App {
     workflow_version: u64,
     /// Runtime-verified workflow results waiting for the end of this turn.
     workflow_outcomes: Vec<String>,
+    /// `/accounts add` in progress: provider and optional label. The next
+    /// successful login for that provider becomes a new pooled account.
+    pending_account_add: Option<(String, Option<String>)>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -864,7 +867,11 @@ impl App {
             VoiceMode::Hold => " · voice hold".to_owned(),
             VoiceMode::Tap => " · voice tap".to_owned(),
         };
-        let right = format!("({}) {}{thinking}{voice}", model.provider, model.id);
+        let accounts = account_indicator(session.registry.credential_provider(&model.provider));
+        let right = format!(
+            "({}) {}{thinking}{accounts}{voice}",
+            model.provider, model.id
+        );
         let left_width = kiss_tui::text::display_width(&left);
         let right_width = kiss_tui::text::display_width(&right);
         let stats = if left_width + right_width + 2 <= width {
@@ -1352,6 +1359,7 @@ pub async fn run(args: &Args) -> Result<i32> {
         job_view: None,
         workflow_version: 0,
         workflow_outcomes: Vec::new(),
+        pending_account_add: None,
     };
     if let Some(indent) = &settings.markdown.code_block_indent {
         app.md.code_indent = indent.clone();
@@ -1780,6 +1788,235 @@ fn handle_session_event(
     }
 }
 
+/// Providers offered first by `/accounts add` completion. Any provider with a
+/// login method can be pooled.
+const ACCOUNT_POOL_PROVIDERS: &[&str] = &[
+    "openai-codex",
+    "anthropic",
+    "cursor",
+    "google",
+    "meta",
+    "xai",
+];
+
+const ACCOUNTS_USAGE: &str = "/accounts add <provider> [label] · /accounts use <provider> <n> · /accounts remove <provider> <n> · /accounts rename <provider> <n> <label>";
+
+/// Footer suffix such as ` · ⇄ 2/4 personal` for a provider with a pool of
+/// two or more accounts.
+fn account_indicator(provider: &str) -> String {
+    let Some(pool) = kiss_ai::auth::accounts::pool(provider) else {
+        return String::new();
+    };
+    if pool.accounts.len() < 2 {
+        return String::new();
+    }
+    let Some(active) = pool.active() else {
+        return String::new();
+    };
+    format!(
+        " · ⇄ {}/{} {}",
+        active.index + 1,
+        pool.accounts.len(),
+        active.label
+    )
+}
+
+fn account_provider(name: &str) -> Option<&'static str> {
+    let name = name.to_ascii_lowercase();
+    let alias = match name.as_str() {
+        "codex" | "chatgpt" => "openai-codex",
+        "claude" => "anthropic",
+        "gemini" => "google",
+        "grok" => "xai",
+        other => other,
+    };
+    kiss_ai::registry::BUILTIN_PROVIDER_IDS
+        .iter()
+        .copied()
+        .find(|provider| *provider == alias)
+}
+
+fn account_argument_candidates() -> Vec<(String, Option<String>, String, String)> {
+    let pools = kiss_ai::auth::accounts::pools();
+    let mut candidates = vec![(
+        "list".to_string(),
+        Some("Show account pools".to_string()),
+        "list".to_string(),
+        "list".to_string(),
+    )];
+    for provider in ACCOUNT_POOL_PROVIDERS {
+        let value = format!("add {provider}");
+        candidates.push((
+            value.clone(),
+            Some("Log in another account".into()),
+            format!("{value} "),
+            value,
+        ));
+    }
+    for pool in &pools {
+        for account in &pool.accounts {
+            for (action, detail) in [("use", "Make active"), ("remove", "Remove")] {
+                let value = format!("{action} {} {}", pool.provider, account.index + 1);
+                candidates.push((
+                    value.clone(),
+                    Some(format!("{detail}: {}", account.label)),
+                    value.clone(),
+                    format!("{value} {}", account.label),
+                ));
+            }
+        }
+    }
+    candidates
+}
+
+fn account_status(account: &kiss_ai::auth::accounts::AccountInfo) -> String {
+    let limited = account
+        .limited_until
+        .filter(|_| account.is_limited())
+        .map(|until| {
+            let seconds = (until - chrono::Utc::now().timestamp_millis()).max(0) as u64 / 1000;
+            format!("rate limited · ready in {}", format_duration_secs(seconds))
+        });
+    match (account.active, limited) {
+        (true, Some(limited)) => format!("active · {limited}"),
+        (true, None) => "active".into(),
+        (false, Some(limited)) => limited,
+        (false, None) => "ready".into(),
+    }
+}
+
+fn accounts_listing() -> String {
+    let pools = kiss_ai::auth::accounts::pools();
+    if pools.is_empty() {
+        return format!(
+            "No account pools yet. Add accounts to a provider and KISS moves to the next one when an account is rate limited.\n\n{ACCOUNTS_USAGE}"
+        );
+    }
+    let mut text = String::from(
+        "Accounts · when the active account is rate limited, KISS retries with the next ready account\n",
+    );
+    for pool in pools {
+        let count = pool.accounts.len();
+        text.push_str(&format!(
+            "\n{} ({count} account{})\n",
+            pool.provider,
+            if count == 1 { "" } else { "s" }
+        ));
+        for account in &pool.accounts {
+            text.push_str(&format!(
+                "  {} {}. {}  {}\n",
+                if account.active { "▸" } else { " " },
+                account.index + 1,
+                account.label,
+                account_status(account)
+            ));
+        }
+    }
+    text.push('\n');
+    text.push_str(ACCOUNTS_USAGE);
+    text
+}
+
+fn run_accounts_command(app: &mut App, arguments: &str) {
+    use kiss_ai::auth::accounts;
+    let parts = arguments.split_whitespace().collect::<Vec<_>>();
+    let action = parts.first().copied().unwrap_or("list");
+    if action == "list" && parts.len() <= 1 {
+        app.cells.push(Cell::Notice(accounts_listing()));
+        return;
+    }
+    let Some(provider) = parts.get(1).and_then(|name| account_provider(name)) else {
+        app.cells.push(Cell::Error(match parts.get(1) {
+            Some(name) => format!("unknown provider '{name}'. Usage: {ACCOUNTS_USAGE}"),
+            None => format!("usage: {ACCOUNTS_USAGE}"),
+        }));
+        return;
+    };
+    let index = || {
+        parts
+            .get(2)
+            .and_then(|value| value.parse::<usize>().ok())
+            .filter(|number| *number > 0)
+            .map(|number| number - 1)
+    };
+    let result = match (action, index()) {
+        ("add", _) => accounts::begin_add(provider).map(|()| {
+            let label = (parts.len() > 2).then(|| parts[2..].join(" "));
+            app.pending_account_add = Some((provider.to_string(), label));
+            app.cells.push(Cell::Notice(format!(
+                "log in to the {provider} account to add. The current account stays active"
+            )));
+            open_login_methods_picker(app, provider);
+        }),
+        ("use", Some(index)) => accounts::activate(provider, index).map(|account| {
+            if provider == "cursor" {
+                app.model_catalog = None;
+            }
+            app.cells.push(Cell::Notice(format!(
+                "{provider}: account {} ({}) is active",
+                index + 1,
+                account.label
+            )));
+        }),
+        ("remove", Some(index)) => accounts::remove(provider, index).map(|account| {
+            app.cells.push(Cell::Notice(format!(
+                "{provider}: removed account {} ({})",
+                index + 1,
+                account.label
+            )));
+        }),
+        ("rename", Some(index)) if parts.len() > 3 => {
+            let label = parts[3..].join(" ");
+            accounts::rename(provider, index, &label).map(|()| {
+                app.cells.push(Cell::Notice(format!(
+                    "{provider}: account {} is now {label}",
+                    index + 1
+                )));
+            })
+        }
+        _ => Err(anyhow::anyhow!("usage: {ACCOUNTS_USAGE}")),
+    };
+    if let Err(error) = result {
+        app.cells.push(Cell::Error(format!("{error:#}")));
+    }
+}
+
+/// Finish `/accounts add` after a login for `provider` completes.
+fn complete_account_add(app: &mut App, provider: &str, succeeded: bool) {
+    if app
+        .pending_account_add
+        .as_ref()
+        .is_none_or(|(pending, _)| pending != provider)
+    {
+        return;
+    }
+    let (_, label) = app.pending_account_add.take().unwrap();
+    if !succeeded {
+        return;
+    }
+    match kiss_ai::auth::accounts::finish_add(provider, label.as_deref()) {
+        Ok(Some(added)) => {
+            let pool = kiss_ai::auth::accounts::pool(provider);
+            let total = pool.as_ref().map_or(1, |pool| pool.accounts.len());
+            let active = pool
+                .as_ref()
+                .and_then(|pool| pool.active().map(|account| account.label.clone()))
+                .unwrap_or_default();
+            app.cells.push(Cell::Notice(format!(
+                "{provider}: added account {}/{total} ({}). Active: {active}",
+                added.index + 1,
+                added.label
+            )));
+        }
+        Ok(None) => app.cells.push(Cell::Notice(format!(
+            "{provider}: that account is already in the pool"
+        ))),
+        Err(error) => app.cells.push(Cell::Error(format!(
+            "could not add the {provider} account: {error:#}"
+        ))),
+    }
+}
+
 /// Short human duration such as `45s`, `12m`, or `2h13m`.
 fn format_duration_secs(seconds: u64) -> String {
     match seconds {
@@ -1846,10 +2083,13 @@ fn handle_command_event(
                     }
                     app.cells
                         .push(Cell::Notice(format!("logged in to {provider}")));
+                    complete_account_add(app, &provider, true);
                 }
-                Err(error) => app
-                    .cells
-                    .push(Cell::Error(format!("login failed for {provider}: {error}"))),
+                Err(error) => {
+                    complete_account_add(app, &provider, false);
+                    app.cells
+                        .push(Cell::Error(format!("login failed for {provider}: {error}")))
+                }
             }
         }
         CommandEvent::DeviceLoginNotice {
@@ -2275,6 +2515,7 @@ fn command_argument_items(
                 )
             })
             .collect(),
+        "accounts" => account_argument_candidates(),
         "webmcp" => [
             ("connect", "Connect to Chrome"),
             ("list", "Show active page tools"),
@@ -3242,6 +3483,9 @@ fn handle_secret_prompt(
                     )
                 });
                 app.secret_prompt = None;
+                if login {
+                    app.pending_account_add = None;
+                }
                 app.cells.push(Cell::Notice(if login {
                     "login cancelled".into()
                 } else {
@@ -3282,10 +3526,14 @@ fn handle_secret_prompt(
                                     app.cells.push(Cell::Notice(format!(
                                         "saved API key for {provider}"
                                     )));
+                                    complete_account_add(app, &provider, true);
                                 }
-                                Err(error) => app.cells.push(Cell::Error(format!(
-                                    "could not save API key: {error:#}"
-                                ))),
+                                Err(error) => {
+                                    complete_account_add(app, &provider, false);
+                                    app.cells.push(Cell::Error(format!(
+                                        "could not save API key: {error:#}"
+                                    )))
+                                }
                             }
                         }
                         SecretPromptKind::ProviderConfig(provider) => {
@@ -5949,13 +6197,19 @@ fn apply_picker_selection(
                     }
                     LoginChoice::External(source) => {
                         match kiss_ai::auth::external::import(source) {
-                            Ok(()) => app.cells.push(Cell::Notice(format!(
-                                "imported {provider} credentials from {}",
-                                source.application
-                            ))),
-                            Err(error) => app
-                                .cells
-                                .push(Cell::Error(format!("credential import failed: {error:#}"))),
+                            Ok(()) => {
+                                app.cells.push(Cell::Notice(format!(
+                                    "imported {provider} credentials from {}",
+                                    source.application
+                                )));
+                                complete_account_add(app, &provider, true);
+                            }
+                            Err(error) => {
+                                complete_account_add(app, &provider, false);
+                                app.cells.push(Cell::Error(format!(
+                                    "credential import failed: {error:#}"
+                                )))
+                            }
                         }
                     }
                 }
@@ -7167,7 +7421,9 @@ fn run_slash_command(
             }
         }
         "trust" => open_trust_picker(app, session),
+        "accounts" => run_accounts_command(app, &rest),
         "login" => {
+            app.pending_account_add = None;
             if rest.is_empty() {
                 open_login_picker(app);
             } else {
@@ -7826,6 +8082,7 @@ mod tests {
             job_view: None,
             workflow_version: 0,
             workflow_outcomes: Vec::new(),
+            pending_account_add: None,
         }
     }
 
@@ -9538,6 +9795,65 @@ mod tests {
             parse_path_argument("folder/session.jsonl ignored"),
             Some("folder/session.jsonl".into())
         );
+    }
+
+    #[test]
+    fn accounts_command_validates_input_without_touching_credentials() {
+        let mut app = test_app();
+        let session = test_session(kiss_coding::SessionManager::in_memory(
+            std::path::Path::new("/tmp/project"),
+        ));
+        let mut resources = test_resources();
+
+        run_command_for_test(&mut app, &session, &mut resources, "accounts add nowhere");
+        assert!(
+            matches!(app.cells.last(), Some(Cell::Error(text)) if text.contains("unknown provider 'nowhere'"))
+        );
+        run_command_for_test(&mut app, &session, &mut resources, "accounts use codex");
+        assert!(
+            matches!(app.cells.last(), Some(Cell::Error(text)) if text.starts_with("usage: /accounts add"))
+        );
+        run_command_for_test(
+            &mut app,
+            &session,
+            &mut resources,
+            "accounts remove claude 0",
+        );
+        assert!(matches!(app.cells.last(), Some(Cell::Error(text)) if text.starts_with("usage:")));
+        assert!(app.pending_account_add.is_none());
+        assert!(app.picker.is_none());
+    }
+
+    #[test]
+    fn account_helpers_resolve_aliases_and_format_cooldowns() {
+        assert_eq!(account_provider("codex"), Some("openai-codex"));
+        assert_eq!(account_provider("Claude"), Some("anthropic"));
+        assert_eq!(account_provider("gemini"), Some("google"));
+        assert_eq!(account_provider("grok"), Some("xai"));
+        assert_eq!(account_provider("cursor"), Some("cursor"));
+        assert_eq!(account_provider("meta"), Some("meta"));
+        assert_eq!(account_provider("nope"), None);
+        assert_eq!(format_duration_secs(42), "42s");
+        assert_eq!(format_duration_secs(900), "15m");
+        assert_eq!(format_duration_secs(7980), "2h13m");
+        assert_eq!(format_duration_secs(7200), "2h");
+        let candidates = account_argument_candidates();
+        assert!(
+            candidates
+                .iter()
+                .any(|candidate| candidate.2 == "add openai-codex ")
+        );
+        assert!(candidates.iter().any(|candidate| candidate.2 == "list"));
+    }
+
+    #[test]
+    fn pending_account_add_is_consumed_by_a_failed_login_for_that_provider() {
+        let mut app = test_app();
+        app.pending_account_add = Some(("openai-codex".into(), None));
+        complete_account_add(&mut app, "anthropic", false);
+        assert!(app.pending_account_add.is_some());
+        complete_account_add(&mut app, "openai-codex", false);
+        assert!(app.pending_account_add.is_none());
     }
 
     #[test]

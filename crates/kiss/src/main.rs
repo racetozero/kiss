@@ -127,7 +127,12 @@ async fn run_command(args: &Args, command: &Command) -> anyhow::Result<i32> {
             api_key,
             base_url,
             entra_id,
+            add_account,
+            account_label,
         } => {
+            if *add_account {
+                kiss_ai::auth::accounts::begin_add(provider)?;
+            }
             if *entra_id && provider != "azure-openai-responses" {
                 anyhow::bail!("--entra-id is only supported for azure-openai-responses");
             }
@@ -191,6 +196,24 @@ async fn run_command(args: &Args, command: &Command) -> anyhow::Result<i32> {
                 } else {
                     kiss_ai::auth::store_api_key(provider, key.trim())?;
                     println!("Saved API key for {provider}.");
+                }
+            }
+            if *add_account {
+                match kiss_ai::auth::accounts::finish_add(provider, account_label.as_deref())? {
+                    Some(added) => {
+                        let pool = kiss_ai::auth::accounts::pool(provider);
+                        let total = pool.as_ref().map_or(1, |pool| pool.accounts.len());
+                        let active = pool
+                            .as_ref()
+                            .and_then(|pool| pool.active().map(|account| account.label.clone()))
+                            .unwrap_or_default();
+                        println!(
+                            "Added account {}/{total} ({}) for {provider}. Active account: {active}.",
+                            added.index + 1,
+                            added.label
+                        );
+                    }
+                    None => println!("That {provider} account is already in the pool."),
                 }
             }
             Ok(0)
