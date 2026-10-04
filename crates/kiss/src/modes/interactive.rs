@@ -1763,6 +1763,32 @@ fn handle_session_event(
                 .push(format!("verified workflow{run} `{name}` {result}"));
         }
         SessionEvent::Iterative { .. } => {}
+        SessionEvent::AccountSwitched {
+            provider,
+            from,
+            to,
+            index,
+            total,
+            retry_after_secs,
+        } => {
+            app.cells.push(Cell::Notice(format!(
+                "{provider}: {from} hit its rate limit (ready again in {}); switched to account {}/{total} ({to})",
+                format_duration_secs(retry_after_secs),
+                index + 1,
+            )));
+        }
+    }
+}
+
+/// Short human duration such as `45s`, `12m`, or `2h13m`.
+fn format_duration_secs(seconds: u64) -> String {
+    match seconds {
+        0..=59 => format!("{seconds}s"),
+        60..=3599 => format!("{}m", seconds.div_ceil(60)),
+        _ => match (seconds / 3600, (seconds % 3600) / 60) {
+            (hours, 0) => format!("{hours}h"),
+            (hours, minutes) => format!("{hours}h{minutes:02}m"),
+        },
     }
 }
 

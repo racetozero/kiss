@@ -2,6 +2,7 @@
 //! project context, skills, prompt templates, search tools, and the
 //! AgentSession facade.
 
+mod account_failover;
 mod child_turn;
 pub mod compaction;
 mod context_file;
