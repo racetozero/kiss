@@ -391,6 +391,41 @@ KISS also accepts a URL that ends in `/api/v2/cortex` or
 
 Account and region rules determine which Snowflake models you can use.
 
+### Multiple accounts with rate-limit failover
+
+Pool several accounts for one provider. KISS uses the active account until
+the provider says it is rate limited or out of quota, then sends the same
+request with the next ready account before any output appears. The
+transcript shows a one-line notice, and the limited account rests until its
+reported reset time (15 minutes when the provider gives none).
+
+```text
+/accounts add openai-codex work      # runs the normal login flow
+/accounts add openai-codex personal
+/accounts                            # list pools, active account, cooldowns
+/accounts use openai-codex 2         # switch by hand
+/accounts rename openai-codex 2 home
+/accounts remove openai-codex 1
+```
+
+From a shell, add `--add-account` to `kiss login`:
+
+```bash
+kiss login openai-codex --add-account --account-label personal
+kiss login google --api-key KEY_TWO --add-account
+```
+
+Pools work for any provider KISS can log in to, including OpenAI Codex,
+Anthropic, Cursor, Google, Meta, and xAI. When the selected model's provider
+has two or more accounts, the footer shows the active one, for example
+`⇄ 2/4 personal`. KISS fails over on HTTP 429, Codex `usage_limit_reached`
+(HTTP or WebSocket), Anthropic `rate_limit_error`, Gemini
+`RESOURCE_EXHAUSTED`, xAI credit exhaustion, and Cursor
+`ERROR_RESOURCE_EXHAUSTED`. It does not fail over on overload or 5xx errors,
+which affect every account alike. Credentials from environment variables or
+`--api-key` on the command line are never rotated. `/logout PROVIDER`
+removes the whole pool.
+
 ### Your own OpenAI-compatible provider
 
 Add a Chat Completions, Responses, or Codex Responses provider. The model then

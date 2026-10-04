@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Added
+
+- Pool multiple accounts per provider with `/accounts add PROVIDER [label]`
+  or `kiss login PROVIDER --add-account`. When the active account is rate
+  limited or out of quota, KISS resends the request with the next ready
+  account before any output appears. Works for OpenAI Codex (HTTP and
+  WebSocket), Anthropic, Cursor, Google, Meta, xAI, and every other provider
+  with a login. The footer shows the active account when a pool has two or
+  more accounts.
+- Keep `retry-after` and Claude subscription reset headers, and the status
+  and type of Responses WebSocket error frames, in provider error messages.
+
 ## 0.0.30 - 2026-10-03
 
 ### Fixed
