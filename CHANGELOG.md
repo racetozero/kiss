@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.0.33 - 2026-10-05
+
 ### Fixed
 
 - Select Git Bash, PowerShell 7, Windows PowerShell, or `cmd.exe` automatically
