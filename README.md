@@ -883,6 +883,33 @@ Use `/config voice-language es` to select Spanish. The default is `en`.
 
 ## Configuration
 
+### Herdr and cmux
+
+Run `kiss` in a Herdr or cmux pane to enable native support. No hook script
+is required. KISS reports when it is working, idle, or waiting for a workflow
+approval, project trust decision, or login input. Reports include active
+workflows and jobs. Each cmux surface has its own KISS status entry and
+receives notifications when work finishes or a decision is required.
+
+For saved sessions, KISS registers `kiss --session <file>` with the current
+model and reasoning level. The command changes when you switch sessions or
+models. `--no-session` does not register a resume command. KISS removes its
+status and resume data when you exit. A host failure does not stop KISS.
+
+Herdr session resume requires version 0.9.2 or later. Herdr cannot accept
+resume arguments with apostrophes or control characters, or commands with
+more than 64 arguments or 8 KiB of argument data. For these commands, KISS
+reports state without session resume.
+
+cmux stores the resume command for the current surface. To permit automatic
+resume, approve the KISS command prefix in **Settings > Terminal > Resume
+Commands**. KISS does not change these approvals. The cmux CLI must be on
+`PATH` and the socket must be enabled.
+
+Resume commands do not contain the original user prompt or an `--api-key`
+override. Use saved credentials or environment variables for sessions that
+must resume. This integration applies to interactive terminal mode.
+
 KISS stores user configuration in `~/.kiss/agent`. It loads project
 configuration only after you trust the project.
 

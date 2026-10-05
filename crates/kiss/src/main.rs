@@ -17,6 +17,7 @@ mod provider_cli;
 mod session_sources;
 mod setup;
 mod slash_commands;
+mod terminal_hosts;
 mod update;
 mod voice;
 mod workflow_ui;

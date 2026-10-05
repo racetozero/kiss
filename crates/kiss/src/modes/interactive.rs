@@ -76,6 +76,7 @@ struct App {
     startup_lines: Vec<String>,
     queue_note: Option<String>,
     working: bool,
+    compacting: bool,
     spinner_frame: usize,
     session_title: Option<String>,
     terminal_title_dirty: bool,
@@ -1126,6 +1127,13 @@ fn provisional_lines(editor: &mut Editor, theme: &Theme, width: usize) -> Vec<St
 }
 
 pub async fn run(args: &Args) -> Result<i32> {
+    let hosts = crate::terminal_hosts::TerminalHosts::from_env();
+    let result = run_with_hosts(args, &hosts).await;
+    hosts.shutdown().await;
+    result
+}
+
+async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHosts) -> Result<i32> {
     let (event_tx, mut event_rx) = mpsc::unbounded_channel::<SessionEvent>();
     let sink = {
         let tx = event_tx.clone();
@@ -1337,6 +1345,7 @@ pub async fn run(args: &Args) -> Result<i32> {
         startup_lines,
         queue_note: None,
         working: false,
+        compacting: false,
         spinner_frame: 0,
         session_title,
         terminal_title_dirty: true,
@@ -1422,6 +1431,9 @@ pub async fn run(args: &Args) -> Result<i32> {
     file_search.warm(session.manager.lock().unwrap().cwd().to_path_buf());
 
     'main: loop {
+        if hosts.enabled() {
+            hosts.update(terminal_host_state(&app, &session), &session, args);
+        }
         let resize_deadline = resize_state
             .next_deadline()
             .unwrap_or_else(|| Instant::now() + Duration::from_secs(86_400));
@@ -1553,6 +1565,46 @@ pub async fn run(args: &Args) -> Result<i32> {
 enum Flow {
     Continue,
     Quit,
+}
+
+fn terminal_host_state(
+    app: &App,
+    session: &kiss_coding::AgentSession,
+) -> crate::terminal_hosts::State {
+    use crate::terminal_hosts::State;
+    let blocked = match app.picker.as_ref().map(|picker| &picker.kind) {
+        Some(PickerKind::WorkflowApproval(..)) => Some("Workflow approval required"),
+        Some(PickerKind::Trust) => Some("Project trust decision required"),
+        _ if app.secret_prompt.is_some() => Some("Login input required"),
+        _ => None,
+    };
+    if let Some(message) = blocked {
+        return State::Blocked(message);
+    }
+    let working = app.working
+        || app.compacting
+        || session.is_running()
+        || app.queue_note.is_some()
+        || app.command_status.is_some()
+        || app
+            .btw_panel
+            .as_ref()
+            .is_some_and(|panel| panel.cancel.is_some())
+        || app.recap_loading
+        || app.title_generation_pending
+        || session
+            .workflows()
+            .is_some_and(|runtime| runtime.active().is_some())
+        || session.iterative_jobs().is_some_and(|runtime| {
+            runtime.summaries().iter().any(|job| {
+                matches!(
+                    job.status,
+                    kiss_coding::iterative::JobStatus::Queued
+                        | kiss_coding::iterative::JobStatus::Running
+                )
+            })
+        });
+    if working { State::Working } else { State::Idle }
 }
 
 fn handle_session_event(
@@ -1728,6 +1780,7 @@ fn handle_session_event(
             };
         }
         SessionEvent::CompactionStart { auto } => {
+            app.compacting = true;
             app.cells.push(Cell::Notice(if auto {
                 "auto-compacting context…".into()
             } else {
@@ -1738,14 +1791,17 @@ fn handle_session_event(
             tokens_before,
             error,
             ..
-        } => match error {
-            Some(err) => app
-                .cells
-                .push(Cell::Error(format!("compaction failed: {err}"))),
-            None => app.cells.push(Cell::Notice(format!(
-                "compacted {tokens_before} tokens of history"
-            ))),
-        },
+        } => {
+            app.compacting = false;
+            match error {
+                Some(err) => app
+                    .cells
+                    .push(Cell::Error(format!("compaction failed: {err}"))),
+                None => app.cells.push(Cell::Notice(format!(
+                    "compacted {tokens_before} tokens of history"
+                ))),
+            }
+        }
         SessionEvent::Retry {
             attempt,
             max,
@@ -8150,6 +8206,7 @@ mod tests {
             startup_lines: Vec::new(),
             queue_note: None,
             working: false,
+            compacting: false,
             spinner_frame: 0,
             session_title: None,
             terminal_title_dirty: false,
@@ -8279,6 +8336,70 @@ mod tests {
             .append_message(AgentMessage::Assistant(answer))
             .unwrap();
         test_session(manager)
+    }
+
+    #[test]
+    fn terminal_hosts_follow_compaction_queue_and_required_decisions() {
+        use crate::terminal_hosts::State;
+        let mut app = test_app();
+        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
+            "/synthetic",
+        )));
+        let (tx, _rx) = mpsc::unbounded_channel();
+        let mut search = FileSearchService::new(tx);
+        assert_eq!(terminal_host_state(&app, &session), State::Idle);
+        handle_session_event(
+            &mut app,
+            SessionEvent::CompactionStart { auto: true },
+            &mut search,
+            &session,
+        );
+        handle_session_event(
+            &mut app,
+            SessionEvent::Agent(Box::new(AgentEvent::AgentEnd {
+                messages: Vec::new(),
+            })),
+            &mut search,
+            &session,
+        );
+        assert_eq!(terminal_host_state(&app, &session), State::Working);
+        handle_session_event(
+            &mut app,
+            SessionEvent::CompactionEnd {
+                summary: String::new(),
+                tokens_before: 100,
+                error: None,
+            },
+            &mut search,
+            &session,
+        );
+        assert_eq!(terminal_host_state(&app, &session), State::Idle);
+        handle_session_event(
+            &mut app,
+            SessionEvent::QueueUpdate {
+                steering: Vec::new(),
+                follow_up: vec!["next task".into()],
+            },
+            &mut search,
+            &session,
+        );
+        assert_eq!(terminal_host_state(&app, &session), State::Working);
+        let (reply, _answer) = tokio::sync::oneshot::channel();
+        open_workflow_approval(
+            &mut app,
+            Box::new(kiss_coding::workflows::WorkflowPlan {
+                name: "test".into(),
+                description: "test".into(),
+                phases: Vec::new(),
+                estimated_agents: Some(1),
+                source: "".into(),
+            }),
+            reply,
+        );
+        assert_eq!(
+            terminal_host_state(&app, &session),
+            State::Blocked("Workflow approval required")
+        );
     }
 
     #[test]
