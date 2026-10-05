@@ -1,9 +1,12 @@
 //! Account failover through a real `AgentSession` and real pool files.
-//! Own test binary: it points HOME at a temporary directory.
+//! Own test binary: it points HOME at a temporary directory. Unix only,
+//! because Windows resolves the profile directory without HOME.
+#![cfg(unix)]
 
 use kiss_agent::AgentMessage;
 use kiss_ai::{AssistantEvent, AssistantMessage, ContentBlock, EventStream, StopReason};
 use kiss_coding::{AgentSession, SessionEvent, SessionManager, Settings};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 const LIMITED: &str = r#"HTTP 429 Too Many Requests: {"error":{"type":"usage_limit_reached","resets_in_seconds":3600}}"#;
@@ -26,13 +29,15 @@ async fn rate_limited_account_fails_over_before_output() {
         .find(|m| m.provider == "xai")
         .unwrap()
         .clone();
+    let mut settings = Settings::default();
+    settings.retry.enabled = false;
     let events = Arc::new(Mutex::new(Vec::new()));
     let saved = events.clone();
     let session = AgentSession::new(
         SessionManager::in_memory(home.path()),
         Vec::new(),
         registry,
-        Settings::default(),
+        settings,
         "test".into(),
         model,
         kiss_ai::ThinkingLevel::Off,
@@ -41,6 +46,9 @@ async fn rate_limited_account_fails_over_before_output() {
     );
     let calls = Arc::new(Mutex::new(Vec::new()));
     let seen = calls.clone();
+    // 0: key-one is limited. 1: output, then a limit. 2: an unrelated error.
+    let phase = Arc::new(AtomicUsize::new(0));
+    let current = phase.clone();
     session.set_stream_fn(Some(Arc::new(move |_, _, options| {
         let secret = options.credential.as_ref().unwrap().value().to_string();
         seen.lock().unwrap().push(secret.clone());
@@ -49,13 +57,28 @@ async fn rate_limited_account_fails_over_before_output() {
         sink.send(AssistantEvent::Start {
             partial: message.clone(),
         });
-        if secret == "key-one" {
-            message.stop_reason = StopReason::Error;
-            message.error_message = Some(LIMITED.into());
-            sink.error(message);
-        } else {
-            message.content.push(ContentBlock::text("hello"));
-            sink.done(message);
+        let error = match (current.load(Ordering::SeqCst), secret.as_str()) {
+            (0, "key-one") => Some(LIMITED),
+            (1, _) => {
+                sink.send(AssistantEvent::TextDelta {
+                    content_index: 0,
+                    delta: "partial".into(),
+                });
+                Some(LIMITED)
+            }
+            (2, _) => Some("HTTP 401 Unauthorized: bad token"),
+            _ => None,
+        };
+        match error {
+            Some(error) => {
+                message.stop_reason = StopReason::Error;
+                message.error_message = Some(error.into());
+                sink.error(message);
+            }
+            None => {
+                message.content.push(ContentBlock::text("hello"));
+                sink.done(message);
+            }
         }
         stream
     })));
@@ -63,13 +86,10 @@ async fn rate_limited_account_fails_over_before_output() {
     session.prompt(vec![AgentMessage::user("hi")]).await;
 
     assert_eq!(*calls.lock().unwrap(), ["key-one", "key-two"]);
-    let events = events.lock().unwrap();
-    assert!(events.iter().any(|e| matches!(e, SessionEvent::AccountSwitched(s) if s.to == "backup" && s.retry_after_secs == 3600)));
-    assert!(
-        !events
-            .iter()
-            .any(|e| matches!(e, SessionEvent::Retry { .. }))
-    );
+    assert!(events.lock().unwrap().iter().any(|e| matches!(
+        e,
+        SessionEvent::AccountSwitched(s) if s.to == "backup" && s.retry_after_secs == 3600
+    )));
     let pool = accounts::pool("xai").unwrap();
     assert_eq!(pool.active().unwrap().label, "backup");
     assert!(pool.accounts[0].is_limited());
@@ -83,4 +103,25 @@ async fn rate_limited_account_fails_over_before_output() {
     )
     .unwrap();
     assert!(text.contains("hello") && !text.contains("usage_limit_reached"));
+
+    // Errors after output, and errors that are not rate limits, reach the
+    // session unchanged and never rotate.
+    for next in [1, 2] {
+        phase.store(next, Ordering::SeqCst);
+        calls.lock().unwrap().clear();
+        events.lock().unwrap().clear();
+        session.prompt(vec![AgentMessage::user("again")]).await;
+        assert_eq!(*calls.lock().unwrap(), ["key-two"]);
+        assert!(
+            !events
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|e| matches!(e, SessionEvent::AccountSwitched(_)))
+        );
+        assert_eq!(
+            accounts::pool("xai").unwrap().active().unwrap().label,
+            "backup"
+        );
+    }
 }

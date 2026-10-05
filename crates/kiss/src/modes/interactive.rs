@@ -3499,12 +3499,18 @@ fn handle_secret_prompt(
                                 _ => Err(anyhow::anyhow!("invalid value format for {provider}")),
                             };
                             match configured {
-                                Ok(()) => app.cells.push(Cell::Notice(format!(
-                                    "saved authentication for {provider}. Run /reload to apply endpoint settings"
-                                ))),
-                                Err(error) => app.cells.push(Cell::Error(format!(
-                                    "could not save authentication: {error:#}"
-                                ))),
+                                Ok(()) => {
+                                    app.cells.push(Cell::Notice(format!(
+                                        "saved authentication for {provider}. Run /reload to apply endpoint settings"
+                                    )));
+                                    complete_account_add(app, &provider, true);
+                                }
+                                Err(error) => {
+                                    complete_account_add(app, &provider, false);
+                                    app.cells.push(Cell::Error(format!(
+                                        "could not save authentication: {error:#}"
+                                    )))
+                                }
                             }
                         }
                         SecretPromptKind::Llama => {
@@ -4506,8 +4512,21 @@ fn open_login_methods_picker(app: &mut App, provider: &str) {
         });
         return;
     }
+    // Ambient identities (Entra ID, gcloud ADC, AWS profiles) are not
+    // separate accounts, so `/accounts add` offers only real credentials.
+    let adding_account = app.pending_account_add.is_some();
     let mut choices = kiss_ai::auth::login_methods(provider)
         .into_iter()
+        .filter(|method| {
+            !adding_account
+                || matches!(
+                    method,
+                    kiss_ai::auth::LoginMethod::BrowserOAuth
+                        | kiss_ai::auth::LoginMethod::DeviceOAuth
+                        | kiss_ai::auth::LoginMethod::ManualOAuth
+                        | kiss_ai::auth::LoginMethod::ApiKey
+                )
+        })
         .map(LoginChoice::Method)
         .collect::<Vec<_>>();
     choices.extend(
@@ -9764,6 +9783,28 @@ mod tests {
         assert_eq!(format_duration_secs(900), "15m");
         assert_eq!(format_duration_secs(7980), "2h13m");
         assert_eq!(format_duration_secs(7200), "2h");
+    }
+
+    #[test]
+    fn adding_an_account_offers_only_per_account_login_methods() {
+        let mut app = test_app();
+        app.pending_account_add = Some(("google-vertex".into(), None));
+        open_login_methods_picker(&mut app, "google-vertex");
+        let Some(Picker {
+            kind: PickerKind::LoginMethods(_, choices),
+            ..
+        }) = app.picker.as_ref()
+        else {
+            panic!("login methods picker");
+        };
+        assert!(!choices.iter().any(|choice| matches!(
+            choice,
+            LoginChoice::Method(kiss_ai::auth::LoginMethod::GoogleApplicationDefault)
+        )));
+        assert!(choices.iter().any(|choice| matches!(
+            choice,
+            LoginChoice::Method(kiss_ai::auth::LoginMethod::ApiKey)
+        )));
     }
 
     #[test]

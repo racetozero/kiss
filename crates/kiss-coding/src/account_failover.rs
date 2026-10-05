@@ -73,8 +73,8 @@ pub(crate) fn wrap(inner: StreamFn, registry: Arc<Registry>, on_switch: SwitchFn
                     sink.send(event);
                 }
                 let Some((switch, credential)) = next_account else {
-                    // The upstream ended without output; let the consumer
-                    // synthesize its usual "ended unexpectedly" error.
+                    // A stream that ends without a terminal event still
+                    // releases its held Start.
                     for held in held {
                         sink.send(held);
                     }
