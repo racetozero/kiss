@@ -444,22 +444,29 @@ Choose the API and credential source:
 
 - Use `--api responses` for a Responses API server.
 - Use `--api-key-env NAME` to read a key from an environment variable.
+- Use `--no-auth` for a proxy that manages authentication. KISS saves a
+  placeholder key, so no login or environment variable is required.
 - Use `kiss login <provider> --api-key KEY` to save a key.
 
-CodexLB can reuse the OpenAI Codex login stored by KISS:
+Use `--no-auth` when CodexLB manages authentication:
 
 ```bash
-kiss login openai-codex
 kiss provider add codex-lb \
   --base-url http://127.0.0.1:2455/backend-api/codex \
   --api codex \
   --model gpt-6.1-sol \
+  --no-auth \
   --reasoning
 kiss --model codex-lb/gpt-6.1-sol
 ```
 
 Use `--api-key-env CODEX_LB_API_KEY` when CodexLB needs its own key. Repeat
 `--header KEY=VALUE` when a gateway needs custom headers.
+
+To reuse KISS's OpenAI Codex login, run `kiss login openai-codex` and omit
+`--no-auth` from the provider command.
+
+`--no-auth` cannot be combined with `--api-key-env` or `--auth-provider`.
 
 The `auto`, `websocket`, and `websocket-cached` transport settings use the
 Responses WebSocket API for the built-in OpenAI, OpenAI Codex, and Azure OpenAI
@@ -470,7 +477,7 @@ transport.
 The TUI supports the same basic operations:
 
 ```text
-/provider add <id> <chat-completions|responses|codex> <base-url> <model> [KEY_ENV|auth:<provider>]
+/provider add <id> <chat-completions|responses|codex> <base-url> <model> [KEY_ENV|auth:<provider>|--no-auth]
 /provider list
 /provider remove <id>
 ```

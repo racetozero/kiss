@@ -7094,7 +7094,7 @@ fn run_provider_command(app: &mut App, arguments: &str) {
                 .and_then(|value| value.strip_prefix("auth:"))
                 .map(str::to_owned);
             let api_key_env = credential
-                .filter(|value| !value.starts_with("auth:"))
+                .filter(|value| !value.starts_with("auth:") && *value != "--no-auth")
                 .map(|value| value.trim_start_matches('$').to_owned());
             let id = parts[1].to_string();
             let result = provider_config::add(&AddProvider {
@@ -7106,6 +7106,7 @@ fn run_provider_command(app: &mut App, arguments: &str) {
                 model_name: None,
                 api_key_env,
                 auth_provider,
+                no_auth: credential == Some("--no-auth"),
                 headers: std::collections::BTreeMap::new(),
                 reasoning: api != ProviderApi::ChatCompletions,
                 context_window: 128_000,
@@ -7138,7 +7139,7 @@ fn run_provider_command(app: &mut App, arguments: &str) {
 }
 
 fn provider_tui_usage() -> &'static str {
-    "Usage:\n/provider add <id> <chat-completions|responses|codex> <base-url> <model> [KEY_ENV|auth:<provider>]\n/provider list\n/provider remove <id>"
+    "Usage:\n/provider add <id> <chat-completions|responses|codex> <base-url> <model> [KEY_ENV|auth:<provider>|--no-auth]\n/provider list\n/provider remove <id>"
 }
 
 fn webmcp_manager(settings: &kiss_coding::settings::WebMcpSettings) -> kiss_webmcp::WebMcpManager {

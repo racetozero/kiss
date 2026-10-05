@@ -177,6 +177,10 @@ pub enum ProviderCommand {
         #[arg(long)]
         auth_provider: Option<String>,
 
+        /// Use a placeholder key for a server that needs no client authentication.
+        #[arg(long, conflicts_with_all = ["api_key_env", "auth_provider"])]
+        no_auth: bool,
+
         /// HTTP header. Repeat as KEY=VALUE.
         #[arg(long = "header", value_name = "KEY=VALUE")]
         headers: Vec<String>,

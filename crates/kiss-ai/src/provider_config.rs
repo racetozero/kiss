@@ -61,6 +61,7 @@ pub struct AddProvider {
     pub model_name: Option<String>,
     pub api_key_env: Option<String>,
     pub auth_provider: Option<String>,
+    pub no_auth: bool,
     pub headers: BTreeMap<String, String>,
     pub reasoning: bool,
     pub context_window: u64,
@@ -106,7 +107,7 @@ fn add_at(path: &Path, request: &AddProvider) -> Result<()> {
             provider.insert("apiKey".into(), json!(format!("${variable}")));
         } else if let Some(auth_provider) = request.auth_provider.as_deref() {
             provider.insert("authProvider".into(), json!(auth_provider));
-        } else if request.api == ProviderApi::Codex {
+        } else if request.api == ProviderApi::Codex && !request.no_auth {
             provider.insert("authProvider".into(), json!("openai-codex"));
         } else {
             // The adapters require a credential value. A local server can
@@ -194,6 +195,11 @@ fn validate(request: &AddProvider) -> Result<()> {
     }
     if request.api_key_env.is_some() && request.auth_provider.is_some() {
         bail!("use either an API key environment variable or an authentication provider");
+    }
+    if request.no_auth && (request.api_key_env.is_some() || request.auth_provider.is_some()) {
+        bail!(
+            "you selected no authentication and a credential source. Use no authentication, an API key environment variable, or an authentication provider; select only one"
+        );
     }
     for (name, value) in &request.headers {
         if name.trim().is_empty() || value.contains(['\r', '\n']) {
@@ -321,6 +327,7 @@ mod tests {
             model_name: None,
             api_key_env: None,
             auth_provider: None,
+            no_auth: false,
             headers: BTreeMap::new(),
             reasoning: true,
             context_window: 128_000,
@@ -349,6 +356,31 @@ mod tests {
         assert_eq!(model.api, "openai-codex-responses");
         assert_eq!(model.base_url, "http://127.0.0.1:2455/backend-api/codex");
         assert_eq!(registry.credential_provider("codex-lb"), "openai-codex");
+    }
+
+    #[test]
+    fn codex_proxy_without_auth_resolves_a_placeholder_credential() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("models.json");
+        let mut request = request();
+        request.id = "kiss-no-auth-proxy-test".into();
+        request.no_auth = true;
+        add_at(&path, &request).unwrap();
+
+        let registry = crate::Registry::load(Some(&path));
+        let provider = registry.credential_provider(&request.id);
+        let credential = crate::auth::resolve_credential_local(provider, &registry.declared_keys)
+            .expect("proxy must work without a saved login or environment key");
+        assert_eq!(credential.value(), "not-needed");
+
+        for (api_key_env, auth_provider) in [
+            (Some("PROXY_KEY".into()), None),
+            (None, Some("openai-codex".into())),
+        ] {
+            request.api_key_env = api_key_env;
+            request.auth_provider = auth_provider;
+            assert!(add_at(&path, &request).is_err());
+        }
     }
 
     #[test]
