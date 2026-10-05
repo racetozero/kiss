@@ -115,6 +115,20 @@ mod tests {
     fn windows_shell_selection() {
         if std::env::var_os("KISS_TEST_SHELL_PROBE").is_some() {
             #[cfg(windows)]
+            for name in [
+                "ProgramFiles",
+                "ProgramFiles(x86)",
+                "LOCALAPPDATA",
+                "SystemRoot",
+                "COMSPEC",
+                "PATH",
+            ] {
+                let value = std::env::var_os(format!("KISS_TEST_{name}")).unwrap();
+                // SAFETY: Windows environment mutation is thread-safe. Keep this
+                // inside the probe process so the parent test is not affected.
+                unsafe { std::env::set_var(name, value) };
+            }
+            #[cfg(windows)]
             let shell = command(None, "echo probe", None)
                 .as_std()
                 .get_program()
@@ -143,21 +157,28 @@ mod tests {
             windows.join("System32/cmd.exe"),
         ];
         let probe = |expected: &std::path::Path| {
-            let output = std::process::Command::new(std::env::current_exe().unwrap())
+            let mut process = std::process::Command::new(std::env::current_exe().unwrap());
+            process
+                .env_clear()
                 .args([
                     "--exact",
                     "tools::shell::tests::windows_shell_selection",
                     "--nocapture",
                 ])
-                .env("KISS_TEST_SHELL_PROBE", "1")
-                .env("ProgramFiles", &program_files)
-                .env("ProgramFiles(x86)", root.join("Program Files x86"))
-                .env("LOCALAPPDATA", root.join("LocalAppData"))
-                .env("SystemRoot", &windows)
-                .env("COMSPEC", root.join("comspec/cmd.exe"))
-                .env("PATH", &path)
-                .output()
-                .unwrap();
+                .env("KISS_TEST_SHELL_PROBE", "1");
+            for (name, value) in [
+                ("ProgramFiles", program_files.clone()),
+                ("ProgramFiles(x86)", root.join("Program Files x86")),
+                ("LOCALAPPDATA", root.join("LocalAppData")),
+                ("SystemRoot", windows.clone()),
+                ("COMSPEC", root.join("comspec/cmd.exe")),
+                ("PATH", path.clone()),
+            ] {
+                process
+                    .env(name, &value)
+                    .env(format!("KISS_TEST_{name}"), value);
+            }
+            let output = process.output().unwrap();
             assert!(output.status.success(), "{output:?}");
             let stdout = String::from_utf8(output.stdout).unwrap();
             let selected = stdout
