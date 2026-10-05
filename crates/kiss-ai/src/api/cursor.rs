@@ -486,7 +486,37 @@ async fn run(
                     thinking_index = None;
                 }
                 Some(wire::agent_server_message::Message::InteractionQuery(query)) => {
-                    anyhow::bail!("unsupported Cursor interaction query {}", query.id);
+                    use wire::interaction_query::Query;
+                    use wire::interaction_response::Result as Reply;
+
+                    let approved = || wire::InteractionPermission {
+                        result: Some(wire::interaction_permission::Result::Approved(wire::EmptyInteractionQuery {})),
+                    };
+                    let rejection = || wire::InteractionRejection {
+                        reason: "Cursor requested a native interaction that KISS cannot perform. Use the registered mcp_kiss tools or ask the user in your reply".into(),
+                    };
+                    let result = match query.query {
+                        Some(Query::WebSearch(_)) => Reply::WebSearch(approved()),
+                        Some(Query::ExaSearch(_)) => Reply::ExaSearch(approved()),
+                        Some(Query::ExaFetch(_)) => Reply::ExaFetch(approved()),
+                        Some(Query::WebFetch(_)) => Reply::WebFetch(approved()),
+                        Some(Query::AskQuestion(_)) => Reply::AskQuestion(wire::QuestionInteractionResponse {
+                            result: Some(wire::QuestionInteractionResult { rejected: Some(rejection()) }),
+                        }),
+                        Some(Query::SwitchMode(_)) => Reply::SwitchMode(wire::InteractionPermission {
+                            result: Some(wire::interaction_permission::Result::Rejected(rejection())),
+                        }),
+                        Some(Query::CreatePlan(_)) => Reply::CreatePlan(wire::PlanInteractionResponse {
+                            result: Some(wire::PlanInteractionResult { error: Some(rejection()) }),
+                        }),
+                        Some(Query::SetupVm(_)) => anyhow::bail!("Cursor requested VM setup (query {}). KISS runs tools on your machine. Ask Cursor to use the registered mcp_kiss tools instead of a VM", query.id),
+                        None => anyhow::bail!("Cursor sent an unknown interaction type (query {}). KISS supports web search and fetch permissions. Ask Cursor to use the registered mcp_kiss tools instead", query.id),
+                    };
+                    send(&request_tx, wire::AgentClientMessage {
+                        message: Some(wire::agent_client_message::Message::InteractionResponse(wire::InteractionResponse {
+                            id: query.id, result: Some(result),
+                        })),
+                    })?;
                 }
                 Some(wire::agent_server_message::Message::ConversationCheckpointUpdate(_))
                 | None => {}
@@ -1563,8 +1593,30 @@ mod tests {
             "append-error",
             "cancel",
             "missing-default",
+            "interaction-web-search",
+            "interaction-exa-search",
+            "interaction-exa-fetch",
+            "interaction-web-fetch",
+            "interaction-web-fetch-id",
+            "interaction-question",
+            "interaction-mode",
+            "interaction-plan",
+            "interaction-vm",
+            "interaction-unknown",
         ] {
             let shell_mode = mode.starts_with("shell");
+            let interaction_field = match mode {
+                "interaction-web-search" => Some(2u8),
+                "interaction-question" => Some(3),
+                "interaction-mode" => Some(4),
+                "interaction-exa-search" => Some(5),
+                "interaction-exa-fetch" => Some(6),
+                "interaction-plan" => Some(7),
+                "interaction-vm" => Some(8),
+                "interaction-web-fetch" | "interaction-web-fetch-id" => Some(9),
+                "interaction-unknown" => Some(10),
+                _ => None,
+            };
             tokio::time::timeout(Duration::from_secs(5), async {
                 let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
                 let mut model = model();
@@ -1684,6 +1736,35 @@ mod tests {
                                     initial_seen = true;
                                 }
                                 wire::agent_client_message::Message::ClientHeartbeat(_) => {}
+                                wire::agent_client_message::Message::InteractionResponse(_) => {
+                                    // Check upstream wire tags independently of KISS's response schema.
+                                    // Request id 0 is omitted by protobuf, but still requires a reply.
+                                    let field = interaction_field.unwrap();
+                                    let tags = match field {
+                                        3 => vec![6, 3, 1, 3, 1], // question -> result -> rejected -> reason
+                                        4 => vec![6, 4, 2, 1], // mode -> rejected -> reason
+                                        7 => vec![6, 7, 1, 2, 1], // plan -> result -> error -> message
+                                        _ => vec![6, u32::from(field), 1], // hosted operation -> approved
+                                    };
+                                    let mut payload = append.data.as_slice();
+                                    for tag in tags {
+                                        assert_eq!(prost::encoding::decode_key(&mut payload).unwrap(), (tag, prost::encoding::WireType::LengthDelimited));
+                                        let length = prost::encoding::decode_varint(&mut payload).unwrap() as usize;
+                                        assert_eq!(payload.len(), length);
+                                        if tag == 6 && mode == "interaction-web-fetch-id" {
+                                            assert_eq!(prost::encoding::decode_key(&mut payload).unwrap(), (1, prost::encoding::WireType::Varint));
+                                            assert_eq!(prost::encoding::decode_varint(&mut payload).unwrap(), 42);
+                                        }
+                                    }
+                                    if matches!(field, 3 | 4 | 7) {
+                                        let reason = std::str::from_utf8(payload).unwrap();
+                                        assert!(reason.contains("KISS cannot perform"));
+                                        assert!(reason.contains("mcp_kiss tools"));
+                                    } else {
+                                        assert!(payload.is_empty());
+                                    }
+                                    finished = true;
+                                }
                                 wire::agent_client_message::Message::ExecClientMessage(reply) => {
                                     assert_eq!(reply.id, 9);
                                     assert_eq!(reply.exec_id, "exec-9");
@@ -1767,6 +1848,18 @@ mod tests {
                         }
                         if initial_seen && !tool_sent && let Some(run) = run_socket.as_mut() {
                             assert_eq!(run_id, append_id);
+                            if let Some(field) = interaction_field {
+                                // AgentServerMessage.interaction_query = 7, query id = 0.
+                                let payload = if mode == "interaction-web-fetch-id" {
+                                    vec![0x3a, 0x04, 0x08, 42, field << 3 | 2, 0x00]
+                                } else {
+                                    vec![0x3a, 0x02, field << 3 | 2, 0x00]
+                                };
+                                let frame = wire::frame_bytes(&payload);
+                                run.write_all(format!("{:x}\r\n", frame.len()).as_bytes()).await.unwrap();
+                                run.write_all(&frame).await.unwrap();
+                                run.write_all(b"\r\n").await.unwrap();
+                            }
                             if mode == "tools" || mode == "context-only" || shell_mode {
                                 // Upstream ExecServerMessage tag 10 is a context request,
                                 // not a model-requested native tool. id=8, execId=context-8.
@@ -1827,6 +1920,15 @@ mod tests {
                 } else if mode == "missing-default" {
                     assert_eq!(result.stop_reason, StopReason::Error);
                     assert!(result.error_message.unwrap().contains("default model"));
+                } else if mode == "interaction-vm" || mode == "interaction-unknown" {
+                    assert_eq!(result.stop_reason, StopReason::Error);
+                    let error = result.error_message.unwrap();
+                    assert!(error.contains(if mode == "interaction-vm" { "VM setup" } else { "unknown interaction type" }));
+                    assert!(error.contains("mcp_kiss tools"));
+                } else if interaction_field.is_some() {
+                    assert_eq!(result.stop_reason, StopReason::Stop, "{result:?}");
+                    assert_eq!(result.text(), "http1 ok");
+                    (&mut server).await.unwrap();
                 } else {
                     assert_eq!(result.stop_reason, StopReason::Aborted);
                 }

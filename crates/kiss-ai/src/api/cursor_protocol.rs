@@ -69,7 +69,7 @@ pub struct BidiAppendRequest {
 
 #[derive(Clone, PartialEq, Message)]
 pub struct AgentClientMessage {
-    #[prost(oneof = "agent_client_message::Message", tags = "1, 2, 3, 5, 7")]
+    #[prost(oneof = "agent_client_message::Message", tags = "1, 2, 3, 5, 6, 7")]
     pub message: Option<agent_client_message::Message>,
 }
 
@@ -86,6 +86,8 @@ pub mod agent_client_message {
         KvClientMessage(KvClientMessage),
         #[prost(message, tag = "5")]
         ExecClientControlMessage(ExecClientControlMessage),
+        #[prost(message, tag = "6")]
+        InteractionResponse(InteractionResponse),
         #[prost(message, tag = "7")]
         ClientHeartbeat(ClientHeartbeat),
     }
@@ -300,10 +302,119 @@ pub struct TokenDeltaUpdate {
 #[derive(Clone, Copy, PartialEq, Message)]
 pub struct TurnEndedUpdate {}
 
-#[derive(Clone, Copy, PartialEq, Message)]
+#[derive(Clone, PartialEq, Message)]
 pub struct InteractionQuery {
     #[prost(uint32, tag = "1")]
     pub id: u32,
+    #[prost(oneof = "interaction_query::Query", tags = "2, 3, 4, 5, 6, 7, 8, 9")]
+    pub query: Option<interaction_query::Query>,
+}
+
+pub mod interaction_query {
+    use super::*;
+
+    #[derive(Clone, PartialEq, Oneof)]
+    pub enum Query {
+        #[prost(message, tag = "2")]
+        WebSearch(EmptyInteractionQuery),
+        #[prost(message, tag = "3")]
+        AskQuestion(EmptyInteractionQuery),
+        #[prost(message, tag = "4")]
+        SwitchMode(EmptyInteractionQuery),
+        #[prost(message, tag = "5")]
+        ExaSearch(EmptyInteractionQuery),
+        #[prost(message, tag = "6")]
+        ExaFetch(EmptyInteractionQuery),
+        #[prost(message, tag = "7")]
+        CreatePlan(EmptyInteractionQuery),
+        #[prost(message, tag = "8")]
+        SetupVm(EmptyInteractionQuery),
+        #[prost(message, tag = "9")]
+        WebFetch(EmptyInteractionQuery),
+    }
+}
+
+// KISS needs only the query type to approve a hosted operation or refuse an interaction.
+#[derive(Clone, Copy, PartialEq, Message)]
+pub struct EmptyInteractionQuery {}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct InteractionResponse {
+    #[prost(uint32, tag = "1")]
+    pub id: u32,
+    #[prost(oneof = "interaction_response::Result", tags = "2, 3, 4, 5, 6, 7, 9")]
+    pub result: Option<interaction_response::Result>,
+}
+
+pub mod interaction_response {
+    use super::*;
+
+    #[derive(Clone, PartialEq, Oneof)]
+    pub enum Result {
+        #[prost(message, tag = "2")]
+        WebSearch(InteractionPermission),
+        #[prost(message, tag = "3")]
+        AskQuestion(QuestionInteractionResponse),
+        #[prost(message, tag = "4")]
+        SwitchMode(InteractionPermission),
+        #[prost(message, tag = "5")]
+        ExaSearch(InteractionPermission),
+        #[prost(message, tag = "6")]
+        ExaFetch(InteractionPermission),
+        #[prost(message, tag = "7")]
+        CreatePlan(PlanInteractionResponse),
+        #[prost(message, tag = "9")]
+        WebFetch(InteractionPermission),
+    }
+}
+
+// Search, fetch and mode-switch permissions share the same wire fields.
+#[derive(Clone, PartialEq, Message)]
+pub struct InteractionPermission {
+    #[prost(oneof = "interaction_permission::Result", tags = "1, 2")]
+    pub result: Option<interaction_permission::Result>,
+}
+
+pub mod interaction_permission {
+    use super::*;
+
+    #[derive(Clone, PartialEq, Oneof)]
+    pub enum Result {
+        #[prost(message, tag = "1")]
+        Approved(EmptyInteractionQuery),
+        #[prost(message, tag = "2")]
+        Rejected(InteractionRejection),
+    }
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct InteractionRejection {
+    #[prost(string, tag = "1")]
+    pub reason: String,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct QuestionInteractionResponse {
+    #[prost(message, optional, tag = "1")]
+    pub result: Option<QuestionInteractionResult>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct QuestionInteractionResult {
+    #[prost(message, optional, tag = "3")]
+    pub rejected: Option<InteractionRejection>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct PlanInteractionResponse {
+    #[prost(message, optional, tag = "1")]
+    pub result: Option<PlanInteractionResult>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct PlanInteractionResult {
+    #[prost(message, optional, tag = "2")]
+    pub error: Option<InteractionRejection>,
 }
 
 #[derive(Clone, PartialEq, Message)]

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Fixed
+
+- Answer Cursor web search and fetch permission requests instead of ending
+  the turn. Return a refusal for native questions, mode changes, and plan
+  requests that KISS cannot perform so the model can continue with KISS tools.
+
 ## 0.0.33 - 2026-10-05
 
 ### Fixed
