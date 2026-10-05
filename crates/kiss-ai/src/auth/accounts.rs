@@ -12,8 +12,7 @@ use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, OnceLock};
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 
 /// Cooldown for a limited account whose provider reported no reset time.
 pub const DEFAULT_COOLDOWN: Duration = Duration::from_secs(15 * 60);
@@ -117,29 +116,6 @@ fn read_accounts_at(path: &Path) -> AccountsFile {
         .unwrap_or_default()
 }
 
-#[derive(Default)]
-struct Cache {
-    path: Option<PathBuf>,
-    signature: Option<(u64, SystemTime)>,
-    value: AccountsFile,
-}
-
-static CACHE: OnceLock<Mutex<Cache>> = OnceLock::new();
-
-/// Read with a metadata check so the footer can call this on every frame.
-fn read_accounts_cached_at(path: &Path) -> AccountsFile {
-    let signature = std::fs::metadata(path)
-        .ok()
-        .and_then(|metadata| Some((metadata.len(), metadata.modified().ok()?)));
-    let mut cache = CACHE.get_or_init(Default::default).lock().unwrap();
-    if cache.path.as_deref() != Some(path) || cache.signature != signature {
-        cache.value = read_accounts_at(path);
-        cache.path = Some(path.to_path_buf());
-        cache.signature = signature;
-    }
-    cache.value.clone()
-}
-
 /// Copy each provider's live `auth.json` credential into its active slot.
 fn sync(auth: &AuthFile, file: &mut AccountsFile) {
     for (provider, pool) in &mut file.pools {
@@ -192,7 +168,7 @@ fn info(provider: &str, pool: &Pool) -> PoolInfo {
 
 /// The provider's pool, or `None` when the provider has no pool.
 pub fn pool(provider: &str) -> Option<PoolInfo> {
-    read_accounts_cached_at(&accounts_path(&auth_path().ok()?))
+    read_accounts_at(&accounts_path(&auth_path().ok()?))
         .pools
         .get(provider)
         .filter(|pool| !pool.accounts.is_empty())
@@ -204,7 +180,7 @@ pub fn pools() -> Vec<PoolInfo> {
     let Ok(path) = auth_path() else {
         return Vec::new();
     };
-    read_accounts_cached_at(&accounts_path(&path))
+    read_accounts_at(&accounts_path(&path))
         .pools
         .iter()
         .filter(|(_, pool)| !pool.accounts.is_empty())
