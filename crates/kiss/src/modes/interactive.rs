@@ -1815,18 +1815,18 @@ fn account_provider(name: &str) -> Option<&'static str> {
 }
 
 fn account_status(account: &kiss_ai::auth::accounts::AccountInfo) -> String {
-    let limited = account
-        .limited_until
-        .filter(|_| account.is_limited())
-        .map(|until| {
-            let seconds = (until - chrono::Utc::now().timestamp_millis()).max(0) as u64 / 1000;
-            format!("rate limited · ready in {}", format_duration_secs(seconds))
-        });
-    match (account.active, limited) {
-        (true, Some(limited)) => format!("active · {limited}"),
-        (true, None) => "active".into(),
-        (false, Some(limited)) => limited,
-        (false, None) => "ready".into(),
+    let state = if account.active { "active" } else { "ready" };
+    match account.limited_until.filter(|_| account.is_limited()) {
+        Some(until) => {
+            let seconds = (until - chrono::Utc::now().timestamp_millis()) as u64 / 1000;
+            let limited = format!("rate limited · ready in {}", format_duration_secs(seconds));
+            if account.active {
+                format!("active · {limited}")
+            } else {
+                limited
+            }
+        }
+        None => state.into(),
     }
 }
 

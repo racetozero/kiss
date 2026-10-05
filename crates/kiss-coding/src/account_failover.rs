@@ -35,7 +35,7 @@ struct SavedPools {
 
 impl AccountPool for SavedPools {
     fn size(&self, provider: &str) -> usize {
-        accounts::pool_size(provider)
+        accounts::pool(provider).map_or(0, |pool| pool.accounts.len())
     }
 
     fn rotate(

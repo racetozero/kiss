@@ -154,7 +154,7 @@ fn sync(auth: &AuthFile, file: &mut AccountsFile) {
     file.pools.retain(|_, pool| !pool.accounts.is_empty());
 }
 
-/// Lock, read and sync both files, apply `f`, then write whichever changed.
+/// Lock, read and sync both files, apply `f`, then write them back.
 fn update_at<T>(
     auth_path: &Path,
     f: impl FnOnce(&mut AuthFile, &mut AccountsFile) -> Result<T>,
@@ -190,17 +190,13 @@ fn info(provider: &str, pool: &Pool) -> PoolInfo {
     }
 }
 
-fn pool_at(auth_path: &Path, provider: &str) -> Option<PoolInfo> {
-    read_accounts_cached_at(&accounts_path(auth_path))
+/// The provider's pool, or `None` when the provider has no pool.
+pub fn pool(provider: &str) -> Option<PoolInfo> {
+    read_accounts_cached_at(&accounts_path(&auth_path().ok()?))
         .pools
         .get(provider)
         .filter(|pool| !pool.accounts.is_empty())
         .map(|pool| info(provider, pool))
-}
-
-/// The provider's pool, or `None` when the provider has no pool.
-pub fn pool(provider: &str) -> Option<PoolInfo> {
-    pool_at(&auth_path().ok()?, provider)
 }
 
 /// Every configured pool, sorted by provider ID.
@@ -216,15 +212,6 @@ pub fn pools() -> Vec<PoolInfo> {
         .collect()
 }
 
-/// Number of pooled accounts. Failover only runs when this is at least two.
-pub fn pool_size(provider: &str) -> usize {
-    pool(provider).map_or(0, |pool| pool.accounts.len())
-}
-
-fn default_label(number: usize) -> String {
-    format!("account {number}")
-}
-
 fn begin_add_at(auth_path: &Path, provider: &str) -> Result<()> {
     update_at(auth_path, |auth, file| {
         if !file.pools.contains_key(provider)
@@ -235,7 +222,7 @@ fn begin_add_at(auth_path: &Path, provider: &str) -> Result<()> {
                 Pool {
                     active: 0,
                     accounts: vec![Account {
-                        label: default_label(1),
+                        label: "account 1".into(),
                         credential: entry.clone(),
                         limited_until: None,
                         added_at: now_ms(),
@@ -281,7 +268,7 @@ fn finish_add_at(
                 .map(str::trim)
                 .filter(|label| !label.is_empty())
                 .map(str::to_string)
-                .unwrap_or_else(|| default_label(number)),
+                .unwrap_or_else(|| format!("account {number}")),
             credential: new_entry,
             limited_until: None,
             added_at: now_ms(),
