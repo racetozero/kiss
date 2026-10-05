@@ -16,7 +16,7 @@ const UPDATE_THROTTLE: Duration = Duration::from_millis(100);
 
 pub struct BashTool {
     pub cwd: PathBuf,
-    /// Shell binary. Defaults to $SHELL-agnostic "bash".
+    /// Shell binary, selected when the tool is constructed unless overridden.
     pub shell_path: Option<String>,
     /// Prefix prepended to every command (settings shellCommandPrefix).
     pub command_prefix: Option<String>,
@@ -26,7 +26,7 @@ impl BashTool {
     pub fn new(cwd: PathBuf) -> Self {
         BashTool {
             cwd,
-            shell_path: None,
+            shell_path: Some(super::shell::resolve(None).to_string_lossy().into_owned()),
             command_prefix: None,
         }
     }
@@ -39,8 +39,23 @@ impl AgentTool for BashTool {
     }
 
     fn description(&self) -> String {
+        let shell = super::shell::resolve(self.shell_path.as_deref());
+        let name = shell
+            .file_stem()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_ascii_lowercase();
+        let syntax = match name.as_str() {
+            "pwsh" => "Use PowerShell 7 syntax.",
+            "powershell" => {
+                "Use Windows PowerShell 5.1 syntax. Do not use && or ||; use ; for unconditional commands and if ($?) for conditional commands."
+            }
+            "cmd" => "Use cmd.exe syntax. Do not use POSIX shell or PowerShell syntax.",
+            _ => "Use POSIX shell syntax.",
+        };
         format!(
-            "Execute a bash command in the current working directory. Returns stdout and stderr. Output is truncated to last {DEFAULT_MAX_LINES} lines or {}KB (whichever is hit first). If truncated, full output is saved to a temp file. Optionally provide a timeout in seconds.",
+            "Execute shell commands using {} in the current working directory. {syntax} Returns stdout and stderr. Output is truncated to last {DEFAULT_MAX_LINES} lines or {}KB (whichever is hit first). If truncated, full output is saved to a temp file. Optionally provide a timeout in seconds.",
+            shell.display(),
             DEFAULT_MAX_BYTES / 1024
         )
     }
@@ -49,7 +64,7 @@ impl AgentTool for BashTool {
         json!({
             "type": "object",
             "properties": {
-                "command": {"type": "string", "description": "Bash command to execute"},
+                "command": {"type": "string", "description": "Command to execute in the shell specified in this tool's description"},
                 "timeout": {"type": "number", "description": "Timeout in seconds (optional, no default timeout)"},
                 "cwd": {"type": "string", "description": "Working directory (optional, defaults to the session directory)"},
             },

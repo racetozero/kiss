@@ -34,7 +34,13 @@ pub fn build_tools(
             })),
             "bash" => {
                 let mut bash = kiss_agent::tools::bash::BashTool::new(cwd.to_path_buf());
-                bash.shell_path = settings.shell_path.clone();
+                if let Some(path) = settings
+                    .shell_path
+                    .as_ref()
+                    .filter(|path| !path.trim().is_empty())
+                {
+                    bash.shell_path = Some(path.clone());
+                }
                 bash.command_prefix = settings.shell_command_prefix.clone();
                 Some(Arc::new(bash))
             }

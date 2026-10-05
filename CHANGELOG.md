@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Fixed
+
+- Select Git Bash, PowerShell 7, Windows PowerShell, or `cmd.exe` automatically
+  on Windows when `shellPath` is not set. Tell the model which shell and
+  command syntax to use, including Cursor-native Shell calls.
+
 ## 0.0.32 - 2026-10-05
 
 ### Fixed

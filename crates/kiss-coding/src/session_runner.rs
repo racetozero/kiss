@@ -1090,6 +1090,14 @@ impl AgentSession {
         };
         drop(manager);
         let mut system_prompt = self.system_prompt.lock().unwrap().clone();
+        let tools = self.tools_for(prompt_mode);
+        // Cursor also advertises its native Shell tool; it must use the registered shell's syntax.
+        if model.provider == "cursor"
+            && let Some(shell) = tools.iter().find(|tool| tool.name() == "bash")
+        {
+            system_prompt.push_str("\n\nKISS shell tool (bash): ");
+            system_prompt.push_str(&shell.description());
+        }
         if self.settings().experimental_context_file
             && let Some(file) = self.context_file.lock().unwrap().as_ref()
         {
@@ -1131,7 +1139,7 @@ impl AgentSession {
             system_prompt,
             openai_responses_input,
             messages,
-            tools: self.tools_for(prompt_mode),
+            tools,
         }
     }
 
@@ -2477,6 +2485,38 @@ mod ephemeral_tests {
             Arc::new(|_| {}),
             subagents_allowed,
         )
+    }
+
+    #[test]
+    fn cursor_native_shell_receives_registered_shell_instructions() {
+        let session = settings_test_session(Settings::default(), false);
+        let mut model = session.model();
+        model.provider = "cursor".into();
+        session.set_model(model);
+        for (path, syntax) in [
+            ("pwsh.exe", "PowerShell 7"),
+            ("powershell.exe", "Windows PowerShell 5.1"),
+            ("cmd.exe", "cmd.exe syntax"),
+            ("bash", "POSIX shell syntax"),
+        ] {
+            let mut tool = kiss_agent::tools::bash::BashTool::new("/test".into());
+            tool.shell_path = Some(path.into());
+            session.install_session_tool(Arc::new(tool));
+            let context = session.build_context();
+            assert!(
+                context.system_prompt.contains(path),
+                "{}",
+                context.system_prompt
+            );
+            assert!(
+                context.system_prompt.contains(syntax),
+                "{}",
+                context.system_prompt
+            );
+            assert!(context.tools[0].to_def().description.contains(syntax));
+        }
+        assert!(session.remove_session_tool("bash"));
+        assert_eq!(session.build_context().system_prompt, "root prompt");
     }
 
     fn benchmark_tools() -> Vec<DynTool> {
