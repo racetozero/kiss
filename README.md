@@ -393,46 +393,43 @@ Account and region rules determine which Snowflake models you can use.
 
 ### Multiple accounts with rate-limit failover
 
-Keep working when one subscription hits its limit. Add several accounts for
-the same provider, and KISS switches to the next one automatically when the
-active account is rate limited or out of quota. The request is resent before
-any output appears, so your turn continues without an error. A one-line
-notice tells you which account took over. The limited account rejoins the
-rotation when its reported reset time passes, or after 15 minutes if the
-provider doesn't report one.
+Add more than one account to a provider to continue work when an account
+reaches its usage limit. KISS sends the request again with the next available
+account and shows a notice when it switches. The footer shows the active
+account, for example `⇄ 2/4 personal`.
+
+Use `/accounts` to add, select, or remove accounts:
 
 ```text
-/accounts                            # browse providers, then use, remove, or add an account
-/accounts add                        # choose a provider and log in another account
-/accounts add openai-codex work      # go straight to login with a label
+/accounts
+/accounts add
+/accounts add openai-codex work
 /accounts use openai-codex 2
 /accounts remove openai-codex 1
 ```
 
-From a shell, add `--add-account` to `kiss login`:
+To add an account from the command line, use `--add-account`. Use a label
+such as `personal` or `work` to identify the account:
 
 ```bash
 kiss login openai-codex --add-account --account-label personal
 kiss login google --api-key KEY_TWO --add-account
 ```
 
-Multiple accounts work with every provider KISS can log in to, including
-OpenAI Codex, Anthropic, Cursor, Google, Meta, and xAI. When the current
-model's provider has two or more accounts, the footer shows which one is
-active, for example `⇄ 2/4 personal`.
+You can add accounts for any provider that supports KISS login, including
+OpenAI Codex, Anthropic, Cursor, Google, Meta, and xAI.
 
-KISS switches accounts only for limits that belong to one account: HTTP 429,
-Codex `usage_limit_reached` over HTTP or WebSocket, Anthropic
-`rate_limit_error`, Gemini `RESOURCE_EXHAUSTED`, xAI credit exhaustion, and
-Cursor `ERROR_RESOURCE_EXHAUSTED`. Overload and 5xx errors affect every
-account equally, so KISS retries those instead. Keys from environment
-variables or `--api-key` are never switched. `/logout PROVIDER` removes every
-account for that provider.
+KISS switches accounts for rate limits and exhausted quotas. It does not
+switch for server errors. An account becomes available again at the reset
+time reported by the provider, or after 15 minutes if no reset time is given.
+Keys supplied through environment variables or the command-line `--api-key`
+option are not rotated. `/logout PROVIDER` removes all saved accounts for
+that provider.
 
 ### Your own OpenAI-compatible provider
 
-Bring any Chat Completions, Responses, or Codex Responses server into KISS.
-Its models appear in the regular model selector.
+Connect KISS to a local model server or an API proxy. Add the server URL,
+API type, and model ID. The model then appears in the model selector:
 
 ```bash
 kiss provider add local \
@@ -444,15 +441,12 @@ kiss --model local/local-model
 kiss provider remove local
 ```
 
-Pick the API and how KISS authenticates:
+Set `--api` to `chat-completions`, `responses`, or `codex` to match the
+server. If it requires a key, use `--api-key-env NAME` to read the key from
+an environment variable, or save it with
+`kiss login <provider> --api-key KEY`.
 
-- `--api responses` connects to a Responses API server.
-- `--api-key-env NAME` reads the key from an environment variable.
-- `--no-auth` is for proxies that handle authentication themselves. No login
-  or environment variable is needed.
-- `kiss login <provider> --api-key KEY` saves a key.
-
-For example, when CodexLB handles authentication:
+Use `--no-auth` when the proxy manages authentication. For CodexLB:
 
 ```bash
 kiss provider add codex-lb \
@@ -464,19 +458,23 @@ kiss provider add codex-lb \
 kiss --model codex-lb/gpt-6.1-sol
 ```
 
-If CodexLB requires its own key, use `--api-key-env CODEX_LB_API_KEY`
-instead. To send custom headers to a gateway, repeat `--header KEY=VALUE`. To
-reuse your KISS OpenAI Codex login, run `kiss login openai-codex` and leave
-out `--no-auth`. `--no-auth` can't be combined with `--api-key-env` or
-`--auth-provider`.
+This setup requires no KISS login or environment variable. If CodexLB
+requires a key, replace `--no-auth` with `--api-key-env CODEX_LB_API_KEY`.
+To use your saved OpenAI Codex login, run `kiss login openai-codex` and omit
+`--no-auth`.
 
-For the built-in OpenAI, OpenAI Codex, and Azure OpenAI providers, the
-`auto`, `websocket`, and `websocket-cached` transport settings stream over
-the Responses WebSocket API. `websocket-cached` keeps the connection open and
-sends only new input after each successful response. Other providers keep
-their usual streaming transport.
+Use `--auth-provider PROVIDER` to share another provider's saved login.
+Choose one authentication option: `--no-auth`, `--api-key-env`, or
+`--auth-provider`. Add `--header KEY=VALUE` for each custom header the
+server requires.
 
-You can manage providers from the TUI too:
+Codex providers also support WebSocket transport, including custom proxies.
+The built-in OpenAI and Azure OpenAI providers support it too. Use `auto`
+to try WebSocket with an SSE fallback, or `sse` for HTTP streaming.
+`websocket-cached` reuses the connection and sends only new input after a
+successful response.
+
+To manage providers in the terminal interface, use `/provider`:
 
 ```text
 /provider add <id> <chat-completions|responses|codex> <base-url> <model> [KEY_ENV|auth:<provider>|--no-auth]
@@ -484,8 +482,7 @@ You can manage providers from the TUI too:
 /provider remove <id>
 ```
 
-After adding or removing a provider, restart the TUI to load the updated
-model list.
+Restart KISS after you add or remove a provider to update the model list.
 
 ### MCP
 
