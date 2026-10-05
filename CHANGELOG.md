@@ -2,15 +2,21 @@
 
 ## Unreleased
 
+## 0.0.31 - 2026-10-05
+
 ### Added
 
-- Pool multiple accounts per provider with `/accounts add PROVIDER [label]`
-  or `kiss login PROVIDER --add-account`. When the active account is rate
+- Add multiple accounts per provider with `/accounts` or
+  `kiss login PROVIDER --add-account`. When the active account is rate
   limited or out of quota, KISS resends the request with the next ready
-  account before any output appears. Works for OpenAI Codex (HTTP and
+  account before any output appears. This works for OpenAI Codex (HTTP and
   WebSocket), Anthropic, Cursor, Google, Meta, xAI, and every other provider
-  with a login. The footer shows the active account when a pool has two or
-  more accounts.
+  with a login. The footer shows the active account when a provider has two
+  or more accounts.
+- Manage accounts interactively: `/accounts` opens provider, account, and
+  action pickers to add, use, or remove accounts.
+- Add `--no-auth` to `kiss provider add` and `/provider add` for proxies,
+  such as CodexLB, that handle authentication themselves.
 - Keep `retry-after` and Claude subscription reset headers, and the status
   and type of Responses WebSocket error frames, in provider error messages.
 
