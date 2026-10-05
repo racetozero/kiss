@@ -393,16 +393,18 @@ Account and region rules determine which Snowflake models you can use.
 
 ### Multiple accounts with rate-limit failover
 
-Pool several accounts for one provider. KISS uses the active account until
-the provider says it is rate limited or out of quota, then sends the same
-request with the next ready account before any output appears. The
-transcript shows a one-line notice, and the limited account rests until its
-reported reset time (15 minutes when the provider gives none).
+Keep working when one subscription hits its limit. Add several accounts for
+the same provider, and KISS switches to the next one automatically when the
+active account is rate limited or out of quota. The request is resent before
+any output appears, so your turn continues without an error. A one-line
+notice tells you which account took over. The limited account rejoins the
+rotation when its reported reset time passes, or after 15 minutes if the
+provider doesn't report one.
 
 ```text
-/accounts                            # pick a provider, then an account to use or remove, or add one
-/accounts add                        # pick a provider and log in another account
-/accounts add openai-codex work      # skip the pickers
+/accounts                            # browse providers, then use, remove, or add an account
+/accounts add                        # choose a provider and log in another account
+/accounts add openai-codex work      # go straight to login with a label
 /accounts use openai-codex 2
 /accounts remove openai-codex 1
 ```
@@ -414,21 +416,23 @@ kiss login openai-codex --add-account --account-label personal
 kiss login google --api-key KEY_TWO --add-account
 ```
 
-Pools work for any provider KISS can log in to, including OpenAI Codex,
-Anthropic, Cursor, Google, Meta, and xAI. When the selected model's provider
-has two or more accounts, the footer shows the active one, for example
-`⇄ 2/4 personal`. KISS fails over on HTTP 429, Codex `usage_limit_reached`
-(HTTP or WebSocket), Anthropic `rate_limit_error`, Gemini
-`RESOURCE_EXHAUSTED`, xAI credit exhaustion, and Cursor
-`ERROR_RESOURCE_EXHAUSTED`. It does not fail over on overload or 5xx errors,
-which affect every account alike. Credentials from environment variables or
-`--api-key` on the command line are never rotated. `/logout PROVIDER`
-removes the whole pool.
+Multiple accounts work with every provider KISS can log in to, including
+OpenAI Codex, Anthropic, Cursor, Google, Meta, and xAI. When the current
+model's provider has two or more accounts, the footer shows which one is
+active, for example `⇄ 2/4 personal`.
+
+KISS switches accounts only for limits that belong to one account: HTTP 429,
+Codex `usage_limit_reached` over HTTP or WebSocket, Anthropic
+`rate_limit_error`, Gemini `RESOURCE_EXHAUSTED`, xAI credit exhaustion, and
+Cursor `ERROR_RESOURCE_EXHAUSTED`. Overload and 5xx errors affect every
+account equally, so KISS retries those instead. Keys from environment
+variables or `--api-key` are never switched. `/logout PROVIDER` removes every
+account for that provider.
 
 ### Your own OpenAI-compatible provider
 
-Add a Chat Completions, Responses, or Codex Responses provider. The model then
-appears in the normal model selector.
+Bring any Chat Completions, Responses, or Codex Responses server into KISS.
+Its models appear in the regular model selector.
 
 ```bash
 kiss provider add local \
@@ -440,15 +444,15 @@ kiss --model local/local-model
 kiss provider remove local
 ```
 
-Choose the API and credential source:
+Pick the API and how KISS authenticates:
 
-- Use `--api responses` for a Responses API server.
-- Use `--api-key-env NAME` to read a key from an environment variable.
-- Use `--no-auth` for a proxy that manages authentication. KISS saves a
-  placeholder key, so no login or environment variable is required.
-- Use `kiss login <provider> --api-key KEY` to save a key.
+- `--api responses` connects to a Responses API server.
+- `--api-key-env NAME` reads the key from an environment variable.
+- `--no-auth` is for proxies that handle authentication themselves. No login
+  or environment variable is needed.
+- `kiss login <provider> --api-key KEY` saves a key.
 
-Use `--no-auth` when CodexLB manages authentication:
+For example, when CodexLB handles authentication:
 
 ```bash
 kiss provider add codex-lb \
@@ -460,21 +464,19 @@ kiss provider add codex-lb \
 kiss --model codex-lb/gpt-6.1-sol
 ```
 
-Use `--api-key-env CODEX_LB_API_KEY` when CodexLB needs its own key. Repeat
-`--header KEY=VALUE` when a gateway needs custom headers.
+If CodexLB requires its own key, use `--api-key-env CODEX_LB_API_KEY`
+instead. To send custom headers to a gateway, repeat `--header KEY=VALUE`. To
+reuse your KISS OpenAI Codex login, run `kiss login openai-codex` and leave
+out `--no-auth`. `--no-auth` can't be combined with `--api-key-env` or
+`--auth-provider`.
 
-To reuse KISS's OpenAI Codex login, run `kiss login openai-codex` and omit
-`--no-auth` from the provider command.
+For the built-in OpenAI, OpenAI Codex, and Azure OpenAI providers, the
+`auto`, `websocket`, and `websocket-cached` transport settings stream over
+the Responses WebSocket API. `websocket-cached` keeps the connection open and
+sends only new input after each successful response. Other providers keep
+their usual streaming transport.
 
-`--no-auth` cannot be combined with `--api-key-env` or `--auth-provider`.
-
-The `auto`, `websocket`, and `websocket-cached` transport settings use the
-Responses WebSocket API for the built-in OpenAI, OpenAI Codex, and Azure OpenAI
-providers. `websocket-cached` reuses the connection and sends only new input
-after a successful response. Other providers keep their normal streaming
-transport.
-
-The TUI supports the same basic operations:
+You can manage providers from the TUI too:
 
 ```text
 /provider add <id> <chat-completions|responses|codex> <base-url> <model> [KEY_ENV|auth:<provider>|--no-auth]
@@ -482,8 +484,8 @@ The TUI supports the same basic operations:
 /provider remove <id>
 ```
 
-Restart the TUI after an add or remove operation so the current session loads
-the changed model catalog.
+After adding or removing a provider, restart the TUI to load the updated
+model list.
 
 ### MCP
 
