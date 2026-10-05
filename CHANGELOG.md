@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.0.34 - 2026-10-05
+
+### Added
+
+- Add native Herdr and cmux support for interactive sessions, including
+  work status, decision notifications, and saved session resume commands.
+
 ### Fixed
 
 - Answer Cursor web search and fetch permission requests instead of ending
