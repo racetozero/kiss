@@ -273,7 +273,7 @@ pub enum Command {
         #[arg(long = "add-account", conflicts_with = "entra_id")]
         add_account: bool,
 
-        /// Label for the added account (default: its e-mail or "account N").
+        /// Label for the added account (default: "account N").
         #[arg(long = "account-label", value_name = "LABEL", requires = "add_account")]
         account_label: Option<String>,
     },

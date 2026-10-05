@@ -404,7 +404,6 @@ reported reset time (15 minutes when the provider gives none).
 /accounts add openai-codex personal
 /accounts                            # list pools, active account, cooldowns
 /accounts use openai-codex 2         # switch by hand
-/accounts rename openai-codex 2 home
 /accounts remove openai-codex 1
 ```
 

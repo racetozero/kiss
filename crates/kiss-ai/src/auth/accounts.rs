@@ -163,13 +163,9 @@ fn update_at<T>(
     with_auth_lock(auth_path, || {
         let mut auth = read_auth_file_at(auth_path);
         let mut file = read_accounts_at(&path);
-        let auth_before = serde_json::to_value(&auth)?;
         sync(&auth, &mut file);
         let result = f(&mut auth, &mut file)?;
-        if serde_json::to_value(&auth)? != auth_before {
-            write_auth_file_at(auth_path, &auth)?;
-        }
-        // Always rewrite the pool file when it exists so synced tokens land.
+        write_auth_file_at(auth_path, &auth)?;
         if path.exists() || !file.pools.is_empty() {
             super::write_json_at(&path, &file)?;
         }
@@ -225,24 +221,8 @@ pub fn pool_size(provider: &str) -> usize {
     pool(provider).map_or(0, |pool| pool.accounts.len())
 }
 
-/// Best-effort e-mail claim from a JWT access token (OpenAI, Cursor).
-fn jwt_email(token: &str) -> Option<String> {
-    use base64::Engine as _;
-    let payload = token.split('.').nth(1)?;
-    let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
-        .decode(payload)
-        .or_else(|_| base64::engine::general_purpose::URL_SAFE.decode(payload))
-        .ok()?;
-    let claims: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
-    claims
-        .pointer("/https:~1~1api.openai.com~1profile/email")
-        .or_else(|| claims.get("email"))
-        .and_then(serde_json::Value::as_str)
-        .map(str::to_string)
-}
-
-fn default_label(entry: &AuthEntry, number: usize) -> String {
-    jwt_email(entry.access_token()).unwrap_or_else(|| format!("account {number}"))
+fn default_label(number: usize) -> String {
+    format!("account {number}")
 }
 
 fn begin_add_at(auth_path: &Path, provider: &str) -> Result<()> {
@@ -255,7 +235,7 @@ fn begin_add_at(auth_path: &Path, provider: &str) -> Result<()> {
                 Pool {
                     active: 0,
                     accounts: vec![Account {
-                        label: default_label(entry, 1),
+                        label: default_label(1),
                         credential: entry.clone(),
                         limited_until: None,
                         added_at: now_ms(),
@@ -301,7 +281,7 @@ fn finish_add_at(
                 .map(str::trim)
                 .filter(|label| !label.is_empty())
                 .map(str::to_string)
-                .unwrap_or_else(|| default_label(&new_entry, number)),
+                .unwrap_or_else(|| default_label(number)),
             credential: new_entry,
             limited_until: None,
             added_at: now_ms(),
@@ -394,22 +374,6 @@ fn remove_at(auth_path: &Path, provider: &str, index: usize) -> Result<AccountIn
 /// removing the last account also removes the saved credential.
 pub fn remove(provider: &str, index: usize) -> Result<AccountInfo> {
     remove_at(&auth_path()?, provider, index)
-}
-
-fn rename_at(auth_path: &Path, provider: &str, index: usize, label: &str) -> Result<()> {
-    let label = label.trim();
-    if label.is_empty() {
-        bail!("account label cannot be empty");
-    }
-    update_at(auth_path, |_, file| {
-        let pool = checked_index(provider, file.pools.get_mut(provider), index)?;
-        pool.accounts[index].label = label.to_string();
-        Ok(())
-    })
-}
-
-pub fn rename(provider: &str, index: usize, label: &str) -> Result<()> {
-    rename_at(&auth_path()?, provider, index, label)
 }
 
 /// Remove the provider's saved credential and its whole pool.
@@ -702,9 +666,6 @@ mod tests {
         let removed = remove_at(&auth_path, "openai-codex", 0).unwrap();
         assert!(removed.active);
         assert_eq!(active_secret(&auth_path, "openai-codex"), "two");
-        rename_at(&auth_path, "openai-codex", 1, "backup").unwrap();
-        let pool = pooled(&auth_path, "openai-codex");
-        assert_eq!(pool.accounts[1].label, "backup");
         assert!(remove_at(&auth_path, "openai-codex", 5).is_err());
 
         assert!(forget_at(&auth_path, "openai-codex").unwrap());
@@ -714,20 +675,6 @@ mod tests {
                 .pools
                 .is_empty()
         );
-    }
-
-    #[test]
-    fn labels_default_to_the_jwt_email() {
-        use base64::Engine as _;
-        let claims = serde_json::json!({
-            "https://api.openai.com/profile": {"email": "dev@example.com"}
-        });
-        let token = format!(
-            "header.{}.signature",
-            base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(claims.to_string())
-        );
-        assert_eq!(default_label(&oauth(&token), 2), "dev@example.com");
-        assert_eq!(default_label(&oauth("opaque"), 2), "account 2");
     }
 
     #[test]

@@ -1785,18 +1785,7 @@ fn handle_session_event(
     }
 }
 
-/// Providers offered first by `/accounts add` completion. Any provider with a
-/// login method can be pooled.
-const ACCOUNT_POOL_PROVIDERS: &[&str] = &[
-    "openai-codex",
-    "anthropic",
-    "cursor",
-    "google",
-    "meta",
-    "xai",
-];
-
-const ACCOUNTS_USAGE: &str = "/accounts add <provider> [label] · /accounts use <provider> <n> · /accounts remove <provider> <n> · /accounts rename <provider> <n> <label>";
+const ACCOUNTS_USAGE: &str = "/accounts add <provider> [label] · /accounts use <provider> <n> · /accounts remove <provider> <n>";
 
 /// Footer suffix such as ` · ⇄ 2/4 personal` for a provider with a pool of
 /// two or more accounts.
@@ -1819,51 +1808,10 @@ fn account_indicator(provider: &str) -> String {
 }
 
 fn account_provider(name: &str) -> Option<&'static str> {
-    let name = name.to_ascii_lowercase();
-    let alias = match name.as_str() {
-        "codex" | "chatgpt" => "openai-codex",
-        "claude" => "anthropic",
-        "gemini" => "google",
-        "grok" => "xai",
-        other => other,
-    };
     kiss_ai::registry::BUILTIN_PROVIDER_IDS
         .iter()
         .copied()
-        .find(|provider| *provider == alias)
-}
-
-fn account_argument_candidates() -> Vec<(String, Option<String>, String, String)> {
-    let pools = kiss_ai::auth::accounts::pools();
-    let mut candidates = vec![(
-        "list".to_string(),
-        Some("Show account pools".to_string()),
-        "list".to_string(),
-        "list".to_string(),
-    )];
-    for provider in ACCOUNT_POOL_PROVIDERS {
-        let value = format!("add {provider}");
-        candidates.push((
-            value.clone(),
-            Some("Log in another account".into()),
-            format!("{value} "),
-            value,
-        ));
-    }
-    for pool in &pools {
-        for account in &pool.accounts {
-            for (action, detail) in [("use", "Make active"), ("remove", "Remove")] {
-                let value = format!("{action} {} {}", pool.provider, account.index + 1);
-                candidates.push((
-                    value.clone(),
-                    Some(format!("{detail}: {}", account.label)),
-                    value.clone(),
-                    format!("{value} {}", account.label),
-                ));
-            }
-        }
-    }
-    candidates
+        .find(|provider| *provider == name)
 }
 
 fn account_status(account: &kiss_ai::auth::accounts::AccountInfo) -> String {
@@ -1962,15 +1910,6 @@ fn run_accounts_command(app: &mut App, arguments: &str) {
                 account.label
             )));
         }),
-        ("rename", Some(index)) if parts.len() > 3 => {
-            let label = parts[3..].join(" ");
-            accounts::rename(provider, index, &label).map(|()| {
-                app.cells.push(Cell::Notice(format!(
-                    "{provider}: account {} is now {label}",
-                    index + 1
-                )));
-            })
-        }
         _ => Err(anyhow::anyhow!("usage: {ACCOUNTS_USAGE}")),
     };
     if let Err(error) = result {
@@ -2504,7 +2443,6 @@ fn command_argument_items(
                 )
             })
             .collect(),
-        "accounts" => account_argument_candidates(),
         "webmcp" => [
             ("connect", "Connect to Chrome"),
             ("list", "Show active page tools"),
@@ -9798,7 +9736,12 @@ mod tests {
         assert!(
             matches!(app.cells.last(), Some(Cell::Error(text)) if text.contains("unknown provider 'nowhere'"))
         );
-        run_command_for_test(&mut app, &session, &mut resources, "accounts use codex");
+        run_command_for_test(
+            &mut app,
+            &session,
+            &mut resources,
+            "accounts use openai-codex",
+        );
         assert!(
             matches!(app.cells.last(), Some(Cell::Error(text)) if text.starts_with("usage: /accounts add"))
         );
@@ -9806,7 +9749,7 @@ mod tests {
             &mut app,
             &session,
             &mut resources,
-            "accounts remove claude 0",
+            "accounts remove anthropic 0",
         );
         assert!(matches!(app.cells.last(), Some(Cell::Error(text)) if text.starts_with("usage:")));
         assert!(app.pending_account_add.is_none());
@@ -9814,25 +9757,13 @@ mod tests {
     }
 
     #[test]
-    fn account_helpers_resolve_aliases_and_format_cooldowns() {
-        assert_eq!(account_provider("codex"), Some("openai-codex"));
-        assert_eq!(account_provider("Claude"), Some("anthropic"));
-        assert_eq!(account_provider("gemini"), Some("google"));
-        assert_eq!(account_provider("grok"), Some("xai"));
-        assert_eq!(account_provider("cursor"), Some("cursor"));
-        assert_eq!(account_provider("meta"), Some("meta"));
-        assert_eq!(account_provider("nope"), None);
+    fn account_helpers_resolve_providers_and_format_cooldowns() {
+        assert_eq!(account_provider("openai-codex"), Some("openai-codex"));
+        assert_eq!(account_provider("codex"), None);
         assert_eq!(format_duration_secs(42), "42s");
         assert_eq!(format_duration_secs(900), "15m");
         assert_eq!(format_duration_secs(7980), "2h13m");
         assert_eq!(format_duration_secs(7200), "2h");
-        let candidates = account_argument_candidates();
-        assert!(
-            candidates
-                .iter()
-                .any(|candidate| candidate.2 == "add openai-codex ")
-        );
-        assert!(candidates.iter().any(|candidate| candidate.2 == "list"));
     }
 
     #[test]

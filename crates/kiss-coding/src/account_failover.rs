@@ -65,24 +65,17 @@ pub(crate) fn wrap(inner: StreamFn, registry: Arc<Registry>, on_switch: SwitchFn
     let pool = Arc::new(SavedPools {
         declared: registry.declared_keys.clone(),
     });
-    wrap_with(
-        inner,
-        Arc::new(move |provider| registry.credential_provider(provider).to_string()),
-        pool,
-        on_switch,
-    )
+    wrap_with(inner, registry, pool, on_switch)
 }
-
-type ProviderMap = Arc<dyn Fn(&str) -> String + Send + Sync>;
 
 fn wrap_with(
     inner: StreamFn,
-    credential_provider: ProviderMap,
+    registry: Arc<Registry>,
     pool: Arc<dyn AccountPool>,
     on_switch: SwitchFn,
 ) -> StreamFn {
     Arc::new(move |model, context, options| {
-        let provider = credential_provider(&model.provider);
+        let provider = registry.credential_provider(&model.provider).to_string();
         let attempts = pool.size(&provider);
         if attempts < 2 || options.credential.is_none() {
             return inner(model, context, options);
@@ -296,7 +289,7 @@ mod tests {
         let recorded = switches.clone();
         let stream_fn = wrap_with(
             scripted(script, calls.clone()),
-            Arc::new(|provider| provider.to_string()),
+            Arc::new(Registry::load(Some(std::path::Path::new("/nonexistent")))),
             pool,
             Arc::new(move |switch| recorded.lock().unwrap().push(switch)),
         );
