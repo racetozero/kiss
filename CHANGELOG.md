@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.0.32 - 2026-10-05
+
 ### Fixed
 
 - Run Cursor-native Shell requests through KISS's enabled `bash` tool and
