@@ -123,7 +123,7 @@ pub(crate) const KISS_SLASH_COMMANDS: &[SlashCommand] = &[
     SlashCommand::new(
         "accounts",
         "Manage multiple accounts per provider with rate-limit failover",
-        Some("[add|use|remove] <provider> [n|label]"),
+        Some("[list|add|use|remove] [provider]"),
     ),
     SlashCommand::new(
         "btw",

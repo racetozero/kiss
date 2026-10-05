@@ -158,6 +158,12 @@ enum PickerKind {
     LoginProviders(Vec<String>),
     LoginMethods(String, Vec<LoginChoice>),
     Logout(Vec<String>),
+    /// Providers for `/accounts`; the action decides what selecting one does.
+    AccountProviders(Vec<String>, AccountAction),
+    /// One provider's accounts. `ADD_ACCOUNT` selects the add row.
+    Accounts(String, AccountAction),
+    /// Use or remove one account (zero-based index).
+    AccountActions(String, usize),
     Settings,
     Trust,
     ImportConfirm(PathBuf),
@@ -175,6 +181,14 @@ enum PickerKind {
     WorkflowRuns(Vec<kiss_coding::workflows::RunId>),
     /// Pick where to save a run's script.
     WorkflowSaveLocation(kiss_coding::workflows::RunId),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AccountAction {
+    Manage,
+    Add,
+    Use,
+    Remove,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1785,8 +1799,6 @@ fn handle_session_event(
     }
 }
 
-const ACCOUNTS_USAGE: &str = "/accounts add <provider> [label] · /accounts use <provider> <n> · /accounts remove <provider> <n>";
-
 /// Footer suffix such as ` · ⇄ 2/4 personal` for a provider with a pool of
 /// two or more accounts.
 fn account_indicator(provider: &str) -> String {
@@ -1830,91 +1842,214 @@ fn account_status(account: &kiss_ai::auth::accounts::AccountInfo) -> String {
     }
 }
 
-fn accounts_listing() -> String {
-    let pools = kiss_ai::auth::accounts::pools();
-    if pools.is_empty() {
-        return format!(
-            "No account pools yet. Add accounts to a provider and KISS moves to the next one when an account is rate limited.\n\n{ACCOUNTS_USAGE}"
-        );
-    }
-    let mut text = String::from(
-        "Accounts · when the active account is rate limited, KISS retries with the next ready account\n",
-    );
-    for pool in pools {
-        let count = pool.accounts.len();
-        text.push_str(&format!(
-            "\n{} ({count} account{})\n",
-            pool.provider,
-            if count == 1 { "" } else { "s" }
-        ));
-        for account in &pool.accounts {
-            text.push_str(&format!(
-                "  {} {}. {}  {}\n",
-                if account.active { "▸" } else { " " },
-                account.index + 1,
-                account.label,
-                account_status(account)
-            ));
-        }
-    }
-    text.push('\n');
-    text.push_str(ACCOUNTS_USAGE);
-    text
-}
+/// Providers offered first when adding an account.
+const FEATURED_ACCOUNT_PROVIDERS: &[&str] = &[
+    "openai-codex",
+    "anthropic",
+    "cursor",
+    "google",
+    "meta",
+    "xai",
+];
+
+const ADD_ACCOUNT: usize = usize::MAX;
 
 fn run_accounts_command(app: &mut App, arguments: &str) {
-    use kiss_ai::auth::accounts;
     let parts = arguments.split_whitespace().collect::<Vec<_>>();
-    let action = parts.first().copied().unwrap_or("list");
-    if action == "list" && parts.len() <= 1 {
-        app.cells.push(Cell::Notice(accounts_listing()));
+    let (action, rest) = match parts.first().copied() {
+        None | Some("list") => (AccountAction::Manage, &parts[parts.len().min(1)..]),
+        Some("add") => (AccountAction::Add, &parts[1..]),
+        Some("use") => (AccountAction::Use, &parts[1..]),
+        Some("remove") => (AccountAction::Remove, &parts[1..]),
+        Some(_) => (AccountAction::Manage, &parts[..]),
+    };
+    let Some(provider) = rest.first().and_then(|name| account_provider(name)) else {
+        open_account_providers(app, action, rest.first().copied());
+        return;
+    };
+    let index = rest
+        .get(1)
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|number| *number > 0)
+        .map(|number| number - 1);
+    match (action, index) {
+        (AccountAction::Add, _) => {
+            let label = (rest.len() > 1).then(|| rest[1..].join(" "));
+            start_account_add(app, provider, label);
+        }
+        (AccountAction::Use | AccountAction::Remove, Some(index)) => {
+            apply_account_action(app, provider, index, action == AccountAction::Use);
+        }
+        _ => open_accounts_picker(app, provider, action),
+    }
+}
+
+fn open_account_providers(app: &mut App, action: AccountAction, filter: Option<&str>) {
+    let pools = kiss_ai::auth::accounts::pools();
+    let mut providers: Vec<String> = pools.iter().map(|pool| pool.provider.clone()).collect();
+    if matches!(action, AccountAction::Manage | AccountAction::Add) {
+        for provider in FEATURED_ACCOUNT_PROVIDERS
+            .iter()
+            .chain(kiss_ai::registry::BUILTIN_PROVIDER_IDS)
+        {
+            if !providers.iter().any(|known| known == provider) {
+                providers.push(provider.to_string());
+            }
+        }
+    }
+    if providers.is_empty() {
+        app.cells.push(Cell::Notice(
+            "no accounts yet. Run /accounts add to log in the first one".into(),
+        ));
         return;
     }
-    let Some(provider) = parts.get(1).and_then(|name| account_provider(name)) else {
-        app.cells.push(Cell::Error(match parts.get(1) {
-            Some(name) => format!("unknown provider '{name}'. Usage: {ACCOUNTS_USAGE}"),
-            None => format!("usage: {ACCOUNTS_USAGE}"),
-        }));
+    let items = providers
+        .iter()
+        .enumerate()
+        .map(|(value, provider)| SelectItem {
+            label: provider.clone(),
+            detail: Some(match pools.iter().find(|pool| &pool.provider == provider) {
+                Some(pool) => format!(
+                    "{} account{} · active: {}",
+                    pool.accounts.len(),
+                    if pool.accounts.len() == 1 { "" } else { "s" },
+                    pool.active()
+                        .map_or("none", |account| account.label.as_str())
+                ),
+                None => "no accounts".into(),
+            }),
+            value,
+        })
+        .collect();
+    let title = match action {
+        AccountAction::Manage => "Accounts · rate-limited accounts fail over to the next one",
+        AccountAction::Add => "Add an account to which provider?",
+        AccountAction::Use => "Switch the active account for which provider?",
+        AccountAction::Remove => "Remove an account from which provider?",
+    };
+    let mut list = SelectList::new(title, items, app.theme.clone());
+    list.max_visible = 14;
+    if let Some(filter) = filter {
+        list.set_filter(filter.to_string());
+    }
+    app.picker = Some(Picker {
+        kind: PickerKind::AccountProviders(providers, action),
+        list,
+    });
+}
+
+fn open_accounts_picker(app: &mut App, provider: &str, action: AccountAction) {
+    let accounts = kiss_ai::auth::accounts::pool(provider)
+        .map(|pool| pool.accounts)
+        .unwrap_or_default();
+    if accounts.is_empty() && action != AccountAction::Manage {
+        app.cells.push(Cell::Notice(format!(
+            "{provider} has no accounts. Run /accounts add {provider}"
+        )));
         return;
+    }
+    let mut items: Vec<SelectItem> = accounts
+        .iter()
+        .map(|account| SelectItem {
+            label: format!(
+                "{} {}. {}",
+                if account.active { "▸" } else { " " },
+                account.index + 1,
+                account.label
+            ),
+            detail: Some(account_status(account)),
+            value: account.index,
+        })
+        .collect();
+    if action == AccountAction::Manage {
+        items.push(SelectItem {
+            label: "+ Add account".into(),
+            detail: Some("Log in another account; the active one stays in use".into()),
+            value: ADD_ACCOUNT,
+        });
+    }
+    let title = match action {
+        AccountAction::Use => format!("Make which {provider} account active?"),
+        AccountAction::Remove => format!("Remove which {provider} account?"),
+        _ => format!("{provider} accounts"),
     };
-    let index = || {
-        parts
-            .get(2)
-            .and_then(|value| value.parse::<usize>().ok())
-            .filter(|number| *number > 0)
-            .map(|number| number - 1)
+    let mut list = SelectList::new(title, items, app.theme.clone());
+    list.max_visible = 12;
+    app.picker = Some(Picker {
+        kind: PickerKind::Accounts(provider.into(), action),
+        list,
+    });
+}
+
+fn open_account_actions(app: &mut App, provider: &str, index: usize) {
+    let Some(account) = kiss_ai::auth::accounts::pool(provider)
+        .and_then(|pool| pool.accounts.into_iter().nth(index))
+    else {
+        return open_accounts_picker(app, provider, AccountAction::Manage);
     };
-    let result = match (action, index()) {
-        ("add", _) => accounts::begin_add(provider).map(|()| {
-            let label = (parts.len() > 2).then(|| parts[2..].join(" "));
-            app.pending_account_add = Some((provider.to_string(), label));
-            app.cells.push(Cell::Notice(format!(
-                "log in to the {provider} account to add. The current account stays active"
-            )));
-            open_login_methods_picker(app, provider);
-        }),
-        ("use", Some(index)) => accounts::activate(provider, index).map(|account| {
+    let items = [
+        ("Use this account", "Make it the active account"),
+        ("Remove this account", "Forget its saved credential"),
+        ("Back", "Return to the account list"),
+    ]
+    .into_iter()
+    .enumerate()
+    .map(|(value, (label, detail))| SelectItem {
+        label: label.into(),
+        detail: Some(detail.into()),
+        value,
+    })
+    .collect();
+    app.picker = Some(Picker {
+        kind: PickerKind::AccountActions(provider.into(), index),
+        list: SelectList::new(
+            format!("{provider} · {}. {}", index + 1, account.label),
+            items,
+            app.theme.clone(),
+        ),
+    });
+}
+
+fn start_account_add(app: &mut App, provider: &str, label: Option<String>) {
+    if let Err(error) = kiss_ai::auth::accounts::begin_add(provider) {
+        app.cells
+            .push(Cell::Error(format!("could not add an account: {error:#}")));
+        return;
+    }
+    app.pending_account_add = Some((provider.to_string(), label));
+    app.cells.push(Cell::Notice(format!(
+        "log in to the {provider} account to add. The current account stays active"
+    )));
+    open_login_methods_picker(app, provider);
+}
+
+/// Make account `index` active (`activate`) or remove it.
+fn apply_account_action(app: &mut App, provider: &str, index: usize, activate: bool) {
+    use kiss_ai::auth::accounts;
+    let result = if activate {
+        accounts::activate(provider, index).map(|account| {
             if provider == "cursor" {
                 app.model_catalog = None;
             }
-            app.cells.push(Cell::Notice(format!(
+            format!(
                 "{provider}: account {} ({}) is active",
                 index + 1,
                 account.label
-            )));
-        }),
-        ("remove", Some(index)) => accounts::remove(provider, index).map(|account| {
-            app.cells.push(Cell::Notice(format!(
+            )
+        })
+    } else {
+        accounts::remove(provider, index).map(|account| {
+            format!(
                 "{provider}: removed account {} ({})",
                 index + 1,
                 account.label
-            )));
-        }),
-        _ => Err(anyhow::anyhow!("usage: {ACCOUNTS_USAGE}")),
+            )
+        })
     };
-    if let Err(error) = result {
-        app.cells.push(Cell::Error(format!("{error:#}")));
-    }
+    app.cells.push(match result {
+        Ok(message) => Cell::Notice(message),
+        Err(error) => Cell::Error(format!("{error:#}")),
+    });
 }
 
 /// Finish `/accounts add` after a login for `provider` completes.
@@ -6135,6 +6270,28 @@ fn apply_picker_selection(
                 open_login_methods_picker(app, provider);
             }
         }
+        PickerKind::AccountProviders(providers, action) => {
+            if let Some(provider) = providers.get(value) {
+                if action == AccountAction::Add {
+                    start_account_add(app, provider, None);
+                } else {
+                    open_accounts_picker(app, provider, action);
+                }
+            }
+        }
+        PickerKind::Accounts(provider, action) => match (value, action) {
+            (ADD_ACCOUNT, _) => start_account_add(app, &provider, None),
+            (index, AccountAction::Manage) => open_account_actions(app, &provider, index),
+            (index, action) => {
+                apply_account_action(app, &provider, index, action == AccountAction::Use)
+            }
+        },
+        PickerKind::AccountActions(provider, index) => {
+            if value < 2 {
+                apply_account_action(app, &provider, index, value == 0);
+            }
+            open_accounts_picker(app, &provider, AccountAction::Manage);
+        }
         PickerKind::LoginMethods(provider, choices) => {
             if let Some(choice) = choices.get(value) {
                 match choice {
@@ -9744,35 +9901,65 @@ mod tests {
     }
 
     #[test]
-    fn accounts_command_validates_input_without_touching_credentials() {
+    fn accounts_commands_open_pickers_instead_of_usage_errors() {
         let mut app = test_app();
         let session = test_session(kiss_coding::SessionManager::in_memory(
             std::path::Path::new("/tmp/project"),
         ));
         let mut resources = test_resources();
+        let picker = |app: &App| match app.picker.as_ref().map(|picker| &picker.kind) {
+            Some(PickerKind::AccountProviders(providers, action)) => {
+                Some((providers.clone(), *action))
+            }
+            _ => None,
+        };
 
-        run_command_for_test(&mut app, &session, &mut resources, "accounts add nowhere");
-        assert!(
-            matches!(app.cells.last(), Some(Cell::Error(text)) if text.contains("unknown provider 'nowhere'"))
-        );
-        run_command_for_test(
-            &mut app,
-            &session,
-            &mut resources,
-            "accounts use openai-codex",
-        );
-        assert!(
-            matches!(app.cells.last(), Some(Cell::Error(text)) if text.starts_with("usage: /accounts add"))
-        );
-        run_command_for_test(
-            &mut app,
-            &session,
-            &mut resources,
-            "accounts remove anthropic 0",
-        );
-        assert!(matches!(app.cells.last(), Some(Cell::Error(text)) if text.starts_with("usage:")));
+        for command in ["accounts", "accounts list"] {
+            run_command_for_test(&mut app, &session, &mut resources, command);
+            let (providers, action) = picker(&app).expect("provider picker");
+            assert_eq!(action, AccountAction::Manage);
+            for featured in FEATURED_ACCOUNT_PROVIDERS {
+                assert!(providers.iter().any(|provider| provider == featured));
+            }
+        }
+
+        // A missing or unknown provider opens the picker filtered by the text.
+        run_command_for_test(&mut app, &session, &mut resources, "accounts add codex");
+        assert_eq!(picker(&app).unwrap().1, AccountAction::Add);
+        assert_eq!(app.picker.as_ref().unwrap().list.filter, "codex");
         assert!(app.pending_account_add.is_none());
-        assert!(app.picker.is_none());
+
+        // Selecting a provider in manage mode lists its accounts with an add row.
+        let providers = {
+            run_command_for_test(&mut app, &session, &mut resources, "accounts");
+            picker(&app).unwrap().0
+        };
+        let index = providers.iter().position(|p| p == "meta").unwrap();
+        let (tx, _rx) = mpsc::unbounded_channel();
+        let kind = app.picker.take().unwrap().kind;
+        apply_picker_selection(
+            &mut app,
+            &session,
+            PickerSelection {
+                kind,
+                value: index,
+                filter: String::new(),
+            },
+            false,
+            &mut resources,
+            &tx,
+        );
+        let picker = app.picker.as_ref().expect("accounts picker");
+        assert!(
+            matches!(&picker.kind, PickerKind::Accounts(provider, AccountAction::Manage) if provider == "meta")
+        );
+        assert!(
+            picker
+                .list
+                .items
+                .iter()
+                .any(|item| item.value == ADD_ACCOUNT)
+        );
     }
 
     #[test]

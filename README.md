@@ -400,10 +400,10 @@ transcript shows a one-line notice, and the limited account rests until its
 reported reset time (15 minutes when the provider gives none).
 
 ```text
-/accounts add openai-codex work      # runs the normal login flow
-/accounts add openai-codex personal
-/accounts                            # list pools, active account, cooldowns
-/accounts use openai-codex 2         # switch by hand
+/accounts                            # pick a provider, then an account to use or remove, or add one
+/accounts add                        # pick a provider and log in another account
+/accounts add openai-codex work      # skip the pickers
+/accounts use openai-codex 2
 /accounts remove openai-codex 1
 ```
 
