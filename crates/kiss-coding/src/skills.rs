@@ -149,15 +149,15 @@ fn scan_dir(dir: &Path, include_root_md: bool, out: &mut Vec<Skill>) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
     };
+    let skill_md = dir.join("SKILL.md");
+    if skill_md.is_file()
+        && let Some(skill) = parse_skill(&skill_md)
+    {
+        out.push(skill);
+    }
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_dir() {
-            let skill_md = path.join("SKILL.md");
-            if skill_md.is_file()
-                && let Some(skill) = parse_skill(&skill_md)
-            {
-                out.push(skill);
-            }
             scan_dir(&path, false, out);
         } else if include_root_md
             && path.extension().and_then(|e| e.to_str()) == Some("md")
@@ -274,6 +274,13 @@ mod tests {
         let names: Vec<&str> = out.iter().map(|s| s.name.as_str()).collect();
         assert!(names.contains(&"pdf-tools"));
         assert!(names.contains(&"quick"));
+
+        let direct = discover(root, false, &[root.join("pdf-tools")]);
+        let loaded = direct
+            .iter()
+            .find(|skill| skill.name == "pdf-tools")
+            .unwrap();
+        assert_eq!(loaded.file_path, root.join("pdf-tools/SKILL.md"));
     }
 
     #[test]

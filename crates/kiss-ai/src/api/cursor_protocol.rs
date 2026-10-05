@@ -312,7 +312,7 @@ pub struct ExecServerMessage {
     pub id: u32,
     #[prost(string, tag = "15")]
     pub exec_id: String,
-    #[prost(oneof = "exec_server_message::Message", tags = "10, 11")]
+    #[prost(oneof = "exec_server_message::Message", tags = "2, 10, 11, 14")]
     pub message: Option<exec_server_message::Message>,
 }
 
@@ -321,11 +321,29 @@ pub mod exec_server_message {
 
     #[derive(Clone, PartialEq, Oneof)]
     pub enum Message {
+        #[prost(message, tag = "2")]
+        Shell(ShellArgs),
         #[prost(message, tag = "10")]
         RequestContextArgs(RequestContextArgs),
         #[prost(message, tag = "11")]
         McpArgs(McpArgs),
+        #[prost(message, tag = "14")]
+        ShellStream(ShellArgs),
     }
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ShellArgs {
+    #[prost(string, tag = "1")]
+    pub command: String,
+    #[prost(string, tag = "2")]
+    pub working_directory: String,
+    #[prost(int32, tag = "3")]
+    pub timeout: i32,
+    #[prost(string, tag = "4")]
+    pub tool_call_id: String,
+    #[prost(int32, optional, tag = "14")]
+    pub hard_timeout: Option<i32>,
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -348,7 +366,7 @@ pub struct ExecClientMessage {
     pub id: u32,
     #[prost(string, tag = "15")]
     pub exec_id: String,
-    #[prost(oneof = "exec_client_message::Message", tags = "10, 11")]
+    #[prost(oneof = "exec_client_message::Message", tags = "2, 10, 11, 14")]
     pub message: Option<exec_client_message::Message>,
 }
 
@@ -357,12 +375,88 @@ pub mod exec_client_message {
 
     #[derive(Clone, PartialEq, Oneof)]
     pub enum Message {
+        #[prost(message, tag = "2")]
+        ShellResult(ShellResult),
         #[prost(message, tag = "10")]
         RequestContextResult(RequestContextResult),
         #[prost(message, tag = "11")]
         McpResult(McpResult),
+        #[prost(message, tag = "14")]
+        ShellStream(ShellStream),
     }
 }
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ShellResult {
+    #[prost(oneof = "shell_result::Result", tags = "1, 2")]
+    pub result: Option<shell_result::Result>,
+}
+
+pub mod shell_result {
+    use super::*;
+
+    #[derive(Clone, PartialEq, Oneof)]
+    pub enum Result {
+        #[prost(message, tag = "1")]
+        Success(ShellOutcome),
+        #[prost(message, tag = "2")]
+        Failure(ShellOutcome),
+    }
+}
+
+// ShellSuccess and ShellFailure share these upstream fields.
+#[derive(Clone, PartialEq, Message)]
+pub struct ShellOutcome {
+    #[prost(string, tag = "1")]
+    pub command: String,
+    #[prost(string, tag = "2")]
+    pub working_directory: String,
+    #[prost(int32, tag = "3")]
+    pub exit_code: i32,
+    #[prost(string, tag = "5")]
+    pub stdout: String,
+    #[prost(string, tag = "6")]
+    pub stderr: String,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ShellStream {
+    #[prost(oneof = "shell_stream::Event", tags = "1, 2, 3, 4")]
+    pub event: Option<shell_stream::Event>,
+}
+
+pub mod shell_stream {
+    use super::*;
+
+    #[derive(Clone, PartialEq, Oneof)]
+    pub enum Event {
+        #[prost(message, tag = "1")]
+        Stdout(ShellStreamOutput),
+        #[prost(message, tag = "2")]
+        Stderr(ShellStreamOutput),
+        #[prost(message, tag = "3")]
+        Exit(ShellStreamExit),
+        #[prost(message, tag = "4")]
+        Start(ShellStreamStart),
+    }
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ShellStreamOutput {
+    #[prost(string, tag = "1")]
+    pub data: String,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ShellStreamExit {
+    #[prost(uint32, tag = "1")]
+    pub code: u32,
+    #[prost(string, tag = "2")]
+    pub cwd: String,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ShellStreamStart {}
 
 #[derive(Clone, PartialEq, Message)]
 pub struct RequestContextArgs {}
@@ -474,7 +568,7 @@ pub struct McpImageContent {
 
 #[derive(Clone, PartialEq, Message)]
 pub struct ExecClientControlMessage {
-    #[prost(oneof = "exec_client_control_message::Message", tags = "2")]
+    #[prost(oneof = "exec_client_control_message::Message", tags = "1, 2")]
     pub message: Option<exec_client_control_message::Message>,
 }
 
@@ -483,9 +577,17 @@ pub mod exec_client_control_message {
 
     #[derive(Clone, PartialEq, Oneof)]
     pub enum Message {
+        #[prost(message, tag = "1")]
+        StreamClose(ExecClientStreamClose),
         #[prost(message, tag = "2")]
         Throw(ExecClientThrow),
     }
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct ExecClientStreamClose {
+    #[prost(uint32, tag = "1")]
+    pub id: u32,
 }
 
 #[derive(Clone, PartialEq, Message)]

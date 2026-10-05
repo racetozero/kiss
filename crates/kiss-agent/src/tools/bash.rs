@@ -51,6 +51,7 @@ impl AgentTool for BashTool {
             "properties": {
                 "command": {"type": "string", "description": "Bash command to execute"},
                 "timeout": {"type": "number", "description": "Timeout in seconds (optional, no default timeout)"},
+                "cwd": {"type": "string", "description": "Working directory (optional, defaults to the session directory)"},
             },
             "required": ["command"],
         })
@@ -76,7 +77,11 @@ impl AgentTool for BashTool {
             self.command_prefix.as_deref(),
         );
         let shell = cmd.as_std().get_program().to_string_lossy().into_owned();
-        cmd.current_dir(&self.cwd)
+        let cwd = args["cwd"]
+            .as_str()
+            .map(|path| self.cwd.join(path))
+            .unwrap_or_else(|| self.cwd.clone());
+        cmd.current_dir(&cwd)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -266,18 +271,33 @@ mod tests {
 
     #[tokio::test]
     async fn captures_stdout_and_stderr() {
-        let r = tool()
-            .execute(
-                "1",
-                json!({"command": "echo out; echo err 1>&2"}),
-                CancellationToken::new(),
-                None,
-            )
-            .await
-            .unwrap();
-        let text = r.output_text();
-        assert!(text.contains("out"));
-        assert!(text.contains("err"));
+        let directory = tempfile::tempdir().unwrap();
+        let child = directory.path().join("child");
+        std::fs::create_dir(&child).unwrap();
+        std::fs::write(directory.path().join("marker.txt"), "session directory").unwrap();
+        std::fs::write(child.join("marker.txt"), "requested directory").unwrap();
+        for cwd in [
+            None,
+            Some("child".to_string()),
+            Some(child.to_string_lossy().into_owned()),
+        ] {
+            let mut args = json!({"command": "echo out; echo err 1>&2; cat marker.txt"});
+            if let Some(cwd) = &cwd {
+                args["cwd"] = cwd.clone().into();
+            }
+            let r = BashTool::new(directory.path().to_path_buf())
+                .execute("1", args, CancellationToken::new(), None)
+                .await
+                .unwrap();
+            let text = r.output_text();
+            assert!(text.contains("out"));
+            assert!(text.contains("err"));
+            assert!(text.contains(if cwd.is_some() {
+                "requested directory"
+            } else {
+                "session directory"
+            }));
+        }
     }
 
     #[tokio::test]

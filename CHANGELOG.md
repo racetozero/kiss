@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Fixed
+
+- Run Cursor-native Shell requests through KISS's enabled `bash` tool and
+  return Cursor's expected shell results, including streamed completion.
+  Preserve working directories and convert shell timeouts to seconds.
+- Preserve integer tool arguments from Cursor so agent wait timeouts work.
+- Load `SKILL.md` from the directory passed to `--skill`.
+
 ## 0.0.31 - 2026-10-05
 
 ### Added

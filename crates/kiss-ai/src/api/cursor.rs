@@ -406,37 +406,49 @@ async fn run(
                         })?;
                         continue;
                     }
-                    let Some(wire::exec_server_message::Message::McpArgs(args)) = exec.message
-                    else {
-                        send_exec_throw(
-                            &request_tx,
-                            exec.id,
-                            "KISS does not run Cursor-native tools",
-                        )?;
-                        continue;
+                    let streamed_shell = matches!(&exec.message, Some(wire::exec_server_message::Message::ShellStream(_)));
+                    let (tool_name, mut call_id, arguments, shell) = match exec.message {
+                        Some(wire::exec_server_message::Message::McpArgs(args)) => {
+                            let name = strip_tool_prefix(if args.tool_name.is_empty() { &args.name } else { &args.tool_name }).to_owned();
+                            (name, args.tool_call_id, decode_arguments(args.args)?, None)
+                        }
+                        Some(wire::exec_server_message::Message::Shell(args) | wire::exec_server_message::Message::ShellStream(args)) => {
+                            let mut arguments = serde_json::json!({"command": args.command});
+                            if !args.working_directory.is_empty() {
+                                arguments["cwd"] = args.working_directory.clone().into();
+                            }
+                            if let Some(timeout) = [Some(args.timeout), args.hard_timeout].into_iter().flatten().filter(|value| *value > 0).min() {
+                                arguments["timeout"] = (f64::from(timeout) / 1000.0).into();
+                            }
+                            ("bash".into(), args.tool_call_id.clone(), arguments, Some(args))
+                        }
+                        _ => {
+                            send_exec_throw(&request_tx, exec.id, "This Cursor-native tool is not supported by KISS. Use the registered mcp_kiss tools instead")?;
+                            continue;
+                        }
                     };
-                    let tool_name = strip_tool_prefix(if args.tool_name.is_empty() {
-                        &args.name
-                    } else {
-                        &args.tool_name
-                    });
                     if !context.tools.iter().any(|tool| tool.name == tool_name) {
                         send_exec_throw(
                             &request_tx,
                             exec.id,
-                            &format!("unknown KISS tool: {tool_name}"),
+                            &format!("Cursor requested {tool_name}, but this KISS tool is disabled. Enable it with --tools {tool_name} or select an enabled tool"),
                         )?;
                         continue;
                     }
                     let current = builder.as_mut().expect("active Cursor event stream");
                     close_blocks(current, &mut text_index, &mut thinking_index);
-                    let arguments = decode_arguments(args.args)?;
-                    let call_id = if args.tool_call_id.is_empty() {
-                        Uuid::new_v4().to_string()
-                    } else {
-                        args.tool_call_id
-                    };
-                    let index = current.begin_tool_call(call_id.clone(), tool_name.to_string());
+                    if call_id.is_empty() { call_id = Uuid::new_v4().to_string(); }
+                    if streamed_shell {
+                        send(&request_tx, wire::AgentClientMessage {
+                            message: Some(wire::agent_client_message::Message::ExecClientMessage(wire::ExecClientMessage {
+                                id: exec.id, exec_id: exec.exec_id.clone(),
+                                message: Some(wire::exec_client_message::Message::ShellStream(wire::ShellStream {
+                                    event: Some(wire::shell_stream::Event::Start(wire::ShellStreamStart {})),
+                                })),
+                            })),
+                        })?;
+                    }
+                    let index = current.begin_tool_call(call_id.clone(), tool_name);
                     current.end_tool_call(index, Some(arguments));
                     let (resume_tx, resume_rx) = oneshot::channel();
                     pending()
@@ -465,7 +477,11 @@ async fn run(
                         find_tool_result(&resumed.context, &call_id).with_context(|| {
                             format!("KISS returned no result for Cursor tool call {call_id}")
                         })?;
-                    send_tool_result(&request_tx, exec.id, exec.exec_id, result)?;
+                    if let Some(args) = shell {
+                        send_shell_result(&request_tx, exec.id, exec.exec_id, args, streamed_shell, result)?;
+                    } else {
+                        send_tool_result(&request_tx, exec.id, exec.exec_id, result)?;
+                    }
                     text_index = None;
                     thinking_index = None;
                 }
@@ -672,6 +688,103 @@ fn handle_kv(
             )),
         },
     )
+}
+
+fn send_shell_result(
+    sender: &RequestSender,
+    id: u32,
+    exec_id: String,
+    args: wire::ShellArgs,
+    streamed: bool,
+    result: &ToolResultMessage,
+) -> Result<()> {
+    let output = tool_result_text(result);
+    let outcome = wire::ShellOutcome {
+        command: args.command,
+        working_directory: args.working_directory,
+        exit_code: if result.is_error { 1 } else { 0 },
+        stdout: if result.is_error {
+            String::new()
+        } else {
+            output.clone()
+        },
+        stderr: if result.is_error {
+            output
+        } else {
+            String::new()
+        },
+    };
+    if streamed {
+        let mut events = Vec::new();
+        if !outcome.stdout.is_empty() {
+            events.push(wire::shell_stream::Event::Stdout(wire::ShellStreamOutput {
+                data: outcome.stdout.clone(),
+            }));
+        }
+        if !outcome.stderr.is_empty() {
+            events.push(wire::shell_stream::Event::Stderr(wire::ShellStreamOutput {
+                data: outcome.stderr.clone(),
+            }));
+        }
+        events.push(wire::shell_stream::Event::Exit(wire::ShellStreamExit {
+            code: outcome.exit_code as u32,
+            cwd: outcome.working_directory.clone(),
+        }));
+        for event in events {
+            send(
+                sender,
+                wire::AgentClientMessage {
+                    message: Some(wire::agent_client_message::Message::ExecClientMessage(
+                        wire::ExecClientMessage {
+                            id,
+                            exec_id: exec_id.clone(),
+                            message: Some(wire::exec_client_message::Message::ShellStream(
+                                wire::ShellStream { event: Some(event) },
+                            )),
+                        },
+                    )),
+                },
+            )?;
+        }
+    }
+    let outcome = if result.is_error {
+        wire::shell_result::Result::Failure(outcome)
+    } else {
+        wire::shell_result::Result::Success(outcome)
+    };
+    send(
+        sender,
+        wire::AgentClientMessage {
+            message: Some(wire::agent_client_message::Message::ExecClientMessage(
+                wire::ExecClientMessage {
+                    id,
+                    exec_id,
+                    message: Some(wire::exec_client_message::Message::ShellResult(
+                        wire::ShellResult {
+                            result: Some(outcome),
+                        },
+                    )),
+                },
+            )),
+        },
+    )?;
+    if streamed {
+        send(
+            sender,
+            wire::AgentClientMessage {
+                message: Some(
+                    wire::agent_client_message::Message::ExecClientControlMessage(
+                        wire::ExecClientControlMessage {
+                            message: Some(wire::exec_client_control_message::Message::StreamClose(
+                                wire::ExecClientStreamClose { id },
+                            )),
+                        },
+                    ),
+                ),
+            },
+        )?;
+    }
+    Ok(())
 }
 
 fn send_tool_result(
@@ -1009,7 +1122,14 @@ fn proto_to_json(input: Value) -> serde_json::Value {
     match input.kind {
         None | Some(value::Kind::NullValue(_)) => serde_json::Value::Null,
         Some(value::Kind::BoolValue(value)) => value.into(),
-        Some(value::Kind::NumberValue(value)) => serde_json::json!(value),
+        Some(value::Kind::NumberValue(value)) => {
+            // Protobuf Value stores all numbers as doubles, including integer tool inputs.
+            if value.fract() == 0.0 && value.abs() <= 9_007_199_254_740_991.0 {
+                (value as i64).into()
+            } else {
+                serde_json::json!(value)
+            }
+        }
         Some(value::Kind::StringValue(value)) => value.into(),
         Some(value::Kind::ListValue(value)) => {
             serde_json::Value::Array(value.values.into_iter().map(proto_to_json).collect())
@@ -1180,7 +1300,7 @@ mod tests {
 
     #[test]
     fn protobuf_value_keeps_json_argument_types() {
-        let input = serde_json::json!({"s":"x","n":2.0,"b":true,"a":[null, 1.0]});
+        let input = serde_json::json!({"s":"x","n":2.5,"b":true,"a":[null, 1.5]});
         assert_eq!(proto_to_json(json_to_proto(&input)), input);
     }
 
@@ -1389,6 +1509,44 @@ mod tests {
         global: Option<Vec<u8>>,
     }
 
+    #[derive(Clone, PartialEq, prost::Message)]
+    struct FixtureShellReply {
+        #[prost(message, optional, tag = "2")]
+        exec: Option<FixtureShellExec>,
+    }
+
+    #[derive(Clone, PartialEq, prost::Message)]
+    struct FixtureShellExec {
+        #[prost(uint32, tag = "1")]
+        id: u32,
+        #[prost(string, tag = "15")]
+        exec_id: String,
+        #[prost(message, optional, tag = "2")]
+        result: Option<FixtureShellResult>,
+    }
+
+    #[derive(Clone, PartialEq, prost::Message)]
+    struct FixtureShellResult {
+        #[prost(message, optional, tag = "1")]
+        success: Option<FixtureShellOutcome>,
+        #[prost(message, optional, tag = "2")]
+        failure: Option<FixtureShellOutcome>,
+    }
+
+    #[derive(Clone, PartialEq, prost::Message)]
+    struct FixtureShellOutcome {
+        #[prost(string, tag = "1")]
+        command: String,
+        #[prost(string, tag = "2")]
+        cwd: String,
+        #[prost(int32, tag = "3")]
+        code: i32,
+        #[prost(string, tag = "5")]
+        stdout: String,
+        #[prost(string, tag = "6")]
+        stderr: String,
+    }
+
     #[tokio::test]
     async fn http1_runs_preserve_tools_append_errors_and_cancellation() {
         use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
@@ -1398,10 +1556,15 @@ mod tests {
         for mode in [
             "context-only",
             "tools",
+            "shell",
+            "shell-stream",
+            "shell-error",
+            "shell-disabled",
             "append-error",
             "cancel",
             "missing-default",
         ] {
+            let shell_mode = mode.starts_with("shell");
             tokio::time::timeout(Duration::from_secs(5), async {
                 let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
                 let mut model = model();
@@ -1435,6 +1598,8 @@ mod tests {
                     let mut seqno = 0;
                     let mut initial_seen = false;
                     let mut tool_sent = false;
+                    let mut shell_events = Vec::new();
+                    let mut shell_result_seen = false;
                     let mut initial_tx = Some(initial_tx);
                     while let Some((mut socket, headers, body)) = requests_rx.recv().await {
                         assert!(headers.contains("authorization: bearer test-key"));
@@ -1475,18 +1640,30 @@ mod tests {
                                 assert_eq!(reply.id, 8);
                                 assert_eq!(reply.exec_id, "context-8");
                                 let context = result.success.unwrap().context.unwrap();
-                                assert_eq!(context.tools[0].tool_name, "read");
+                                assert_eq!(context.tools[0].tool_name, if shell_mode && mode != "shell-disabled" { "bash" } else { "read" });
                                 assert_eq!(context.rules[0].content, "Follow KISS instructions");
                                 assert_eq!(context.rules[0].source, 2);
                                 assert_eq!(context.rules[0].rule_type.as_ref().unwrap().global, Some(Vec::new()));
                                 socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").await.unwrap();
-                                let frame = wire::frame(&wire::AgentServerMessage {
+                                let frame = if shell_mode {
+                                    // Independent upstream ShellArgs tag 2 / ShellStreamArgs tag 14.
+                                    let payload = if mode == "shell-stream" {
+                                        b"\x12\x28\x08\x09\x7a\x06exec-9\x72\x1c\x0a\x04date\x12\x09workspace\x18\xdc\x0b\x22\x06call-1".as_slice()
+                                    } else {
+                                        b"\x12\x28\x08\x09\x7a\x06exec-9\x12\x1c\x0a\x04date\x12\x09workspace\x18\xdc\x0b\x22\x06call-1".as_slice()
+                                    };
+                                    wire::frame_bytes(payload)
+                                } else { wire::frame(&wire::AgentServerMessage {
                                     message: Some(wire::agent_server_message::Message::ExecServerMessage(wire::ExecServerMessage {
                                         id: 9, exec_id: "exec-9".into(), message: Some(wire::exec_server_message::Message::McpArgs(wire::McpArgs {
-                                            name: "read".into(), tool_call_id: "call-1".into(), ..Default::default()
+                                            name: "read".into(), tool_call_id: "call-1".into(), args: HashMap::from([
+                                                ("timeout_ms".into(), b"\x11\x00\x00\x00\x00\x00\x4c\xed\x40".to_vec()),
+                                                ("fraction".into(), b"\x11\x00\x00\x00\x00\x00\x00\xf8\x3f".to_vec()),
+                                                ("offset".into(), b"\x11\x00\x00\x00\x00\x00\x00\x00\xc0".to_vec()),
+                                            ]), ..Default::default()
                                         })),
                                     })),
-                                });
+                                }) };
                                 let run = run_socket.as_mut().unwrap();
                                 run.write_all(format!("{:x}\r\n", frame.len()).as_bytes()).await.unwrap();
                                 run.write_all(&frame).await.unwrap();
@@ -1496,6 +1673,7 @@ mod tests {
                             let message = wire::AgentClientMessage::decode(append.data.as_slice()).unwrap();
                             let status = if mode == "append-error" { "400 Bad Request" } else { "200 OK" };
                             socket.write_all(format!("HTTP/1.1 {status}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").as_bytes()).await.unwrap();
+                            let mut finished = false;
                             match message.message.unwrap() {
                                 wire::agent_client_message::Message::RunRequest(run) => {
                                     let selection = FixtureInitialRun::decode(append.data.as_slice()).unwrap().run.unwrap();
@@ -1509,9 +1687,66 @@ mod tests {
                                 wire::agent_client_message::Message::ExecClientMessage(reply) => {
                                     assert_eq!(reply.id, 9);
                                     assert_eq!(reply.exec_id, "exec-9");
-                                    let Some(wire::exec_client_message::Message::McpResult(result)) = reply.message else { panic!("MCP result") };
-                                    let Some(wire::mcp_result::Result::Success(success)) = result.result else { panic!("MCP success") };
-                                    assert_eq!(success.content[0].content, Some(wire::mcp_tool_result_content_item::Content::Text(wire::McpTextContent { text: "file data".into() })));
+                                    match reply.message.unwrap() {
+                                        wire::exec_client_message::Message::ShellStream(stream) => {
+                                            shell_events.push(stream.event.unwrap());
+                                            continue;
+                                        }
+                                        wire::exec_client_message::Message::ShellResult(_) => {
+                                            let reply = FixtureShellReply::decode(append.data.as_slice()).unwrap().exec.unwrap();
+                                            assert_eq!(reply.id, 9);
+                                            assert_eq!(reply.exec_id, "exec-9");
+                                            let result = reply.result.unwrap();
+                                            let outcome = if mode == "shell-error" {
+                                                assert!(result.success.is_none());
+                                                result.failure.unwrap()
+                                            } else {
+                                                assert!(result.failure.is_none());
+                                                result.success.unwrap()
+                                            };
+                                            assert_eq!(outcome.command, "date");
+                                            assert_eq!(outcome.cwd, "workspace");
+                                            assert_eq!(outcome.code, i32::from(mode == "shell-error"));
+                                            assert_eq!(outcome.stdout, if mode == "shell-error" { "" } else { "file data" });
+                                            assert_eq!(outcome.stderr, if mode == "shell-error" { "file data" } else { "" });
+                                            shell_result_seen = true;
+                                            if mode == "shell-stream" { continue; }
+                                            finished = true;
+                                        }
+                                        wire::exec_client_message::Message::McpResult(result) => {
+                                            let Some(wire::mcp_result::Result::Success(success)) = result.result else { panic!("MCP success") };
+                                            assert_eq!(success.content[0].content, Some(wire::mcp_tool_result_content_item::Content::Text(wire::McpTextContent { text: "file data".into() })));
+                                            finished = true;
+                                        }
+                                        _ => panic!("unexpected exec result"),
+                                    }
+                                }
+                                wire::agent_client_message::Message::ExecClientControlMessage(control) => {
+                                    match control.message.unwrap() {
+                                        wire::exec_client_control_message::Message::StreamClose(close) => {
+                                            assert_eq!(close.id, 9);
+                                            assert!(shell_result_seen);
+                                            assert!(matches!(shell_events.as_slice(), [wire::shell_stream::Event::Start(_), wire::shell_stream::Event::Stdout(_), wire::shell_stream::Event::Exit(_)]));
+                                            finished = true;
+                                        }
+                                        wire::exec_client_control_message::Message::Throw(error) => {
+                                            assert_eq!(mode, "shell-disabled");
+                                            assert!(error.error.contains("bash"));
+                                            let body = b"{\"error\":{\"message\":\"disabled bash\"}}";
+                                            let mut frame = vec![wire::END_STREAM_FLAG];
+                                            frame.extend_from_slice(&(body.len() as u32).to_be_bytes());
+                                            frame.extend_from_slice(body);
+                                            let run = run_socket.as_mut().unwrap();
+                                            run.write_all(format!("{:x}\r\n", frame.len()).as_bytes()).await.unwrap();
+                                            run.write_all(&frame).await.unwrap();
+                                            run.write_all(b"\r\n0\r\n\r\n").await.unwrap();
+                                            return;
+                                        }
+                                    }
+                                }
+                                _ => panic!("unexpected client message"),
+                            }
+                            if finished {
                                     let response = wire::frame(&wire::AgentServerMessage {
                                         message: Some(wire::agent_server_message::Message::InteractionUpdate(wire::InteractionUpdate {
                                             message: Some(wire::interaction_update::Message::TextDelta(wire::TextDeltaUpdate { text: "http1 ok".into() })),
@@ -1528,13 +1763,11 @@ mod tests {
                                     run.write_all(&body).await.unwrap();
                                     run.write_all(b"\r\n0\r\n\r\n").await.unwrap();
                                     return;
-                                }
-                                _ => panic!("unexpected client message"),
                             }
                         }
                         if initial_seen && !tool_sent && let Some(run) = run_socket.as_mut() {
                             assert_eq!(run_id, append_id);
-                            if mode == "tools" || mode == "context-only" {
+                            if mode == "tools" || mode == "context-only" || shell_mode {
                                 // Upstream ExecServerMessage tag 10 is a context request,
                                 // not a model-requested native tool. id=8, execId=context-8.
                                 let payload = b"\x12\x0f\x08\x08\x7a\x09context-8\x52\x00";
@@ -1555,7 +1788,7 @@ mod tests {
                 let mut context = Context {
                     system_prompt: Some("Follow KISS instructions".into()),
                     messages: vec![Message::User(UserMessage { content: UserContent::Text("hi".into()), timestamp: 0 })],
-                    tools: vec![ToolDef { name: "read".into(), description: "Read a file".into(), parameters: serde_json::json!({"type":"object","properties":{}}) }],
+                    tools: vec![ToolDef { name: if shell_mode && mode != "shell-disabled" { "bash".into() } else { "read".into() }, description: "Test tool".into(), parameters: serde_json::json!({"type":"object","properties":{}}) }],
                     ..Default::default()
                 };
                 let output = crate::stream_simple(&model, &context, &options);
@@ -1564,15 +1797,29 @@ mod tests {
                     options.cancel.cancel();
                 }
                 let result = output.result().await;
-                if mode == "tools" || mode == "context-only" {
+                if mode == "tools" || mode == "context-only" || (shell_mode && mode != "shell-disabled") {
                     assert_eq!(result.stop_reason, StopReason::ToolUse);
+                    if shell_mode {
+                        let call = result.tool_calls().next().unwrap();
+                        assert_eq!(call.name, "bash");
+                        assert_eq!(call.arguments, serde_json::json!({"command":"date", "cwd":"workspace", "timeout":1.5}));
+                    } else {
+                        let call = result.tool_calls().next().unwrap();
+                        assert_eq!(serde_json::from_value::<u64>(call.arguments["timeout_ms"].clone()).unwrap(), 60000);
+                        assert_eq!(call.arguments["fraction"].as_f64(), Some(1.5));
+                        assert_eq!(call.arguments["offset"].as_i64(), Some(-2));
+                    }
                     context.messages.push(Message::Assistant(result));
                     context.messages.push(Message::ToolResult(ToolResultMessage {
-                        tool_call_id: "call-1".into(), tool_name: "read".into(), content: vec![ContentBlock::text("file data")], details: None, usage: None, is_error: false, timestamp: 0,
+                        tool_call_id: "call-1".into(), tool_name: if shell_mode { "bash".into() } else { "read".into() }, content: vec![ContentBlock::text("file data")], details: None, usage: None, is_error: mode == "shell-error", timestamp: 0,
                     }));
                     let continued = crate::stream_simple(&model, &context, &options).result().await;
                     assert_eq!(continued.stop_reason, StopReason::Stop);
                     assert_eq!(continued.text(), "http1 ok");
+                    (&mut server).await.unwrap();
+                } else if mode == "shell-disabled" {
+                    assert_eq!(result.stop_reason, StopReason::Error);
+                    assert!(result.tool_calls().next().is_none());
                     (&mut server).await.unwrap();
                 } else if mode == "append-error" {
                     assert_eq!(result.stop_reason, StopReason::Error);
