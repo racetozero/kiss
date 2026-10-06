@@ -28,6 +28,12 @@ use kiss_ai::auth::{LoginMethod, login_methods};
 use std::io::{IsTerminal as _, Write as _};
 use std::process::ExitCode;
 
+// mimalloc was faster than the system allocator and jemalloc in the release
+// benchmarks. The Python and Node modules set it too. The library crates do
+// not, so that Rust programs that embed the SDK choose their own allocator.
+#[global_allocator]
+static ALLOCATOR: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 // KISS returns from `main` instead of calling `std::process::exit`. On
 // windows-msvc `std::process::exit` calls `ExitProcess`, which skips the C
 // runtime `atexit` handlers. The LLVM PGO instrumentation writes its counters

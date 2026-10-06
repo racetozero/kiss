@@ -31,6 +31,7 @@ kiss-sdk = { workspace = true, features = ["rpc"] }
 kiss-tui.workspace = true
 kiss-webmcp.workspace = true
 libc.workspace = true
+mimalloc.workspace = true
 reqwest.workspace = true
 rpassword.workspace = true
 rustls.workspace = true

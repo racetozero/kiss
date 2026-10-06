@@ -13,6 +13,10 @@ use serde_json::{Value, json};
 use std::path::PathBuf;
 use std::sync::Arc;
 
+// Use the same allocator as the `kiss` binary. See crates/kiss/src/main.rs.
+#[global_allocator]
+static ALLOCATOR: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 fn napi_error(error: impl std::fmt::Display) -> Error {
     Error::new(Status::GenericFailure, error.to_string())
 }

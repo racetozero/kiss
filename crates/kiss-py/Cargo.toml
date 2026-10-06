@@ -24,6 +24,9 @@ mock = ["kiss-sdk/mock"]
 
 [dependencies]
 kiss-sdk = { package = "kiss-agent-sdk", path = "../kiss-sdk", features = ["rpc"] }
+# Python loads this library with dlopen, where initial-exec TLS can fail with
+# "cannot allocate memory in static TLS block".
+mimalloc = { version = "0.1.52", features = ["local_dynamic_tls"] }
 pyo3 = { version = "0.29", features = ["extension-module"] }
 pyo3-async-runtimes = { version = "0.29", features = ["tokio-runtime"] }
 serde_json = { version = "1", features = ["preserve_order"] }

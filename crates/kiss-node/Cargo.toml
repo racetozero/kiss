@@ -19,6 +19,9 @@ mock = ["kiss-sdk/mock"]
 
 [dependencies]
 kiss-sdk = { package = "kiss-agent-sdk", path = "../kiss-sdk", features = ["rpc"] }
+# Node loads this library with dlopen, where initial-exec TLS can fail with
+# "cannot allocate memory in static TLS block".
+mimalloc = { version = "0.1.52", features = ["local_dynamic_tls"] }
 napi = { version = "3", features = ["napi9", "tokio_rt"] }
 napi-derive = "3"
 serde_json = { version = "1", features = ["preserve_order"] }
