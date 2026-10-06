@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.0.35 - 2026-10-06
+
+### Changed
+
+- Use mimalloc for memory allocation in the CLI, Python module, and Node
+  module to improve performance.
+
 ## 0.0.34 - 2026-10-05
 
 ### Added
