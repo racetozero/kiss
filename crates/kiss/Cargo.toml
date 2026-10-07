@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "kiss: a fast, minimal terminal coding agent"
+homepage = "https://github.com/racetozero/kiss"
 
 [lints]
 workspace = true

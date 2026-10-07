@@ -4,9 +4,10 @@
 # SPDX-License-Identifier: MIT or Apache-2.0
 #
 # KISS overrides: build-local-artifacts trains target-specific PGO profiles
-# where Rust provides a profiling runtime and keeps the default token permission
-# read-only. `dist generate`
-# removes these overrides. Reapply them after a dist upgrade.
+# where Rust provides a profiling runtime, the default token permission is
+# read-only, and the Homebrew formula uses the musl builds on Linux and is
+# published after announce with a tap deploy key. `dist generate` removes these
+# overrides. Reapply them after a dist upgrade.
 #
 # CI that:
 #
@@ -317,6 +318,47 @@ jobs:
           echo "$ANNOUNCEMENT_BODY" > $RUNNER_TEMP/notes.txt
 
           gh release create "${{ needs.plan.outputs.tag }}" --target "$RELEASE_COMMIT" $PRERELEASE_FLAG --title "$ANNOUNCEMENT_TITLE" --notes-file "$RUNNER_TEMP/notes.txt" artifacts/*
+
+  # KISS override: the formula downloads release assets, so publish it after
+  # announce. The deploy key can write only to the tap repository.
+  publish-homebrew-formula:
+    needs: [plan, announce]
+    if: ${{ !fromJson(needs.plan.outputs.val).announcement_is_prerelease }}
+    runs-on: 'ubuntu-22.04'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: true
+          repository: 'racetozero/homebrew-tap'
+          ssh-key: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
+      - name: Fetch homebrew formula
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: artifacts-build-global
+          path: ${{ runner.temp }}/global
+      - name: Commit formula
+        env:
+          TAG: ${{ needs.plan.outputs.tag }}
+        run: |
+          mkdir -p Formula
+          cp "$RUNNER_TEMP/global/kiss.rb" Formula/kiss.rb
+          # Homebrew does not pick a libc variant, and the gnu builds need a
+          # recent glibc, so point Linux at the static musl builds.
+          for arch in aarch64 x86_64; do
+            gnu=$(awk -v f="*kiss-$arch-unknown-linux-gnu.tar.gz" '$2 == f { print $1 }' "$RUNNER_TEMP/global/sha256.sum")
+            musl=$(awk -v f="*kiss-$arch-unknown-linux-musl.tar.gz" '$2 == f { print $1 }' "$RUNNER_TEMP/global/sha256.sum")
+            if [ -z "$gnu" ] || [ -z "$musl" ]; then
+              echo "::error::sha256.sum has no checksum for kiss-$arch-unknown-linux-gnu.tar.gz or kiss-$arch-unknown-linux-musl.tar.gz. Keep both Linux targets for $arch in dist-workspace.toml."
+              exit 1
+            fi
+            perl -0777 -pi -e "s/kiss-$arch-unknown-linux-gnu/kiss-$arch-unknown-linux-musl/ or die 'kiss.rb has no $arch gnu URL. Check the dist formula template.'; s/$gnu/$musl/ or die 'kiss.rb has no $arch gnu checksum. Check the dist formula template.'" Formula/kiss.rb
+          done
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/kiss.rb
+          git diff --cached --quiet && exit 0
+          git commit -m "kiss $TAG"
+          git push
 
   # The npm wrapper loads a native addon, so a single runner's binary cannot
   # serve users on the other supported platforms.

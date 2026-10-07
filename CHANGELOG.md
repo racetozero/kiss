@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Added
+
+- Publish a Homebrew formula on each stable release. Install KISS with
+  `brew install racetozero/tap/kiss`. On Linux, the formula installs the
+  static musl build, so KISS does not require glibc. For a Homebrew
+  install, `kiss update` stops and tells you to run
+  `brew upgrade racetozero/tap/kiss`.
+
 ## 0.0.35 - 2026-10-06
 
 ### Changed

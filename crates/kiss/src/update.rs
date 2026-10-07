@@ -12,6 +12,7 @@ const GITHUB_LATEST_RELEASE_URL: &str =
     "https://api.github.com/repos/racetozero/kiss/releases/latest";
 const GITHUB_RELEASES_URL: &str = "https://github.com/racetozero/kiss/releases";
 const RAW_REPOSITORY_URL: &str = "https://raw.githubusercontent.com/racetozero/kiss";
+const HOMEBREW_UPGRADE_COMMAND: &str = "brew upgrade racetozero/tap/kiss";
 const CACHE_MAX_AGE_HOURS: i64 = 20;
 const VERSION_CACHE_FILE: &str = "version.json";
 
@@ -31,6 +32,11 @@ pub async fn run() -> Result<i32> {
     if cfg!(debug_assertions) {
         anyhow::bail!(
             "`kiss update` is not available in debug builds. Install a KISS release to use this command"
+        );
+    }
+    if installed_by_homebrew() {
+        anyhow::bail!(
+            "`kiss update` cannot replace a KISS binary that Homebrew installed. Run `{HOMEBREW_UPGRADE_COMMAND}` to update it"
         );
     }
     run_release_update().await?;
@@ -73,7 +79,22 @@ pub fn check_on_launch() -> Option<Version> {
 
 /// Build the single startup instruction shown for a newer cached release.
 pub fn notice(current: &Version, latest: &Version) -> String {
-    format!("Update available: kiss v{current} -> v{latest}. Run `kiss update`.")
+    let command = if installed_by_homebrew() {
+        HOMEBREW_UPGRADE_COMMAND
+    } else {
+        "kiss update"
+    };
+    format!("Update available: kiss v{current} -> v{latest}. Run `{command}`.")
+}
+
+fn installed_by_homebrew() -> bool {
+    std::env::current_exe()
+        .and_then(std::fs::canonicalize)
+        .is_ok_and(|path| {
+            path.ancestors()
+                .nth(3)
+                .is_some_and(|rack| rack.ends_with("Cellar/kiss"))
+        })
 }
 
 fn current_version() -> Result<Version> {
@@ -354,6 +375,51 @@ mod tests {
             notice(&Version::new(1, 2, 3), &Version::new(1, 3, 0)),
             "Update available: kiss v1.2.3 -> v1.3.0. Run `kiss update`."
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn homebrew_notice_uses_the_resolved_install_path() {
+        const EXPECTED_COMMAND: &str = "KISS_TEST_UPDATE_COMMAND";
+        if let Ok(command) = std::env::var(EXPECTED_COMMAND) {
+            assert_eq!(
+                notice(&Version::new(1, 2, 3), &Version::new(1, 3, 0)),
+                format!("Update available: kiss v1.2.3 -> v1.3.0. Run `{command}`.")
+            );
+            return;
+        }
+
+        let directory = tempfile::tempdir().unwrap();
+        let homebrew = directory.path().join("Cellar/kiss/1.2.3/bin/kiss");
+        let manual = directory.path().join("Cellar/projects/bin/kiss");
+        for binary in [&homebrew, &manual] {
+            std::fs::create_dir_all(binary.parent().unwrap()).unwrap();
+            std::fs::copy(std::env::current_exe().unwrap(), binary).unwrap();
+        }
+        let link = directory.path().join("kiss");
+        std::os::unix::fs::symlink(&homebrew, &link).unwrap();
+
+        for (binary, command) in [
+            (&homebrew, HOMEBREW_UPGRADE_COMMAND),
+            (&link, HOMEBREW_UPGRADE_COMMAND),
+            (&manual, "kiss update"),
+        ] {
+            let output = std::process::Command::new(binary)
+                .args([
+                    "--exact",
+                    "update::tests::homebrew_notice_uses_the_resolved_install_path",
+                ])
+                .env(EXPECTED_COMMAND, command)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}: {}{}",
+                binary.display(),
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
     }
 
     #[test]
