@@ -81,8 +81,7 @@ struct App {
     session_title: Option<String>,
     terminal_title_dirty: bool,
     title_generation_pending: bool,
-    /// OSC 7501 status to report when the current work stops.
-    work_outcome: ProgramStatus,
+    idle_status: ProgramStatus,
     picker: Option<Picker>,
     model_catalog: Option<Arc<kiss_ai::Registry>>,
     command_menu: Option<CommandCompletion>,
@@ -1352,7 +1351,7 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
         session_title,
         terminal_title_dirty: true,
         title_generation_pending: false,
-        work_outcome: ProgramStatus::Done,
+        idle_status: ProgramStatus::Idle,
         picker: None,
         model_catalog: None,
         command_menu: None,
@@ -1433,14 +1432,12 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
     let mut file_search = FileSearchService::new(file_search_tx);
     file_search.warm(session.manager.lock().unwrap().cwd().to_path_buf());
 
-    let mut program_status = ProgramStatus::Idle;
     'main: loop {
-        let host_state = terminal_host_state(&app, &session);
+        let status = terminal_host_state(&app, &session);
         if hosts.enabled() {
-            hosts.update(host_state, &session, args);
+            hosts.update(status, &session, args);
         }
-        program_status = next_program_status(program_status, host_state, &mut app);
-        terminal.set_program_status(program_status)?;
+        terminal.set_program_status(status)?;
         let resize_deadline = resize_state
             .next_deadline()
             .unwrap_or_else(|| Instant::now() + Duration::from_secs(86_400));
@@ -1574,11 +1571,7 @@ enum Flow {
     Quit,
 }
 
-fn terminal_host_state(
-    app: &App,
-    session: &kiss_coding::AgentSession,
-) -> crate::terminal_hosts::State {
-    use crate::terminal_hosts::State;
+fn terminal_host_state(app: &App, session: &kiss_coding::AgentSession) -> ProgramStatus {
     use kiss_tui::BlockedKind;
     let blocked = match app.picker.as_ref().map(|picker| &picker.kind) {
         Some(PickerKind::WorkflowApproval(..)) => {
@@ -1591,7 +1584,7 @@ fn terminal_host_state(
         _ => None,
     };
     if let Some((kind, message)) = blocked {
-        return State::Blocked(kind, message);
+        return ProgramStatus::Blocked(kind, message);
     }
     let working = app.working
         || app.compacting
@@ -1607,37 +1600,13 @@ fn terminal_host_state(
         || session
             .workflows()
             .is_some_and(|runtime| runtime.active().is_some())
-        || session.iterative_jobs().is_some_and(|runtime| {
-            runtime.summaries().iter().any(|job| {
-                matches!(
-                    job.status,
-                    kiss_coding::iterative::JobStatus::Queued
-                        | kiss_coding::iterative::JobStatus::Running
-                )
-            })
-        });
-    if working { State::Working } else { State::Idle }
-}
-
-/// Map host state to OSC 7501. Idle after work keeps the work outcome until
-/// the next change, so the terminal can show an unseen result.
-fn next_program_status(
-    previous: ProgramStatus,
-    state: crate::terminal_hosts::State,
-    app: &mut App,
-) -> ProgramStatus {
-    use crate::terminal_hosts::State;
-    match state {
-        State::Working => ProgramStatus::Working,
-        State::Blocked(kind, message) => ProgramStatus::Blocked(kind, message),
-        State::Idle => match previous {
-            ProgramStatus::Working => std::mem::replace(&mut app.work_outcome, ProgramStatus::Done),
-            ProgramStatus::Blocked(..) => {
-                app.work_outcome = ProgramStatus::Done;
-                ProgramStatus::Idle
-            }
-            outcome => outcome,
-        },
+        || session
+            .iterative_jobs()
+            .is_some_and(|runtime| runtime.has_queued_or_running());
+    if working {
+        ProgramStatus::Working
+    } else {
+        app.idle_status
     }
 }
 
@@ -1733,7 +1702,7 @@ fn handle_session_event(
             AgentEvent::MessageEnd {
                 message: AgentMessage::Assistant(a),
             } => {
-                app.work_outcome = match a.stop_reason {
+                app.idle_status = match a.stop_reason {
                     StopReason::Error => ProgramStatus::Error,
                     StopReason::Aborted => ProgramStatus::Idle,
                     _ => ProgramStatus::Done,
@@ -8250,7 +8219,7 @@ mod tests {
             session_title: None,
             terminal_title_dirty: false,
             title_generation_pending: false,
-            work_outcome: ProgramStatus::Done,
+            idle_status: ProgramStatus::Idle,
             picker: None,
             model_catalog: None,
             command_menu: None,
@@ -8379,52 +8348,6 @@ mod tests {
     }
 
     #[test]
-    fn program_status_keeps_the_work_outcome_while_idle() {
-        use crate::terminal_hosts::State;
-        let mut app = test_app();
-        let blocked = State::Blocked(kiss_tui::BlockedKind::Auth, "Login input required");
-        let mut status = ProgramStatus::Idle;
-        let mut observed = Vec::new();
-        for (state, outcome) in [
-            (State::Idle, None),
-            (State::Working, Some(ProgramStatus::Error)),
-            (State::Idle, None),
-            (State::Idle, None),
-            (State::Working, Some(ProgramStatus::Idle)),
-            (State::Idle, None),
-            (State::Working, None),
-            (State::Idle, None),
-            (blocked, Some(ProgramStatus::Error)),
-            (State::Idle, None),
-            (State::Working, None),
-            (State::Idle, None),
-        ] {
-            if let Some(outcome) = outcome {
-                app.work_outcome = outcome;
-            }
-            status = next_program_status(status, state, &mut app);
-            observed.push(status);
-        }
-        assert_eq!(
-            observed,
-            [
-                ProgramStatus::Idle,
-                ProgramStatus::Working,
-                ProgramStatus::Error,
-                ProgramStatus::Error,
-                ProgramStatus::Working,
-                ProgramStatus::Idle,
-                ProgramStatus::Working,
-                ProgramStatus::Done,
-                ProgramStatus::Blocked(kiss_tui::BlockedKind::Auth, "Login input required"),
-                ProgramStatus::Idle,
-                ProgramStatus::Working,
-                ProgramStatus::Done,
-            ]
-        );
-    }
-
-    #[test]
     fn terminal_hosts_follow_compaction_queue_and_required_decisions() {
         use crate::terminal_hosts::State;
         let mut app = test_app();
@@ -8460,6 +8383,22 @@ mod tests {
             &session,
         );
         assert_eq!(terminal_host_state(&app, &session), State::Idle);
+        for (stop_reason, status) in [
+            (StopReason::Error, State::Error),
+            (StopReason::Stop, State::Done),
+        ] {
+            let mut message = kiss_ai::AssistantMessage::empty("test", "test", "test");
+            message.stop_reason = stop_reason;
+            handle_session_event(
+                &mut app,
+                SessionEvent::Agent(Box::new(AgentEvent::MessageEnd {
+                    message: AgentMessage::Assistant(message),
+                })),
+                &mut search,
+                &session,
+            );
+            assert_eq!(terminal_host_state(&app, &session), status);
+        }
         handle_session_event(
             &mut app,
             SessionEvent::QueueUpdate {

@@ -421,6 +421,17 @@ impl IterativeRuntime {
             .unwrap_or_default()
     }
 
+    pub fn has_queued_or_running(&self) -> bool {
+        self.jobs.lock().is_ok_and(|jobs| {
+            jobs.iter().any(|job| {
+                matches!(
+                    job.state.lock().unwrap().status,
+                    JobStatus::Queued | JobStatus::Running
+                )
+            })
+        })
+    }
+
     pub fn active_count(&self) -> usize {
         self.jobs
             .lock()

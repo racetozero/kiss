@@ -14,20 +14,13 @@ use tokio::task::JoinHandle;
 const COMMAND_TIMEOUT: Duration = Duration::from_millis(500);
 const RETRY_DELAY: Duration = Duration::from_secs(2);
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum State {
-    Idle,
-    Working,
-    Blocked(kiss_tui::BlockedKind, &'static str),
-}
+pub(crate) use kiss_tui::ProgramStatus as State;
 
-impl State {
-    fn label(self) -> &'static str {
-        match self {
-            Self::Idle => "idle",
-            Self::Working => "working",
-            Self::Blocked(..) => "blocked",
-        }
+fn label(state: State) -> &'static str {
+    match state {
+        State::Working => "working",
+        State::Blocked(..) => "blocked",
+        State::Idle | State::Done | State::Error => "idle",
     }
 }
 
@@ -256,7 +249,8 @@ impl Host {
                 .await;
             if state_sent {
                 let notification = match (previous, report.state) {
-                    (Some(State::Working), State::Idle) => Some("Task complete"),
+                    (Some(State::Working), State::Error) => Some("Task failed"),
+                    (Some(State::Working), State::Idle | State::Done) => Some("Task complete"),
                     (Some(State::Blocked(..)), State::Blocked(..)) => None,
                     (_, State::Blocked(_, message)) => Some(message),
                     _ => None,
@@ -318,7 +312,7 @@ impl Host {
                         "--agent",
                         "kiss",
                         "--state",
-                        state.label(),
+                        label(state),
                         "--seq",
                     ])
                     .arg(next_sequence(sequence));
@@ -369,7 +363,7 @@ impl Host {
                     || execute(
                         self.command(&["set-status"])
                             .arg(format!("kiss-{}", surface.to_string_lossy()))
-                            .arg(format!("KISS: {}", state.label()))
+                            .arg(format!("KISS: {}", label(state)))
                             .arg("--workspace")
                             .arg(workspace),
                     )

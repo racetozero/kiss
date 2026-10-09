@@ -174,6 +174,9 @@ impl Terminal {
 
     /// Report a changed status with OSC 7501. Unsupported terminals ignore it.
     pub fn set_program_status(&mut self, status: ProgramStatus) -> std::io::Result<()> {
+        if self.program_status == Some(status) {
+            return Ok(());
+        }
         let mut out = std::io::stdout().lock();
         self.write_program_status(&mut out, status)
     }
@@ -187,24 +190,21 @@ impl Terminal {
             return Ok(());
         }
         out.write_all(b"\x1b]7501;state=")?;
-        out.write_all(match status {
-            ProgramStatus::Idle => b"idle:app=kiss",
-            ProgramStatus::Working => b"working:app=kiss",
-            ProgramStatus::Done => b"done:app=kiss",
-            ProgramStatus::Error => b"error:app=kiss",
-            ProgramStatus::Blocked(BlockedKind::Permission, _) => {
-                b"blocked:app=kiss:kind=permission"
+        match status {
+            ProgramStatus::Idle => out.write_all(b"idle")?,
+            ProgramStatus::Working => out.write_all(b"working")?,
+            ProgramStatus::Done => out.write_all(b"done")?,
+            ProgramStatus::Error => out.write_all(b"error")?,
+            ProgramStatus::Blocked(kind, message) => {
+                out.write_all(match kind {
+                    BlockedKind::Permission => b"blocked:kind=permission:msg=",
+                    BlockedKind::Auth => b"blocked:kind=auth:msg=",
+                })?;
+                let message = base64::engine::general_purpose::STANDARD.encode(message);
+                out.write_all(message.as_bytes())?;
             }
-            ProgramStatus::Blocked(BlockedKind::Auth, _) => b"blocked:app=kiss:kind=auth",
-        })?;
-        if let ProgramStatus::Blocked(_, message) = status {
-            out.write_all(b":msg=")?;
-            out.write_all(
-                base64::engine::general_purpose::STANDARD
-                    .encode(message)
-                    .as_bytes(),
-            )?;
         }
+        out.write_all(b":app=kiss")?;
         out.write_all(b"\x1b\\")?;
         out.flush()?;
         self.program_status = Some(status);
@@ -436,7 +436,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             output,
-            b"\x1b]7501;state=blocked:app=kiss:kind=permission:msg=V29ya2Zsb3cgYXBwcm92YWwgcmVxdWlyZWQ=\x1b\\"
+            b"\x1b]7501;state=blocked:kind=permission:msg=V29ya2Zsb3cgYXBwcm92YWwgcmVxdWlyZWQ=:app=kiss\x1b\\"
         );
 
         output.clear();
@@ -448,7 +448,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             output,
-            b"\x1b]7501;state=blocked:app=kiss:kind=auth:msg=TG9naW4=\x1b\\"
+            b"\x1b]7501;state=blocked:kind=auth:msg=TG9naW4=:app=kiss\x1b\\"
         );
 
         output.clear();
@@ -456,9 +456,5 @@ mod tests {
             .write_program_status(&mut output, ProgramStatus::Done)
             .unwrap();
         assert_eq!(output, b"\x1b]7501;state=done:app=kiss\x1b\\");
-        assert_eq!(
-            PROGRAM_STATUS_PANIC_SEQUENCE,
-            b"\x1b]7501;state=error:app=kiss\x1b\\"
-        );
     }
 }
