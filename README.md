@@ -44,6 +44,14 @@ Why? Because I am stupid :)
 KISS uses four focused tools by default: `read`, `write`, `edit`, and `bash`.
 Catppuccin Mocha is the default dark theme.
 
+Like Pi, KISS has no permission checks, sandbox, policy rules, or auto-mode
+safety classifiers by default. Safety belongs to the model and to the system
+where you run the harness, not to the harness itself. KISS stays agnostic to
+its execution environment so it can focus on hill-climbing toward a solution
+for the task at hand, in coding and in other disciplines. If you need
+isolation, run KISS in a container, a virtual machine, or a restricted
+account.
+
 ## Install
 
 macOS and Linux:
