@@ -45,7 +45,6 @@ export interface SessionOptions {
   session?: "in-memory" | "create" | "continue" | `open:${string}` | `fork:${string}`
   sessionDir?: string
   sessionName?: string
-  trustProjectFiles?: boolean
   noContextFiles?: boolean
   eventCapacity?: number
 }

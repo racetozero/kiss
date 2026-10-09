@@ -23,7 +23,6 @@ async fn benchmark_session() -> (tempfile::TempDir, MockProvider, Arc<Session>) 
         model: Some("mock/mock-1".into()),
         models_file: Some(provider.catalog_path()),
         no_context_files: true,
-        trust_project_files: false,
         ..Default::default()
     })
     .await

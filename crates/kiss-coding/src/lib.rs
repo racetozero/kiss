@@ -17,7 +17,6 @@ pub mod skills;
 pub mod subagents;
 pub mod system_prompt;
 pub mod tools;
-pub mod trust;
 pub mod workflows;
 
 pub use session::entry::{SessionEntry, SessionHeader};

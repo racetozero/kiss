@@ -48,7 +48,6 @@ pub fn options_from_args(args: &Args) -> Result<SessionOptions> {
         session,
         session_dir: args.session_dir.clone().map(PathBuf::from),
         session_name: args.name.clone(),
-        trust_project_files: args.approve && !args.no_approve,
         no_context_files: args.no_context_files,
         ..Default::default()
     })
