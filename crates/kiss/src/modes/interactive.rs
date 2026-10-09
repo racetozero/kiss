@@ -167,7 +167,6 @@ enum PickerKind {
     /// Use or remove one account (zero-based index).
     AccountActions(String, usize),
     Settings,
-    Trust,
     ImportConfirm(PathBuf),
     Llama(Vec<LlamaModel>),
     McpServers,
@@ -1576,9 +1575,6 @@ fn terminal_host_state(app: &App, session: &kiss_coding::AgentSession) -> Progra
     let blocked = match app.picker.as_ref().map(|picker| &picker.kind) {
         Some(PickerKind::WorkflowApproval(..)) => {
             Some((BlockedKind::Permission, "Workflow approval required"))
-        }
-        Some(PickerKind::Trust) => {
-            Some((BlockedKind::Permission, "Project trust decision required"))
         }
         _ if app.secret_prompt.is_some() => Some((BlockedKind::Auth, "Login input required")),
         _ => None,
@@ -4912,18 +4908,6 @@ fn settings_picker(
             value: 8,
         },
         SelectItem {
-            label: "Default project trust".into(),
-            detail: Some(
-                match settings.default_project_trust {
-                    kiss_coding::settings::ProjectTrustDefault::Ask => "ask",
-                    kiss_coding::settings::ProjectTrustDefault::Always => "always",
-                    kiss_coding::settings::ProjectTrustDefault::Never => "never",
-                }
-                .into(),
-            ),
-            value: 9,
-        },
-        SelectItem {
             label: "Skill slash commands".into(),
             detail: Some(
                 if settings.enable_skill_commands.unwrap_or(true) {
@@ -5455,26 +5439,6 @@ fn workflow_approver(
     })
 }
 
-fn open_trust_picker(app: &mut App, session: &Arc<kiss_coding::AgentSession>) {
-    let cwd = session.manager.lock().unwrap().cwd().display().to_string();
-    let items = vec![
-        SelectItem {
-            label: "Trust project".into(),
-            detail: Some("Load project settings, prompts, and skills".into()),
-            value: 0,
-        },
-        SelectItem {
-            label: "Do not trust project".into(),
-            detail: Some("Ignore project-local resources".into()),
-            value: 1,
-        },
-    ];
-    app.picker = Some(Picker {
-        kind: PickerKind::Trust,
-        list: SelectList::new(format!("Trust for {cwd}"), items, app.theme.clone()),
-    });
-}
-
 fn open_llama_picker(app: &mut App, models: Vec<LlamaModel>) {
     let items = models
         .iter()
@@ -5701,24 +5665,10 @@ fn start_mcp_check(
 fn open_mcp_picker(
     app: &mut App,
     session: &Arc<kiss_coding::AgentSession>,
-    args: &Args,
     command_tx: &mpsc::UnboundedSender<CommandEvent>,
 ) {
     let cwd = session.manager.lock().unwrap().cwd().to_path_buf();
-    let cli_trust = if args.approve {
-        Some(true)
-    } else if args.no_approve {
-        Some(false)
-    } else {
-        None
-    };
-    let bootstrap = kiss_coding::Settings::load(&cwd, false);
-    let trusted = kiss_coding::trust::resolve_non_interactive(
-        &cwd,
-        cli_trust,
-        bootstrap.default_project_trust,
-    );
-    let loaded = match kiss_mcp::config::load(&cwd, trusted) {
+    let loaded = match kiss_mcp::config::load(&cwd) {
         Ok(loaded) => loaded,
         Err(error) => {
             app.cells.push(Cell::Error(format!(
@@ -6404,19 +6354,6 @@ fn apply_picker_selection(
             apply_settings_selection(app, session, resources, value);
             reopen_settings_picker(app, session, resources, filter, value);
         }
-        PickerKind::Trust => {
-            let cwd = session.manager.lock().unwrap().cwd().to_path_buf();
-            let trusted = value == 0;
-            match kiss_coding::trust::save_decision(&cwd, trusted) {
-                Ok(()) => app.cells.push(Cell::Notice(format!(
-                    "saved project trust as {}. Run /reload to apply it",
-                    if trusted { "trusted" } else { "untrusted" }
-                ))),
-                Err(error) => app.cells.push(Cell::Error(format!(
-                    "could not save project trust: {error:#}"
-                ))),
-            }
-        }
         PickerKind::ImportConfirm(path) => {
             if value == 0 {
                 import_session(app, session, &path);
@@ -6603,20 +6540,6 @@ fn apply_settings_selection(
         6 => resources.settings.compaction.enabled = !resources.settings.compaction.enabled,
         7 => resources.settings.retry.enabled = !resources.settings.retry.enabled,
         8 => resources.settings.quiet_startup = !resources.settings.quiet_startup,
-        9 => {
-            resources.settings.default_project_trust =
-                match resources.settings.default_project_trust {
-                    kiss_coding::settings::ProjectTrustDefault::Ask => {
-                        kiss_coding::settings::ProjectTrustDefault::Always
-                    }
-                    kiss_coding::settings::ProjectTrustDefault::Always => {
-                        kiss_coding::settings::ProjectTrustDefault::Never
-                    }
-                    kiss_coding::settings::ProjectTrustDefault::Never => {
-                        kiss_coding::settings::ProjectTrustDefault::Ask
-                    }
-                };
-        }
         10 => {
             resources.settings.enable_skill_commands =
                 Some(!resources.settings.enable_skill_commands.unwrap_or(true));
@@ -7491,7 +7414,7 @@ fn run_slash_command(
                 ));
             }
         }
-        "mcp" => open_mcp_picker(app, session, args, command_tx),
+        "mcp" => open_mcp_picker(app, session, command_tx),
         "webmcp" => start_webmcp(app, session, &rest, command_tx),
         "provider" => run_provider_command(app, &rest),
         "providers" => run_provider_command(app, "list"),
@@ -7588,7 +7511,6 @@ fn run_slash_command(
                     .push(Cell::Error(format!("clone failed: {error:#}"))),
             }
         }
-        "trust" => open_trust_picker(app, session),
         "accounts" => run_accounts_command(app, &rest),
         "login" => {
             app.pending_account_add = None;
@@ -8114,14 +8036,7 @@ fn discover_saved_workflows(
     session: &Arc<kiss_coding::AgentSession>,
 ) -> Vec<kiss_coding::workflows::SavedWorkflow> {
     let cwd = session.manager.lock().unwrap().cwd().to_path_buf();
-    // A project workflow feeds child agents instructions, so it loads under the
-    // same trust rule as project skills and prompts.
-    let trusted = kiss_coding::trust::resolve_non_interactive(
-        &cwd,
-        None,
-        session.settings().default_project_trust,
-    );
-    kiss_coding::workflows::discover(&cwd, trusted)
+    kiss_coding::workflows::discover(&cwd)
 }
 
 fn reload_interactive(

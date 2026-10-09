@@ -115,7 +115,7 @@ async fn run_command(args: &Args, command: &Command) -> anyhow::Result<i32> {
         Command::Acp => modes::acp::run(args).await,
         Command::CacheUsage { session, provider } => {
             let cwd = std::env::current_dir()?;
-            let settings = kiss_coding::Settings::load(&cwd, false);
+            let settings = kiss_coding::Settings::load(&cwd);
             let session_dir = setup::session_dir(args, &settings);
             println!(
                 "{}",

@@ -444,15 +444,6 @@ pub struct Args {
     #[arg(long)]
     pub append_system_prompt: Option<String>,
 
-    // --- trust ---
-    /// Trust project-local files for this run.
-    #[arg(short = 'a', long)]
-    pub approve: bool,
-
-    /// Ignore project-local files for this run.
-    #[arg(long = "no-approve")]
-    pub no_approve: bool,
-
     /// Force verbose startup output.
     #[arg(long)]
     pub verbose: bool,

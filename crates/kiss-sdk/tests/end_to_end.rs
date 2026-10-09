@@ -33,9 +33,6 @@ async fn session_with(
                 .map(str::to_string)
                 .to_vec(),
         ),
-        // Project files in a temporary directory are ours, but leaving trust
-        // off and selecting tools keeps the test independent of local files.
-        trust_project_files: false,
         no_context_files: true,
         ..Default::default()
     };
