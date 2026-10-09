@@ -1,17 +1,19 @@
 //! Raw-mode terminal control. The only module that touches the real
 //! terminal. Everything else renders to strings.
 
+use base64::Engine as _;
 use crossterm::terminal;
 use std::io::Write;
 
 const ENTER_SEQUENCE: &[u8] = b"\x1b[?2004h\x1b[>3u\x1b[1 q\x1b[?25l";
 const RESTORE_SEQUENCE: &[u8] =
-    b"\x1b]9;4;0;0\x1b\\\x1b]0;\x07\x1b[?2004l\x1b[<1u\x1b[0 q\x1b[?25h\x1b[0m\r\n";
+    b"\x1b]7501;state=clear\x1b\\\x1b]9;4;0;0\x1b\\\x1b]0;\x07\x1b[?2004l\x1b[<1u\x1b[0 q\x1b[?25h\x1b[0m\r\n";
 const TITLE_PREFIX: &[u8] = b"\x1b]0;\xf0\x9f\x92\x8b ";
 const TITLE_SUFFIX: &[u8] = b"\x07";
 const WORKING_TITLE_FRAMES: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const PROGRESS_IDLE_SEQUENCE: &[u8] = b"\x1b]9;4;0;0\x1b\\";
 const PROGRESS_WORKING_SEQUENCE: &[u8] = b"\x1b]9;4;3;0\x1b\\";
+const PROGRAM_STATUS_PANIC_SEQUENCE: &[u8] = b"\x1b]7501;state=error:app=kiss\x1b\\";
 const TITLE_TICKS_PER_FRAME: usize = 1;
 const SESSION_TITLE_MAX_CHARS: usize = 48;
 
@@ -64,6 +66,23 @@ fn write_title(
     out.write_all(TITLE_SUFFIX)
 }
 
+/// Why the user must act, reported as the OSC 7501 `kind` key.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BlockedKind {
+    Permission,
+    Auth,
+}
+
+/// Program state reported with the OSC 7501 Program Status Protocol.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ProgramStatus {
+    Idle,
+    Working,
+    Done,
+    Error,
+    Blocked(BlockedKind, &'static str),
+}
+
 pub struct Terminal {
     raw: bool,
     #[cfg(windows)]
@@ -72,6 +91,7 @@ pub struct Terminal {
     session_title: String,
     title_dirty: bool,
     progress_enabled: bool,
+    program_status: Option<ProgramStatus>,
 }
 
 impl Terminal {
@@ -88,6 +108,7 @@ impl Terminal {
             title_dirty: false,
             progress_enabled: std::env::var_os("TERM_PROGRAM")
                 .is_none_or(|value| value != "ghostty"),
+            program_status: None,
         };
         let mut out = std::io::stdout();
         // Bracketed paste and modified-key reporting on. The latter lets
@@ -151,6 +172,45 @@ impl Terminal {
         Ok(())
     }
 
+    /// Report a changed status with OSC 7501. Unsupported terminals ignore it.
+    pub fn set_program_status(&mut self, status: ProgramStatus) -> std::io::Result<()> {
+        let mut out = std::io::stdout().lock();
+        self.write_program_status(&mut out, status)
+    }
+
+    fn write_program_status(
+        &mut self,
+        out: &mut impl Write,
+        status: ProgramStatus,
+    ) -> std::io::Result<()> {
+        if self.program_status == Some(status) {
+            return Ok(());
+        }
+        out.write_all(b"\x1b]7501;state=")?;
+        out.write_all(match status {
+            ProgramStatus::Idle => b"idle:app=kiss",
+            ProgramStatus::Working => b"working:app=kiss",
+            ProgramStatus::Done => b"done:app=kiss",
+            ProgramStatus::Error => b"error:app=kiss",
+            ProgramStatus::Blocked(BlockedKind::Permission, _) => {
+                b"blocked:app=kiss:kind=permission"
+            }
+            ProgramStatus::Blocked(BlockedKind::Auth, _) => b"blocked:app=kiss:kind=auth",
+        })?;
+        if let ProgramStatus::Blocked(_, message) = status {
+            out.write_all(b":msg=")?;
+            out.write_all(
+                base64::engine::general_purpose::STANDARD
+                    .encode(message)
+                    .as_bytes(),
+            )?;
+        }
+        out.write_all(b"\x1b\\")?;
+        out.flush()?;
+        self.program_status = Some(status);
+        Ok(())
+    }
+
     pub fn restore(&mut self) {
         if self.raw {
             self.raw = false;
@@ -170,6 +230,7 @@ impl Terminal {
         std::panic::set_hook(Box::new(move |info| {
             let mut out = std::io::stdout();
             let _ = write_control_sequence(&mut out, RESTORE_SEQUENCE);
+            let _ = write_control_sequence(&mut out, PROGRAM_STATUS_PANIC_SEQUENCE);
             let _ = terminal::disable_raw_mode();
             #[cfg(windows)]
             if let Some(modes) = &windows_console {
@@ -268,6 +329,7 @@ mod tests {
             session_title: String::new(),
             title_dirty: false,
             progress_enabled: true,
+            program_status: None,
         }
     }
 
@@ -289,7 +351,7 @@ mod tests {
         write_control_sequence(&mut restored, RESTORE_SEQUENCE).unwrap();
         assert_eq!(
             restored,
-            b"\x1b]9;4;0;0\x1b\\\x1b]0;\x07\x1b[?2004l\x1b[<1u\x1b[0 q\x1b[?25h\x1b[0m\r\n"
+            b"\x1b]7501;state=clear\x1b\\\x1b]9;4;0;0\x1b\\\x1b]0;\x07\x1b[?2004l\x1b[<1u\x1b[0 q\x1b[?25h\x1b[0m\r\n"
         );
     }
 
@@ -348,5 +410,55 @@ mod tests {
             SESSION_TITLE_MAX_CHARS
         );
         assert!(!terminal.session_title.chars().any(char::is_control));
+    }
+
+    #[test]
+    fn program_status_writes_osc_7501_only_when_status_changes() {
+        let mut terminal = terminal();
+        let mut output = Vec::new();
+
+        terminal
+            .write_program_status(&mut output, ProgramStatus::Idle)
+            .unwrap();
+        assert_eq!(output, b"\x1b]7501;state=idle:app=kiss\x1b\\");
+
+        output.clear();
+        terminal
+            .write_program_status(&mut output, ProgramStatus::Idle)
+            .unwrap();
+        assert!(output.is_empty());
+
+        terminal
+            .write_program_status(
+                &mut output,
+                ProgramStatus::Blocked(BlockedKind::Permission, "Workflow approval required"),
+            )
+            .unwrap();
+        assert_eq!(
+            output,
+            b"\x1b]7501;state=blocked:app=kiss:kind=permission:msg=V29ya2Zsb3cgYXBwcm92YWwgcmVxdWlyZWQ=\x1b\\"
+        );
+
+        output.clear();
+        terminal
+            .write_program_status(
+                &mut output,
+                ProgramStatus::Blocked(BlockedKind::Auth, "Login"),
+            )
+            .unwrap();
+        assert_eq!(
+            output,
+            b"\x1b]7501;state=blocked:app=kiss:kind=auth:msg=TG9naW4=\x1b\\"
+        );
+
+        output.clear();
+        terminal
+            .write_program_status(&mut output, ProgramStatus::Done)
+            .unwrap();
+        assert_eq!(output, b"\x1b]7501;state=done:app=kiss\x1b\\");
+        assert_eq!(
+            PROGRAM_STATUS_PANIC_SEQUENCE,
+            b"\x1b]7501;state=error:app=kiss\x1b\\"
+        );
     }
 }

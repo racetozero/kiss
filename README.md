@@ -892,6 +892,23 @@ Use `/config voice-language es` to select Spanish. The default is `en`.
 
 ## Configuration
 
+### Terminal program status
+
+Interactive KISS reports its state with the Program Status Protocol
+(OSC 7501). Terminals that support it, such as Rex and terminals built on
+libghostty, can show this state in a tab or notification. No setup is
+required, and other terminals ignore the reports.
+
+| State     | When KISS reports it                                           |
+| --------- | -------------------------------------------------------------- |
+| `idle`    | KISS waits for input, or you cancelled the last turn.          |
+| `working` | A turn, command, compaction, workflow, or job is active.       |
+| `done`    | A turn finished and the terminal can mark it as unread.        |
+| `blocked` | KISS needs a workflow approval, trust decision, or login.      |
+| `error`   | The last turn failed, or KISS stopped after an internal error. |
+
+KISS clears its status when you exit.
+
 ### Herdr and cmux
 
 Run `kiss` in a Herdr or cmux pane to enable native support. No hook script

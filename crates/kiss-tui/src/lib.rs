@@ -25,5 +25,5 @@ pub use keys::{InputDecoder, InputEvent, Key, KeyEvent};
 pub use markdown::{MarkdownRenderer, MermaidMode, StreamingMarkdownCache};
 pub use renderer::{CURSOR_MARKER, DiffRenderer};
 pub use select_list::{SelectItem, SelectList};
-pub use terminal::Terminal;
+pub use terminal::{BlockedKind, ProgramStatus, Terminal};
 pub use theme::{Color, Theme};

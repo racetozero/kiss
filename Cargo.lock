@@ -2679,6 +2679,7 @@ name = "kiss-tui"
 version = "0.0.35"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "crossterm",
  "crossterm_winapi",
  "dirs",

@@ -1,5 +1,6 @@
 use super::*;
 use clap::Parser;
+use kiss_tui::BlockedKind;
 use std::os::unix::fs::PermissionsExt;
 use std::sync::Arc;
 
@@ -169,7 +170,7 @@ async fn native_hosts_deliver_state_resume_notifications_and_cleanup() {
     })
     .await;
     hosts.update(
-        State::Blocked("Workflow approval required"),
+        State::Blocked(BlockedKind::Permission, "Workflow approval required"),
         &session,
         &args,
     );
@@ -360,7 +361,11 @@ async fn slow_host_drops_old_states_and_does_not_delay_other_hosts() {
     slow.wait(|calls| !calls.is_empty()).await;
     let started = std::time::Instant::now();
     for _ in 0..1000 {
-        hosts.update(State::Blocked("Old decision"), &session, &args);
+        hosts.update(
+            State::Blocked(BlockedKind::Permission, "Old decision"),
+            &session,
+            &args,
+        );
     }
     hosts.update(State::Idle, &session, &args);
     fast.wait(|calls| calls.iter().any(|call| call.contains(&"KISS: idle".into())))

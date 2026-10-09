@@ -18,7 +18,7 @@ const RETRY_DELAY: Duration = Duration::from_secs(2);
 pub(crate) enum State {
     Idle,
     Working,
-    Blocked(&'static str),
+    Blocked(kiss_tui::BlockedKind, &'static str),
 }
 
 impl State {
@@ -26,7 +26,7 @@ impl State {
         match self {
             Self::Idle => "idle",
             Self::Working => "working",
-            Self::Blocked(_) => "blocked",
+            Self::Blocked(..) => "blocked",
         }
     }
 }
@@ -257,8 +257,8 @@ impl Host {
             if state_sent {
                 let notification = match (previous, report.state) {
                     (Some(State::Working), State::Idle) => Some("Task complete"),
-                    (Some(State::Blocked(_)), State::Blocked(_)) => None,
-                    (_, State::Blocked(message)) => Some(message),
+                    (Some(State::Blocked(..)), State::Blocked(..)) => None,
+                    (_, State::Blocked(_, message)) => Some(message),
                     _ => None,
                 };
                 if let Self::Cmux {
@@ -322,7 +322,7 @@ impl Host {
                         "--seq",
                     ])
                     .arg(next_sequence(sequence));
-                if let State::Blocked(message) = state {
+                if let State::Blocked(_, message) = state {
                     command.args(["--message", message]);
                 }
                 if let Some(resume) = resume {

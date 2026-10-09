@@ -4,6 +4,9 @@
 
 ### Added
 
+- Report interactive state with the Program Status Protocol (OSC 7501).
+  Supporting terminals show when KISS is idle, working, done, blocked on a
+  decision or login, or stopped by an error. KISS clears its status on exit.
 - Publish a Homebrew formula on each stable release. Install KISS with
   `brew install racetozero/tap/kiss`. On Linux, the formula installs the
   static musl build, so KISS does not require glibc. For a Homebrew
