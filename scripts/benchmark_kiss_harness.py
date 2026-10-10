@@ -16,7 +16,9 @@ import time
 from pathlib import Path
 
 
-def start(binary: Path) -> tuple[subprocess.Popen[bytes], int]:
+def start(
+    binary: Path, extra_args: tuple[str, ...] = ()
+) -> tuple[subprocess.Popen[bytes], int]:
     import fcntl
     import pty
     import termios
@@ -26,7 +28,7 @@ def start(binary: Path) -> tuple[subprocess.Popen[bytes], int]:
     environment = os.environ.copy()
     environment.setdefault('TERM', 'xterm-256color')
     process = subprocess.Popen(
-        [str(binary), '--no-session'],
+        [str(binary), '--no-session', *extra_args],
         stdin=slave,
         stdout=slave,
         stderr=slave,
@@ -98,12 +100,17 @@ def memory_kib(pid: int) -> int:
     raise RuntimeError('memory measurement supports Linux and macOS')
 
 
-def memory_sample(binary: Path, heading: bytes, count: int) -> float:
+def memory_sample(binary: Path, count: int) -> float:
     sessions = [start(binary) for _ in range(count)]
     try:
         for _, master in sessions:
-            wait_for(master, heading, time.perf_counter())
-        time.sleep(1)
+            wait_for(master, b'$ skills', time.perf_counter(), 30)
+        masters = [master for _, master in sessions]
+        deadline = time.perf_counter() + 1
+        while (remaining := deadline - time.perf_counter()) > 0:
+            readable, _, _ = select.select(masters, [], [], min(remaining, 0.1))
+            for master in readable:
+                os.read(master, 65_536)
         return sum(memory_kib(process.pid) for process, _ in sessions) / 1_024
     finally:
         for process, master in sessions:
@@ -115,8 +122,8 @@ def benchmark(binary: Path, launches: int, memory_trials: int) -> dict[str, obje
     heading = version.replace('kiss ', 'kiss v', 1).encode()
     launch_sample(binary, heading)
     timings = [launch_sample(binary, heading) for _ in range(launches)]
-    one_session = [memory_sample(binary, heading, 1) for _ in range(memory_trials)]
-    ten_sessions = [memory_sample(binary, heading, 10) for _ in range(memory_trials)]
+    one_session = [memory_sample(binary, 1) for _ in range(memory_trials)]
+    ten_sessions = [memory_sample(binary, 10) for _ in range(memory_trials)]
     one_mean = statistics.fmean(one_session)
     ten_mean = statistics.fmean(ten_sessions)
     memory_kind = 'PSS' if sys.platform.startswith('linux') else 'RSS'
