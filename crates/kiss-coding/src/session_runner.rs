@@ -1855,14 +1855,13 @@ impl AgentSession {
         {
             tokens
         } else {
-            let messages = manager.build_session_context().messages;
+            let messages = manager.context_messages();
             let tokens = if self.settings().experimental_context_file {
                 messages
-                    .iter()
-                    .map(compaction::estimate_message_tokens)
+                    .map(|message| compaction::estimate_message_tokens(&message))
                     .sum()
             } else {
-                estimate_context_tokens(&messages)
+                compaction::estimate_context_tokens_iter(messages)
             };
             *self.context_usage_cache.lock().unwrap() = Some((revision, tokens));
             tokens

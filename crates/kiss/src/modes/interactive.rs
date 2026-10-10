@@ -9648,6 +9648,7 @@ mod tests {
             .unwrap();
         let session = test_session(manager);
         let initial = session.context_usage().0;
+        assert_eq!(initial, 4);
         assert_eq!(session.context_usage().0, initial);
 
         session
@@ -9657,7 +9658,7 @@ mod tests {
             .append_message(AgentMessage::user("larger message ".repeat(500)))
             .unwrap();
 
-        assert!(session.context_usage().0 > initial);
+        assert_eq!(session.context_usage().0, 1879);
     }
 
     #[test]
