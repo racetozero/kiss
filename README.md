@@ -881,6 +881,55 @@ events.
 KISS combines rapid resize events and redraws once 75 ms after the final
 change. The full resize test wrote 178,231 bytes.
 
+### Reuse of unchanged renderer rows (2026-10-10)
+
+A second change retains shared source rows in the renderer and reuses row width
+checks when the source text and terminal width are unchanged. Changed text,
+wrapped rows, resize, and cursor markers still use their existing layout rules.
+This removes repeated text scans and a separate copy of each shared source row.
+
+The baseline is `482f5f9`, after the three copy and buffer changes above. Both
+versions use the same release settings and host. Each size used five alternating
+process trials per version and 15 warmed samples per process. No compilation
+ran during measurement. Values are medians of process medians; brackets show
+the lowest and highest process median.
+
+| App and renderer operation | Source text | Before, ms [range] | After, ms [range] |
+| --- | ---: | ---: | ---: |
+| First full frame | 2 MiB | 7.091 [7.048–7.411] | 6.562 [6.548–6.647] |
+| First full frame | 10 MiB | 38.746 [38.418–38.985] | 34.768 [34.574–34.961] |
+| First full frame | 40 MiB | 157.679 [156.874–158.318] | 141.834 [141.437–149.600] |
+| Spinner frame | 2 MiB | 3.601 [3.585–3.652] | 1.138 [1.134–1.145] |
+| Spinner frame | 10 MiB | 21.779 [21.482–22.236] | 8.451 [8.400–9.256] |
+| Spinner frame | 40 MiB | 88.294 [87.830–89.091] | 39.172 [39.037–42.093] |
+
+The 40 MiB spinner frame used about 56% less time, from 88.294 to 39.172 ms.
+The first full frame used about 10% less time, from 157.679 to 141.834 ms.
+The app-only path was unchanged: its medians were 15.724 and 15.677 ms.
+The small-cell spinner medians were 0.027 and 0.017 ms, but their process
+ranges overlap. No stable small-cell speed claim is made.
+
+| App and renderer component | Before peak RSS, MiB [range] | After peak RSS, MiB [range] |
+| --- | ---: | ---: |
+| 2 MiB source text | 42.547 [42.547–42.562] | 39.078 [39.078–39.078] |
+| 10 MiB source text | 151.766 [151.750–151.766] | 117.766 [117.766–117.766] |
+| 40 MiB source text | 473.078 [473.078–473.094] | 415.750 [415.750–415.766] |
+
+At 40 MiB, component peak RSS fell by about 12%, from 473.078 to 415.750 MiB.
+The small component rose from 16.500 to 16.547 MiB. All ten processes at each
+size produced the same row count, output byte count, and output hash. Output
+buffer size and total output bytes were unchanged.
+
+Real terminal checks passed for first paint, typing, a 16 KiB paste, resize,
+slow output reads with a 2 MiB session history, and exit.
+
+These are the same deterministic assistant fixtures and counting sink used
+above. They measure the full app-plus-renderer component, not terminal I/O,
+input-to-paint time, or model latency. Use the same benchmark commands above
+to repeat them. The complete transcript still remains in memory. Large frames
+still take tens of milliseconds; this change does not establish a 16 ms frame
+limit.
+
 ### Published Prime Agent results
 
 [Prime Intellect's Results section](https://www.primeintellect.ai/blog/prime-agent-rust#results)
