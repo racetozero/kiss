@@ -87,7 +87,9 @@ impl DiffRenderer {
         height: usize,
         out: &mut impl Write,
     ) -> std::io::Result<()> {
-        self.render_frame_lines(new_lines, width, height, out)
+        self.render_frame_lines(new_lines, width, height, out, |line| {
+            Arc::from(line.as_str())
+        })
     }
 
     /// Render immutable rows shared with the transcript cache.
@@ -98,7 +100,7 @@ impl DiffRenderer {
         height: usize,
         out: &mut impl Write,
     ) -> std::io::Result<()> {
-        self.render_frame_lines(new_lines, width, height, out)
+        self.render_frame_lines(new_lines, width, height, out, Arc::clone)
     }
 
     fn render_frame_lines<S: AsRef<str>>(
@@ -107,6 +109,7 @@ impl DiffRenderer {
         width: usize,
         height: usize,
         out: &mut impl Write,
+        share_source: impl Fn(&S) -> Arc<str>,
     ) -> std::io::Result<()> {
         let width = width.max(1);
         let height = height.max(1);
@@ -114,10 +117,15 @@ impl DiffRenderer {
             source: &self.source,
             prepared: &self.previous,
         });
-        let prepared = if new_lines
-            .iter()
-            .any(|line| display_width(line.as_ref()) > width)
-        {
+        let prepared = if new_lines.iter().enumerate().any(|(row, line)| {
+            let source = line.as_ref();
+            // The source cache has already processed this row at the same width.
+            let unchanged = reusable
+                .as_ref()
+                .and_then(|old| old.source.get(row))
+                .is_some_and(|old| old.as_ref() == source);
+            !unchanged && display_width(source) > width
+        }) {
             let wrapped: Vec<String> = new_lines
                 .iter()
                 .flat_map(|line| {
@@ -129,9 +137,11 @@ impl DiffRenderer {
                     }
                 })
                 .collect();
-            prepare_lines(&wrapped, width, height, reusable)
+            prepare_lines(&wrapped, width, height, reusable, |line| {
+                Arc::from(line.as_str())
+            })
         } else {
-            prepare_lines(new_lines, width, height, reusable)
+            prepare_lines(new_lines, width, height, reusable, share_source)
         };
 
         let first_render = self.width == 0 && self.height == 0 && self.previous.is_empty();
@@ -329,13 +339,14 @@ fn prepare_lines<S: AsRef<str>>(
     width: usize,
     height: usize,
     reusable: Option<ReusableLines<'_>>,
+    share_source: impl Fn(&S) -> Arc<str>,
 ) -> PreparedFrame {
     let viewport_top = lines.len().saturating_sub(height);
     let mut position = None;
     let mut source_lines = Vec::with_capacity(lines.len());
     let mut prepared = Vec::with_capacity(lines.len());
-    for (row, source) in lines.iter().enumerate() {
-        let source = source.as_ref();
+    for (row, input) in lines.iter().enumerate() {
+        let source = input.as_ref();
         let marker = (row >= viewport_top)
             .then(|| source.find(CURSOR_MARKER))
             .flatten();
@@ -359,7 +370,7 @@ fn prepare_lines<S: AsRef<str>>(
             prepared.push(old.prepared[row].clone());
             continue;
         }
-        source_lines.push(Arc::from(source));
+        source_lines.push(share_source(input));
         let without_marker = marker
             .map(|_| Cow::Owned(source.replace(CURSOR_MARKER, "")))
             .unwrap_or_else(|| Cow::Borrowed(source));
@@ -650,6 +661,22 @@ mod tests {
             &["skills: ponyta", "il, linkup-sea", "rch"]
         );
         assert_eq!(renderer.line_count(), 3);
+
+        let shared = vec![Arc::<str>::from("skills: ponytail, linkup-search")];
+        let mut output = Vec::new();
+        renderer
+            .render_shared_frame(&shared, 14, 5, &mut output)
+            .unwrap();
+        assert!(output.is_empty(), "unchanged wrapped text must not repaint");
+        renderer
+            .render_shared_frame(&shared, 10, 5, &mut output)
+            .unwrap();
+        let mut narrowed = VirtualTerminal::new(10, 5);
+        narrowed.feed(std::str::from_utf8(&output).unwrap());
+        assert_eq!(
+            &narrowed.history()[..4],
+            &["skills: po", "nytail, li", "nkup-searc", "h"]
+        );
     }
 
     #[test]
@@ -780,6 +807,22 @@ mod tests {
     fn cursor_marker_is_removed_and_positions_cursor() {
         let mut renderer = DiffRenderer::new();
         let output = render(&mut renderer, &[&format!("ab{CURSOR_MARKER}cd")], 20, 5);
+        assert!(!output.contains(CURSOR_MARKER));
+        assert!(output.contains("\x1b[3G\x1b[1 q\x1b[?25h"));
+
+        let rows: Vec<Arc<str>> =
+            vec![Arc::from(format!("ab{CURSOR_MARKER}cd")), Arc::from("tail")];
+        let mut renderer = DiffRenderer::new();
+        let mut output = Vec::new();
+        renderer
+            .render_shared_frame(&rows, 20, 1, &mut output)
+            .unwrap();
+        assert!(!output.windows(6).any(|bytes| bytes == b"\x1b[?25h"));
+        output.clear();
+        renderer
+            .render_shared_frame(&rows, 20, 2, &mut output)
+            .unwrap();
+        let output = std::str::from_utf8(&output).unwrap();
         assert!(!output.contains(CURSOR_MARKER));
         assert!(output.contains("\x1b[3G\x1b[1 q\x1b[?25h"));
     }
