@@ -11,8 +11,25 @@ pub fn measure<T>(
     work: &str,
     mut workload: impl FnMut() -> T,
 ) {
-    assert!(samples > 0, "a benchmark needs at least one sample");
-    assert!(iterations > 0, "a benchmark needs at least one iteration");
+    if std::env::var("KISS_BENCH_FILTER")
+        .is_ok_and(|names| !names.split(',').any(|selected| selected == name))
+    {
+        return;
+    }
+    let samples = std::env::var("KISS_BENCH_SAMPLES").map_or(samples, |value| {
+        value.parse().expect("KISS_BENCH_SAMPLES must be a positive integer. Set it to 1000 for tail measurements or remove it to use the test default.")
+    });
+    let iterations = std::env::var("KISS_BENCH_ITERATIONS").map_or(iterations, |value| {
+        value.parse().expect("KISS_BENCH_ITERATIONS must be a positive integer. Set it to 1 for individual operation timings or remove it to use the test default.")
+    });
+    assert!(
+        samples > 0,
+        "Benchmark sample count is zero. Use a positive count or remove KISS_BENCH_SAMPLES to use the test default."
+    );
+    assert!(
+        iterations > 0,
+        "Benchmark iteration count is zero. Use a positive count or remove KISS_BENCH_ITERATIONS to use the test default."
+    );
 
     for _ in 0..iterations.min(3) {
         black_box(workload());
@@ -49,8 +66,27 @@ pub fn measure_pair<A, B>(
     mut first: impl FnMut() -> A,
     mut second: impl FnMut() -> B,
 ) {
-    assert!(samples > 0, "a benchmark needs at least one sample");
-    assert!(iterations > 0, "a benchmark needs at least one iteration");
+    if std::env::var("KISS_BENCH_FILTER").is_ok_and(|selected| {
+        !selected
+            .split(',')
+            .any(|name| name == names.0 || name == names.1)
+    }) {
+        return;
+    }
+    let samples = std::env::var("KISS_BENCH_SAMPLES").map_or(samples, |value| {
+        value.parse().expect("KISS_BENCH_SAMPLES must be a positive integer. Set it to 1000 for tail measurements or remove it to use the test default.")
+    });
+    let iterations = std::env::var("KISS_BENCH_ITERATIONS").map_or(iterations, |value| {
+        value.parse().expect("KISS_BENCH_ITERATIONS must be a positive integer. Set it to 1 for individual operation timings or remove it to use the test default.")
+    });
+    assert!(
+        samples > 0,
+        "Benchmark sample count is zero. Use a positive count or remove KISS_BENCH_SAMPLES to use the test default."
+    );
+    assert!(
+        iterations > 0,
+        "Benchmark iteration count is zero. Use a positive count or remove KISS_BENCH_ITERATIONS to use the test default."
+    );
 
     for _ in 0..iterations.min(3) {
         black_box(first());
@@ -84,12 +120,17 @@ pub fn report(name: &str, elapsed_ns: &mut [u128], iterations: usize, work: &str
         "a benchmark needs at least one sample"
     );
     let mean = elapsed_ns.iter().sum::<u128>() / elapsed_ns.len() as u128;
+    if std::env::var("KISS_BENCH_RAW").as_deref() == Ok("1") {
+        println!("KISS_BENCH_RAW\t{name}\tsamples_ns={elapsed_ns:?}");
+    }
     elapsed_ns.sort_unstable();
     let median = elapsed_ns[elapsed_ns.len() / 2];
     let p95_index = (elapsed_ns.len() * 95).div_ceil(100).saturating_sub(1);
     let p95 = elapsed_ns[p95_index];
+    let p99_index = (elapsed_ns.len() * 99).div_ceil(100).saturating_sub(1);
+    let p99 = elapsed_ns[p99_index];
     println!(
-        "KISS_BENCH\t{name}\tmean_ns={mean}\tmedian_ns={median}\tp95_ns={p95}\tsamples={}\titerations={iterations}\twork={work}",
+        "KISS_BENCH\t{name}\tmean_ns={mean}\tmedian_ns={median}\tp95_ns={p95}\tp99_ns={p99}\tsamples={}\titerations={iterations}\twork={work}",
         elapsed_ns.len()
     );
 }
