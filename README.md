@@ -817,15 +817,31 @@ KISS_PERF_MIB=40 cargo test --release -p kiss --bin kiss benchmark_scalar_sessio
 
 ### Core operations
 
-| User action              | Test size                         |       p95 |
-| ------------------------ | --------------------------------- | --------: |
-| File search              | 100,000 files, three warm queries |  4.889 ms |
-| File search              | 500,000 files, three warm queries |  7.690 ms |
-| SSE parsing              | 10,000 events                     |  0.973 ms |
-| Grep                     | 1,000 files and 200 matches       |  8.340 ms |
-| Incremental Markdown     | 200 streaming prefix renders      | 12.576 ms |
-| Rust syntax highlighting | One 200-line fence                |  6.165 ms |
-| Unchanged frame          | 10,000 logical rows               |  0.885 ms |
+The core, automation, and TUI tables below were measured on 2026-10-10 with
+product source `3ab0483` and the p99 benchmark update. Each workload ran in
+three separate release processes. The timing helper used one untimed warmup
+per row; fixtures can do additional setup work. Each row has 1,000 samples,
+with one complete workload operation per sample. Values are
+the median of the three process percentiles. Brackets show the lowest and
+highest process p99. Percentiles use the nearest-rank rule. All reported
+p95 and p99 values were checked against the retained raw samples.
+
+These replace the earlier small-sample p95 values. The new sample method
+and total work differ from the earlier batched tests. Differences between
+the old and new values do not measure a code speed change. Timer overhead
+is included; nanosecond values approach the clock resolution. The component
+tests exclude model inference and terminal I/O. Some p99 ranges are wide;
+these results do not establish a latency limit.
+
+| User action              | Test size                         |       p95 |               p99 [range] |
+| ------------------------ | --------------------------------- | --------: | ------------------------: |
+| File search              | 100,000 files, three warm queries |  4.692 ms |    4.915 [4.812–9.163] ms |
+| File search              | 500,000 files, three warm queries |  8.698 ms |   9.284 [8.987–15.225] ms |
+| SSE parsing              | 10,000 events                     |  0.810 ms |    0.865 [0.801–1.184] ms |
+| Grep                     | 1,000 files and 200 matches       |  8.623 ms |  10.397 [9.188–12.269] ms |
+| Incremental Markdown     | 200 streaming prefix renders      | 13.203 ms | 14.683 [13.870–31.086] ms |
+| Rust syntax highlighting | One 200-line fence                |  5.177 ms |    5.514 [5.276–5.537] ms |
+| Unchanged frame          | 10,000 logical rows               |  0.151 ms |    0.157 [0.154–0.159] ms |
 
 ### SDK, RPC, and browser WebAssembly
 
@@ -845,38 +861,38 @@ The release module is 574,734 bytes raw and 209,375 bytes gzip. It starts with
 
 ### Agent automation
 
-Subagents are off by default. Session setup had no measured slowdown when they
-were enabled. Their six control tools added 71 ns to request preparation.
+Subagents are off by default. The session setup p99 ranges overlap with
+subagents off and on. Request preparation includes six extra control tools
+when subagents are on.
 
-| Measure                    | State or size         |        p95 |
-| -------------------------- | --------------------- | ---------: |
-| Subagent session setup     | Off                   | 364.466 us |
-| Subagent session setup     | On                    | 361.740 us |
-| Request preparation        | Subagents off         |     177 ns |
-| Request preparation        | Subagents on          |     249 ns |
-| Workflow script parsing    | 200 lines             |  59.922 us |
-| Workflow interpreter       | 1,000 agent calls     |   2.423 ms |
-| Workflow progress snapshot | 500 agents, 5 phases  |  64.816 us |
-| Workflow phase view        | 500 agents, 5 phases  |  12.207 us |
-| Workflow agent detail      | One prompt and result |   5.021 us |
-| Workflow unchanged view    | 500 agents, cached    |     317 ns |
-| Job detail view            | Long goal and result  |  46.595 us |
+| Measure                    | State or size                     |        p95 |                  p99 [range] |
+| -------------------------- | --------------------------------- | ---------: | ---------------------------: |
+| Subagent session setup     | Off                               | 398.542 us | 425.875 [409.417–434.667] us |
+| Subagent session setup     | On                                | 398.084 us | 422.625 [414.000–434.542] us |
+| Request preparation        | Subagents off                     |     250 ns |             291 [250–333] ns |
+| Request preparation        | Subagents on                      |     334 ns |             375 [334–375] ns |
+| Workflow script parsing    | 200 lines                         |  63.833 us |    69.500 [67.458–91.875] us |
+| Workflow interpreter       | 1,000 agent calls                 |   2.155 ms |       2.350 [2.153–2.482] ms |
+| Workflow progress snapshot | 500 agents, 5 phases, growing log |  24.583 us |    24.916 [20.584–25.417] us |
+| Workflow phase view        | 500 agents, 5 phases              |   8.291 us |       8.417 [8.334–8.917] us |
+| Workflow agent detail      | One prompt and result             |   3.625 us |       4.375 [3.584–4.417] us |
+| Workflow unchanged view    | 500 agents, cached                |     167 ns |             250 [208–250] ns |
+| Job detail view            | Long goal and result              |  36.958 us |    40.542 [40.166–41.583] us |
 
-The workflow interpreter used 2.185 us per agent call. Arming a workflow added
-651 ns to request preparation and kept the total below 1 us. Loop and
-autoresearch jobs sleep between model turns and update the TUI through small
-events.
+The snapshot test adds one log entry per operation. Its log grows during the
+1,000 samples, so it measures a changing history size. Loop and autoresearch
+jobs sleep between model turns and update the TUI through small events.
 
 ### TUI rendering and resize
 
-| Measure                   | Test size           |      p95 |
-| ------------------------- | ------------------- | -------: |
-| Full renderer             | 1,800 logical rows  | 0.436 ms |
-| Unchanged renderer        | 10,000 logical rows | 0.885 ms |
-| Last-row update           | 10,000 logical rows | 0.916 ms |
-| Cached transcript render  | 2,885 logical rows  | 0.063 ms |
-| Spinner transcript render | 2,885 logical rows  | 0.057 ms |
-| Full resize redraw        | 1,800 logical rows  | 0.477 ms |
+| Measure                   | Test size           |      p95 |            p99 [range] |
+| ------------------------- | ------------------- | -------: | ---------------------: |
+| Full renderer             | 1,800 logical rows  | 0.395 ms | 0.423 [0.410–0.426] ms |
+| Unchanged renderer        | 10,000 logical rows | 0.151 ms | 0.157 [0.154–0.159] ms |
+| Last-row update           | 10,000 logical rows | 0.148 ms | 0.154 [0.153–0.160] ms |
+| Cached transcript render  | 2,885 logical rows  | 0.040 ms | 0.043 [0.043–0.045] ms |
+| Spinner transcript render | 2,885 logical rows  | 0.040 ms | 0.044 [0.044–0.046] ms |
+| Full resize redraw        | 1,800 logical rows  | 0.416 ms | 0.845 [0.507–1.981] ms |
 
 KISS combines rapid resize events and redraws once 75 ms after the final
 change. The full resize test wrote 178,231 bytes.
@@ -938,18 +954,57 @@ Prime Sandbox with 4 CPU cores and 8 GB of memory for each benchmark. It drives
 a real terminal with a screen emulator and a scripted model. Model inference
 is excluded. Values below include the variation shown in the source.
 
-| Measure | Prime Agent Rust | Prime Agent TypeScript | Claude Code 2.1.289 | Codex CLI 0.160.0 | Pi 1.0.3 | Hermes Agent 0.21.5 |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| First visible output | 23.6 ± 0.6 ms | 722.8 ± 15.1 ms | 264.6 ± 5.8 ms | 296.8 ± 2.7 ms | 306.3 ± 6.7 ms | 1,715.3 ± 10.3 ms |
-| Cold time to type | 55.8 ± 4.9 ms | 737.8 ± 13.9 ms | 348.4 ± 8.2 ms | 324.6 ± 4.9 ms | 317.7 ± 8.0 ms | 2,094.5 ± 23.5 ms |
-| Warm time to type | 42.4 ± 4.3 ms | 549.6 ± 10.0 ms | 345.1 ± 6.2 ms | 321.3 ± 9.2 ms | 240.4 ± 5.9 ms | 2,097.1 ± 40.8 ms |
-| Complete installed size | 59.6 MB | 172.1 MB | 492.4 MB | 446.8 MB | 456.0 MB | 960.1 MB |
-| Process tree RSS after startup | 106.0 ± 1.3 MB | 607.4 ± 0.9 MB | 226.9 ± 0.4 MB | 344.4 ± 3.1 MB | 138.1 ± 0.7 MB | 194.6 ± 0.3 MB |
+| Measure                        | Prime Agent Rust | Prime Agent TypeScript | Claude Code 2.1.289 | Codex CLI 0.160.0 |       Pi 1.0.3 | Hermes Agent 0.21.5 |
+| ------------------------------ | ---------------: | ---------------------: | ------------------: | ----------------: | -------------: | ------------------: |
+| First visible output           |    23.6 ± 0.6 ms |        722.8 ± 15.1 ms |      264.6 ± 5.8 ms |    296.8 ± 2.7 ms | 306.3 ± 6.7 ms |   1,715.3 ± 10.3 ms |
+| Cold time to type              |    55.8 ± 4.9 ms |        737.8 ± 13.9 ms |      348.4 ± 8.2 ms |    324.6 ± 4.9 ms | 317.7 ± 8.0 ms |   2,094.5 ± 23.5 ms |
+| Warm time to type              |    42.4 ± 4.3 ms |        549.6 ± 10.0 ms |      345.1 ± 6.2 ms |    321.3 ± 9.2 ms | 240.4 ± 5.9 ms |   2,097.1 ± 40.8 ms |
+| Complete installed size        |          59.6 MB |               172.1 MB |            492.4 MB |          446.8 MB |       456.0 MB |            960.1 MB |
+| Process tree RSS after startup |   106.0 ± 1.3 MB |         607.4 ± 0.9 MB |      226.9 ± 0.4 MB |    344.4 ± 3.1 MB | 138.1 ± 0.7 MB |      194.6 ± 0.3 MB |
 
 Source checked on 2026-10-10. These are published measurements; we did not run
-this suite. KISS was not included. Hardware, operating system, setup, and
-measurement rules differ from the KISS tests above. Use this table as source
-data, not as a direct speed or memory comparison with KISS.
+this suite. KISS was not included in the published suite.
+
+KISS was measured locally for the same named measures on an Apple M4 with
+macOS 27.0 and Rust 1.99.0. The executable uses the normal release build with
+fat LTO, one codegen unit, and mimalloc. Its product source is `3ab0483`.
+The terminal test uses a 160 by 40 pseudo-terminal and pyte 0.8.2 to inspect
+visible screen cells. The clock starts before process creation. First output
+and the typing probe count only after a synchronized terminal update ends.
+Terminal echo must be off before the probe is sent. No model turn is submitted.
+
+| Measure                        | KISS local mean ± sample standard deviation |       p95 |       p99 |
+| ------------------------------ | ------------------------------------------: | --------: | --------: |
+| First visible output, cold     |                            7.008 ± 3.158 ms | 13.210 ms | 22.637 ms |
+| Cold time to type              |                            9.420 ± 4.007 ms | 17.121 ms | 28.500 ms |
+| Warm time to type              |                            8.960 ± 2.620 ms | 12.463 ms | 25.364 ms |
+| Installed CLI payload          |                                   25.230 MB |         — |         — |
+| Process tree RSS after startup |                           20.772 ± 0.092 MB |         — |         — |
+
+There were 1,000 cold launches and 1,000 warm launches, in alternating order.
+Cold means a fresh project and session directory. Warm means another launch
+in the same directories after a warmup. OS file caches were not cleared.
+The test reads the user's global configuration, selects the built-in Anthropic
+provider with a local placeholder key, uses an empty custom-model file, and
+disables context files. Typing time is launch until the probe is visible after
+the observer has seen the first frame. It includes the observer's work.
+
+Memory uses 20 separate launches. Output is read for one second after typing
+works, then `ps` supplies RSS for KISS and its descendants. All 20 samples had
+one process. MB means 1,000,000 bytes. Installed size is the executable's
+25,229,584 file bytes. The CLI has no separate language runtime or updater;
+this size excludes installer receipts, download caches, SDK packages, generated
+sessions, and OS libraries. Memory p95 and p99 are omitted because 20 samples
+provide little tail information.
+
+Hardware, OS, configuration, observer, and installed-size rules differ from
+the published suite. These KISS results do not establish a direct speed or
+memory comparison with the published agents. No compilation or other benchmark
+ran during the timed KISS runs. Repeat the visible-screen test with:
+
+```sh
+uv run --no-project --with pyte==0.8.2 python scripts/benchmark_kiss_startup.py --binary target/release/kiss --samples 1000 --memory-trials 20 --json target/visible-startup-benchmark.json
+```
 
 ### Profile-guided release builds
 
@@ -964,10 +1019,21 @@ data, not as a direct speed or memory comparison with KISS.
 
 The tests use release builds and local deterministic fixtures. The startup
 test used a 160 by 40 terminal and `kiss --no-session` on macOS 27.0 with an
-Apple M4 and Rust 1.99.0. Startup values are the mean of twenty warm launches. Memory values are
-the mean of three idle samples. The earlier core, SDK, RPC, and WebAssembly tests also ran
-on the Apple M4. Profile-guided results use separate held-out runs. Lower is
-better.
+Apple M4 and Rust 1.99.0. The earlier startup values are the mean of twenty
+warm launches; earlier memory values are the mean of three idle samples.
+The visible-screen startup results and p95/p99 tables have their own methods
+and sample counts above. The SDK, RPC, and WebAssembly tests also ran on the
+Apple M4. Profile-guided results use separate held-out runs. Lower is better.
+
+To repeat a native p95/p99 workload, select its ignored benchmark test and use
+the sample controls below. Repeat it in three separate processes with no
+concurrent benchmark or compilation. `KISS_BENCH_RAW=1` retains the timing samples
+in the output. `KISS_BENCH_FILTER` can select comma-separated exact output row
+names; a paired benchmark reports both rows when either is selected.
+
+```sh
+KISS_BENCH_SAMPLES=1000 KISS_BENCH_ITERATIONS=1 KISS_BENCH_RAW=1 cargo test --release -p kiss-tui benchmark_performance_renderer_frames -- --ignored --nocapture --test-threads=1
+```
 
 Run the complete native and browser suite with `just bench`. It requires
 cargo-nextest, wasm-pack, Deno, and Node. Harness results are written to
