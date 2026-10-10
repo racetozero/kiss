@@ -4,8 +4,10 @@
 
 use crate::tool::{AgentTool, ToolResult, ToolUpdateSink};
 use crate::tools::truncate::{DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, format_size, truncate_tail};
+use anyhow::Context as _;
 use kiss_ai::ContentBlock;
 use serde_json::{Value, json};
+use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::time::Duration;
@@ -13,6 +15,131 @@ use tokio::io::AsyncReadExt;
 use tokio_util::sync::CancellationToken;
 
 const UPDATE_THROTTLE: Duration = Duration::from_millis(100);
+const OUTPUT_FILE_ERROR: &str = "The command output could not be saved. Use a writable temporary directory with free disk space. Correct the temporary directory permissions or free disk space, then run the command again.";
+
+/// Keep only the live tail. Once output is large, preserve its raw bytes on disk.
+#[derive(Default)]
+struct BashOutput {
+    tail: String,
+    partial_first_line: bool,
+    pending_utf8: Vec<u8>,
+    prefix: Vec<u8>,
+    spill: Option<(BufWriter<std::fs::File>, PathBuf)>,
+    total_bytes: usize,
+    newlines: usize,
+    last_line_bytes: usize,
+}
+
+impl BashOutput {
+    fn append(&mut self, bytes: &[u8]) -> anyhow::Result<()> {
+        if let Some((file, _)) = &mut self.spill {
+            file.write_all(bytes).context(OUTPUT_FILE_ERROR)?;
+        } else {
+            self.prefix.extend_from_slice(bytes);
+        }
+        let mut pending = std::mem::take(&mut self.pending_utf8);
+        pending.extend_from_slice(bytes);
+        let mut offset = 0;
+        while offset < pending.len() {
+            match std::str::from_utf8(&pending[offset..]) {
+                Ok(text) => {
+                    self.record(text);
+                    offset = pending.len();
+                }
+                Err(error) => {
+                    let valid_end = offset + error.valid_up_to();
+                    self.record(std::str::from_utf8(&pending[offset..valid_end]).unwrap());
+                    offset = valid_end;
+                    match error.error_len() {
+                        Some(len) => {
+                            self.record("\u{fffd}");
+                            offset += len;
+                        }
+                        None => break,
+                    }
+                }
+            }
+        }
+        pending.drain(..offset);
+        self.pending_utf8 = pending;
+        if self.spill.is_none()
+            && (self.total_bytes + usize::from(!self.pending_utf8.is_empty()) * 3
+                > DEFAULT_MAX_BYTES
+                || self.newlines >= DEFAULT_MAX_LINES)
+        {
+            let file = tempfile::Builder::new()
+                .prefix("kiss-bash-")
+                .suffix(".txt")
+                .tempfile()
+                .context(OUTPUT_FILE_ERROR)?;
+            let (file, path) = file
+                .keep()
+                .map_err(|error| error.error)
+                .context(OUTPUT_FILE_ERROR)?;
+            let mut file = BufWriter::with_capacity(64 * 1024, file);
+            file.write_all(&self.prefix).context(OUTPUT_FILE_ERROR)?;
+            self.prefix = Vec::new();
+            self.spill = Some((file, path));
+        }
+        Ok(())
+    }
+
+    fn record(&mut self, text: &str) {
+        self.total_bytes += text.len();
+        self.newlines += text.bytes().filter(|&byte| byte == b'\n').count();
+        self.last_line_bytes = match text.rfind('\n') {
+            Some(index) => text.len() - index - 1,
+            None => self.last_line_bytes + text.len(),
+        };
+        self.tail.push_str(text);
+        if self.tail.len() > DEFAULT_MAX_BYTES + 1 {
+            let cut = self
+                .tail
+                .ceil_char_boundary(self.tail.len() - DEFAULT_MAX_BYTES - 1);
+            self.partial_first_line = self.tail.as_bytes()[cut - 1] != b'\n';
+            self.tail.drain(..cut);
+        }
+    }
+
+    fn truncation(&self) -> crate::tools::truncate::TruncationResult {
+        let text = if self.partial_first_line && self.last_line_bytes <= DEFAULT_MAX_BYTES {
+            self.tail
+                .split_once('\n')
+                .map(|(_, rest)| rest)
+                .unwrap_or("")
+        } else {
+            &self.tail
+        };
+        let mut result = truncate_tail(text, DEFAULT_MAX_LINES, DEFAULT_MAX_BYTES);
+        result.total_lines = self.newlines + 1;
+        result.total_bytes = self.total_bytes;
+        result.last_line_partial = self.last_line_bytes > DEFAULT_MAX_BYTES;
+        result.truncated =
+            result.output_lines < result.total_lines || result.output_bytes < result.total_bytes;
+        if result.truncated {
+            result.truncated_by = Some(
+                if result.output_lines >= DEFAULT_MAX_LINES {
+                    "lines"
+                } else {
+                    "bytes"
+                }
+                .into(),
+            );
+        }
+        result
+    }
+
+    fn finish(&mut self) -> anyhow::Result<()> {
+        if !self.pending_utf8.is_empty() {
+            self.record("\u{fffd}");
+            self.pending_utf8.clear();
+        }
+        if let Some((file, _)) = &mut self.spill {
+            file.flush().context(OUTPUT_FILE_ERROR)?;
+        }
+        Ok(())
+    }
+}
 
 pub struct BashTool {
     pub cwd: PathBuf,
@@ -114,7 +241,7 @@ impl AgentTool for BashTool {
 
         let mut stdout = child.stdout.take().expect("piped stdout");
         let mut stderr = child.stderr.take().expect("piped stderr");
-        let mut output: Vec<u8> = Vec::new();
+        let mut output = BashOutput::default();
         let mut stdout_buf = [0u8; 8192];
         let mut stderr_buf = [0u8; 8192];
         let mut stdout_open = true;
@@ -137,6 +264,7 @@ impl AgentTool for BashTool {
         };
 
         loop {
+            let mut output_error = None;
             let timeout_sleep = async {
                 match deadline {
                     Some(d) => tokio::time::sleep_until(d).await,
@@ -147,14 +275,14 @@ impl AgentTool for BashTool {
                 n = stdout.read(&mut stdout_buf), if stdout_open => {
                     match n {
                         Ok(0) => stdout_open = false,
-                        Ok(n) => output.extend_from_slice(&stdout_buf[..n]),
+                        Ok(n) => output_error = output.append(&stdout_buf[..n]).err(),
                         Err(_) => stdout_open = false,
                     }
                 }
                 n = stderr.read(&mut stderr_buf), if stderr_open => {
                     match n {
                         Ok(0) => stderr_open = false,
-                        Ok(n) => output.extend_from_slice(&stderr_buf[..n]),
+                        Ok(n) => output_error = output.append(&stderr_buf[..n]).err(),
                         Err(_) => stderr_open = false,
                     }
                 }
@@ -170,6 +298,11 @@ impl AgentTool for BashTool {
                 }
                 else => break,
             }
+            if let Some(error) = output_error {
+                kill_child(pgid, &mut child);
+                let _ = child.wait().await;
+                return Err(error);
+            }
             // The cancellation and no-deadline futures stay pending forever.
             // Therefore, `select!` does not enter its `else` branch after both
             // output pipes reach EOF. Stop explicitly when both readers close.
@@ -180,38 +313,34 @@ impl AgentTool for BashTool {
                 && last_update.elapsed() >= UPDATE_THROTTLE
             {
                 last_update = std::time::Instant::now();
-                let text = String::from_utf8_lossy(&output);
-                let t = truncate_tail(&text, DEFAULT_MAX_LINES, DEFAULT_MAX_BYTES);
+                let t = output.truncation();
                 update(ToolResult::text(t.content));
             }
         }
 
-        // Drain remaining output unless we killed the process.
-        if !cancelled && !timed_out {
-            if stdout_open {
-                let _ = stdout.read_to_end(&mut output).await;
-            }
-            if stderr_open {
-                let _ = stderr.read_to_end(&mut output).await;
-            }
-        }
         let status = child.wait().await.ok();
         let exit_code = status.and_then(|s| s.code());
 
-        let text = String::from_utf8_lossy(&output).into_owned();
-        let truncation = truncate_tail(&text, DEFAULT_MAX_LINES, DEFAULT_MAX_BYTES);
+        output.finish()?;
+        let truncation = output.truncation();
         let mut output_text = truncation.content.clone();
         let mut details = Value::Null;
 
         if truncation.truncated {
-            let full_path = spill_full_output(&output);
+            let full_path = output
+                .spill
+                .as_ref()
+                .expect("truncated output has a spill file")
+                .1
+                .display()
+                .to_string();
             let start = truncation.total_lines - truncation.output_lines + 1;
             let end = truncation.total_lines;
             let notice = if truncation.last_line_partial {
                 format!(
                     "[Showing last {} of line {end} (line is {}). Full output: {full_path}]",
                     format_size(truncation.output_bytes),
-                    format_size(text.split('\n').next_back().map(str::len).unwrap_or(0)),
+                    format_size(output.last_line_bytes),
                 )
             } else if truncation.truncated_by.as_deref() == Some("lines") {
                 format!(
@@ -268,20 +397,46 @@ impl AgentTool for BashTool {
     }
 }
 
-fn spill_full_output(bytes: &[u8]) -> String {
-    let dir = std::env::temp_dir().join("kiss-bash");
-    let _ = std::fs::create_dir_all(&dir);
-    let path = dir.join(format!("output-{}.txt", kiss_ai::now_ms()));
-    let _ = std::fs::write(&path, bytes);
-    path.display().to_string()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn tool() -> BashTool {
         BashTool::new(std::env::temp_dir())
+    }
+
+    #[test]
+    fn bounded_output_matches_full_truncation_and_spill() {
+        let cases = [
+            b"small\noutput".to_vec(),
+            "line\n".repeat(3000).into_bytes(),
+            "x".repeat(200_000).into_bytes(),
+            format!("{}\nend\n", "x".repeat(100_000)).into_bytes(),
+            "\u{00e9}\u{1f642}\n".repeat(20_000).into_bytes(),
+            vec![0xff; 60_000],
+            [vec![b'x'; 70_000], vec![0xf0, 0x9f, 0x99]].concat(),
+        ];
+        for bytes in cases {
+            for chunk_size in [1, 8192] {
+                let mut output = BashOutput::default();
+                for chunk in bytes.chunks(chunk_size) {
+                    output.append(chunk).unwrap();
+                }
+                output.finish().unwrap();
+                let expected = truncate_tail(
+                    &String::from_utf8_lossy(&bytes),
+                    DEFAULT_MAX_LINES,
+                    DEFAULT_MAX_BYTES,
+                );
+                assert_eq!(output.truncation(), expected, "chunk size {chunk_size}");
+                assert!(output.tail.len() <= DEFAULT_MAX_BYTES + 1);
+                if expected.truncated {
+                    let (_, path) = output.spill.take().unwrap();
+                    assert_eq!(std::fs::read(&path).unwrap(), bytes);
+                    std::fs::remove_file(path).unwrap();
+                }
+            }
+        }
     }
 
     #[tokio::test]
@@ -313,6 +468,82 @@ mod tests {
                 "session directory"
             }));
         }
+    }
+
+    #[test]
+    #[ignore = "release-mode performance benchmark"]
+    fn benchmark_performance_bash_progress() {
+        let bytes = "output line with deterministic text\n"
+            .repeat(240_000)
+            .into_bytes();
+        kiss_bench::measure_pair(
+            ("bash_full_progress", "bash_bounded_progress"),
+            11,
+            1,
+            (
+                "8mib_1024ish_progress_updates",
+                "8mib_1024ish_progress_updates",
+            ),
+            || {
+                let mut output = Vec::new();
+                for chunk in bytes.chunks(8192) {
+                    output.extend_from_slice(chunk);
+                    std::hint::black_box(truncate_tail(
+                        &String::from_utf8_lossy(&output),
+                        DEFAULT_MAX_LINES,
+                        DEFAULT_MAX_BYTES,
+                    ));
+                }
+                truncate_tail(
+                    &String::from_utf8_lossy(&output),
+                    DEFAULT_MAX_LINES,
+                    DEFAULT_MAX_BYTES,
+                )
+            },
+            || {
+                let mut output = BashOutput::default();
+                for chunk in bytes.chunks(8192) {
+                    output.append(chunk).unwrap();
+                    std::hint::black_box(output.truncation());
+                }
+                output.finish().unwrap();
+                let result = output.truncation();
+                if let Some((file, path)) = output.spill.take() {
+                    drop(file);
+                    std::fs::remove_file(path).unwrap();
+                }
+                result
+            },
+        );
+    }
+
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn large_command_preserves_full_output_on_disk() {
+        let result = tool()
+            .execute(
+                "1",
+                json!({"command": "printf '%070000d' 0; printf '\\nend\\n'"}),
+                CancellationToken::new(),
+                None,
+            )
+            .await
+            .unwrap();
+        let path = result.details["fullOutputPath"].as_str().unwrap();
+        let full = std::fs::read(path).unwrap();
+        assert_eq!(full.len(), 70_005);
+        assert!(full.ends_with(b"\nend\n"));
+        let expected = truncate_tail(
+            &String::from_utf8_lossy(&full),
+            DEFAULT_MAX_LINES,
+            DEFAULT_MAX_BYTES,
+        );
+        assert_eq!(
+            result.details["truncation"],
+            serde_json::to_value(&expected).unwrap()
+        );
+        assert!(result.output_text().starts_with("end\n"));
+        std::fs::remove_file(path).unwrap();
     }
 
     #[tokio::test]
