@@ -7,7 +7,7 @@
 
 use crate::text::{display_width, strip_ansi, truncate_to_width, wrap_terminal_text};
 use std::borrow::Cow;
-use std::io::Write;
+use std::io::{BufWriter, Write};
 use std::sync::Arc;
 
 /// Zero-width APC sequence inserted by a focused component at its cursor.
@@ -87,41 +87,59 @@ impl DiffRenderer {
         height: usize,
         out: &mut impl Write,
     ) -> std::io::Result<()> {
+        self.render_frame_lines(new_lines, width, height, out)
+    }
+
+    /// Render immutable rows shared with the transcript cache.
+    pub fn render_shared_frame(
+        &mut self,
+        new_lines: &[Arc<str>],
+        width: usize,
+        height: usize,
+        out: &mut impl Write,
+    ) -> std::io::Result<()> {
+        self.render_frame_lines(new_lines, width, height, out)
+    }
+
+    fn render_frame_lines<S: AsRef<str>>(
+        &mut self,
+        new_lines: &[S],
+        width: usize,
+        height: usize,
+        out: &mut impl Write,
+    ) -> std::io::Result<()> {
         let width = width.max(1);
         let height = height.max(1);
-        let wrapped = new_lines
+        let reusable = (self.width == width).then_some(ReusableLines {
+            source: &self.source,
+            prepared: &self.previous,
+        });
+        let prepared = if new_lines
             .iter()
-            .any(|line| display_width(line) > width)
-            .then(|| {
-                new_lines
-                    .iter()
-                    .flat_map(|line| {
-                        if display_width(line) <= width {
-                            vec![line.clone()]
-                        } else {
-                            wrap_terminal_text(line, width)
-                        }
-                    })
-                    .collect::<Vec<_>>()
-            });
-        let new_lines = wrapped.as_deref().unwrap_or(new_lines);
-        let can_reuse = self.width == width;
-        let prepared = prepare_lines(
-            new_lines,
-            width,
-            height,
-            can_reuse.then_some(ReusableLines {
-                source: &self.source,
-                prepared: &self.previous,
-            }),
-        );
+            .any(|line| display_width(line.as_ref()) > width)
+        {
+            let wrapped: Vec<String> = new_lines
+                .iter()
+                .flat_map(|line| {
+                    let line = line.as_ref();
+                    if display_width(line) <= width {
+                        vec![line.to_owned()]
+                    } else {
+                        wrap_terminal_text(line, width)
+                    }
+                })
+                .collect();
+            prepare_lines(&wrapped, width, height, reusable)
+        } else {
+            prepare_lines(new_lines, width, height, reusable)
+        };
 
         let first_render = self.width == 0 && self.height == 0 && self.previous.is_empty();
         let width_changed = self.width != 0 && self.width != width;
         let height_changed = self.height != 0 && self.height != height;
 
         if first_render {
-            self.full_render(prepared, width, height, false, out)?;
+            self.full_render(prepared, width, height, self.invalidated, out)?;
             return Ok(());
         }
         if self.invalidated
@@ -161,43 +179,56 @@ impl DiffRenderer {
             first_changed
         };
 
-        let mut buffer = String::from("\x1b[?2026h");
-
-        // A cursor-down command cannot move below the viewport. Scroll with
-        // real newlines when the target logical row is below it.
-        if move_target_row > previous_viewport_bottom {
-            let current_screen_row = hardware_cursor_row
-                .saturating_sub(previous_viewport_top)
-                .min(height - 1);
-            let move_to_bottom = height - 1 - current_screen_row;
-            if move_to_bottom > 0 {
-                buffer.push_str(&format!("\x1b[{move_to_bottom}B"));
-            }
-            let scroll = move_target_row - previous_viewport_bottom;
-            buffer.push_str(&"\r\n".repeat(scroll));
-            previous_viewport_top += scroll;
-            viewport_top += scroll;
-            hardware_cursor_row = move_target_row;
-        }
-
-        let current_screen_row = hardware_cursor_row.saturating_sub(previous_viewport_top);
-        let target_screen_row = move_target_row.saturating_sub(viewport_top);
-        push_vertical_move(&mut buffer, current_screen_row, target_screen_row);
-        buffer.push_str(if append_start { "\r\n" } else { "\r" });
-
         let render_end = last_changed.min(prepared.lines.len() - 1);
-        for (offset, line) in prepared.lines[first_changed..=render_end]
-            .iter()
-            .enumerate()
-        {
-            if offset > 0 {
-                buffer.push_str("\r\n");
+        let mut buffer = BufWriter::with_capacity(64 * 1024, &mut *out);
+        let result = (|| -> std::io::Result<()> {
+            buffer.write_all(b"\x1b[?2026h")?;
+
+            // A cursor-down command cannot move below the viewport. Scroll with
+            // real newlines when the target logical row is below it.
+            if move_target_row > previous_viewport_bottom {
+                let current_screen_row = hardware_cursor_row
+                    .saturating_sub(previous_viewport_top)
+                    .min(height - 1);
+                let move_to_bottom = height - 1 - current_screen_row;
+                if move_to_bottom > 0 {
+                    write!(buffer, "\x1b[{move_to_bottom}B")?;
+                }
+                let scroll = move_target_row - previous_viewport_bottom;
+                for _ in 0..scroll {
+                    buffer.write_all(b"\r\n")?;
+                }
+                previous_viewport_top += scroll;
+                viewport_top += scroll;
+                hardware_cursor_row = move_target_row;
             }
-            buffer.push_str("\x1b[2K");
-            buffer.push_str(line);
+
+            let current_screen_row = hardware_cursor_row.saturating_sub(previous_viewport_top);
+            let target_screen_row = move_target_row.saturating_sub(viewport_top);
+            let mut movement = String::new();
+            push_vertical_move(&mut movement, current_screen_row, target_screen_row);
+            buffer.write_all(movement.as_bytes())?;
+            buffer.write_all(if append_start { b"\r\n" } else { b"\r" })?;
+
+            for (offset, line) in prepared.lines[first_changed..=render_end]
+                .iter()
+                .enumerate()
+            {
+                if offset > 0 {
+                    buffer.write_all(b"\r\n")?;
+                }
+                buffer.write_all(b"\x1b[2K")?;
+                buffer.write_all(line.as_bytes())?;
+            }
+            buffer.write_all(b"\x1b[?2026l")?;
+            buffer.flush()
+        })();
+        // Discard pending bytes on failure; Drop must not retry a partial frame.
+        let _ = buffer.into_parts();
+        if result.is_err() {
+            self.invalidated = true;
         }
-        buffer.push_str("\x1b[?2026l");
-        out.write_all(buffer.as_bytes())?;
+        result?;
 
         let final_cursor_row = render_end;
         self.cursor_row = prepared.lines.len().saturating_sub(1);
@@ -222,23 +253,32 @@ impl DiffRenderer {
         clear: bool,
         out: &mut impl Write,
     ) -> std::io::Result<()> {
-        let mut buffer = String::from("\x1b[?2026h");
-        if clear {
-            // Clear the visible screen and stale scrollback before the full
-            // logical frame is replayed.
-            buffer.push_str("\x1b[2J\x1b[H\x1b[3J");
-        } else {
-            buffer.push('\r');
-        }
-        for (index, line) in prepared.lines.iter().enumerate() {
-            if index > 0 {
-                buffer.push_str("\r\n");
+        let mut buffer = BufWriter::with_capacity(64 * 1024, &mut *out);
+        let result = (|| -> std::io::Result<()> {
+            buffer.write_all(b"\x1b[?2026h")?;
+            if clear {
+                // Clear the visible screen and stale scrollback before the full
+                // logical frame is replayed.
+                buffer.write_all(b"\x1b[2J\x1b[H\x1b[3J")?;
+            } else {
+                buffer.write_all(b"\r")?;
             }
-            buffer.push_str("\x1b[2K");
-            buffer.push_str(line);
+            for (index, line) in prepared.lines.iter().enumerate() {
+                if index > 0 {
+                    buffer.write_all(b"\r\n")?;
+                }
+                buffer.write_all(b"\x1b[2K")?;
+                buffer.write_all(line.as_bytes())?;
+            }
+            buffer.write_all(b"\x1b[?2026l")?;
+            buffer.flush()
+        })();
+        // Discard pending bytes on failure; Drop must not retry a partial frame.
+        let _ = buffer.into_parts();
+        if result.is_err() {
+            self.invalidated = true;
         }
-        buffer.push_str("\x1b[?2026l");
-        out.write_all(buffer.as_bytes())?;
+        result?;
 
         self.cursor_row = prepared.lines.len().saturating_sub(1);
         self.hardware_cursor_row = self.cursor_row;
@@ -284,8 +324,8 @@ impl DiffRenderer {
     }
 }
 
-fn prepare_lines(
-    lines: &[String],
+fn prepare_lines<S: AsRef<str>>(
+    lines: &[S],
     width: usize,
     height: usize,
     reusable: Option<ReusableLines<'_>>,
@@ -295,6 +335,7 @@ fn prepare_lines(
     let mut source_lines = Vec::with_capacity(lines.len());
     let mut prepared = Vec::with_capacity(lines.len());
     for (row, source) in lines.iter().enumerate() {
+        let source = source.as_ref();
         let marker = (row >= viewport_top)
             .then(|| source.find(CURSOR_MARKER))
             .flatten();
@@ -318,7 +359,7 @@ fn prepare_lines(
             prepared.push(old.prepared[row].clone());
             continue;
         }
-        source_lines.push(Arc::from(source.as_str()));
+        source_lines.push(Arc::from(source));
         let without_marker = marker
             .map(|_| Cow::Owned(source.replace(CURSOR_MARKER, "")))
             .unwrap_or_else(|| Cow::Borrowed(source));
@@ -372,6 +413,72 @@ mod tests {
             .render_frame(&owned, width, height, &mut out)
             .unwrap();
         String::from_utf8(out).unwrap()
+    }
+
+    #[test]
+    fn shared_frames_preserve_terminal_bytes_and_recover_from_write_failure() {
+        let mut owned_renderer = DiffRenderer::new();
+        let mut shared_renderer = DiffRenderer::new();
+        for (rows, width, height) in [
+            (vec!["old".to_owned(); 2000], 80, 24),
+            (vec!["old".to_owned(); 2000], 80, 24),
+            (
+                vec![format!("styled \x1b[31mwide 界\x1b[0m{CURSOR_MARKER}"); 2001],
+                80,
+                24,
+            ),
+            (vec!["wrapped long row".to_owned(); 100], 5, 10),
+            (vec!["short".to_owned()], 80, 24),
+        ] {
+            let shared: Vec<Arc<str>> = rows.iter().map(|row| Arc::from(row.as_str())).collect();
+            let mut expected = Vec::new();
+            let mut actual = Vec::new();
+            owned_renderer
+                .render_frame(&rows, width, height, &mut expected)
+                .unwrap();
+            shared_renderer
+                .render_shared_frame(&shared, width, height, &mut actual)
+                .unwrap();
+            assert_eq!(actual, expected);
+        }
+
+        struct FailingWriter {
+            writes: usize,
+        }
+        impl Write for FailingWriter {
+            fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+                self.writes += 1;
+                match self.writes {
+                    1 => Ok(bytes.len().min(7)),
+                    _ => Err(std::io::Error::other("terminal disconnected")),
+                }
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let rows = vec!["retry".to_owned(); 20_000];
+        let mut failing = FailingWriter { writes: 0 };
+        assert!(
+            shared_renderer
+                .render_frame(&rows, 80, 24, &mut failing)
+                .is_err()
+        );
+        assert_eq!(
+            failing.writes, 2,
+            "do not retry buffered output after an error"
+        );
+        let mut recovered = Vec::new();
+        shared_renderer
+            .render_frame(&rows, 80, 24, &mut recovered)
+            .unwrap();
+        assert!(recovered.starts_with(b"\x1b[?2026h\x1b[2J\x1b[H\x1b[3J"));
+        let mut terminal = VirtualTerminal::new(80, 24);
+        terminal.feed(std::str::from_utf8(&recovered).unwrap());
+        assert_eq!(
+            terminal.lines.last().unwrap().iter().collect::<String>(),
+            "retry"
+        );
     }
 
     fn generated_lines(count: usize) -> Vec<String> {
