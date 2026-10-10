@@ -8,10 +8,47 @@ use anyhow::{Context as _, Result};
 use kiss_agent::{AgentMessage, BranchSummaryMessage, CompactionSummaryMessage, CustomMessage};
 use kiss_ai::{Model, ThinkingLevel, Usage};
 use serde_json::{Map, Value};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
+
+const LISTING_CACHE_LIMIT: usize = 4096;
+
+#[derive(Clone, PartialEq, Eq)]
+struct FileVersion {
+    len: u64,
+    modified: std::time::SystemTime,
+    #[cfg(unix)]
+    identity: (u64, u64, i64, i64),
+}
+
+impl FileVersion {
+    fn from_metadata(metadata: &std::fs::Metadata) -> std::io::Result<Self> {
+        #[cfg(unix)]
+        use std::os::unix::fs::MetadataExt;
+        Ok(Self {
+            len: metadata.len(),
+            modified: metadata.modified()?,
+            #[cfg(unix)]
+            identity: (
+                metadata.dev(),
+                metadata.ino(),
+                metadata.ctime(),
+                metadata.ctime_nsec(),
+            ),
+        })
+    }
+}
+
+#[derive(Default)]
+struct ListingCache {
+    rows: HashMap<PathBuf, (FileVersion, SessionListing)>,
+    order: VecDeque<PathBuf>,
+}
+
+static LISTING_CACHE: OnceLock<Mutex<ListingCache>> = OnceLock::new();
 
 pub struct SessionManager {
     header: SessionHeader,
@@ -92,13 +129,24 @@ impl SessionManager {
     }
 
     pub fn open(path: &Path) -> Result<Self> {
-        let text = std::fs::read_to_string(path)
-            .with_context(|| format!("open session {}", path.display()))?;
-        let needs_trailing_newline = !text.is_empty() && !text.ends_with('\n');
-        let mut lines = text.lines().filter(|l| !l.trim().is_empty());
-        let header_line = lines.next().context("empty session file")?;
-        let header: SessionHeader =
-            serde_json::from_str(header_line).context("parse session header")?;
+        let file = File::open(path).with_context(|| format!("open session {}", path.display()))?;
+        let mut reader = BufReader::with_capacity(64 * 1024, file);
+        let large_line_capacity = reader.get_ref().metadata()?.len().min(16 * 1024 * 1024) as usize;
+        let mut line = String::new();
+        loop {
+            line.clear();
+            if reader.read_line(&mut line)? == 0 {
+                anyhow::bail!(
+                    "The session file {} is empty. Select a JSONL session with a session header, or start a new session.",
+                    path.display()
+                );
+            }
+            if !line.trim().is_empty() {
+                break;
+            }
+        }
+        let mut needs_trailing_newline = !line.ends_with('\n');
+        let header: SessionHeader = serde_json::from_str(&line).context("parse session header")?;
         let cwd = PathBuf::from(&header.cwd);
         let mut manager = SessionManager {
             header,
@@ -116,8 +164,22 @@ impl SessionManager {
             cwd,
         };
         let mut all_entries_valid = true;
-        for line in lines {
-            match serde_json::from_str::<SessionEntry>(line) {
+        loop {
+            line.clear();
+            // Long records reserve once instead of copying a growing line repeatedly.
+            let buffer_capacity = reader.capacity();
+            let available = reader.fill_buf()?;
+            if available.len() >= buffer_capacity / 2 && !available.contains(&b'\n') {
+                line.reserve(large_line_capacity);
+            }
+            if reader.read_line(&mut line)? == 0 {
+                break;
+            }
+            needs_trailing_newline = !line.ends_with('\n');
+            if line.trim().is_empty() {
+                continue;
+            }
+            match serde_json::from_str::<SessionEntry>(&line) {
                 Ok(entry) => manager.insert_entry(entry),
                 Err(err) => {
                     all_entries_valid = false;
@@ -248,9 +310,20 @@ impl SessionManager {
         Ok(out)
     }
 
-    /// Cheap listing: header + scan for name/first user message.
+    /// Reuse unchanged listing rows. JSONL remains authoritative.
     fn peek(path: &Path) -> Option<SessionListing> {
-        let mut reader = BufReader::new(File::open(path).ok()?);
+        let version = FileVersion::from_metadata(&std::fs::metadata(path).ok()?).ok()?;
+        let cache = LISTING_CACHE.get_or_init(|| Mutex::new(ListingCache::default()));
+        if cfg!(unix)
+            && let Ok(cache) = cache.lock()
+            && let Some((cached_version, listing)) = cache.rows.get(path)
+            && *cached_version == version
+        {
+            // Unix ctime also invalidates permission changes. Other platforms
+            // scan the file until they have an equally strong generation key.
+            return Some(listing.clone());
+        }
+        let mut reader = BufReader::with_capacity(64 * 1024, File::open(path).ok()?);
         let mut line = String::new();
         loop {
             line.clear();
@@ -300,16 +373,34 @@ impl SessionManager {
         if entry_count == 0 {
             return None;
         }
-        let modified = std::fs::metadata(path).and_then(|m| m.modified()).ok()?;
-        Some(SessionListing {
+        let listing = SessionListing {
             path: path.to_path_buf(),
             id: header.id,
             name,
             first_message,
             cwd: header.cwd,
-            modified,
+            modified: version.modified,
             entry_count,
-        })
+        };
+        // A concurrent append or path replacement must not certify a stale row.
+        if cfg!(unix)
+            && FileVersion::from_metadata(&reader.get_ref().metadata().ok()?).ok()? == version
+            && FileVersion::from_metadata(&std::fs::metadata(path).ok()?).ok()? == version
+            && let Ok(mut cache) = cache.lock()
+        {
+            if !cache.rows.contains_key(path) {
+                if cache.rows.len() == LISTING_CACHE_LIMIT
+                    && let Some(oldest) = cache.order.pop_front()
+                {
+                    cache.rows.remove(&oldest);
+                }
+                cache.order.push_back(path.to_path_buf());
+            }
+            cache
+                .rows
+                .insert(path.to_path_buf(), (version, listing.clone()));
+        }
+        Some(listing)
     }
 
     /// Find a session file by partial UUID across all projects.
@@ -1431,6 +1522,41 @@ mod tests {
     }
 
     #[test]
+    fn listing_cache_tracks_append_replacement_and_deletion() {
+        let dir = tempfile::tempdir().unwrap();
+        let cwd = dir.path().join("project");
+        let sessions = dir.path().join("sessions");
+        let mut manager = SessionManager::create(&cwd, Some(sessions.clone())).unwrap();
+        manager.append_message(AgentMessage::user("first")).unwrap();
+        let path = manager.session_file().unwrap().to_path_buf();
+        for _ in 0..2 {
+            let rows = SessionManager::list(&cwd, &sessions).unwrap();
+            assert_eq!(rows[0].first_message.as_deref(), Some("first"));
+            assert_eq!(rows[0].entry_count, 1);
+        }
+        manager.append_session_info("new name").unwrap();
+        let rows = SessionManager::list(&cwd, &sessions).unwrap();
+        assert_eq!(rows[0].name.as_deref(), Some("new name"));
+        assert_eq!(rows[0].entry_count, 2);
+        drop(manager);
+        let mut replacement = SessionManager::in_memory(&cwd);
+        replacement
+            .append_message(AgentMessage::user("replacement"))
+            .unwrap();
+        let mut temporary = tempfile::NamedTempFile::new_in(path.parent().unwrap()).unwrap();
+        temporary
+            .write_all(replacement.to_jsonl().unwrap().as_bytes())
+            .unwrap();
+        temporary.persist(&path).unwrap();
+        let rows = SessionManager::list(&cwd, &sessions).unwrap();
+        assert_eq!(rows[0].first_message.as_deref(), Some("replacement"));
+        assert_eq!(rows[0].name, None);
+        assert_eq!(rows[0].entry_count, 1);
+        std::fs::remove_file(path).unwrap();
+        assert!(SessionManager::list(&cwd, &sessions).unwrap().is_empty());
+    }
+
+    #[test]
     fn open_repairs_missing_final_newline_before_append() {
         let dir = tempfile::tempdir().unwrap();
         let cwd = dir.path().join("project");
@@ -1466,6 +1592,86 @@ mod tests {
         let source = manager();
         let sibling = source.create_sibling().unwrap();
         assert!(!sibling.is_persisted());
+    }
+
+    #[test]
+    #[ignore = "release-mode performance benchmark"]
+    fn benchmark_performance_session_open_many_records() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("many-records.jsonl");
+        let mut manager = SessionManager::in_memory(dir.path());
+        manager
+            .append_message(AgentMessage::user("x".repeat(10 * 1024)))
+            .unwrap();
+        let fixture = manager.to_jsonl().unwrap();
+        let mut lines = fixture.lines();
+        let header = lines.next().unwrap();
+        let mut entry: serde_json::Value = serde_json::from_str(lines.next().unwrap()).unwrap();
+        let mut file = std::io::BufWriter::new(File::create(&path).unwrap());
+        writeln!(file, "{header}").unwrap();
+        for index in 0..1024 {
+            entry["id"] = serde_json::json!(format!("entry-{index}"));
+            serde_json::to_writer(&mut file, &entry).unwrap();
+            writeln!(file).unwrap();
+        }
+        file.flush().unwrap();
+        kiss_bench::measure(
+            "session_open_1024_records",
+            11,
+            1,
+            "10mib_1024_records",
+            || {
+                let manager = SessionManager::open(&path).unwrap();
+                assert_eq!(manager.entries().len(), 1024);
+                manager.entries().len()
+            },
+        );
+    }
+
+    #[test]
+    #[ignore = "release-mode performance benchmark"]
+    fn benchmark_performance_session_open_and_list() {
+        let dir = tempfile::tempdir().unwrap();
+        let cwd = dir.path().join("project");
+        let sessions = dir.path().join("sessions");
+        let mut manager = SessionManager::create(&cwd, Some(sessions.clone())).unwrap();
+        let text = "x".repeat(10 * 1024 * 1024);
+        manager.append_message(AgentMessage::user(text)).unwrap();
+        let path = manager.session_file().unwrap().to_path_buf();
+        drop(manager);
+        kiss_bench::measure("session_open_10mib", 11, 1, "10mib_user_message", || {
+            SessionManager::open(&path).unwrap().entries().len()
+        });
+        for index in 0..1000 {
+            let mut manager = SessionManager::create(&cwd, Some(sessions.clone())).unwrap();
+            manager
+                .append_message(AgentMessage::user(format!("session {index}")))
+                .unwrap();
+            manager
+                .append_session_info(&format!("name {index}"))
+                .unwrap();
+        }
+        kiss_bench::measure(
+            "session_list_1001",
+            11,
+            1,
+            "1000_small_and_one_10mib",
+            || SessionManager::list(&cwd, &sessions).unwrap().len(),
+        );
+        kiss_bench::measure_pair(
+            ("session_list_uncached_1001", "session_list_cached_1001"),
+            11,
+            1,
+            ("same_1001_files", "same_1001_files"),
+            || {
+                let mut cache = LISTING_CACHE.get().unwrap().lock().unwrap();
+                cache.rows.clear();
+                cache.order.clear();
+                drop(cache);
+                SessionManager::list(&cwd, &sessions).unwrap().len()
+            },
+            || SessionManager::list(&cwd, &sessions).unwrap().len(),
+        );
     }
 
     #[test]
