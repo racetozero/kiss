@@ -232,15 +232,14 @@ impl SessionOptions {
 
         // A resumed session may name a model the caller did not ask for.
         let (model, thinking) = if self.model.is_none() {
-            let context = manager.build_session_context();
-            let restored = context
-                .model
+            let (saved_model, saved_thinking) = manager.session_settings();
+            let restored = saved_model
                 .as_ref()
                 .and_then(|(provider, id)| {
                     registry.resolve(id, Some(provider)).map(|(model, _)| model)
                 })
                 .unwrap_or(model);
-            (restored, context.thinking_level.unwrap_or(thinking))
+            (restored, saved_thinking.unwrap_or(thinking))
         } else {
             (model, thinking)
         };

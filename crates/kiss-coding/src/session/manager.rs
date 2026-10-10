@@ -858,8 +858,8 @@ impl SessionManager {
         }
     }
 
-    /// Messages + model + thinking level for the next LLM call.
-    pub fn build_session_context(&self) -> SessionContext {
+    /// Saved model and thinking level on the full active branch.
+    pub fn session_settings(&self) -> (Option<(String, String)>, Option<ThinkingLevel>) {
         // Model/thinking come from the full active path.
         let path = self.branch_entries(None);
         let mut model: Option<(String, String)> = None;
@@ -878,6 +878,30 @@ impl SessionManager {
             }
         }
 
+        (model, thinking)
+    }
+
+    /// Count active context messages without copying their content.
+    pub fn context_message_count(&self) -> usize {
+        self.build_context_entries()
+            .iter()
+            .map(|entry| match entry {
+                SessionEntry::Message { .. }
+                | SessionEntry::BranchSummary { .. }
+                | SessionEntry::CustomMessage { .. } => 1,
+                SessionEntry::Compaction {
+                    summary,
+                    retained_tail,
+                    ..
+                } => usize::from(!summary.is_empty()) + retained_tail.as_ref().map_or(0, Vec::len),
+                _ => 0,
+            })
+            .sum()
+    }
+
+    /// Messages, model and thinking level for the next model call.
+    pub fn build_session_context(&self) -> SessionContext {
+        let (model, thinking) = self.session_settings();
         let mut messages: Vec<AgentMessage> = Vec::new();
         for entry in self.build_context_entries() {
             match entry {
@@ -1250,6 +1274,7 @@ mod tests {
             .collect();
         assert_eq!(path, vec![a, c]);
         assert_eq!(m.children(path.first().map(String::as_str)).len(), 2);
+        assert_eq!(m.context_message_count(), 2);
     }
 
     #[test]
@@ -1268,6 +1293,7 @@ mod tests {
             .unwrap();
         assert_eq!(m.leaf_id(), Some(summary.as_str()));
         assert_eq!(m.get_entry(&summary).unwrap().parent_id(), None);
+        assert_eq!(m.context_message_count(), 1);
     }
 
     #[test]
@@ -1295,6 +1321,7 @@ mod tests {
             })
             .collect();
         assert_eq!(texts, vec!["summary:summary of old", "kept", "new"]);
+        assert_eq!(m.context_message_count(), 3);
     }
 
     #[test]
@@ -1309,6 +1336,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(manager.build_session_context().messages, retained);
+        assert_eq!(manager.context_message_count(), 1);
     }
 
     #[test]
@@ -1451,6 +1479,44 @@ mod tests {
     }
 
     #[test]
+    fn scalar_count_preserves_legacy_tail_and_hidden_custom_messages() {
+        let mut m = manager();
+        m.append_message(AgentMessage::user("discarded")).unwrap();
+        let kept = m.append_message(AgentMessage::user("kept")).unwrap();
+        m.append_entry(|base| SessionEntry::Compaction {
+            base,
+            summary: "legacy summary".into(),
+            tokens_before: 100,
+            first_kept_entry_id: Some(kept),
+            retained_tail: None,
+            usage: None,
+            details: None,
+            extra: Map::new(),
+        })
+        .unwrap();
+        m.append_custom("extension-state", None).unwrap();
+        m.append_entry(|base| SessionEntry::CustomMessage {
+            base,
+            custom_type: "hidden".into(),
+            content: serde_json::from_value(serde_json::json!("")).unwrap(),
+            display: false,
+            details: None,
+            extra: Map::new(),
+        })
+        .unwrap();
+        assert_eq!(m.context_message_count(), 3);
+        let context = m.build_session_context();
+        assert_eq!(context.messages.len(), 3);
+        assert!(
+            matches!(&context.messages[1], AgentMessage::User(user) if user.content.as_text() == "kept")
+        );
+        assert!(
+            matches!(&context.messages[0], AgentMessage::CompactionSummary(summary) if summary.summary == "legacy summary")
+        );
+        assert!(matches!(&context.messages[2], AgentMessage::Custom(message) if !message.display));
+    }
+
+    #[test]
     fn model_and_thinking_tracked() {
         let mut m = manager();
         m.append_model_change("anthropic", "claude-sonnet-4-5")
@@ -1463,6 +1529,16 @@ mod tests {
         );
         assert_eq!(ctx.thinking_level, Some(ThinkingLevel::High));
         assert!(ctx.messages.is_empty());
+        m.append_compaction(String::new(), 0, Vec::new(), None, None)
+            .unwrap();
+        assert_eq!(
+            m.session_settings(),
+            (
+                Some(("anthropic".into(), "claude-sonnet-4-5".into())),
+                Some(ThinkingLevel::High)
+            )
+        );
+        assert_eq!(m.context_message_count(), 0);
     }
 
     #[test]

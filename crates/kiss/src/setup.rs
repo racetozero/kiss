@@ -410,17 +410,13 @@ pub async fn build_startup(
     }
 
     // Session context may override model/thinking (resumed sessions).
-    let session_context = manager.build_session_context();
     let (model, thinking) = if args.model.is_none() {
-        let restored_model = session_context
-            .model
+        let (saved_model, saved_thinking) = manager.session_settings();
+        let restored_model = saved_model
             .as_ref()
             .and_then(|(p, id)| registry.resolve(id, Some(p)).map(|(m, _)| m))
             .unwrap_or(model);
-        (
-            restored_model,
-            session_context.thinking_level.unwrap_or(thinking),
-        )
+        (restored_model, saved_thinking.unwrap_or(thinking))
     } else {
         (model, thinking)
     };

@@ -539,13 +539,13 @@ impl AgentSession {
             runtime.stop_all();
         }
         let totals = manager.usage_totals();
-        let context = manager.build_session_context();
-        if let Some((provider, model_id)) = context.model
+        let (saved_model, saved_thinking) = manager.session_settings();
+        if let Some((provider, model_id)) = saved_model
             && let Some((model, _)) = self.registry.resolve(&model_id, Some(&provider))
         {
             *self.model.lock().unwrap() = model;
         }
-        if let Some(thinking) = context.thinking_level {
+        if let Some(thinking) = saved_thinking {
             *self.thinking.lock().unwrap() = thinking;
         }
         *self.manager.lock().unwrap() = manager;

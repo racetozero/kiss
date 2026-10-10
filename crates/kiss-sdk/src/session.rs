@@ -427,7 +427,7 @@ impl Session {
             session_file: manager.session_file().map(Path::to_path_buf),
             session_id: manager.session_id().to_string(),
             session_name: manager.session_name(),
-            message_count: manager.build_session_context().messages.len(),
+            message_count: manager.context_message_count(),
             tools: self.inner.available_tool_names(),
         }
     }
