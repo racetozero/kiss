@@ -335,6 +335,11 @@ fn options_from_dict(options: &Bound<'_, PyDict>) -> PyResult<SessionOptions> {
     {
         built.no_tools = value.extract()?;
     }
+    if let Some(value) = options.get_item("trust_project_files")?
+        && !value.is_none()
+    {
+        built.trust_project_files = value.extract()?;
+    }
     if let Some(value) = options.get_item("no_context_files")?
         && !value.is_none()
     {

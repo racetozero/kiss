@@ -180,6 +180,7 @@ class Session:
         session: SessionSource = 'in-memory',
         session_dir: str | None = None,
         session_name: str | None = None,
+        trust_project_files: bool = False,
         no_context_files: bool = False,
         event_capacity: int = 1024,
     ) -> Self:
@@ -207,6 +208,7 @@ class Session:
             'session': session,
             'session_dir': session_dir,
             'session_name': session_name,
+            'trust_project_files': trust_project_files,
             'no_context_files': no_context_files,
             'event_capacity': event_capacity,
         }

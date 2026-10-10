@@ -1,4 +1,4 @@
-//! Shared startup: resolve settings, resources, model, session, and
+//! Shared startup: resolve settings, trust, resources, model, session, and
 //! build the AgentSession all modes drive.
 
 use crate::args::Args;
@@ -11,6 +11,7 @@ use kiss_coding::session_runner::{AgentSession, SessionEventSink};
 use kiss_coding::settings::Settings;
 use kiss_coding::skills::Skill;
 use kiss_coding::system_prompt::{SystemPromptOptions, build_system_prompt};
+use kiss_coding::trust;
 use kiss_mcp::McpManager;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -42,6 +43,7 @@ pub use kiss_sdk::tools::build_tools;
 fn configured_tools(
     args: &Args,
     cwd: &std::path::Path,
+    trusted: bool,
     settings: &Settings,
 ) -> Result<(Vec<String>, Option<McpManager>)> {
     let allow = args.tools.as_ref().map(|_| Args::split_csv(&args.tools));
@@ -54,7 +56,7 @@ fn configured_tools(
     if args.no_tools {
         return Ok((names, None));
     }
-    let loaded = kiss_mcp::config::load(cwd)?;
+    let loaded = kiss_mcp::config::load(cwd, trusted)?;
     if loaded.enabled_server_count() == 0 {
         names.retain(|name| name != "mcp");
         return Ok((names, None));
@@ -79,7 +81,16 @@ fn configured_tools(
 
 /// Reload the file-backed inputs used by an existing interactive session.
 pub fn reload_runtime(args: &Args, cwd: &std::path::Path) -> Result<ReloadedRuntime> {
-    let mut settings = Settings::load(cwd);
+    let cli_trust = if args.approve {
+        Some(true)
+    } else if args.no_approve {
+        Some(false)
+    } else {
+        None
+    };
+    let bootstrap = Settings::load(cwd, false);
+    let trusted = trust::resolve_non_interactive(cwd, cli_trust, bootstrap.default_project_trust);
+    let mut settings = Settings::load(cwd, trusted);
     settings.experimental_context_file |= args.experimental_context_file;
 
     let context = if args.no_context_files {
@@ -89,7 +100,7 @@ pub fn reload_runtime(args: &Args, cwd: &std::path::Path) -> Result<ReloadedRunt
     };
     let skill_paths: Vec<PathBuf> = args.skills.iter().map(PathBuf::from).collect();
     let skills = if args.no_skills {
-        kiss_coding::skills::discover(cwd, &skill_paths)
+        kiss_coding::skills::discover(cwd, false, &skill_paths)
             .into_iter()
             .filter(|skill| {
                 skill_paths
@@ -98,17 +109,17 @@ pub fn reload_runtime(args: &Args, cwd: &std::path::Path) -> Result<ReloadedRunt
             })
             .collect()
     } else {
-        kiss_coding::skills::discover(cwd, &skill_paths)
+        kiss_coding::skills::discover(cwd, trusted, &skill_paths)
     };
     let template_paths: Vec<PathBuf> = args.prompt_templates.iter().map(PathBuf::from).collect();
     let prompt_templates = if args.no_prompt_templates {
         Vec::new()
     } else {
-        kiss_coding::prompts::discover(cwd, &template_paths)
+        kiss_coding::prompts::discover(cwd, trusted, &template_paths)
     };
 
     let files = context_files::system_prompt_files(cwd);
-    let (tool_names, mcp) = configured_tools(args, cwd, &settings)?;
+    let (tool_names, mcp) = configured_tools(args, cwd, trusted, &settings)?;
     let custom = args.system_prompt.clone().or(files.replace);
     let append = match (&args.append_system_prompt, &files.append) {
         (Some(first), Some(second)) => Some(format!("{first}\n\n{second}")),
@@ -272,7 +283,19 @@ pub async fn build_startup(
     sink: SessionEventSink,
 ) -> Result<Startup> {
     let cwd = std::env::current_dir()?;
-    let mut settings = Settings::load(&cwd);
+    let cli_trust = if args.approve {
+        Some(true)
+    } else if args.no_approve {
+        Some(false)
+    } else {
+        None
+    };
+    // Interactive trust prompting is handled by the caller before this via
+    // saved decisions. Default flow matches non-interactive resolution.
+    let bootstrap_settings = Settings::load(&cwd, false);
+    let trusted =
+        trust::resolve_non_interactive(&cwd, cli_trust, bootstrap_settings.default_project_trust);
+    let mut settings = Settings::load(&cwd, trusted);
     settings.experimental_context_file |= args.experimental_context_file;
 
     let mut registry = Registry::load(None);
@@ -331,7 +354,7 @@ pub async fn build_startup(
     };
     let skill_paths: Vec<PathBuf> = args.skills.iter().map(PathBuf::from).collect();
     let skills = if args.no_skills {
-        kiss_coding::skills::discover(&cwd, &skill_paths)
+        kiss_coding::skills::discover(&cwd, false, &skill_paths)
             .into_iter()
             .filter(|s| {
                 skill_paths
@@ -340,18 +363,18 @@ pub async fn build_startup(
             })
             .collect()
     } else {
-        kiss_coding::skills::discover(&cwd, &skill_paths)
+        kiss_coding::skills::discover(&cwd, trusted, &skill_paths)
     };
     let template_paths: Vec<PathBuf> = args.prompt_templates.iter().map(PathBuf::from).collect();
     let prompt_templates = if args.no_prompt_templates {
         Vec::new()
     } else {
-        kiss_coding::prompts::discover(&cwd, &template_paths)
+        kiss_coding::prompts::discover(&cwd, trusted, &template_paths)
     };
 
     // System prompt.
     let files = context_files::system_prompt_files(&cwd);
-    let (tool_names, mcp) = configured_tools(args, &cwd, &settings)?;
+    let (tool_names, mcp) = configured_tools(args, &cwd, trusted, &settings)?;
     let custom = args.system_prompt.clone().or(files.replace);
     let append = match (&args.append_system_prompt, &files.append) {
         (Some(a), Some(b)) => Some(format!("{a}\n\n{b}")),

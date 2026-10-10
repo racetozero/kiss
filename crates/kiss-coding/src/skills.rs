@@ -170,18 +170,20 @@ fn scan_dir(dir: &Path, include_root_md: bool, out: &mut Vec<Skill>) {
 }
 
 /// Discover skills from every location pi checks (kiss equivalents).
-pub fn discover(cwd: &Path, extra_paths: &[PathBuf]) -> Vec<Skill> {
+pub fn discover(cwd: &Path, project_trusted: bool, extra_paths: &[PathBuf]) -> Vec<Skill> {
     let mut out: Vec<Skill> = Vec::new();
     if let Some(home) = dirs::home_dir() {
         scan_dir(&home.join(".kiss/agent/skills"), true, &mut out);
         scan_dir(&home.join(".agents/skills"), false, &mut out);
     }
-    scan_dir(&cwd.join(".kiss/skills"), true, &mut out);
-    // .agents/skills in cwd and ancestors up to a git root.
-    for dir in cwd.ancestors() {
-        scan_dir(&dir.join(".agents/skills"), false, &mut out);
-        if dir.join(".git").exists() {
-            break;
+    if project_trusted {
+        scan_dir(&cwd.join(".kiss/skills"), true, &mut out);
+        // .agents/skills in cwd and ancestors up to a git root.
+        for dir in cwd.ancestors() {
+            scan_dir(&dir.join(".agents/skills"), false, &mut out);
+            if dir.join(".git").exists() {
+                break;
+            }
         }
     }
     for path in extra_paths {
@@ -273,7 +275,7 @@ mod tests {
         assert!(names.contains(&"pdf-tools"));
         assert!(names.contains(&"quick"));
 
-        let direct = discover(root, &[root.join("pdf-tools")]);
+        let direct = discover(root, false, &[root.join("pdf-tools")]);
         let loaded = direct
             .iter()
             .find(|skill| skill.name == "pdf-tools")
