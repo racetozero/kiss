@@ -8,6 +8,7 @@ use anyhow::{Context as _, Result};
 use kiss_agent::{AgentMessage, BranchSummaryMessage, CompactionSummaryMessage, CustomMessage};
 use kiss_ai::{Model, ThinkingLevel, Usage};
 use serde_json::{Map, Value};
+use std::borrow::Cow;
 use std::collections::{HashMap, VecDeque};
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
@@ -901,71 +902,42 @@ impl SessionManager {
 
     /// Messages, model and thinking level for the next model call.
     pub fn build_session_context(&self) -> SessionContext {
-        let (model, thinking) = self.session_settings();
-        let mut messages: Vec<AgentMessage> = Vec::new();
-        for entry in self.build_context_entries() {
-            match entry {
-                SessionEntry::Message { message, .. } => messages.push(message.clone()),
+        let (model, thinking_level) = self.session_settings();
+        SessionContext {
+            messages: self.context_messages().map(Cow::into_owned).collect(),
+            model,
+            thinking_level,
+        }
+    }
+
+    pub(crate) fn context_messages(
+        &self,
+    ) -> impl DoubleEndedIterator<Item = Cow<'_, AgentMessage>> {
+        self.build_context_entries().into_iter().flat_map(|entry| {
+            let message = match entry {
+                SessionEntry::Message { message, .. } => Some(Cow::Borrowed(message)),
                 SessionEntry::Compaction {
                     summary,
                     tokens_before,
-                    retained_tail,
                     base,
                     ..
-                } => {
-                    if !summary.is_empty() {
-                        messages.push(AgentMessage::CompactionSummary(CompactionSummaryMessage {
-                            summary: summary.clone(),
-                            tokens_before: *tokens_before,
-                            timestamp: chrono::DateTime::parse_from_rfc3339(&base.timestamp)
-                                .map(|t| t.timestamp_millis())
-                                .unwrap_or_else(|_| kiss_ai::now_ms()),
-                        }));
-                    }
-                    if let Some(tail) = retained_tail {
-                        messages.extend(tail.iter().cloned());
-                    }
-                }
-                SessionEntry::BranchSummary {
-                    summary,
-                    from_id,
-                    base,
-                    ..
-                } => {
-                    messages.push(AgentMessage::BranchSummary(BranchSummaryMessage {
+                } if !summary.is_empty() => Some(Cow::Owned(AgentMessage::CompactionSummary(
+                    CompactionSummaryMessage {
                         summary: summary.clone(),
-                        from_id: from_id.clone(),
-                        timestamp: chrono::DateTime::parse_from_rfc3339(&base.timestamp)
-                            .map(|t| t.timestamp_millis())
-                            .unwrap_or_else(|_| kiss_ai::now_ms()),
-                    }));
+                        tokens_before: *tokens_before,
+                        timestamp: entry_timestamp(base),
+                    },
+                ))),
+                _ => context_message_from_entry(entry).map(Cow::Owned),
+            };
+            let tail = match entry {
+                SessionEntry::Compaction { retained_tail, .. } => {
+                    retained_tail.as_deref().unwrap_or(&[])
                 }
-                SessionEntry::CustomMessage {
-                    custom_type,
-                    content,
-                    display,
-                    details,
-                    base,
-                    ..
-                } => {
-                    messages.push(AgentMessage::Custom(CustomMessage {
-                        custom_type: custom_type.clone(),
-                        content: content.clone(),
-                        display: *display,
-                        details: details.clone(),
-                        timestamp: chrono::DateTime::parse_from_rfc3339(&base.timestamp)
-                            .map(|t| t.timestamp_millis())
-                            .unwrap_or_else(|_| kiss_ai::now_ms()),
-                    }));
-                }
-                _ => {}
-            }
-        }
-        SessionContext {
-            messages,
-            model,
-            thinking_level: thinking,
-        }
+                _ => &[],
+            };
+            message.into_iter().chain(tail.iter().map(Cow::Borrowed))
+        })
     }
 
     /// Restore provider-native OpenAI history from the latest compaction on

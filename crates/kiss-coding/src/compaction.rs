@@ -4,6 +4,7 @@
 use kiss_agent::{AgentMessage, convert_to_llm};
 use kiss_ai::{ContentBlock, Message, Model, StreamOptions, ThinkingLevel, UserContent};
 use serde_json::json;
+use std::borrow::Borrow;
 
 const TOOL_RESULT_SERIALIZE_CAP: usize = 2000;
 
@@ -52,23 +53,25 @@ pub fn estimate_message_tokens(message: &AgentMessage) -> u64 {
 /// Estimated context size: prefer the last assistant usage (input+output+
 /// cache) and add estimates for everything after it.
 pub fn estimate_context_tokens(messages: &[AgentMessage]) -> u64 {
-    let last_assistant = messages
-        .iter()
-        .rposition(|m| matches!(m, AgentMessage::Assistant(_)));
-    match last_assistant {
-        Some(pos) => {
-            let AgentMessage::Assistant(a) = &messages[pos] else {
-                unreachable!()
-            };
-            let base = a.usage.input + a.usage.output + a.usage.cache_read + a.usage.cache_write;
-            let tail: u64 = messages[pos + 1..]
-                .iter()
-                .map(estimate_message_tokens)
-                .sum();
-            base + tail
+    estimate_context_tokens_iter(messages.iter())
+}
+
+pub(crate) fn estimate_context_tokens_iter<M: Borrow<AgentMessage>>(
+    messages: impl DoubleEndedIterator<Item = M>,
+) -> u64 {
+    let mut tokens = 0;
+    for message in messages.rev() {
+        let message = message.borrow();
+        if let AgentMessage::Assistant(assistant) = message {
+            return tokens
+                + assistant.usage.input
+                + assistant.usage.output
+                + assistant.usage.cache_read
+                + assistant.usage.cache_write;
         }
-        None => messages.iter().map(estimate_message_tokens).sum(),
+        tokens += estimate_message_tokens(message);
     }
+    tokens
 }
 
 /// Serialize a conversation to labeled text for the summary prompt. Tool
@@ -382,6 +385,37 @@ mod tests {
             is_error: false,
             timestamp: 0,
         })
+    }
+
+    #[test]
+    fn context_estimate_uses_latest_usage_and_only_its_tail() {
+        let mut measured = AssistantMessage::empty("test", "test", "test");
+        measured.usage.input = 100;
+        measured.usage.output = 20;
+        measured.usage.cache_read = 30;
+        measured.usage.cache_write = 40;
+        for (messages, expected) in [
+            (vec![], 0),
+            (vec![user("12345")], 2),
+            (
+                vec![
+                    user(&"old".repeat(1000)),
+                    AgentMessage::Assistant(measured.clone()),
+                    user("tailtailtail"),
+                ],
+                193,
+            ),
+            (
+                vec![
+                    AgentMessage::Assistant(measured),
+                    assistant("new response"),
+                    user("tailtailtail"),
+                ],
+                3,
+            ),
+        ] {
+            assert_eq!(estimate_context_tokens(&messages), expected);
+        }
     }
 
     #[test]
