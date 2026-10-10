@@ -28,6 +28,7 @@ sdk-test-all: sdk-test sdk-test-python sdk-test-node sdk-test-wasm
 bench:
     @cargo build --release -p kiss
     @python3 scripts/benchmark_kiss_harness.py --json target/harness-benchmark.json
+    @uv run --no-project python scripts/benchmark_kiss_session_memory.py --json target/session-memory-benchmark.json
     @cargo nextest run --workspace --release --run-ignored only --no-capture -E 'test(~benchmark_performance_)'
     @cargo nextest run -p kiss-agent-sdk --features 'mock rpc' --release --run-ignored only --no-capture -E 'test(~benchmark_performance_)'
     @cd crates/kiss-core-wasm && wasm-pack build --target web --release && deno test --allow-read test/performance_test.ts && node test/size.mjs && node test/wasm_memory.mjs
@@ -40,6 +41,11 @@ latency-check:
 # Compare one and ten idle terminals for one minute per workload.
 bench-idle baseline candidate:
     @uv run --no-project python scripts/benchmark_kiss_idle.py --baseline {{baseline}} --candidate {{candidate}} --json target/idle-benchmark.json
+
+# Measure long-session RSS and growth from local shell results.
+bench-session-memory:
+    @cargo build --release -p kiss
+    @uv run --no-project python scripts/benchmark_kiss_session_memory.py --json target/session-memory-benchmark.json
 
 # Test the cross-platform PGO build and benchmark helpers.
 pgo-test:
