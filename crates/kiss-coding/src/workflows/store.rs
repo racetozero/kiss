@@ -2,7 +2,8 @@
 //!
 //! A saved workflow is a `.js` file whose `meta.name` becomes a slash command,
 //! following the same discovery rules as prompt templates in
-//! `crate::prompts`: the user's own directory and the project's.
+//! `crate::prompts`: the user's own directory always, and the project's only
+//! when the project is trusted.
 
 use kiss_workflow::Script;
 use std::path::{Path, PathBuf};
@@ -71,9 +72,11 @@ fn scan(dir: &Path, from_project: bool, out: &mut Vec<SavedWorkflow>) {
 }
 
 /// Find every saved workflow, with the project's copy winning on a name clash.
-pub fn discover(cwd: &Path) -> Vec<SavedWorkflow> {
+pub fn discover(cwd: &Path, project_trusted: bool) -> Vec<SavedWorkflow> {
     let mut out = Vec::new();
-    scan(&project_workflow_dir(cwd), true, &mut out);
+    if project_trusted {
+        scan(&project_workflow_dir(cwd), true, &mut out);
+    }
     if let Some(dir) = user_workflow_dir() {
         scan(&dir, false, &mut out);
     }
@@ -166,11 +169,32 @@ mod tests {
         .unwrap();
         assert!(path.ends_with("audit-routes.js"));
 
-        let found = discover(dir.path());
+        let found = discover(dir.path(), true);
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].name, "audit-routes");
         assert_eq!(found[0].description, "Audit routes");
         assert!(found[0].from_project);
+    }
+
+    #[test]
+    fn an_untrusted_project_contributes_no_workflows() {
+        let dir = tempfile::tempdir().unwrap();
+        save(
+            SaveLocation::Project,
+            dir.path(),
+            "audit-routes",
+            SCRIPT,
+            false,
+        )
+        .unwrap();
+        // The user's own directory may hold workflows on this machine, so the
+        // check is that the project's file is absent rather than that nothing
+        // was found.
+        assert!(
+            !discover(dir.path(), false)
+                .iter()
+                .any(|workflow| workflow.from_project)
+        );
     }
 
     #[test]
@@ -216,7 +240,7 @@ mod tests {
         std::fs::write(workflows.join("broken.js"), "this is not a workflow").unwrap();
         std::fs::write(workflows.join("good.js"), SCRIPT).unwrap();
 
-        let found: Vec<String> = discover(dir.path())
+        let found: Vec<String> = discover(dir.path(), true)
             .into_iter()
             .filter(|workflow| workflow.from_project)
             .map(|workflow| workflow.name)
@@ -230,7 +254,7 @@ mod tests {
         let workflows = project_workflow_dir(dir.path());
         std::fs::create_dir_all(&workflows).unwrap();
         std::fs::write(workflows.join("whatever.js"), SCRIPT).unwrap();
-        let found = discover(dir.path());
+        let found = discover(dir.path(), true);
         assert_eq!(found[0].name, "audit-routes");
     }
 }

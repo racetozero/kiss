@@ -12,7 +12,7 @@ use tokio_util::sync::CancellationToken;
 
 pub async fn run(command: &McpCommand) -> Result<i32> {
     let cwd = std::env::current_dir()?;
-    let loaded = config::load(&cwd)?;
+    let loaded = config::load(&cwd, true)?;
     match command {
         McpCommand::List { json } => {
             if *json {

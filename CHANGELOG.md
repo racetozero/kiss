@@ -2,15 +2,6 @@
 
 ## Unreleased
 
-### Removed
-
-- Remove the project trust gate. KISS always loads project settings, MCP
-  servers, skills, prompt templates, and workflow scripts from the working
-  directory. The `/trust` command, the `defaultProjectTrust` setting,
-  `~/.kiss/agent/trust.json`, the `--approve` (`-a`) and `--no-approve` flags,
-  and the SDK `trust_project_files` (`trustProjectFiles`) option no longer
-  exist. Remove these flags from scripts and saved resume commands.
-
 ### Added
 
 - Report interactive state with the Program Status Protocol (OSC 7501).

@@ -39,7 +39,7 @@ async fn main() -> anyhow::Result<()> {
 ```
 
 `SessionOptions` configures `cwd`, model/provider/key, `models_file`, thinking
-level, tool allow/exclude lists, custom Rust tools, prompts,
+level, tool allow/exclude lists, custom Rust tools, prompts, project trust,
 event capacity, and session persistence. SDK sessions are in-memory by default;
 choose `SessionSource::Create` to persist one. Rust callers can restore caller-owned
 history without creating a file through `SessionBuilder::restore_entries` or
@@ -225,9 +225,9 @@ slow subscriber missed.
 ## Tools and safety
 
 Defaults are `read`, `write`, `edit`, and `bash`. Optional built-ins are `grep`,
-`find`, `ls`, and `mcp`. Set a read-only allowlist for untrusted prompts. SDK
-sessions load project settings, skills, and MCP servers from `cwd`, like the
-CLI. Point `cwd` at a directory whose project files you accept.
+`find`, `ls`, and `mcp`. Set a read-only allowlist for untrusted prompts. Project
+resource loading is off by default in SDK sessions. Explicitly enable
+`trust_project_files` only for a trusted directory.
 
 Rust callers can implement `kiss_agent::AgentTool` and pass `custom_tools`.
 Cross-language custom callback tools are intentionally not supported yet: a

@@ -154,6 +154,8 @@ impl TerminalHosts {
                     ("--no-prompt-templates", args.no_prompt_templates),
                     ("--no-themes", args.no_themes),
                     ("--no-context-files", args.no_context_files),
+                    ("--approve", args.approve),
+                    ("--no-approve", args.no_approve),
                     (
                         "--experimental-context-file",
                         args.experimental_context_file,

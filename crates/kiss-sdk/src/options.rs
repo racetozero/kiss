@@ -12,11 +12,11 @@ use crate::tools::{build_tools, select_tool_names};
 use anyhow::{Context as _, Result};
 use kiss_agent::{DynTool, StreamFn};
 use kiss_ai::{Model, Registry, ThinkingLevel};
-use kiss_coding::context_files;
 use kiss_coding::session::manager::{SessionManager, default_session_dir};
 use kiss_coding::session_runner::{AgentSession, SessionEventSink};
 use kiss_coding::settings::Settings;
 use kiss_coding::system_prompt::{SystemPromptOptions, build_system_prompt};
+use kiss_coding::{context_files, trust};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -82,6 +82,9 @@ pub struct SessionOptions {
     pub session_name: Option<String>,
     /// Replace the loaded settings wholesale.
     pub settings: Option<Settings>,
+    /// Load project-local skills, prompt templates, and MCP configuration.
+    /// Off by default because those files can execute project-controlled code.
+    pub trust_project_files: bool,
     /// Skip discovery of `AGENTS.md` and similar context files.
     pub no_context_files: bool,
     /// How many events the broadcast channel buffers per subscriber.
@@ -107,6 +110,7 @@ impl std::fmt::Debug for SessionOptions {
             .field("session", &self.session)
             .field("session_dir", &self.session_dir)
             .field("session_name", &self.session_name)
+            .field("trust_project_files", &self.trust_project_files)
             .field("no_context_files", &self.no_context_files)
             .field("event_capacity", &self.event_capacity)
             .field("stream_fn", &self.stream_fn.is_some())
@@ -134,6 +138,7 @@ impl Default for SessionOptions {
             session_dir: None,
             session_name: None,
             settings: None,
+            trust_project_files: false,
             no_context_files: false,
             event_capacity: 1024,
             stream_fn: None,
@@ -155,9 +160,15 @@ impl SessionOptions {
         std::fs::create_dir_all(&cwd)
             .with_context(|| format!("create working directory {}", cwd.display()))?;
 
+        let trusted = self.trust_project_files
+            || trust::resolve_non_interactive(
+                &cwd,
+                None,
+                Settings::load(&cwd, false).default_project_trust,
+            );
         let settings = match &self.settings {
             Some(settings) => settings.clone(),
-            None => Settings::load(&cwd),
+            None => Settings::load(&cwd, trusted),
         };
 
         let registry = Registry::load(self.models_file.as_deref());
@@ -178,7 +189,7 @@ impl SessionOptions {
         } else {
             context_files::discover(&cwd)
         };
-        let skills = kiss_coding::skills::discover(&cwd, &[]);
+        let skills = kiss_coding::skills::discover(&cwd, trusted, &[]);
 
         let mut tool_names = select_tool_names(
             self.tools.as_deref(),
@@ -186,7 +197,12 @@ impl SessionOptions {
             self.no_tools,
             settings.default_tools.as_deref(),
         );
-        let mcp = self.load_mcp(&cwd, &mut tool_names, settings.default_tools.as_deref())?;
+        let mcp = self.load_mcp(
+            &cwd,
+            trusted,
+            &mut tool_names,
+            settings.default_tools.as_deref(),
+        )?;
         let files = context_files::system_prompt_files(&cwd);
         let custom = self.system_prompt.clone().or(files.replace);
         let append = match (&self.append_system_prompt, &files.append) {
@@ -257,13 +273,14 @@ impl SessionOptions {
     fn load_mcp(
         &self,
         cwd: &Path,
+        trusted: bool,
         tool_names: &mut Vec<String>,
         defaults: Option<&[String]>,
     ) -> Result<Option<kiss_mcp::McpManager>> {
         if self.no_tools {
             return Ok(None);
         }
-        let mut loaded = kiss_mcp::config::load(cwd)?;
+        let mut loaded = kiss_mcp::config::load(cwd, trusted)?;
         for (name, server) in &self.mcp_servers {
             server.validate(name)?;
             loaded
@@ -391,7 +408,7 @@ mod tests {
 
         let mut names = select_tool_names(None, &[], false, None);
         let manager = options
-            .load_mcp(directory.path(), &mut names, None)
+            .load_mcp(directory.path(), false, &mut names, None)
             .unwrap()
             .expect("MCP manager");
 
@@ -406,7 +423,7 @@ mod tests {
         ] {
             let mut names = select_tool_names(None, &[], false, Some(&defaults));
             let manager = options
-                .load_mcp(directory.path(), &mut names, Some(&defaults))
+                .load_mcp(directory.path(), false, &mut names, Some(&defaults))
                 .unwrap();
             let expected = defaults == ["+mcp"];
             assert_eq!(manager.is_some(), expected);

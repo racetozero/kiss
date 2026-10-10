@@ -205,6 +205,10 @@ fn options_from_json(value: Value) -> Result<SessionOptions> {
         session,
         session_dir: string("sessionDir").map(PathBuf::from),
         session_name: string("sessionName"),
+        trust_project_files: object
+            .get("trustProjectFiles")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
         no_context_files: object
             .get("noContextFiles")
             .and_then(Value::as_bool)

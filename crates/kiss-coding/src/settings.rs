@@ -156,6 +156,15 @@ pub enum QueueMode {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
+pub enum ProjectTrustDefault {
+    #[default]
+    Ask,
+    Always,
+    Never,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
 pub enum CacheWarmingMode {
     Off,
     #[default]
@@ -207,6 +216,7 @@ pub struct Settings {
     pub hide_thinking_block: bool,
     pub theme: Option<String>,
     pub quiet_startup: bool,
+    pub default_project_trust: ProjectTrustDefault,
     pub compaction: CompactionSettings,
     /// Let the model edit its live conversation through a private JSON file.
     pub experimental_context_file: bool,
@@ -311,7 +321,7 @@ fn merged_settings(mut global: Value, project: Option<Value>) -> Settings {
     }
     let mut settings: Settings = serde_json::from_value(global).unwrap_or_default();
     // Subagents are a user-level authority choice. A repository must not turn
-    // them on through a project settings file.
+    // them on through a trusted project settings file.
     settings.subagents.enabled = subagents_enabled;
     settings.experimental_context_file = experimental_context_file;
     // Workflows spend the user's tokens many agents at a time, so the same rule
@@ -359,12 +369,15 @@ impl Settings {
         self.auto_recap.unwrap_or(true)
     }
 
-    /// Load global settings, overlaying project settings.
-    pub fn load(cwd: &Path) -> Settings {
+    /// Load global settings, overlaying project settings when trusted.
+    pub fn load(cwd: &Path, project_trusted: bool) -> Settings {
         let global = global_settings_path()
             .and_then(|p| read_json(&p))
             .unwrap_or_else(|| Value::Object(Default::default()));
-        merged_settings(global, read_json(&project_settings_path(cwd)))
+        let project = project_trusted
+            .then(|| read_json(&project_settings_path(cwd)))
+            .flatten();
+        merged_settings(global, project)
     }
 
     pub fn save_global(&self) -> anyhow::Result<()> {

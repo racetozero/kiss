@@ -44,14 +44,6 @@ Why? Because I am stupid :)
 KISS uses four focused tools by default: `read`, `write`, `edit`, and `bash`.
 Catppuccin Mocha is the default dark theme.
 
-Like Pi, KISS has no permission checks, sandbox, policy rules, or auto-mode
-safety classifiers by default. Safety belongs to the model and to the system
-where you run the harness, not to the harness itself. KISS stays agnostic to
-its execution environment so it can focus on hill-climbing toward a solution
-for the task at hand, in coding and in other disciplines. If you need
-isolation, run KISS in a container, a virtual machine, or a restricted
-account.
-
 ## Install
 
 macOS and Linux:
@@ -547,8 +539,8 @@ describe, and call page tools. The list omits descriptions. KISS follows page
 tool changes, navigation, and tab changes. `/webmcp disconnect` closes the
 connection and removes the agent tool.
 
-Limit access to known sites in `~/.kiss/agent/settings.json` or a project's
-`.kiss/settings.json`:
+Limit access to known sites in `~/.kiss/agent/settings.json` or a trusted
+project's `.kiss/settings.json`:
 
 ```json
 {
@@ -912,7 +904,7 @@ required, and other terminals ignore the reports.
 | `idle`    | KISS waits for input, or you cancelled the last turn.          |
 | `working` | A turn, command, compaction, workflow, or job is active.       |
 | `done`    | A turn finished and the terminal can mark it as unread.        |
-| `blocked` | KISS needs a workflow approval or login input.                 |
+| `blocked` | KISS needs a workflow approval, trust decision, or login.      |
 | `error`   | The last turn failed, or KISS stopped after an internal error. |
 
 KISS clears its status when you exit.
@@ -921,7 +913,7 @@ KISS clears its status when you exit.
 
 Run `kiss` in a Herdr or cmux pane to enable native support. No hook script
 is required. KISS reports when it is working, idle, or waiting for a workflow
-approval or login input. Reports include active
+approval, project trust decision, or login input. Reports include active
 workflows and jobs. Each cmux surface has its own KISS status entry and
 receives notifications when work finishes or a decision is required.
 
@@ -944,20 +936,20 @@ Resume commands do not contain the original user prompt or an `--api-key`
 override. Use saved credentials or environment variables for sessions that
 must resume. This integration applies to interactive terminal mode.
 
-KISS stores user configuration in `~/.kiss/agent`. It always loads project
-configuration from the working directory.
+KISS stores user configuration in `~/.kiss/agent`. It loads project
+configuration only after you trust the project.
 
-| Path                          | Purpose                     |
-| ----------------------------- | --------------------------- |
-| `~/.kiss/agent/settings.json` | User settings               |
-| `.kiss/settings.json`         | Project settings            |
-| `~/.kiss/agent/models.json`   | Custom providers and models |
-| `~/.kiss/agent/mcp.json`      | User MCP servers            |
-| `.mcp.json`                   | Project MCP servers         |
-| `~/.kiss/agent/skills/`       | User skills                 |
-| `.kiss/skills/`               | Project skills              |
-| `~/.kiss/agent/workflows/`    | Personal workflow scripts   |
-| `.kiss/workflows/`            | Project workflow scripts    |
+| Path                          | Purpose                          |
+| ----------------------------- | -------------------------------- |
+| `~/.kiss/agent/settings.json` | User settings                    |
+| `.kiss/settings.json`         | Project settings                 |
+| `~/.kiss/agent/models.json`   | Custom providers and models      |
+| `~/.kiss/agent/mcp.json`      | User MCP servers                 |
+| `.mcp.json`                   | Project MCP servers              |
+| `~/.kiss/agent/skills/`       | User skills                      |
+| `.kiss/skills/`               | Project skills                   |
+| `~/.kiss/agent/workflows/`    | Personal workflow scripts        |
+| `.kiss/workflows/`            | Trusted project workflow scripts |
 
 Open `/settings` for common TUI settings. Run `kiss --help` for all command-line
 options. Custom themes live in `~/.kiss/agent/settings.json`.
@@ -972,7 +964,7 @@ To adjust the default selection, use `+` to add a tool and `-` to remove one.
 For example, `["+grep", "-write"]` adds search and removes the write tool. Add
 `"+mcp"` to keep access to your configured MCP servers.
 
-Save this selection in your user settings to use it across projects. A
+Save this selection in your user settings to use it across projects. A trusted
 project can provide its own selection or adjust yours with `+` and `-` entries.
 For a single run, `--tools` selects the tools, `--exclude-tools` removes tools,
 and `--no-tools` disables them all. These options override your saved selection.

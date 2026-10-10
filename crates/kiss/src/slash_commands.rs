@@ -64,6 +64,11 @@ pub(crate) const PI_CORE_SLASH_COMMANDS: &[SlashCommand] = &[
         None,
     ),
     SlashCommand::new(
+        "trust",
+        "Save project trust decision for future sessions",
+        None,
+    ),
+    SlashCommand::new(
         "login",
         "Configure provider authentication",
         Some("<provider>"),
@@ -185,6 +190,7 @@ mod tests {
                 "hotkeys",
                 "fork",
                 "clone",
+                "trust",
                 "login",
                 "logout",
                 "new",
@@ -243,6 +249,11 @@ mod tests {
                 (
                     "clone",
                     "Duplicate the current session at the current position",
+                    None
+                ),
+                (
+                    "trust",
+                    "Save project trust decision for future sessions",
                     None
                 ),
                 (

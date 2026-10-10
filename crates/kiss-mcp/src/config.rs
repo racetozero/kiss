@@ -49,8 +49,8 @@ impl ConfigPaths {
         }
     }
 
-    fn read_sources(&self) -> Vec<ConfigSource> {
-        vec![
+    fn read_sources(&self, trusted_project: bool) -> Vec<ConfigSource> {
+        let mut sources = vec![
             ConfigSource::new("shared global", self.shared_global.clone(), false),
             ConfigSource::new("agents global", self.agents_global.clone(), false),
             ConfigSource::new(
@@ -59,9 +59,20 @@ impl ConfigPaths {
                 false,
             ),
             ConfigSource::new("KISS global", self.kiss_global.clone(), false),
-            ConfigSource::new("project .mcp.json", self.shared_project.clone(), true),
-            ConfigSource::new("project KISS MCP", self.kiss_project.clone(), true),
-        ]
+        ];
+        if trusted_project {
+            sources.push(ConfigSource::new(
+                "project .mcp.json",
+                self.shared_project.clone(),
+                true,
+            ));
+            sources.push(ConfigSource::new(
+                "project KISS MCP",
+                self.kiss_project.clone(),
+                true,
+            ));
+        }
+        sources
     }
 }
 
@@ -278,14 +289,14 @@ impl LoadedConfig {
     }
 }
 
-pub fn load(cwd: &Path) -> Result<LoadedConfig> {
-    load_with_paths(ConfigPaths::discover(cwd)?)
+pub fn load(cwd: &Path, trusted_project: bool) -> Result<LoadedConfig> {
+    load_with_paths(ConfigPaths::discover(cwd)?, trusted_project)
 }
 
-pub fn load_with_paths(paths: ConfigPaths) -> Result<LoadedConfig> {
+pub fn load_with_paths(paths: ConfigPaths, trusted_project: bool) -> Result<LoadedConfig> {
     let mut merged = Value::Object(Default::default());
     let mut sources: BTreeMap<String, Vec<ConfigSource>> = BTreeMap::new();
-    for source in paths.read_sources() {
+    for source in paths.read_sources(trusted_project) {
         let Some(value) = read_json_value(&source.path)? else {
             continue;
         };
@@ -529,9 +540,9 @@ fn secure_create(path: &Path) -> Result<File> {
         .with_context(|| format!("create {}", path.display()))
 }
 
-pub fn all_source_paths(paths: &ConfigPaths) -> BTreeSet<PathBuf> {
+pub fn all_source_paths(paths: &ConfigPaths, trusted_project: bool) -> BTreeSet<PathBuf> {
     paths
-        .read_sources()
+        .read_sources(trusted_project)
         .into_iter()
         .map(|source| source.path)
         .collect()
@@ -568,10 +579,24 @@ mod tests {
         )
         .unwrap();
 
-        let loaded = load_with_paths(paths).unwrap();
+        let loaded = load_with_paths(paths, true).unwrap();
         let demo = &loaded.config.mcp_servers["demo"];
         assert_eq!(demo.command.as_deref(), Some("project-command"));
         assert_eq!(demo.args, ["one"]);
+    }
+
+    #[test]
+    fn untrusted_project_config_is_not_loaded() {
+        let temp = tempfile::tempdir().unwrap();
+        let paths = paths(&temp);
+        std::fs::create_dir_all(paths.shared_project.parent().unwrap()).unwrap();
+        std::fs::write(
+            &paths.shared_project,
+            r#"{"mcpServers":{"project":{"command":"danger"}}}"#,
+        )
+        .unwrap();
+        let loaded = load_with_paths(paths, false).unwrap();
+        assert!(loaded.config.mcp_servers.is_empty());
     }
 
     #[test]
@@ -585,7 +610,7 @@ mod tests {
         )
         .unwrap();
         add_server(&paths, ConfigScope::User, "demo", stdio("tool")).unwrap();
-        let loaded = load_with_paths(paths.clone()).unwrap();
+        let loaded = load_with_paths(paths.clone(), false).unwrap();
         assert_eq!(
             loaded.config.mcp_servers["demo"].command.as_deref(),
             Some("tool")

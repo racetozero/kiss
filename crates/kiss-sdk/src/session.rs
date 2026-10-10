@@ -236,6 +236,11 @@ impl SessionBuilder {
         self
     }
 
+    pub fn trust_project_files(mut self, trust: bool) -> Self {
+        self.options.trust_project_files = trust;
+        self
+    }
+
     pub fn event_capacity(mut self, capacity: usize) -> Self {
         self.options.event_capacity = capacity.max(1);
         self

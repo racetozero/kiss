@@ -70,12 +70,14 @@ fn scan(dir: &Path, out: &mut Vec<PromptTemplate>) {
     }
 }
 
-pub fn discover(cwd: &Path, extra_paths: &[PathBuf]) -> Vec<PromptTemplate> {
+pub fn discover(cwd: &Path, project_trusted: bool, extra_paths: &[PathBuf]) -> Vec<PromptTemplate> {
     let mut out = Vec::new();
     if let Some(home) = dirs::home_dir() {
         scan(&home.join(".kiss/agent/prompts"), &mut out);
     }
-    scan(&cwd.join(".kiss/prompts"), &mut out);
+    if project_trusted {
+        scan(&cwd.join(".kiss/prompts"), &mut out);
+    }
     for path in extra_paths {
         if path.is_dir() {
             scan(path, &mut out);
