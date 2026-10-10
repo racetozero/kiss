@@ -733,6 +733,47 @@ These separate runs do not measure a startup regression. Memory uses three
 trials. RSS is the resident memory reported by macOS and differs from Linux
 proportional set size.
 
+### Long-session memory
+
+Context-use accounting now borrows saved messages instead of copying the active
+conversation. These matched tests compare the earlier release binary (product
+source `3ab0483`) with `8e5243c` on the same Apple M4, macOS 27.0, Rust 1.99.0,
+and normal release settings with mimalloc.
+
+| History entries | Compacted | Before footprint, MiB [range] | After footprint, MiB [range] |
+| --- | --- | ---: | ---: |
+| 0 | No | 9.329 [9.313–9.360] | 10.313 [10.266–10.329] |
+| 1,000 | No | 38.172 [37.438–39.610] | 33.141 [33.126–33.141] |
+| 1,000 | Yes | 35.704 [35.532–35.704] | 33.157 [31.782–33.516] |
+| 5,000 | No | 131.532 [128.063–131.548] | 126.985 [122.766–127.001] |
+| 5,000 | Yes | 127.282 [127.266–127.282] | 126.641 [126.641–126.985] |
+
+Values are physical footprint after 20 local shell updates and a further idle
+sample. They are medians of three process medians; brackets give the process
+range. At 1,000 uncompacted entries, footprint fell about 13%; at 5,000, it fell
+about 3.5%. The empty-history case increased by 0.984 MiB. Before transcript
+reconstruction, the 5,000-entry footprint fell from 33.954 to 22.922 MiB.
+
+Each fixture rotates user, assistant, and shell messages with 2,048 text bytes
+per entry, plus one readiness message. Compacted fixtures keep the last 32
+historical messages in model context. The test loads history with `--session`,
+rebuilds the transcript through `/clone`, and adds results with `!!cat` without
+a model turn. Each phase has three memory observations 0.2 seconds apart.
+The 30 fresh processes alternate version and case order; terminal output is
+drained throughout. Global user settings are read. Results include allocator
+retention from cloning and exclude child processes and the terminal emulator.
+
+The JSON records RSS and macOS physical footprint, including charged compressed
+pages. These metrics differ. The test measures retained memory for synthetic
+histories, not peak heap use or every long-running workload. Full history and
+styled transcript rows remain in memory, so usage still grows with history size.
+
+Run `just bench-session-memory`, or compare saved release binaries with:
+
+```sh
+uv run --no-project python scripts/benchmark_kiss_session_memory.py --baseline /path/to/before/kiss --binary /path/to/after/kiss --entries 0 1000 5000 --trials 3 --updates 20 --json target/session-memory-benchmark.json
+```
+
 ### Large-session copy and buffer changes (2026-10-10)
 
 KISS now shares cached transcript rows, writes terminal frames through a
