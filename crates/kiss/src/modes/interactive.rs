@@ -402,7 +402,8 @@ struct ShellRunResult {
 
 const SPINNER: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const AUTO_RECAP_IDLE: Duration = Duration::from_secs(5 * 60);
-const MIN_FRAME_INTERVAL: Duration = Duration::from_millis(33);
+const MIN_FRAME_INTERVAL: Duration = Duration::from_millis(16);
+const ACTIVE_FRAME_INTERVAL: Duration = Duration::from_millis(33);
 #[cfg(not(unix))]
 const RESIZE_POLL_INTERVAL: Duration = Duration::from_millis(25);
 const RESIZE_SETTLE_DELAY: Duration = Duration::from_millis(75);
@@ -1031,16 +1032,16 @@ fn mermaid_mode(setting: MermaidRendering) -> MermaidMode {
     }
 }
 
-fn should_start_idle_recap(app: &App, settings: &kiss_coding::Settings, now: Instant) -> bool {
-    settings.auto_recap_enabled()
+fn idle_recap_deadline(app: &App, settings: &kiss_coding::Settings) -> Option<Instant> {
+    (settings.auto_recap_enabled()
         && app.idle_recap_armed
         && !app.working
         && !app.recap_loading
         && app.btw_panel.is_none()
         && app.picker.is_none()
         && app.secret_prompt.is_none()
-        && app.command_status.is_none()
-        && now.saturating_duration_since(app.last_user_activity) >= AUTO_RECAP_IDLE
+        && app.command_status.is_none())
+    .then(|| app.last_user_activity + AUTO_RECAP_IDLE)
 }
 
 fn session_has_conversation(session: &Arc<kiss_coding::AgentSession>) -> bool {
@@ -1184,11 +1185,27 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
     let mut startup_task =
         tokio::spawn(async move { build_startup(&startup_args, true, sink).await });
     let mut submit_after_startup = false;
+    let mut startup_dirty = false;
+    let mut startup_render_at = Instant::now() + MIN_FRAME_INTERVAL;
     let startup = 'startup: loop {
+        if startup_dirty
+            && !resize_state.pending()
+            && (stdin_rx.is_empty() || Instant::now() >= startup_render_at)
+        {
+            let (width, height) = resize_state.accepted;
+            let lines = provisional_lines(&mut provisional_editor, &provisional_theme, width);
+            let mut out = std::io::stdout().lock();
+            renderer.render_frame(&lines, width, height, &mut out)?;
+            out.flush()?;
+            startup_dirty = false;
+            startup_render_at = Instant::now() + MIN_FRAME_INTERVAL;
+        }
         let resize_deadline = resize_state
             .next_deadline()
             .unwrap_or_else(|| Instant::now() + Duration::from_secs(86_400));
         tokio::select! {
+            _ = tokio::time::sleep_until(tokio::time::Instant::from_std(startup_render_at)),
+                if startup_dirty && !resize_state.pending() => {}
             result = &mut startup_task => {
                 let result = result.context("startup task stopped")?;
                 match result {
@@ -1213,13 +1230,7 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
                         }
                     }
                 }
-                if !resize_state.pending() {
-                    let (width, height) = resize_state.accepted;
-                    let lines = provisional_lines(&mut provisional_editor, &provisional_theme, width);
-                    let mut out = std::io::stdout().lock();
-                    renderer.render_frame(&lines, width, height, &mut out)?;
-                    out.flush()?;
-                }
+                startup_dirty = true;
             }
             Some(()) = resize_rx.recv() => {
                 let now = Instant::now();
@@ -1231,11 +1242,8 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
                 let redraw = resize_state.settle(now);
                 resize_state.recheck(Terminal::size(), now);
                 if redraw {
-                    let (width, height) = resize_state.accepted;
-                    let lines = provisional_lines(&mut provisional_editor, &provisional_theme, width);
-                    let mut out = std::io::stdout().lock();
-                    renderer.render_frame(&lines, width, height, &mut out)?;
-                    out.flush()?;
+                    startup_dirty = true;
+                    startup_render_at = now;
                 }
             }
         }
@@ -1425,6 +1433,7 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
     }
 
     let mut ticker = tokio::time::interval(std::time::Duration::from_millis(80));
+    ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let mut dirty = true;
     let mut next_render_at = Instant::now();
     let mut running_task: Option<tokio::task::JoinHandle<()>> = None;
@@ -1446,6 +1455,9 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
             || app.btw_panel.is_some()
             || app.recap_loading
             || app.title_generation_pending;
+        let recap_deadline = idle_recap_deadline(&app, &resources.settings);
+        let recap_at =
+            recap_deadline.unwrap_or_else(|| Instant::now() + Duration::from_secs(86_400));
         if app.terminal_title_dirty {
             terminal.set_session_title(app.session_title.as_deref());
             app.terminal_title_dirty = false;
@@ -1453,7 +1465,7 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
         terminal.set_activity(render_is_active, app.spinner_frame)?;
         if dirty
             && !resize_state.pending()
-            && (!render_is_active || Instant::now() >= next_render_at)
+            && ((!render_is_active && stdin_rx.is_empty()) || Instant::now() >= next_render_at)
         {
             let (width, height) = resize_state.accepted;
             let lines = app.render(width, &session);
@@ -1461,12 +1473,27 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
             renderer.render_frame(&lines, width, height, &mut out)?;
             out.flush()?;
             dirty = false;
-            next_render_at = Instant::now() + MIN_FRAME_INTERVAL;
+            next_render_at = Instant::now()
+                + if render_is_active {
+                    ACTIVE_FRAME_INTERVAL
+                } else {
+                    MIN_FRAME_INTERVAL
+                };
         }
 
         tokio::select! {
             _ = tokio::time::sleep_until(tokio::time::Instant::from_std(next_render_at)),
-                if dirty && !resize_state.pending() && render_is_active && Instant::now() < next_render_at => {}
+                if dirty && !resize_state.pending() && Instant::now() < next_render_at => {}
+            _ = async {
+                match running_task.as_mut() {
+                    Some(task) => { let _ = task.await; }
+                    None => std::future::pending::<()>().await,
+                }
+            } => {
+                running_task = None;
+                app.working = false;
+                dirty = true;
+            }
             Some(()) = resize_rx.recv() => {
                 let now = Instant::now();
                 resize_state.observe(Terminal::size(), now);
@@ -1481,26 +1508,14 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
                     next_render_at = now;
                 }
             }
-            _ = ticker.tick() => {
-                if app.working
-                    || app.command_status.is_some()
-                    || app.btw_panel.is_some()
-                    || app.recap_loading
-                    || app.title_generation_pending
-                {
-                    app.spinner_frame += 1;
-                    dirty = true;
-                }
-                if let Some(task) = &running_task
-                    && task.is_finished()
-                {
-                    running_task = None;
-                    app.working = false;
-                    dirty = true;
-                }
-                if should_start_idle_recap(&app, &resources.settings, Instant::now())
-                    && session_has_conversation(&session)
-                {
+            _ = ticker.tick(), if render_is_active => {
+                app.spinner_frame += 1;
+                dirty = true;
+            }
+            _ = tokio::time::sleep_until(tokio::time::Instant::from_std(recap_at)),
+                if recap_deadline.is_some() => {
+                app.idle_recap_armed = false;
+                if session_has_conversation(&session) {
                     start_recap(&mut app, &session, true, &command_tx);
                     dirty = true;
                 }
@@ -8666,18 +8681,18 @@ mod tests {
         let settings = kiss_coding::Settings::default();
         let now = Instant::now();
         app.last_user_activity = now - AUTO_RECAP_IDLE;
-        assert!(should_start_idle_recap(&app, &settings, now));
+        assert!(idle_recap_deadline(&app, &settings).is_some_and(|deadline| deadline <= now));
 
         app.working = true;
-        assert!(!should_start_idle_recap(&app, &settings, now));
+        assert!(idle_recap_deadline(&app, &settings).is_none());
         app.working = false;
         app.idle_recap_armed = false;
-        assert!(!should_start_idle_recap(&app, &settings, now));
+        assert!(idle_recap_deadline(&app, &settings).is_none());
 
         app.idle_recap_armed = true;
         let mut disabled = settings;
         disabled.auto_recap = Some(false);
-        assert!(!should_start_idle_recap(&app, &disabled, now));
+        assert!(idle_recap_deadline(&app, &disabled).is_none());
     }
 
     #[test]
