@@ -57,7 +57,7 @@ enum Cell {
 struct CachedCellLines {
     width: usize,
     key: u64,
-    lines: Vec<String>,
+    lines: Vec<Arc<str>>,
     streaming: Option<StreamingMarkdownCache>,
 }
 
@@ -506,7 +506,7 @@ enum CommandMenuAction {
 }
 
 impl App {
-    fn render(&mut self, width: usize, session: &Arc<kiss_coding::AgentSession>) -> Vec<String> {
+    fn render(&mut self, width: usize, session: &Arc<kiss_coding::AgentSession>) -> Vec<Arc<str>> {
         let mut lines: Vec<String> = Vec::new();
         lines.extend(self.startup_lines.iter().cloned());
 
@@ -519,7 +519,7 @@ impl App {
             lines.push(String::new());
             lines.extend(self.editor.render(width));
             lines.extend(self.footer(width, session));
-            return lines;
+            return lines.into_iter().map(Arc::from).collect();
         }
 
         if let Some(view) = &mut self.job_view {
@@ -527,8 +527,10 @@ impl App {
             lines.extend(view.render(width, &self.theme));
             lines.push(String::new());
             lines.extend(self.footer(width, session));
-            return lines;
+            return lines.into_iter().map(Arc::from).collect();
         }
+
+        let mut frame: Vec<Arc<str>> = lines.into_iter().map(Arc::from).collect();
 
         if self.cell_render_cache.len() < self.cells.len() {
             self.cell_render_cache
@@ -538,8 +540,8 @@ impl App {
         }
 
         for (cell_index, cell) in self.cells.iter().enumerate() {
-            if !lines.is_empty() {
-                lines.push(String::new());
+            if !frame.is_empty() {
+                frame.push(Arc::from(""));
             }
             let key = cell_render_key(
                 cell,
@@ -551,7 +553,7 @@ impl App {
                 && cached.width == width
                 && cached.key == key
             {
-                lines.extend(cached.lines.iter().cloned());
+                frame.extend(cached.lines.iter().cloned());
                 continue;
             }
             if let Cell::AssistantStreaming(text) = cell {
@@ -559,8 +561,12 @@ impl App {
                     .take()
                     .and_then(|cached| cached.streaming)
                     .unwrap_or_default();
-                let rendered = streaming.render(&self.md, text, width, self.mermaid_mode);
-                lines.extend(rendered.iter().cloned());
+                let rendered: Vec<Arc<str>> = streaming
+                    .render(&self.md, text, width, self.mermaid_mode)
+                    .into_iter()
+                    .map(Arc::from)
+                    .collect();
+                frame.extend(rendered.iter().cloned());
                 self.cell_render_cache[cell_index] = Some(CachedCellLines {
                     width,
                     key,
@@ -569,7 +575,7 @@ impl App {
                 });
                 continue;
             }
-            let cell_start = lines.len();
+            let mut lines = Vec::new();
             match cell {
                 Cell::User(text) => {
                     for l in kiss_tui::text::wrap_text(text, width.saturating_sub(2)) {
@@ -675,15 +681,17 @@ impl App {
                     }
                 }
             }
+            let rendered: Vec<Arc<str>> = lines.into_iter().map(Arc::from).collect();
+            frame.extend(rendered.iter().cloned());
             self.cell_render_cache[cell_index] = Some(CachedCellLines {
                 width,
                 key,
-                lines: lines[cell_start..].to_vec(),
+                lines: rendered,
                 streaming: None,
             });
         }
 
-        lines.push(String::new());
+        let mut lines = vec![String::new()];
         if self.working {
             let spin = SPINNER[self.spinner_frame % SPINNER.len()];
             lines.push(self.theme.fg(
@@ -836,7 +844,8 @@ impl App {
             }
             lines.extend(self.footer(width, session));
         }
-        lines
+        frame.extend(lines.into_iter().map(Arc::from));
+        frame
     }
 
     fn footer(&self, width: usize, session: &Arc<kiss_coding::AgentSession>) -> Vec<String> {
@@ -1470,7 +1479,7 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
             let (width, height) = resize_state.accepted;
             let lines = app.render(width, &session);
             let mut out = std::io::stdout().lock();
-            renderer.render_frame(&lines, width, height, &mut out)?;
+            renderer.render_shared_frame(&lines, width, height, &mut out)?;
             out.flush()?;
             dirty = false;
             next_render_at = Instant::now()
@@ -9781,7 +9790,11 @@ mod tests {
             thinking_color_token(ThinkingLevel::High),
             "◆ Jev changed reasoning to high for 5 generations",
         );
-        assert!(app.render(80, &session).contains(&expected));
+        assert!(
+            app.render(80, &session)
+                .iter()
+                .any(|line| line.as_ref() == expected)
+        );
     }
 
     #[test]
@@ -10346,6 +10359,154 @@ mod tests {
         );
     }
 
+    #[test]
+    #[ignore = "release-mode large transcript benchmark; KISS_PERF_MIB=2, 10, or 40"]
+    fn benchmark_shared_transcript_pipeline() {
+        use std::io::{self, Write};
+        #[derive(Default)]
+        struct Sink {
+            bytes: usize,
+            max_write: usize,
+            hash: u64,
+        }
+        impl Write for Sink {
+            fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+                self.bytes += bytes.len();
+                self.max_write = self.max_write.max(bytes.len());
+                // Timing uses a counting sink; verify bytes separately below.
+                if self.hash != 0 {
+                    for byte in bytes {
+                        self.hash = (self.hash ^ u64::from(*byte)).wrapping_mul(1099511628211);
+                    }
+                }
+                Ok(bytes.len())
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+        let mib: usize = std::env::var("KISS_PERF_MIB")
+            .unwrap_or_else(|_| "2".into())
+            .parse()
+            .unwrap();
+        assert!(
+            [0, 2, 10, 40].contains(&mib),
+            "Use KISS_PERF_MIB=0, 2, 10, or 40; 0 selects one small cell."
+        );
+        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
+            "/synthetic",
+        )));
+        let mut app = test_app();
+        let paragraph = "A deterministic assistant paragraph has **styled text**, a source/path.rs name, and enough words to wrap across terminal rows.\n\n";
+        let text = paragraph.repeat(8192 / paragraph.len() + 1);
+        for _ in 0..(mib * 1024 * 1024).div_ceil(text.len()).max(1) {
+            app.cells.push(Cell::AssistantFinal(text.clone()));
+        }
+        let rows = app.render(100, &session);
+        let mut sink = Sink {
+            hash: 14695981039346656037,
+            ..Default::default()
+        };
+        kiss_tui::renderer::DiffRenderer::new()
+            .render_shared_frame(&rows, 100, 40, &mut sink)
+            .unwrap();
+        println!(
+            "KISS_OUTPUT\tmib={mib}\trows={}\tbytes={}\tmax_write={}\thash={}",
+            rows.len(),
+            sink.bytes,
+            sink.max_write,
+            sink.hash
+        );
+        kiss_bench::measure(
+            "app_cached_transcript_large",
+            15,
+            2,
+            &format!("{mib}mib_source"),
+            || app.render(100, &session).len(),
+        );
+        kiss_bench::measure(
+            "first_full_app_renderer",
+            15,
+            1,
+            &format!("{mib}mib_cached_app_counting_sink_no_terminal_io"),
+            || {
+                let rows = app.render(100, &session);
+                let mut sink = Sink::default();
+                kiss_tui::renderer::DiffRenderer::new()
+                    .render_shared_frame(&rows, 100, 40, &mut sink)
+                    .unwrap();
+                sink.bytes
+            },
+        );
+        let mut renderer = kiss_tui::renderer::DiffRenderer::new();
+        renderer
+            .render_shared_frame(&rows, 100, 40, &mut Sink::default())
+            .unwrap();
+        app.working = true;
+        kiss_bench::measure(
+            "spinner_app_renderer",
+            15,
+            2,
+            &format!("{mib}mib_cached_app_counting_sink_no_terminal_io"),
+            || {
+                app.spinner_frame = app.spinner_frame.wrapping_add(1);
+                let rows = app.render(100, &session);
+                let mut sink = Sink::default();
+                renderer
+                    .render_shared_frame(&rows, 100, 40, &mut sink)
+                    .unwrap();
+                sink.bytes
+            },
+        );
+    }
+
+    #[test]
+    #[ignore = "release-mode scalar session benchmark; KISS_PERF_MIB=2, 10, or 40"]
+    fn benchmark_scalar_session_reads() {
+        let mib: usize = std::env::var("KISS_PERF_MIB")
+            .unwrap_or_else(|_| "2".into())
+            .parse()
+            .unwrap();
+        assert!(
+            [0, 2, 10, 40].contains(&mib),
+            "Use KISS_PERF_MIB=0, 2, 10, or 40; 0 selects one message."
+        );
+        let mut manager = kiss_coding::SessionManager::in_memory(Path::new("/synthetic"));
+        manager
+            .append_model_change("anthropic", "test-model")
+            .unwrap();
+        manager
+            .append_thinking_level_change(kiss_ai::ThinkingLevel::High)
+            .unwrap();
+        let records = (mib * 64).max(1);
+        for _ in 0..records {
+            manager
+                .append_message(AgentMessage::user("x".repeat(16 * 1024)))
+                .unwrap();
+        }
+        assert_eq!(manager.context_message_count(), records);
+        assert_eq!(
+            manager.session_settings(),
+            (
+                Some(("anthropic".into(), "test-model".into())),
+                Some(kiss_ai::ThinkingLevel::High)
+            )
+        );
+        kiss_bench::measure(
+            "session_message_count",
+            15,
+            2,
+            &format!("{mib}mib_{records}_messages"),
+            || manager.context_message_count(),
+        );
+        kiss_bench::measure(
+            "session_saved_settings",
+            15,
+            2,
+            &format!("{mib}mib_{records}_messages"),
+            || manager.session_settings(),
+        );
+    }
     #[tokio::test]
     async fn shell_command_merges_output_and_keeps_context_mode() {
         let temp = tempfile::tempdir().unwrap();
