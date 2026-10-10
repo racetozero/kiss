@@ -714,22 +714,106 @@ See the [SDK guide](docs/sdk.md), [RPC protocol](docs/rpc.md), and
 
 ## Performance
 
-KISS benchmarks local work, not model or network latency. Results below are
-from a recorded full release benchmark run.
+KISS benchmarks local work, not model or network latency. Startup and large-session results below were measured on 2026-10-10.
+The other KISS tables come from an earlier full release benchmark run.
 
 ### Startup and memory
 
 | Measure                     |            Mean |
 | --------------------------- | --------------: |
-| Warm time to first frame    |        5.037 ms |
-| Warm time to first input    |        5.094 ms |
-| One idle session            |  15.802 MiB RSS |
-| Ten idle sessions           | 159.010 MiB RSS |
-| Extra RSS per added session |      15.912 MiB |
+| Warm time to first frame    |        8.557 ms |
+| Warm time to first input    |        8.640 ms |
+| One idle session            |  20.083 MiB RSS |
+| Ten idle sessions           | 201.635 MiB RSS |
+| Extra RSS per added session |      20.172 MiB |
 
-Startup results use ten launches after one warm-up. Memory results use three
+Startup results use twenty launches after one warm-up. Memory results use three
 trials. RSS is the resident memory reported by macOS. Do not compare these
 values directly with Linux proportional set size.
+
+### Large-session copy and buffer changes (2026-10-10)
+
+KISS now shares cached transcript rows, writes terminal frames through a
+64 KiB output buffer, and reads message counts and saved settings without
+copying message text. The baseline is commit `3539dff`. Both versions use the
+normal release profile, Rust 1.99.0, and the CLI's mimalloc allocator on an
+Apple M4 with macOS 27.0.
+
+The table gives the median of process medians. Each bracket gives the lowest
+and highest process median. Transcript tests used eight processes per version
+and size. Scalar session tests used three. Each process used 15 timed samples
+after warm-up. Version order alternated. No compilation ran during measurement.
+Background applications remained active.
+
+| Operation | Source text | Before, ms [range] | After, ms [range] |
+| --- | ---: | ---: | ---: |
+| Cached app frame | 2 MiB | 0.688 [0.667–0.757] | 0.528 [0.521–0.572] |
+| Cached app frame | 10 MiB | 4.091 [3.839–6.585] | 3.537 [3.093–6.183] |
+| Cached app frame | 40 MiB | 18.580 [16.351–21.714] | 18.349 [15.945–24.019] |
+| Cached app + first renderer frame | 2 MiB | 7.729 [7.567–11.043] | 7.299 [7.140–9.645] |
+| Cached app + first renderer frame | 10 MiB | 41.769 [40.766–71.307] | 40.673 [39.253–54.521] |
+| Cached app + first renderer frame | 40 MiB | 174.991 [166.846–195.499] | 169.566 [160.932–189.722] |
+| App + spinner renderer frame | 2 MiB | 3.842 [3.717–4.891] | 3.665 [3.582–4.764] |
+| App + spinner renderer frame | 10 MiB | 22.497 [22.074–38.716] | 24.056 [22.124–27.292] |
+| App + spinner renderer frame | 40 MiB | 97.527 [89.271–120.684] | 93.142 [89.905–117.022] |
+| Context message count | 2 MiB | 0.038 [0.038–0.041] | 0.003 [0.003–0.004] |
+| Context message count | 10 MiB | 0.262 [0.246–0.613] | 0.018 [0.017–0.019] |
+| Context message count | 40 MiB | 2.367 [1.321–2.945] | 0.083 [0.080–0.087] |
+| Saved model and thinking settings | 2 MiB | 0.039 [0.038–0.040] | 0.003 [0.003–0.004] |
+| Saved model and thinking settings | 10 MiB | 0.279 [0.269–0.605] | 0.018 [0.016–0.019] |
+| Saved model and thinking settings | 40 MiB | 2.776 [1.336–2.813] | 0.079 [0.079–0.083] |
+
+The 2 MiB cached app frame fell from 0.688 to 0.528 ms, about 23% less time.
+Context counts and saved settings also show clear gains. At 40 MiB, counts
+fell from 2.367 to 0.083 ms and saved settings from 2.776 to 0.079 ms.
+Larger frame timing ranges overlap. These tests do not establish a stable
+speed gain for complete large frames. The 10 MiB spinner median rose from
+22.497 to 24.056 ms, about 6.9%; its timing ranges also overlap.
+
+Peak RSS was more consistent. These values cover the whole component test
+process, including its fixtures and render work. They are not CLI session RSS.
+
+| Component test | Source text | Before peak RSS, MiB [range] | After peak RSS, MiB [range] |
+| --- | ---: | ---: | ---: |
+| App and renderer | 2 MiB | 63.734 [63.734–63.750] | 42.578 [42.562–42.594] |
+| App and renderer | 10 MiB | 176.594 [176.578–176.594] | 151.766 [151.484–151.781] |
+| App and renderer | 40 MiB | 687.945 [683.375–688.234] | 472.961 [468.375–473.109] |
+| Scalar session reads | 2 MiB | 13.156 [13.156–13.172] | 11.016 [11.016–11.016] |
+| Scalar session reads | 10 MiB | 30.203 [30.203–30.203] | 19.453 [19.438–19.453] |
+| Scalar session reads | 40 MiB | 91.797 [91.797–91.797] | 51.531 [51.516–51.531] |
+
+At 40 MiB, app and renderer peak RSS fell by about 31%, from 687.945 to
+472.961 MiB. Scalar read peak RSS fell from 91.797 to 51.531 MiB. The small
+transcript test rose from 16.359 to 16.516 MiB. Shared row handles and the
+fixed output buffer have a cost.
+
+Transcript input consists of settled assistant paragraphs with styled text,
+rendered at 100 columns and 40 screen rows. The renderer writes to a counting
+sink. These timings include app work and renderer work, but exclude terminal
+I/O and model latency. Scalar input has 16 KiB messages and two saved settings.
+It retains all history. Compaction summaries, retained tails, branches, and
+hidden custom messages keep their existing count rules.
+
+Output byte counts and hashes matched across all 16 transcript processes at
+each size, including the small case. The 40 MiB fixture wrote 61,942,008 bytes
+in both versions. Its largest write fell from 61,941,989 to 65,536 bytes.
+The temporary output buffer is bounded; the full transcript and prepared rows
+still remain in memory. A single row with very large ANSI data can bypass the
+buffer, so 64 KiB is not a general limit on each write.
+
+A real terminal check also passed with a 2 MiB resumed history, slow output
+reads, typing, resize, paste, and exit. Existing tests check terminal history,
+cursor placement, write failure recovery, and session behavior. The workspace
+checks passed with 739 tests and 33 skips.
+
+To repeat the component tests, set `KISS_PERF_MIB` to `0`, `2`, `10`, or `40`.
+Zero selects one small transcript cell or one message. Run each test in a new
+process; use the same input and release build settings for comparisons:
+
+```sh
+KISS_PERF_MIB=40 cargo test --release -p kiss --bin kiss benchmark_shared_transcript_pipeline -- --ignored --nocapture --test-threads=1
+KISS_PERF_MIB=40 cargo test --release -p kiss --bin kiss benchmark_scalar_session_reads -- --ignored --nocapture --test-threads=1
+```
 
 ### Core operations
 
@@ -797,6 +881,27 @@ events.
 KISS combines rapid resize events and redraws once 75 ms after the final
 change. The full resize test wrote 178,231 bytes.
 
+### Published Prime Agent results
+
+[Prime Intellect's Results section](https://www.primeintellect.ai/blog/prime-agent-rust#results)
+reports these values for its own runtime suite. The suite uses a fresh Linux
+Prime Sandbox with 4 CPU cores and 8 GB of memory for each benchmark. It drives
+a real terminal with a screen emulator and a scripted model. Model inference
+is excluded. Values below include the variation shown in the source.
+
+| Measure | Prime Agent Rust | Prime Agent TypeScript | Claude Code 2.1.289 | Codex CLI 0.160.0 | Pi 1.0.3 | Hermes Agent 0.21.5 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| First visible output | 23.6 ± 0.6 ms | 722.8 ± 15.1 ms | 264.6 ± 5.8 ms | 296.8 ± 2.7 ms | 306.3 ± 6.7 ms | 1,715.3 ± 10.3 ms |
+| Cold time to type | 55.8 ± 4.9 ms | 737.8 ± 13.9 ms | 348.4 ± 8.2 ms | 324.6 ± 4.9 ms | 317.7 ± 8.0 ms | 2,094.5 ± 23.5 ms |
+| Warm time to type | 42.4 ± 4.3 ms | 549.6 ± 10.0 ms | 345.1 ± 6.2 ms | 321.3 ± 9.2 ms | 240.4 ± 5.9 ms | 2,097.1 ± 40.8 ms |
+| Complete installed size | 59.6 MB | 172.1 MB | 492.4 MB | 446.8 MB | 456.0 MB | 960.1 MB |
+| Process tree RSS after startup | 106.0 ± 1.3 MB | 607.4 ± 0.9 MB | 226.9 ± 0.4 MB | 344.4 ± 3.1 MB | 138.1 ± 0.7 MB | 194.6 ± 0.3 MB |
+
+Source checked on 2026-10-10. These are published measurements; we did not run
+this suite. KISS was not included. Hardware, operating system, setup, and
+measurement rules differ from the KISS tests above. Use this table as source
+data, not as a direct speed or memory comparison with KISS.
+
 ### Profile-guided release builds
 
 | Measure                | Standard build | Optimized build |         Change |
@@ -809,9 +914,9 @@ change. The full resize test wrote 178,231 bytes.
 ### Method
 
 The tests use release builds and local deterministic fixtures. The startup
-test used a 160 by 40 terminal and `kiss --no-session` on macOS 26.5.1 with an
-Apple M4. Startup values are the mean of ten warm launches. Memory values are
-the mean of three idle samples. Core, SDK, RPC, and WebAssembly tests also ran
+test used a 160 by 40 terminal and `kiss --no-session` on macOS 27.0 with an
+Apple M4 and Rust 1.99.0. Startup values are the mean of twenty warm launches. Memory values are
+the mean of three idle samples. The earlier core, SDK, RPC, and WebAssembly tests also ran
 on the Apple M4. Profile-guided results use separate held-out runs. Lower is
 better.
 
