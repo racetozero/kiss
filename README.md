@@ -727,9 +727,11 @@ The other KISS tables come from an earlier full release benchmark run.
 | Ten idle sessions           | 201.635 MiB RSS |
 | Extra RSS per added session |      20.172 MiB |
 
-Startup results use twenty launches after one warm-up. Memory results use three
-trials. RSS is the resident memory reported by macOS. Do not compare these
-values directly with Linux proportional set size.
+Startup results use twenty launches after one warmup and detect output bytes,
+not visible screen cells. The visible-screen test below uses a different method.
+These separate runs do not measure a startup regression. Memory uses three
+trials. RSS is the resident memory reported by macOS and differs from Linux
+proportional set size.
 
 ### Large-session copy and buffer changes (2026-10-10)
 
@@ -817,21 +819,17 @@ KISS_PERF_MIB=40 cargo test --release -p kiss --bin kiss benchmark_scalar_sessio
 
 ### Core operations
 
-The core, automation, and TUI tables below were measured on 2026-10-10 with
+The core, automation, and TUI tables were measured on 2026-10-10 with
 product source `3ab0483` and the p99 benchmark update. Each workload ran in
-three separate release processes. The timing helper used one untimed warmup
-per row; fixtures can do additional setup work. Each row has 1,000 samples,
-with one complete workload operation per sample. Values are
-the median of the three process percentiles. Brackets show the lowest and
-highest process p99. Percentiles use the nearest-rank rule. All reported
-p95 and p99 values were checked against the retained raw samples.
+three release processes, with 1,000 single-operation samples per process.
+Each row had one untimed warmup, plus fixture setup. Values are the median
+of the three process percentiles; brackets give the process p99 range.
+Percentiles use nearest rank and were checked against the raw samples.
 
-These replace the earlier small-sample p95 values. The new sample method
-and total work differ from the earlier batched tests. Differences between
-the old and new values do not measure a code speed change. Timer overhead
-is included; nanosecond values approach the clock resolution. The component
-tests exclude model inference and terminal I/O. Some p99 ranges are wide;
-these results do not establish a latency limit.
+These replace earlier batched tests with fewer samples. The method and total
+work changed, so differences do not prove a code speed change. Timings include
+timer overhead and exclude model inference and terminal I/O. Nanosecond values
+approach clock resolution. The p99 ranges do not establish latency limits.
 
 | User action              | Test size                         |       p95 |               p99 [range] |
 | ------------------------ | --------------------------------- | --------: | ------------------------: |
@@ -861,9 +859,8 @@ The release module is 574,734 bytes raw and 209,375 bytes gzip. It starts with
 
 ### Agent automation
 
-Subagents are off by default. The session setup p99 ranges overlap with
-subagents off and on. Request preparation includes six extra control tools
-when subagents are on.
+Subagents are off by default. Their session setup p99 ranges overlap.
+Enabling subagents adds six control tools to request preparation.
 
 | Measure                    | State or size                     |        p95 |                  p99 [range] |
 | -------------------------- | --------------------------------- | ---------: | ---------------------------: |
@@ -879,9 +876,9 @@ when subagents are on.
 | Workflow unchanged view    | 500 agents, cached                |     167 ns |             250 [208–250] ns |
 | Job detail view            | Long goal and result              |  36.958 us |    40.542 [40.166–41.583] us |
 
-The snapshot test adds one log entry per operation. Its log grows during the
-1,000 samples, so it measures a changing history size. Loop and autoresearch
-jobs sleep between model turns and update the TUI through small events.
+The snapshot test adds one log entry per sample, so history grows during
+the 1,000 samples. Loop and autoresearch jobs sleep between model turns
+and update the TUI through small events.
 
 ### TUI rendering and resize
 
@@ -962,16 +959,14 @@ is excluded. Values below include the variation shown in the source.
 | Complete installed size        |          59.6 MB |               172.1 MB |            492.4 MB |          446.8 MB |       456.0 MB |            960.1 MB |
 | Process tree RSS after startup |   106.0 ± 1.3 MB |         607.4 ± 0.9 MB |      226.9 ± 0.4 MB |    344.4 ± 3.1 MB | 138.1 ± 0.7 MB |      194.6 ± 0.3 MB |
 
-Source checked on 2026-10-10. These are published measurements; we did not run
-this suite. KISS was not included in the published suite.
+Source checked on 2026-10-10. We did not run this suite. It does not include KISS.
 
-KISS was measured locally for the same named measures on an Apple M4 with
-macOS 27.0 and Rust 1.99.0. The executable uses the normal release build with
-fat LTO, one codegen unit, and mimalloc. Its product source is `3ab0483`.
-The terminal test uses a 160 by 40 pseudo-terminal and pyte 0.8.2 to inspect
-visible screen cells. The clock starts before process creation. First output
-and the typing probe count only after a synchronized terminal update ends.
-Terminal echo must be off before the probe is sent. No model turn is submitted.
+KISS was measured on an Apple M4 with macOS 27.0 and Rust 1.99.0, using
+product source `3ab0483`. The normal release build uses fat LTO, one codegen
+unit, and mimalloc. The test uses a 160 by 40 pseudo-terminal and pyte 0.8.2.
+Timing starts before process creation. Output and input count only when visible
+screen cells appear after a synchronized terminal update ends. The test checks
+that terminal echo is off before sending input. No model turn is submitted.
 
 | Measure                        | KISS local mean ± sample standard deviation |       p95 |       p99 |
 | ------------------------------ | ------------------------------------------: | --------: | --------: |
@@ -981,26 +976,23 @@ Terminal echo must be off before the probe is sent. No model turn is submitted.
 | Installed CLI payload          |                                   25.230 MB |         — |         — |
 | Process tree RSS after startup |                           20.772 ± 0.092 MB |         — |         — |
 
-There were 1,000 cold launches and 1,000 warm launches, in alternating order.
-Cold means a fresh project and session directory. Warm means another launch
-in the same directories after a warmup. OS file caches were not cleared.
-The test reads the user's global configuration, selects the built-in Anthropic
-provider with a local placeholder key, uses an empty custom-model file, and
-disables context files. Typing time is launch until the probe is visible after
-the observer has seen the first frame. It includes the observer's work.
+The test alternated 1,000 cold and 1,000 warm launches. Cold launches use fresh
+project and session directories; warm launches reuse directories after a
+warmup. OS caches were not cleared. The test reads global user configuration,
+uses the built-in Anthropic provider with a placeholder key and an empty
+custom-model file, and disables context files. Typing time includes the screen
+observer's work and starts with launch; the probe is sent after the first frame.
 
-Memory uses 20 separate launches. Output is read for one second after typing
-works, then `ps` supplies RSS for KISS and its descendants. All 20 samples had
-one process. MB means 1,000,000 bytes. Installed size is the executable's
-25,229,584 file bytes. The CLI has no separate language runtime or updater;
-this size excludes installer receipts, download caches, SDK packages, generated
-sessions, and OS libraries. Memory p95 and p99 are omitted because 20 samples
-provide little tail information.
+RSS was measured with `ps` in 20 separate launches, after reading output for
+one second following typing. Each process tree had one process. This sample
+count is too small for useful memory p95 or p99 values. MB means 1,000,000 bytes.
+Installed size is the executable's 25,229,584 bytes; it excludes receipts,
+download caches, SDKs, generated sessions, and OS libraries. The CLI has no
+separate language runtime or updater.
 
-Hardware, OS, configuration, observer, and installed-size rules differ from
-the published suite. These KISS results do not establish a direct speed or
-memory comparison with the published agents. No compilation or other benchmark
-ran during the timed KISS runs. Repeat the visible-screen test with:
+Hardware, OS, configuration, observer, and installation scope differ from
+Prime's suite, so these results do not support a direct comparison.
+No compilation or other benchmark ran during measurement. To repeat:
 
 ```sh
 uv run --no-project --with pyte==0.8.2 python scripts/benchmark_kiss_startup.py --binary target/release/kiss --samples 1000 --memory-trials 20 --json target/visible-startup-benchmark.json
@@ -1025,11 +1017,10 @@ The visible-screen startup results and p95/p99 tables have their own methods
 and sample counts above. The SDK, RPC, and WebAssembly tests also ran on the
 Apple M4. Profile-guided results use separate held-out runs. Lower is better.
 
-To repeat a native p95/p99 workload, select its ignored benchmark test and use
-the sample controls below. Repeat it in three separate processes with no
-concurrent benchmark or compilation. `KISS_BENCH_RAW=1` retains the timing samples
-in the output. `KISS_BENCH_FILTER` can select comma-separated exact output row
-names; a paired benchmark reports both rows when either is selected.
+To repeat a native p95/p99 workload, run its ignored benchmark test in three
+separate processes without concurrent compilation or benchmarks.
+`KISS_BENCH_RAW=1` prints raw samples. `KISS_BENCH_FILTER` selects comma-separated
+exact output names; paired benchmarks report both rows when either is selected.
 
 ```sh
 KISS_BENCH_SAMPLES=1000 KISS_BENCH_ITERATIONS=1 KISS_BENCH_RAW=1 cargo test --release -p kiss-tui benchmark_performance_renderer_frames -- --ignored --nocapture --test-threads=1
