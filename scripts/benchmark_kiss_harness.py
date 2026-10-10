@@ -65,6 +65,8 @@ def wait_for(master: int, needle: bytes, started: float, timeout: float = 5) -> 
             break
         if needle in data:
             return (time.perf_counter() - started) * 1_000
+        # Keep only a possible marker prefix across read boundaries.
+        del data[: max(0, len(data) - len(needle) + 1)]
     raise RuntimeError(f'timed out waiting for {needle!r}')
 
 
