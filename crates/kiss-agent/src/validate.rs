@@ -170,19 +170,19 @@ fn coerce_primitive(value: &Value, kind: &str) -> Value {
     match (kind, value) {
         ("number" | "integer", Value::Null) => Value::from(0),
         ("number" | "integer", Value::Bool(flag)) => Value::from(u8::from(*flag)),
-        ("number" | "integer", Value::String(text)) if !text.trim().is_empty() => {
-            let text = text.trim();
-            if let Ok(integer) = text.parse::<i64>() {
-                Value::from(integer)
-            } else {
-                match text.parse::<f64>() {
-                    // An integer property keeps the whole part, as Pi does.
-                    Ok(number) if number.is_finite() && kind == "integer" => {
-                        Value::from(number.trunc() as i64)
-                    }
-                    Ok(number) if number.is_finite() => Value::from(number),
-                    _ => value.clone(),
+        // serde_json's number parser is already in the build. Rust's float
+        // parser would add about 12 KB (gzip) to the browser WebAssembly module.
+        ("number" | "integer", Value::String(text)) => {
+            match serde_json::from_str::<serde_json::Number>(text.trim()) {
+                Ok(number) if kind == "number" || number.is_i64() || number.is_u64() => {
+                    Value::Number(number)
                 }
+                // An integer property keeps the whole part, as Pi does.
+                Ok(number) => number.as_f64().map_or_else(
+                    || value.clone(),
+                    |number| Value::from(number.trunc() as i64),
+                ),
+                Err(_) => value.clone(),
             }
         }
         ("boolean", Value::Null) => Value::Bool(false),
