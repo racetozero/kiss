@@ -2,7 +2,18 @@
 
 ## Unreleased
 
+## 0.0.36 - 2026-11-02
+
 ### Added
+
+- Opt-in desktop notifications when an interactive prompt finishes or needs
+  input. Enable them in user settings; KISS suppresses notices while the
+  terminal is focused and uses one terminal or native OS delivery route.
+- Selectable decision models for tool-interaction compaction and dynamic
+  reasoning: Liquid d1-ultra and d1.1, TypeSafe Jev, and Cloudflare Clef
+  Flash and Clef. Both features are off by default.
+- Rex sessions receive agent session context and shared terminal guidance.
+- Benchmarks for visible startup, p99 latency, and long-session memory growth.
 
 - Report interactive state with the Program Status Protocol (OSC 7501).
   Supporting terminals show when KISS is idle, working, done, blocked on a
@@ -44,6 +55,12 @@
 
 ### Changed
 
+- Reduce long-session memory use and copying with borrowed messages, shared
+  transcript rows, cached session listings, and reused TUI row layouts.
+- Wait for terminal events and combine input bursts instead of polling;
+  bound frame buffers and bash progress output, and stream spill files.
+- Send cmux notices only through the opt-in desktop notification system.
+
 - Updated the Pi baseline and model catalog to v1.5.0. Added GPT-6.1 Terra
   and Kimi K3.1 Pro. OpenCode uses its protocol-specific endpoints, and the
   OpenRouter `~anthropic/*-latest` models use Anthropic Messages. The default
@@ -68,6 +85,10 @@
   provider that has credentials.
 
 ### Fixed
+
+- Give every interrupted tool call a result so later provider requests do
+  not contain unmatched tool calls.
+- Keep tool argument coercion within the core WASM build's size budget.
 
 - Retry more temporary provider errors: `server_busy`, model capacity,
   temporary service outages, gateway upstream failures, interrupted HTTP/2
