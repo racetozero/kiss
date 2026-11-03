@@ -81,7 +81,7 @@ fn session(directory: &std::path::Path) -> Arc<AgentSession> {
 }
 
 #[tokio::test]
-async fn native_hosts_deliver_state_resume_notifications_and_cleanup() {
+async fn native_hosts_deliver_state_resume_and_cleanup() {
     let directory = tempfile::tempdir().unwrap();
     let herdr = HostLog::new(directory.path(), "herdr", "");
     let cmux = HostLog::new(directory.path(), "cmux", "");
@@ -180,7 +180,7 @@ async fn native_hosts_deliver_state_resume_notifications_and_cleanup() {
     cmux.wait(|calls| {
         calls
             .iter()
-            .any(|call| call.contains(&"Workflow approval required".into()))
+            .any(|call| call.contains(&"KISS: blocked".into()))
     })
     .await;
     hosts.update(State::Working, &session, &args);
@@ -196,7 +196,9 @@ async fn native_hosts_deliver_state_resume_notifications_and_cleanup() {
     cmux.wait(|calls| {
         calls
             .iter()
-            .any(|call| call.contains(&"Task complete".into()))
+            .filter(|call| call.contains(&"KISS: idle".into()))
+            .count()
+            == 2
     })
     .await;
 
@@ -252,6 +254,10 @@ async fn native_hosts_deliver_state_resume_notifications_and_cleanup() {
         ]
     );
     for call in calls.iter().chain(&cmux_calls) {
+        assert!(
+            !call.first().is_some_and(|arg| arg == "notify"),
+            "status reporting must not also notify"
+        );
         assert!(
             !call
                 .iter()

@@ -249,29 +249,6 @@ impl Host {
                 )
                 .await;
             if state_sent {
-                let notification = match (previous, report.state) {
-                    (Some(State::Working), State::Error) => Some("Task failed"),
-                    (Some(State::Working), State::Idle | State::Done) => Some("Task complete"),
-                    (Some(State::Blocked(..)), State::Blocked(..)) => None,
-                    (_, State::Blocked(_, message)) => Some(message),
-                    _ => None,
-                };
-                if let Self::Cmux {
-                    workspace, surface, ..
-                } = &self
-                    && receiver.borrow().as_ref() == Some(&report)
-                    && let Some(body) = notification
-                {
-                    // Do not retry notifications or send notices for superseded states.
-                    execute(
-                        self.command(&["notify", "--workspace"])
-                            .arg(workspace)
-                            .arg("--surface")
-                            .arg(surface)
-                            .args(["--title", "KISS", "--body", body]),
-                    )
-                    .await;
-                }
                 previous = Some(report.state);
             }
             if state_sent && registered.as_ref() == resume && !file_pending {
