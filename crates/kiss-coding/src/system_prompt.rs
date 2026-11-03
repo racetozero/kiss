@@ -27,24 +27,6 @@ fn tool_snippet(name: &str) -> Option<&'static str> {
     })
 }
 
-fn rex_context(session: Option<&str>, block: Option<&str>) -> String {
-    let valid = |value: &&str| {
-        !value.is_empty() && value.len() <= 256 && !value.chars().any(char::is_control)
-    };
-    let Some(session) = session.filter(valid) else {
-        return String::new();
-    };
-    let mut context =
-        format!("\n\nYou are running inside Rex. Your own REX_SESSION is {session:?}.");
-    if let Some(block) = block.filter(valid) {
-        context.push_str(&format!(" Your own terminal REX_BLOCK is {block:?}."));
-    }
-    context.push_str(
-        "\nFor Rex tasks, load the rex skill if available. Otherwise run `rex skill show` and follow its guide. Use your own session and terminal for requests such as 'here' or 'beside you', or when no target is specified. Use the visible session or focused pane only when the user requests it. An explicit target name takes priority. Do not rename sessions unless the user or the installed skill requests it.",
-    );
-    context
-}
-
 pub fn build_system_prompt(options: &SystemPromptOptions) -> String {
     let cwd = options.cwd.replace('\\', "/");
     let mut prompt = match options.custom_prompt {
@@ -85,12 +67,6 @@ pub fn build_system_prompt(options: &SystemPromptOptions) -> String {
         prompt.push('\n');
     }
 
-    if options.selected_tools.iter().any(|tool| tool == "bash") {
-        let session = std::env::var("REX_SESSION").ok();
-        let block = std::env::var("REX_BLOCK").ok();
-        prompt.push_str(&rex_context(session.as_deref(), block.as_deref()));
-    }
-
     prompt.push_str(&format!("\nCurrent working directory: {cwd}"));
     prompt
 }
@@ -128,27 +104,6 @@ fn default_prompt(options: &SystemPromptOptions) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn rex_context_identifies_own_location_and_rejects_invalid_ids() {
-        let long = "x".repeat(257);
-        for session in [None, Some(""), Some("bad\nlocation"), Some(long.as_str())] {
-            assert!(rex_context(session, Some("block-1")).is_empty());
-        }
-
-        for block in [None, Some(""), Some("bad\x1bblock"), Some(long.as_str())] {
-            let context = rex_context(Some("session-1"), block);
-            assert!(context.contains("REX_SESSION is \"session-1\""));
-            assert!(!context.contains("REX_BLOCK"));
-            assert!(context.contains("rex skill show"));
-        }
-
-        let context = rex_context(Some("session-1"), Some("block-1"));
-        assert!(context.contains("REX_SESSION is \"session-1\""));
-        assert!(context.contains("REX_BLOCK is \"block-1\""));
-        assert!(context.contains("An explicit target name takes priority"));
-        assert!(rex_context(Some("a\"b"), None).contains(r#""a\"b""#));
-    }
 
     fn base_options<'a>(tools: &'a [String]) -> SystemPromptOptions<'a> {
         SystemPromptOptions {
