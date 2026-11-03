@@ -66,6 +66,7 @@ fn assistant_tool_call(name: &str, args: Value, stop: StopReason) -> AssistantMe
         name: name.to_string(),
         arguments: args,
         thought_signature: None,
+        arguments_error: None,
     }));
     m.stop_reason = stop;
     m
@@ -79,6 +80,7 @@ fn assistant_tool_batch(name: &str, count: usize) -> AssistantMessage {
             name: name.to_string(),
             arguments: json!({"value": index.to_string()}),
             thought_signature: None,
+            arguments_error: None,
         })
     }));
     message.stop_reason = StopReason::ToolUse;

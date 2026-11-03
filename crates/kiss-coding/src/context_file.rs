@@ -163,6 +163,7 @@ mod tests {
             name: "read".into(),
             arguments: serde_json::json!({"path": "test"}),
             thought_signature: None,
+            arguments_error: None,
         }));
         let call = AgentMessage::Assistant(call);
         let result = AgentMessage::ToolResult(ToolResultMessage {

@@ -410,6 +410,7 @@ mod tests {
             thinking_level_map: BTreeMap::new(),
             headers: BTreeMap::new(),
             sampling_params: Default::default(),
+            sampling_params_by_thinking_level: Default::default(),
         }
     }
 

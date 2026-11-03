@@ -291,7 +291,11 @@ impl SessionOptions {
             tool_names.retain(|name| name != "mcp");
             return Ok(None);
         }
-        let explicitly_excluded = self.exclude_tools.iter().any(|name| name == "mcp");
+        let explicitly_excluded = self
+            .exclude_tools
+            .iter()
+            .any(|pattern| crate::tools::tool_pattern_matches(pattern, "mcp"));
+        // An SDK tool list is exact. Only the CLI keeps MCP beside `--tools`.
         if self.tools.is_none()
             && defaults.is_none()
             && !explicitly_excluded

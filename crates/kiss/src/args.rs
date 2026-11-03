@@ -2,6 +2,11 @@
 
 use clap::{Parser, Subcommand, ValueEnum};
 
+/// Accept provider IDs that Pi renamed, such as `azure-openai-responses`.
+fn provider_id(value: &str) -> Result<String, std::convert::Infallible> {
+    Ok(kiss_ai::registry::canonical_provider_id(value).to_owned())
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum McpScope {
     User,
@@ -26,9 +31,17 @@ pub struct McpServerArgs {
     #[arg(long)]
     pub cwd: Option<String>,
 
+    /// One line that tells the model what the server is for.
+    #[arg(long)]
+    pub description: Option<String>,
+
     /// HTTP authentication mode: oauth, bearer, or none.
-    #[arg(long, value_name = "MODE")]
+    #[arg(long, value_name = "MODE", conflicts_with = "auth_provider")]
     pub auth: Option<String>,
+
+    /// Send the token of this KISS provider login, such as radius. User scope only.
+    #[arg(long, value_name = "PROVIDER", value_parser = provider_id)]
+    pub auth_provider: Option<String>,
 
     /// Bearer token value. Environment expansion uses ${NAME}.
     #[arg(long, value_name = "TOKEN", conflicts_with = "bearer_token_env")]
@@ -57,6 +70,19 @@ pub struct McpServerArgs {
     /// OAuth callback URI.
     #[arg(long)]
     pub redirect_uri: Option<String>,
+
+    /// client_name for OAuth dynamic client registration.
+    #[arg(long, value_name = "NAME")]
+    pub oauth_client_name: Option<String>,
+
+    /// Authorization server metadata URL to use instead of discovery.
+    #[arg(long, value_name = "URL")]
+    pub auth_server_metadata_url: Option<String>,
+
+    /// Identify KISS with this Client ID Metadata Document (https URL)
+    /// instead of dynamic client registration.
+    #[arg(long, value_name = "URL")]
+    pub client_metadata_url: Option<String>,
 
     /// Request timeout in milliseconds.
     #[arg(long)]
@@ -174,7 +200,7 @@ pub enum ProviderCommand {
         api_key_env: Option<String>,
 
         /// Existing provider whose saved credentials authenticate this provider.
-        #[arg(long)]
+        #[arg(long, value_parser = provider_id)]
         auth_provider: Option<String>,
 
         /// Use a placeholder key for a server that needs no client authentication.
@@ -243,7 +269,7 @@ pub enum Command {
     /// Save credentials for a provider.
     Login {
         /// Provider ID. OpenAI Codex uses ChatGPT subscription login.
-        #[arg(default_value = "openai-codex")]
+        #[arg(default_value = "openai-codex", value_parser = provider_id)]
         provider: String,
 
         /// Use a headless flow. Cursor prints a sign-in link; OpenAI Codex uses a device code.
@@ -284,7 +310,7 @@ pub enum Command {
 
     /// Remove saved credentials for a provider.
     Logout {
-        #[arg(default_value = "openai-codex")]
+        #[arg(default_value = "openai-codex", value_parser = provider_id)]
         provider: String,
     },
 
@@ -294,6 +320,7 @@ pub enum Command {
         action_or_provider: Option<String>,
 
         /// Provider to import when the first argument is `import`.
+        #[arg(value_parser = provider_id)]
         provider: Option<String>,
 
         /// Import without an interactive confirmation.
@@ -336,8 +363,9 @@ pub struct Args {
     pub export: Option<Vec<String>>,
 
     // --- model options ---
-    /// Provider, such as anthropic, openai, or google.
-    #[arg(long)]
+    /// Provider to search for --model, such as anthropic, openai, or google.
+    /// Requires --model.
+    #[arg(long, requires = "model", value_parser = provider_id)]
     pub provider: Option<String>,
 
     /// Model pattern or id. Supports provider/id and :<thinking> suffix.
@@ -394,17 +422,23 @@ pub struct Args {
     pub name: Option<String>,
 
     // --- tool options ---
-    /// Allowlist specific tools (comma separated).
+    /// Allowlist tools (comma separated). `*` matches any characters.
+    /// `+name` and `-name` entries change the default tools instead.
+    /// The MCP tool stays on unless an entry names it.
     #[arg(short = 't', long)]
     pub tools: Option<String>,
 
-    /// Disable specific tools (comma separated).
+    /// Disable tools (comma separated). `*` matches any characters.
     #[arg(long = "exclude-tools", short_alias = 'x')]
     pub exclude_tools: Option<String>,
 
     /// Disable all tools.
     #[arg(long = "no-tools")]
     pub no_tools: bool,
+
+    /// Disable MCP servers for this run.
+    #[arg(long = "no-mcp")]
+    pub no_mcp: bool,
 
     // --- resource options ---
     /// Load a skill file or directory (repeatable).
@@ -664,6 +698,27 @@ mod tests {
                 }
             }) if name == "demo"
         ));
+    }
+
+    #[test]
+    fn old_azure_provider_id_means_azure() {
+        let args = Args::try_parse_from([
+            "kiss",
+            "--provider",
+            "azure-openai-responses",
+            "--model",
+            "gpt-6.1-sol",
+        ])
+        .unwrap();
+        assert_eq!(args.provider.as_deref(), Some("azure"));
+        for command in ["login", "logout"] {
+            let args = Args::try_parse_from(["kiss", command, "azure-openai-responses"]).unwrap();
+            assert!(matches!(
+                args.command,
+                Some(Command::Login { provider, .. } | Command::Logout { provider })
+                    if provider == "azure"
+            ));
+        }
     }
 
     #[test]

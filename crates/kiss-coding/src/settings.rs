@@ -265,6 +265,17 @@ pub struct WebMcpSettings {
     pub cdp: Option<Value>,
 }
 
+/// Where `/share` uploads a session.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum SessionShareDestination {
+    /// Radius when signed in, otherwise a secret GitHub gist.
+    #[default]
+    Auto,
+    Gist,
+    Radius,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
@@ -291,6 +302,7 @@ pub struct Settings {
     pub shell_path: Option<String>,
     pub shell_command_prefix: Option<String>,
     pub session_dir: Option<String>,
+    pub session_share_destination: SessionShareDestination,
     pub enabled_models: Option<Vec<String>>,
     pub default_tools: Option<Vec<String>>,
     pub external_editor: Option<String>,

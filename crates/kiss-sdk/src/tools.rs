@@ -73,6 +73,10 @@ pub fn build_tools(
 }
 
 /// Apply an allowlist and an exclusion list to the built-in tool names.
+///
+/// Plain entries replace the selection and may use `*` patterns. `+name` and
+/// `-name` entries add to or remove from the selection that plain entries, or
+/// else the defaults, produce. Exclusions accept `*` patterns and apply last.
 pub fn select_tool_names(
     allow: Option<&[String]>,
     exclude: &[String],
@@ -82,35 +86,109 @@ pub fn select_tool_names(
     if no_tools {
         return Vec::new();
     }
-    let mut names: Vec<String> = match allow {
-        Some(allow) => allow.to_vec(),
-        None => {
-            let entries = defaults.unwrap_or_default();
-            let mut names: Vec<String> = entries
-                .iter()
-                .filter(|name| !name.starts_with(['+', '-']))
-                .cloned()
-                .collect();
-            if defaults.is_none() || (!entries.is_empty() && names.is_empty()) {
-                names = DEFAULT_TOOLS.iter().map(|name| name.to_string()).collect();
-            }
-            for entry in entries {
-                if let Some(name) = entry.strip_prefix('+') {
-                    if !name.is_empty() && !names.iter().any(|existing| existing == name) {
-                        names.push(name.to_string());
-                    }
-                } else if let Some(name) = entry.strip_prefix('-') {
-                    names.retain(|existing| existing != name);
-                }
-            }
-            names
-        }
+    let builtin: Vec<String> = DEFAULT_TOOLS.iter().map(|name| name.to_string()).collect();
+    let default_names = match defaults {
+        None => builtin,
+        Some([]) => Vec::new(),
+        Some(entries) => apply_tool_entries(&builtin, entries),
+    };
+    let mut names = match allow {
+        Some([]) => Vec::new(),
+        Some(allow) => apply_tool_entries(&default_names, allow),
+        None => default_names,
     };
     names.retain(|name| ALL_TOOLS.contains(&name.as_str()));
-    names.retain(|name| !exclude.iter().any(|excluded| excluded == name));
+    names.retain(|name| {
+        !exclude
+            .iter()
+            .any(|pattern| tool_pattern_matches(pattern, name))
+    });
     let mut seen = std::collections::HashSet::new();
     names.retain(|name| seen.insert(name.clone()));
     names
+}
+
+/// Whether the MCP tool joins the selection without being named. An
+/// allowlist keeps it unless an entry names MCP. Configured defaults decide
+/// when no allowlist is given, and exclusions can always remove it.
+pub fn includes_mcp_by_default(
+    allow: Option<&[String]>,
+    exclude: &[String],
+    defaults: Option<&[String]>,
+) -> bool {
+    if exclude
+        .iter()
+        .any(|pattern| tool_pattern_matches(pattern, "mcp"))
+    {
+        return false;
+    }
+    match allow {
+        Some([]) => false,
+        Some(allow)
+            if allow
+                .iter()
+                .any(|entry| entry.trim_start_matches(['+', '-']).starts_with("mcp")) =>
+        {
+            false
+        }
+        Some(allow) if !allow.iter().all(|entry| entry.starts_with(['+', '-'])) => true,
+        _ => defaults.is_none(),
+    }
+}
+
+fn apply_tool_entries(base: &[String], entries: &[String]) -> Vec<String> {
+    let plain: Vec<&String> = entries
+        .iter()
+        .filter(|entry| !entry.starts_with(['+', '-']))
+        .collect();
+    let mut names: Vec<String> = if plain.is_empty() {
+        base.to_vec()
+    } else {
+        plain
+            .iter()
+            .flat_map(|pattern| {
+                if pattern.contains('*') {
+                    ALL_TOOLS
+                        .iter()
+                        .filter(|name| tool_pattern_matches(pattern, name))
+                        .map(|name| name.to_string())
+                        .collect()
+                } else {
+                    vec![pattern.to_string()]
+                }
+            })
+            .collect()
+    };
+    for entry in entries {
+        if let Some(name) = entry.strip_prefix('+') {
+            if !name.is_empty() && !names.iter().any(|existing| existing == name) {
+                names.push(name.to_string());
+            }
+        } else if let Some(name) = entry.strip_prefix('-') {
+            names.retain(|existing| existing != name);
+        }
+    }
+    names
+}
+
+/// Match a tool name against a pattern in which `*` matches any characters.
+pub fn tool_pattern_matches(pattern: &str, name: &str) -> bool {
+    let mut parts = pattern.split('*');
+    let first = parts.next().unwrap_or_default();
+    let Some(mut rest) = name.strip_prefix(first) else {
+        return false;
+    };
+    let parts: Vec<&str> = parts.collect();
+    let Some((last, middle)) = parts.split_last() else {
+        return rest.is_empty();
+    };
+    for part in middle {
+        match rest.find(part) {
+            Some(index) => rest = &rest[index + part.len()..],
+            None => return false,
+        }
+    }
+    rest.len() >= last.len() && rest.ends_with(last)
 }
 
 #[cfg(test)]
@@ -164,5 +242,49 @@ mod tests {
         );
         assert!(select_tool_names(None, &[], false, Some(&[])).is_empty());
         assert!(select_tool_names(Some(&allow), &[], true, Some(&defaults)).is_empty());
+    }
+
+    #[test]
+    fn cli_entries_accept_patterns_and_default_modifiers() {
+        let names = |allow: &[&str], exclude: &[&str]| {
+            let allow: Vec<String> = allow.iter().map(|name| name.to_string()).collect();
+            let exclude: Vec<String> = exclude.iter().map(|name| name.to_string()).collect();
+            select_tool_names(Some(&allow), &exclude, false, None)
+        };
+        assert_eq!(
+            names(&["+grep", "-write"], &[]),
+            ["read", "edit", "bash", "grep"]
+        );
+        assert_eq!(names(&["read", "*it*"], &[]), ["read", "write", "edit"]);
+        assert_eq!(
+            names(&["*"], &["*s*"]),
+            ["read", "write", "edit", "grep", "find", "mcp"]
+        );
+        assert!(tool_pattern_matches(
+            "mcp__radius__*",
+            "mcp__radius__search"
+        ));
+        assert!(!tool_pattern_matches("r*d", "reader"));
+        assert!(tool_pattern_matches("a*a", "aa") && !tool_pattern_matches("a*a", "a"));
+    }
+
+    #[test]
+    fn mcp_stays_on_unless_an_entry_names_it() {
+        let list = |items: &[&str]| {
+            items
+                .iter()
+                .map(|item| item.to_string())
+                .collect::<Vec<_>>()
+        };
+        assert!(includes_mcp_by_default(Some(&list(&["read"])), &[], None));
+        assert!(includes_mcp_by_default(Some(&list(&["+grep"])), &[], None));
+        assert!(!includes_mcp_by_default(
+            Some(&list(&["read", "mcp"])),
+            &[],
+            None
+        ));
+        assert!(!includes_mcp_by_default(None, &list(&["m*"]), None));
+        assert!(!includes_mcp_by_default(None, &[], Some(&list(&["read"]))));
+        assert!(includes_mcp_by_default(None, &[], None));
     }
 }

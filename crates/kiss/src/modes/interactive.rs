@@ -2714,6 +2714,8 @@ fn command_items(
 }
 
 fn command_query(text: &str) -> Option<&str> {
+    // Submission trims the text, so leading whitespace still runs a command.
+    let text = text.trim_start();
     let query = text.strip_prefix('/')?;
     if text.contains('\n') || query.chars().any(char::is_whitespace) {
         return None;
@@ -6047,6 +6049,13 @@ fn start_mcp_authentication(
         )));
         return;
     };
+    if let Some(provider) = server.entry.auth_provider() {
+        app.cells.push(Cell::Error(format!(
+            "MCP server {} uses your {provider} login and has no separate sign-in. Run /login {provider} instead",
+            server.name
+        )));
+        return;
+    }
     let name = server.name.clone();
     let oauth = server.entry.oauth.clone().unwrap_or_default();
     let cancel = CancellationToken::new();
@@ -7750,6 +7759,7 @@ fn run_slash_command(
         "accounts" => run_accounts_command(app, &rest),
         "login" => {
             app.pending_account_add = None;
+            let rest = kiss_ai::registry::canonical_provider_id(&rest);
             if rest.is_empty() {
                 open_login_picker(app);
             } else {
@@ -7757,22 +7767,23 @@ fn run_slash_command(
                     .iter()
                     .copied()
                     .chain(std::iter::once("llama.cpp"))
-                    .find(|provider| provider.eq_ignore_ascii_case(&rest));
+                    .find(|provider| provider.eq_ignore_ascii_case(rest));
                 if let Some(provider) = provider {
                     open_login_methods_picker(app, provider);
                 } else {
-                    open_login_picker_with_filter(app, Some(&rest));
+                    open_login_picker_with_filter(app, Some(rest));
                 }
             }
         }
         "logout" => {
+            let rest = kiss_ai::registry::canonical_provider_id(&rest);
             if rest.is_empty() {
                 open_logout_picker(app);
             } else {
                 if rest == "cursor" {
                     app.model_catalog = None;
                 }
-                match kiss_ai::auth::remove_api_key(&rest) {
+                match kiss_ai::auth::remove_api_key(rest) {
                     Ok(true) => app.cells.push(Cell::Notice(format!(
                         "removed stored credentials for {rest}"
                     ))),
@@ -7940,7 +7951,8 @@ fn run_slash_command(
                 .iter()
                 .find(|template| template.name == other)
             {
-                let args: Vec<&str> = rest.split_whitespace().collect();
+                let args = kiss_coding::prompts::parse_args(&rest);
+                let args: Vec<&str> = args.iter().map(String::as_str).collect();
                 let expanded = kiss_coding::prompts::expand(&template.body, &args);
                 if app.working {
                     session.queue_steering(AgentMessage::user(expanded));
@@ -8176,8 +8188,9 @@ fn start_share_session(
     app.command_cancel = Some(cancel.clone());
     app.command_status = Some("sharing session".into());
     let tx = command_tx.clone();
+    let destination = session.settings().session_share_destination;
     tokio::spawn(async move {
-        let result = share_session_async(&id, &jsonl, &target, &cancel)
+        let result = share_session_async(&id, &jsonl, &target, destination, &cancel)
             .await
             .map_err(|error| format!("session share failed: {error:#}"));
         let _ = std::fs::remove_file(&target);
@@ -8200,10 +8213,26 @@ async fn share_session_async(
     id: &str,
     jsonl: &str,
     html_path: &std::path::Path,
+    destination: kiss_coding::settings::SessionShareDestination,
     cancel: &CancellationToken,
 ) -> Result<String> {
-    if let Some(token) = kiss_ai::auth::resolve_api_key_async("radius", &Default::default()).await?
-    {
+    use kiss_coding::settings::SessionShareDestination;
+    let radius_token = match destination {
+        SessionShareDestination::Gist => None,
+        SessionShareDestination::Auto => {
+            kiss_ai::auth::resolve_api_key_async("radius", &Default::default()).await?
+        }
+        SessionShareDestination::Radius => Some(
+            kiss_ai::auth::resolve_api_key_async("radius", &Default::default())
+                .await?
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "sessionShareDestination is \"radius\", but you are not signed in to Radius. Run /login radius, or set sessionShareDestination to \"auto\" or \"gist\""
+                    )
+                })?,
+        ),
+    };
+    if let Some(token) = radius_token {
         let gateway =
             std::env::var("RADIUS_GATEWAY").unwrap_or_else(|_| "https://radius.pi.dev".into());
         let mut url =

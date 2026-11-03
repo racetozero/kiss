@@ -282,7 +282,7 @@ fn model_endpoint(registry: &Registry, model: &Model) -> Result<String, String> 
                 .into(),
         );
     }
-    if model.base_url.trim().is_empty() && model.api != "azure-openai-responses" {
+    if model.base_url.trim().is_empty() && model.provider != "azure" {
         return Err("set the provider base URL".into());
     }
 
@@ -291,6 +291,11 @@ fn model_endpoint(registry: &Registry, model: &Model) -> Result<String, String> 
             "{}/v1/messages",
             model.base_url.trim_end_matches('/')
         )),
+        "openai-completions" if model.provider == "azure" => {
+            kiss_ai::api::openai_responses::azure_base_url(&model.base_url)
+                .map(|base_url| format!("{base_url}/chat/completions"))
+                .map_err(|error| error.to_string())
+        }
         "openai-completions" => Ok(format!(
             "{}/chat/completions",
             model.base_url.trim_end_matches('/')
@@ -387,7 +392,7 @@ fn raw_authority(value: &str) -> String {
 }
 
 fn unresolved_host(model: &Model) -> String {
-    if model.provider == "azure-openai-responses" {
+    if model.provider == "azure" {
         "<AZURE_OPENAI_BASE_URL>:443".into()
     } else if model.provider == "databricks-unity-gateway" {
         "<DATABRICKS_HOST>:443".into()

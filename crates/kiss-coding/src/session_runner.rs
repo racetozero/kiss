@@ -2087,10 +2087,14 @@ fn is_transient(error: &str) -> bool {
             return false;
         }
     }
-    if e.contains("subscription_sharing_usage_limit_exceeded") {
+    // ChatGPT usage limits, including a Business workspace limit that only
+    // the workspace admin can raise.
+    if e.contains("subscription_sharing_usage_limit_exceeded")
+        || e.contains("subscription_sharing_workplace_individual_usage_limit_exceeded")
+    {
         return false;
     }
-    let transient_status = [429, 500, 502, 503, 504, 520].iter().any(|status| {
+    let transient_status = [429, 500, 502, 503, 504, 520, 524].iter().any(|status| {
         [
             format!("http {status}"),
             format!("status {status}"),
@@ -2117,6 +2121,22 @@ fn is_transient(error: &str) -> bool {
             "stream error",
             "subscription_sharing_usage_unavailable",
             "subscription_sharing_user_unavailable",
+            "server error",
+            "server_busy",
+            "servers are currently busy",
+            "model is at capacity",
+            "service unavailable",
+            "service is temporarily unavailable",
+            "provider returned error",
+            "provider returned an error",
+            "unable to forward upstream",
+            "upstream request failed",
+            "upstream_stream_read_error",
+            "stream was interrupted",
+            "stream disconnected before completion",
+            "pending stream has been canceled",
+            "http2 stream failed",
+            "http/2 stream failed",
         ]
         .iter()
         .any(|needle| e.contains(needle))
@@ -2145,6 +2165,7 @@ mod ephemeral_tests {
             thinking_level_map: BTreeMap::new(),
             headers: BTreeMap::new(),
             sampling_params: Default::default(),
+            sampling_params_by_thinking_level: Default::default(),
         }
     }
 
@@ -2354,6 +2375,7 @@ mod ephemeral_tests {
                     name: "bash".into(),
                     arguments: serde_json::json!({"command": format!("printf '%s' '{replacement}' > '{quoted_path}'")}),
                     thought_signature: None,
+                    arguments_error: None,
                 }));
                 message.stop_reason = StopReason::ToolUse;
             } else if step == 3 {
@@ -2562,6 +2584,24 @@ mod ephemeral_tests {
         assert!(!is_transient("connection settings are invalid"));
         assert!(!is_transient(
             "HTTP 429: subscription_sharing_usage_limit_exceeded"
+        ));
+        assert!(is_transient(
+            "Selected model is at capacity. Please try again"
+        ));
+        assert!(is_transient(r#"{"error":{"code":"server_busy"}}"#));
+        assert!(is_transient("The service is temporarily unavailable"));
+        assert!(is_transient("The upstream provider returned an error"));
+        assert!(is_transient("Unable to forward upstream stream"));
+        assert!(is_transient(
+            "stream disconnected before completion: stream closed before response.completed"
+        ));
+        assert!(is_transient("The pending stream has been canceled"));
+        assert!(is_transient("Provider finish_reason: error (server error)"));
+        assert!(!is_transient(
+            "request req_5030 failed: invalid tool schema"
+        ));
+        assert!(!is_transient(
+            "subscription_sharing_workplace_individual_usage_limit_exceeded"
         ));
         assert!(is_transient("subscription_sharing_usage_unavailable"));
         assert!(is_transient("subscription_sharing_user_unavailable"));

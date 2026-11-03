@@ -184,6 +184,43 @@
         }
       },
       "type": "chat"
+    },
+    "chat:muse-wonder-1.0": {
+      "id": "muse-wonder-1.0",
+      "name": "Muse Wonder",
+      "api": "openai-responses",
+      "provider": "meta",
+      "baseUrl": "https://api.meta.ai/v1",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": {
+        "input": 4,
+        "output": 20,
+        "cacheRead": 0.2,
+        "cacheWrite": 0
+      },
+      "contextWindow": 1048576,
+      "maxTokens": 131072,
+      "thinkingLevelMap": {
+        "off": null,
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh",
+        "max": "max"
+      },
+      "inputLimits": {
+        "images": {
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
+        }
+      },
+      "type": "chat"
     }
   }
 }

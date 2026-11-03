@@ -41,7 +41,7 @@
         "supportsDeveloperRole": false
       },
       "contextWindow": 163840,
-      "maxTokens": 163840,
+      "maxTokens": 32768,
       "type": "chat"
     },
     "chat:deepseek-ai/DeepSeek-V3": {
@@ -329,6 +329,47 @@
       },
       "type": "chat"
     },
+    "chat:deepseek-ai/DeepSeek-V4.1-Flash-1017": {
+      "id": "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+      "name": "DeepSeek V4.1 Flash 1017",
+      "api": "openai-completions",
+      "provider": "huggingface",
+      "baseUrl": "https://router.huggingface.co/v1",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": {
+        "input": 0.3,
+        "output": 1.2,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
+      "compat": {
+        "supportsStrictMode": true,
+        "supportsDeveloperRole": false
+      },
+      "contextWindow": 1048576,
+      "maxTokens": 384000,
+      "thinkingLevelMap": {
+        "off": null,
+        "minimal": null,
+        "low": "low",
+        "medium": null,
+        "high": "high",
+        "xhigh": null,
+        "max": "max"
+      },
+      "inputLimits": {
+        "images": {
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
+        }
+      },
+      "type": "chat"
+    },
     "chat:google/gemma-3-12b-it": {
       "id": "google/gemma-3-12b-it",
       "name": "Gemma 3 12B IT",
@@ -531,6 +572,28 @@
       },
       "contextWindow": 131072,
       "maxTokens": 4096,
+      "type": "chat"
+    },
+    "chat:MiniMaxAI/MiniMax-M1-80k": {
+      "id": "MiniMaxAI/MiniMax-M1-80k",
+      "name": "MiniMax M1 80K",
+      "api": "openai-completions",
+      "provider": "huggingface",
+      "baseUrl": "https://router.huggingface.co/v1",
+      "reasoning": true,
+      "input": ["text"],
+      "cost": {
+        "input": 0.55,
+        "output": 2.2,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
+      "compat": {
+        "supportsStrictMode": true,
+        "supportsDeveloperRole": false
+      },
+      "contextWindow": 1000000,
+      "maxTokens": 80000,
       "type": "chat"
     },
     "chat:MiniMaxAI/MiniMax-M2": {
@@ -1003,7 +1066,7 @@
         "supportsDeveloperRole": false
       },
       "contextWindow": 262144,
-      "maxTokens": 131072,
+      "maxTokens": 81920,
       "type": "chat"
     },
     "chat:Qwen/Qwen3-30B-A3B": {
@@ -1050,6 +1113,37 @@
       "maxTokens": 16384,
       "type": "chat"
     },
+    "chat:Qwen/Qwen3-8B": {
+      "id": "Qwen/Qwen3-8B",
+      "name": "Qwen3 8B",
+      "api": "openai-completions",
+      "provider": "huggingface",
+      "baseUrl": "https://router.huggingface.co/v1",
+      "reasoning": true,
+      "input": ["text"],
+      "cost": {
+        "input": 0.07,
+        "output": 0.18,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
+      "compat": {
+        "supportsStrictMode": true,
+        "supportsDeveloperRole": false
+      },
+      "contextWindow": 40960,
+      "maxTokens": 32768,
+      "thinkingLevelMap": {
+        "off": "none",
+        "minimal": null,
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": null,
+        "max": null
+      },
+      "type": "chat"
+    },
     "chat:Qwen/Qwen3-Coder-30B-A3B-Instruct": {
       "id": "Qwen/Qwen3-Coder-30B-A3B-Instruct",
       "name": "Qwen3-Coder 30B-A3B Instruct",
@@ -1091,7 +1185,7 @@
         "supportsDeveloperRole": false
       },
       "contextWindow": 262144,
-      "maxTokens": 66536,
+      "maxTokens": 65536,
       "type": "chat"
     },
     "chat:Qwen/Qwen3-Coder-Next": {
@@ -1135,7 +1229,7 @@
         "supportsDeveloperRole": false
       },
       "contextWindow": 262144,
-      "maxTokens": 66536,
+      "maxTokens": 32768,
       "type": "chat"
     },
     "chat:Qwen/Qwen3-Next-80B-A3B-Thinking": {
@@ -1144,7 +1238,7 @@
       "api": "openai-completions",
       "provider": "huggingface",
       "baseUrl": "https://router.huggingface.co/v1",
-      "reasoning": false,
+      "reasoning": true,
       "input": ["text"],
       "cost": {
         "input": 0.3,
@@ -1157,7 +1251,7 @@
         "supportsDeveloperRole": false
       },
       "contextWindow": 262144,
-      "maxTokens": 131072,
+      "maxTokens": 32768,
       "type": "chat"
     },
     "chat:Qwen/Qwen3-VL-235B-A22B-Instruct": {
@@ -1221,6 +1315,38 @@
         "xhigh": null,
         "max": null
       },
+      "inputLimits": {
+        "images": {
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
+        }
+      },
+      "type": "chat"
+    },
+    "chat:Qwen/Qwen3-VL-30B-A3B-Instruct": {
+      "id": "Qwen/Qwen3-VL-30B-A3B-Instruct",
+      "name": "Qwen3 VL 30B A3B Instruct",
+      "api": "openai-completions",
+      "provider": "huggingface",
+      "baseUrl": "https://router.huggingface.co/v1",
+      "reasoning": false,
+      "input": ["text", "image"],
+      "cost": {
+        "input": 0.2,
+        "output": 0.7,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
+      "compat": {
+        "supportsStrictMode": true,
+        "supportsDeveloperRole": false
+      },
+      "contextWindow": 131072,
+      "maxTokens": 32768,
       "inputLimits": {
         "images": {
           "resize": {

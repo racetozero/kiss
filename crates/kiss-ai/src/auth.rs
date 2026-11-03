@@ -12,6 +12,7 @@ use std::time::SystemTime;
 
 pub mod accounts;
 pub mod anthropic;
+pub mod anthropic_federation;
 mod azure;
 pub mod cursor;
 mod device_code;
@@ -105,6 +106,7 @@ pub fn is_oauth_access_token(provider: &str, access_token: &str) -> bool {
 
 pub fn is_bearer_access_token(provider: &str, access_token: &str) -> bool {
     matches!(provider, "databricks-unity-gateway" | "snowflake-cortex")
+        || (provider == "anthropic" && access_token.starts_with(anthropic_federation::TOKEN_PREFIX))
         || (provider == "anthropic"
             && std::env::var("ANTHROPIC_AUTH_TOKEN")
                 .is_ok_and(|value| !value.is_empty() && value == access_token))
@@ -229,7 +231,17 @@ pub fn auth_file_path() -> Option<PathBuf> {
 
 fn read_auth_file_at(path: &Path) -> AuthFile {
     match std::fs::read_to_string(path) {
-        Ok(text) => serde_json::from_str(&text).unwrap_or_default(),
+        Ok(text) => {
+            let mut auth: AuthFile = serde_json::from_str(&text).unwrap_or_default();
+            // Logins saved under an old provider ID belong to the current ID.
+            // The next write saves them under the current ID.
+            for (old, new) in crate::registry::RENAMED_PROVIDER_IDS {
+                if let Some(entry) = auth.entries.remove(*old) {
+                    auth.entries.entry((*new).into()).or_insert(entry);
+                }
+            }
+            auth
+        }
         Err(_) => AuthFile::default(),
     }
 }
@@ -412,6 +424,9 @@ pub fn resolve_credential_local(
             "google-application-default-credentials",
         ));
     }
+    if provider == "anthropic" && anthropic_federation::configured() {
+        return Some(ResolvedCredential::bearer(anthropic_federation::MARKER));
+    }
     declared.get(provider).and_then(|value| {
         value
             .strip_prefix('$')
@@ -569,6 +584,11 @@ async fn resolve_api_key_async_generic(
     }
     if provider == "google-vertex" && has_google_application_credentials() {
         return Ok(Some(google_application_access_token().await?));
+    }
+    // Workload identity federation comes after keys and tokens, as in the
+    // Anthropic SDK.
+    if provider == "anthropic" && anthropic_federation::configured() {
+        return Ok(Some(anthropic_federation::access_token().await?));
     }
     Ok(declared.get(provider).cloned())
 }
@@ -804,6 +824,21 @@ mod tests {
         assert_eq!(auth.entries["old"].access_token(), "one");
         assert_eq!(auth.entries["detailed"].access_token(), "two");
         assert_eq!(auth.entries["oauth"].access_token(), "three");
+
+        // An Azure login saved under the old provider ID belongs to `azure`.
+        std::fs::write(&path, r#"{"azure-openai-responses":"old-azure"}"#).unwrap();
+        let auth = read_auth_file_at(&path);
+        assert_eq!(auth.entries["azure"].access_token(), "old-azure");
+        assert!(!auth.entries.contains_key("azure-openai-responses"));
+        std::fs::write(
+            &path,
+            r#"{"azure-openai-responses":"old-azure","azure":"new-azure"}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            read_auth_file_at(&path).entries["azure"].access_token(),
+            "new-azure"
+        );
     }
 
     #[test]
@@ -898,7 +933,7 @@ mod tests {
             [LoginMethod::BrowserOAuth, LoginMethod::DeviceOAuth]
         );
         assert_eq!(
-            login_methods("azure-openai-responses"),
+            login_methods("azure"),
             vec![LoginMethod::ApiKey, LoginMethod::AzureEntraId]
         );
     }
@@ -906,7 +941,7 @@ mod tests {
     #[test]
     fn azure_login_exposes_both_credential_sources() {
         assert_eq!(
-            env_var_names("azure-openai-responses"),
+            env_var_names("azure"),
             &["AZURE_OPENAI_API_KEY", "AZURE_OPENAI_AUTH_TOKEN"]
         );
     }

@@ -509,6 +509,7 @@ async fn execute_parallel_tools(
                                     name: String::new(),
                                     arguments: Value::Null,
                                     thought_signature: None,
+                                    arguments_error: None,
                                 },
                                 result: ToolResult::text(format!("tool task failed: {join_error}")),
                                 is_error: true,
@@ -595,6 +596,15 @@ async fn prepare_tool_call(
     let Some(tool) = context.find_tool(&tc.name) else {
         return Err(error(format!("Tool {} not found", tc.name), false));
     };
+    if let Some(arguments_error) = &tc.arguments_error {
+        return Err(error(
+            format!(
+                "Invalid arguments for tool \"{}\": {arguments_error}",
+                tc.name
+            ),
+            false,
+        ));
+    }
     let args = tool.prepare_arguments(tc.arguments.clone());
     if let Err(msg) = validate_arguments(&tool.parameters(), &args) {
         return Err(error(msg, false));

@@ -1,12 +1,12 @@
 //! MCP OAuth 2.1 orchestration and persistent credential storage.
 
-use crate::config::{OAuthConfig, OAuthGrantType};
+use crate::config::{ClientRegistration, OAuthConfig, OAuthGrantType};
 use anyhow::{Context as _, Result, bail};
 use async_trait::async_trait;
 use fs2::FileExt as _;
 use rmcp::transport::auth::{
-    AuthError, AuthorizationManager, AuthorizationRequest, ClientCredentialsConfig,
-    CredentialStore, OAuthState, StoredCredentials,
+    AuthError, AuthorizationManager, AuthorizationMetadata, AuthorizationRequest,
+    AuthorizationSession, ClientCredentialsConfig, CredentialStore, OAuthState, StoredCredentials,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -179,11 +179,36 @@ async fn begin_login_with_path(
         .redirect_uri
         .clone()
         .unwrap_or_else(|| DEFAULT_REDIRECT_URI.to_string());
-    let mut state = OAuthState::Unauthorized(
-        new_manager(server_name, server_url, oauth, credential_path).await?,
-    );
+    let mut manager = base_manager(server_name, server_url, oauth, credential_path).await?;
+    let metadata = match &oauth.auth_server_metadata_url {
+        Some(url) => fetch_metadata(server_name, url).await?,
+        None => {
+            manager
+                .resolve_metadata_from_challenge(challenge)
+                .await
+                .context("discover the MCP OAuth authorization server")?
+                .metadata
+        }
+    };
     let mut request = AuthorizationRequest::new(&redirect_uri)
         .with_client_name(oauth.client_name.as_deref().unwrap_or("KISS MCP Client"));
+    if oauth.client_registration == ClientRegistration::Cimd {
+        // rmcp silently falls back to dynamic registration without support.
+        if metadata
+            .additional_fields
+            .get("client_id_metadata_document_supported")
+            .and_then(serde_json::Value::as_bool)
+            != Some(true)
+        {
+            bail!(
+                "the authorization server of MCP server `{server_name}` does not support Client ID Metadata Documents. Remove oauth.clientRegistration \"cimd\" to use dynamic client registration"
+            )
+        }
+        if let Some(url) = &oauth.client_metadata_url {
+            request = request.with_client_metadata_url(url);
+        }
+    }
+    manager.set_metadata(metadata);
     if let Some(scopes) = &oauth.scope {
         request = request.with_scopes(scopes.split_whitespace());
     }
@@ -193,13 +218,13 @@ async fn begin_login_with_path(
     if let Some(client_secret) = &oauth.client_secret {
         request = request.with_client_secret(client_secret);
     }
-    if let Some(challenge) = challenge {
-        request = request.with_challenge(challenge);
-    }
-    state
-        .start_authorization(request)
+    // Build the session directly. `OAuthState::start_authorization` would
+    // discover the metadata again and replace a configured document.
+    let session = AuthorizationSession::new(manager, request)
         .await
+        .map_err(|(_, error)| error)
         .context("start MCP OAuth authorization")?;
+    let state = OAuthState::Session(session);
     let authorization_url = add_authorization_params(
         &state.get_authorization_url().await?,
         &oauth.authorization_params,
@@ -259,6 +284,19 @@ pub async fn new_manager(
     oauth: &OAuthConfig,
     credential_path: Option<PathBuf>,
 ) -> Result<AuthorizationManager> {
+    let mut manager = base_manager(server_name, server_url, oauth, credential_path).await?;
+    if let Some(url) = &oauth.auth_server_metadata_url {
+        manager.set_metadata(fetch_metadata(server_name, url).await?);
+    }
+    Ok(manager)
+}
+
+async fn base_manager(
+    server_name: &str,
+    server_url: &str,
+    oauth: &OAuthConfig,
+    credential_path: Option<PathBuf>,
+) -> Result<AuthorizationManager> {
     crate::ensure_tls_crypto_provider();
     let mut manager = AuthorizationManager::new(server_url)
         .await
@@ -270,6 +308,31 @@ pub async fn new_manager(
     };
     manager.set_credential_store(store);
     Ok(manager)
+}
+
+/// Fetch a configured RFC 8414 or OpenID Connect metadata document. It is
+/// trusted as configured, so its issuer is not compared with the server URL.
+async fn fetch_metadata(server_name: &str, url: &str) -> Result<AuthorizationMetadata> {
+    let response = kiss_ai::stream::http_client()
+        .get(url)
+        .header("accept", "application/json")
+        .timeout(std::time::Duration::from_secs(15))
+        .send()
+        .await
+        .with_context(|| {
+            format!("fetch oauth.authServerMetadataUrl {url} for MCP server `{server_name}`")
+        })?;
+    let status = response.status();
+    if !status.is_success() {
+        bail!(
+            "oauth.authServerMetadataUrl {url} for MCP server `{server_name}` returned HTTP {status}. Check the URL of the authorization server metadata document"
+        )
+    }
+    response.json().await.with_context(|| {
+        format!(
+            "oauth.authServerMetadataUrl {url} for MCP server `{server_name}` is not an authorization server metadata document with authorization_endpoint and token_endpoint"
+        )
+    })
 }
 
 pub async fn has_credentials(server_name: &str, server_url: &str) -> Result<bool> {
@@ -433,6 +496,20 @@ mod tests {
                                 }))
                                 .unwrap(),
                             )
+                        } else if target == "/configured-metadata" {
+                            (
+                            "200 OK",
+                            "application/json",
+                            serde_json::to_vec(&json!({
+                                "issuer": base,
+                                "authorization_endpoint": format!("{base}/configured-authorize"),
+                                "token_endpoint": format!("{base}/token"),
+                                "response_types_supported": ["code"],
+                                "code_challenge_methods_supported": ["S256"],
+                                "client_id_metadata_document_supported": true
+                            }))
+                            .unwrap(),
+                        )
                         } else if target == "/token" {
                             (
                                 "200 OK",
@@ -505,6 +582,44 @@ mod tests {
         assert!(saved.token_response.is_some());
         store.clear().await.unwrap();
         assert!(store.load().await.unwrap().is_none());
+        server_cancel.cancel();
+    }
+
+    #[tokio::test]
+    async fn configured_metadata_and_client_metadata_document_drive_login() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("oauth.json");
+        let (base, server_cancel) = start_oauth_server().await;
+        let server_url = format!("{base}/mcp");
+        let document = "https://example.com/kiss/client.json";
+
+        // Discovered metadata does not advertise CIMD support.
+        let cimd = OAuthConfig {
+            client_registration: ClientRegistration::Cimd,
+            client_metadata_url: Some(document.to_string()),
+            ..Default::default()
+        };
+        let error = begin_login_with_path("demo", &server_url, &cimd, None, Some(path.clone()))
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("does not support Client ID Metadata Documents"),
+            "{error}"
+        );
+
+        // The configured document replaces discovery and supports CIMD.
+        let configured = OAuthConfig {
+            auth_server_metadata_url: Some(format!("{base}/configured-metadata")),
+            ..cimd
+        };
+        let pending = begin_login_with_path("demo", &server_url, &configured, None, Some(path))
+            .await
+            .unwrap();
+        let authorization = url::Url::parse(&pending.authorization_url).unwrap();
+        assert_eq!(authorization.path(), "/configured-authorize");
+        let params = authorization.query_pairs().collect::<BTreeMap<_, _>>();
+        assert_eq!(params.get("client_id").unwrap(), document);
         server_cancel.cancel();
     }
 }

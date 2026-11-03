@@ -18,8 +18,78 @@ pub fn parse_salvage(input: &str) -> Option<Value> {
     if let Ok(v) = serde_json::from_str(trimmed) {
         return Some(v);
     }
-    let repaired = repair(trimmed)?;
+    let repaired = repair(&repair_strings(trimmed))?;
     serde_json::from_str(&repaired).ok()
+}
+
+/// Parse the complete arguments of a finished tool call. Unlike
+/// [`parse_salvage`], this never keeps a truncated prefix: text that is not a
+/// JSON object is an error that names the text the model sent.
+pub fn parse_tool_arguments(input: &str) -> Result<Value, String> {
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return Ok(Value::Object(serde_json::Map::new()));
+    }
+    let parsed = serde_json::from_str::<Value>(trimmed).or_else(|error| {
+        let repaired = repair_strings(trimmed);
+        if repaired == trimmed {
+            Err(error)
+        } else {
+            serde_json::from_str(&repaired)
+        }
+    });
+    match parsed {
+        Ok(value @ Value::Object(_)) => Ok(value),
+        Ok(_) => Err(format!(
+            "Tool arguments must be a JSON object\n\nReceived arguments:\n{input}"
+        )),
+        Err(error) => Err(format!("{error}\n\nReceived arguments:\n{input}")),
+    }
+}
+
+/// Repair string literals: escape raw control characters and double a
+/// backslash that does not start a valid escape, such as `\usepackage`.
+fn repair_strings(input: &str) -> String {
+    let mut out = String::with_capacity(input.len() + 8);
+    let mut in_string = false;
+    let mut chars = input.chars().peekable();
+    while let Some(c) = chars.next() {
+        if !in_string {
+            in_string = c == '"';
+            out.push(c);
+            continue;
+        }
+        match c {
+            '"' => {
+                in_string = false;
+                out.push(c);
+            }
+            '\\' => match chars.peek().copied() {
+                Some('u') => {
+                    let digits: String = chars.clone().skip(1).take(4).collect();
+                    if digits.len() == 4 && digits.chars().all(|d| d.is_ascii_hexdigit()) {
+                        out.push_str("\\u");
+                        out.push_str(&digits);
+                        chars.nth(4);
+                    } else {
+                        out.push_str("\\\\");
+                    }
+                }
+                Some(next @ ('"' | '\\' | '/' | 'b' | 'f' | 'n' | 'r' | 't')) => {
+                    out.push('\\');
+                    out.push(next);
+                    chars.next();
+                }
+                _ => out.push_str("\\\\"),
+            },
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if c < ' ' => out.push_str(&format!("\\u{:04x}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    out
 }
 
 fn repair(input: &str) -> Option<String> {
@@ -129,6 +199,24 @@ mod tests {
     #[test]
     fn complete_json_passes_through() {
         assert_eq!(parse_salvage(r#"{"a": 1}"#), Some(json!({"a": 1})));
+    }
+
+    #[test]
+    fn invalid_unicode_escapes_are_kept_as_text() {
+        let raw = r#"{"path": "a.tex", "content": "\usepackage{x}\n\u00e9"}"#;
+        assert_eq!(
+            parse_tool_arguments(raw).unwrap(),
+            json!({"path": "a.tex", "content": "\\usepackage{x}\né"})
+        );
+        assert_eq!(parse_salvage(raw), parse_tool_arguments(raw).ok());
+    }
+
+    #[test]
+    fn malformed_final_arguments_are_errors_with_the_raw_text() {
+        let error = parse_tool_arguments(r#"{"path": "a", "content": "#).unwrap_err();
+        assert!(error.ends_with("Received arguments:\n{\"path\": \"a\", \"content\": "));
+        assert!(parse_tool_arguments("[1]").is_err());
+        assert_eq!(parse_tool_arguments(" ").unwrap(), json!({}));
     }
 
     #[test]

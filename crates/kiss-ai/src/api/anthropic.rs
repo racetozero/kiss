@@ -33,9 +33,17 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
     {
         builder.message.provider_thinking_level = Some(adaptive_effort(model, options.reasoning));
     }
+    // A workload identity federation token is an OAuth bearer token, but
+    // not a Claude subscription token.
+    let (api_key, federated) =
+        match api_key.strip_prefix(crate::auth::anthropic_federation::TOKEN_PREFIX) {
+            Some(token) => (token.to_string(), true),
+            None => (api_key, false),
+        };
     let oauth = model.provider == "anthropic"
+        && !federated
         && crate::auth::is_oauth_access_token(&model.provider, &api_key);
-    let bearer = crate::auth::is_bearer_access_token(&model.provider, &api_key);
+    let bearer = federated || crate::auth::is_bearer_access_token(&model.provider, &api_key);
     let base_url = provider_base_url(model, &api_key);
     let url = format!("{}/v1/messages", base_url.trim_end_matches('/'));
     let mut request = http_client()
@@ -82,7 +90,10 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
         }
     } else {
         request = request.json(&body);
-        let beta_features = beta_features(model, false, options.fast_mode);
+        let mut beta_features = beta_features(model, false, options.fast_mode);
+        if federated {
+            beta_features.insert(0, "oauth-2025-04-20");
+        }
         if !beta_features.is_empty() {
             request = request.header("anthropic-beta", beta_features.join(","));
         }
@@ -460,7 +471,13 @@ fn build_request(model: &Model, context: &Context, options: &StreamOptions) -> V
     }
 
     let mut messages: Vec<Value> = Vec::new();
+    // Anthropic rejects images in error tool results. Send them after the
+    // turn's tool results, in the same user message.
+    let mut error_images: Vec<Value> = Vec::new();
     for message in &context.messages {
+        if !matches!(message, Message::ToolResult(_)) && !error_images.is_empty() {
+            append_error_images(&mut messages, &mut error_images);
+        }
         match message {
             Message::User(user) => {
                 let content = match &user.content {
@@ -526,7 +543,37 @@ fn build_request(model: &Model, context: &Context, options: &StreamOptions) -> V
                 }
             }
             Message::ToolResult(result) => {
-                let inner: Vec<Value> = result.content.iter().filter_map(user_block).collect();
+                let has_images = result
+                    .content
+                    .iter()
+                    .any(|block| matches!(block, ContentBlock::Image { .. }));
+                let inner: Vec<Value> = if result.is_error && has_images {
+                    error_images.push(json!({
+                        "type": "text",
+                        "text": format!(
+                            "Images from the error result of tool call {} ({}):",
+                            result.tool_call_id, result.tool_name
+                        ),
+                    }));
+                    let mut inner = Vec::new();
+                    for block in &result.content {
+                        if matches!(block, ContentBlock::Image { .. }) {
+                            error_images.extend(user_block(block));
+                            if inner.last().is_none_or(|last: &Value| {
+                                last["text"] != ERROR_TOOL_IMAGE_PLACEHOLDER
+                            }) {
+                                inner.push(
+                                    json!({"type": "text", "text": ERROR_TOOL_IMAGE_PLACEHOLDER}),
+                                );
+                            }
+                        } else {
+                            inner.extend(user_block(block));
+                        }
+                    }
+                    inner
+                } else {
+                    result.content.iter().filter_map(user_block).collect()
+                };
                 let tool_result = json!({
                     "type": "tool_result",
                     "tool_use_id": super::anthropic_tool_id(&result.tool_call_id),
@@ -547,6 +594,7 @@ fn build_request(model: &Model, context: &Context, options: &StreamOptions) -> V
             }
         }
     }
+    append_error_images(&mut messages, &mut error_images);
 
     // Cache breakpoint on the final message so the conversation prefix caches.
     if let Some(last) = messages.last_mut()
@@ -566,6 +614,18 @@ fn build_request(model: &Model, context: &Context, options: &StreamOptions) -> V
 
     body["messages"] = Value::Array(messages);
     body
+}
+
+const ERROR_TOOL_IMAGE_PLACEHOLDER: &str = "(image attached after the tool results)";
+
+fn append_error_images(messages: &mut [Value], error_images: &mut Vec<Value>) {
+    if let Some(content) = messages
+        .last_mut()
+        .and_then(|last| last["content"].as_array_mut())
+    {
+        content.append(error_images);
+    }
+    error_images.clear();
 }
 
 fn user_block(block: &ContentBlock) -> Option<Value> {
@@ -603,6 +663,7 @@ mod tests {
             thinking_level_map: BTreeMap::new(),
             headers: BTreeMap::new(),
             sampling_params: Default::default(),
+            sampling_params_by_thinking_level: Default::default(),
         }
     }
 
@@ -657,6 +718,94 @@ mod tests {
         assert!(builder.message.usage.cache_read_available);
     }
 
+    #[tokio::test]
+    async fn federated_token_uses_bearer_auth_and_the_oauth_beta() {
+        use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+        crate::stream::ensure_tls_crypto_provider();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut request = Vec::new();
+            let mut buffer = [0; 8192];
+            while !request.windows(4).any(|window| window == b"\r\n\r\n") {
+                let read = socket.read(&mut buffer).await.unwrap();
+                request.extend_from_slice(&buffer[..read]);
+            }
+            let body = "{\"type\":\"error\",\"error\":{\"message\":\"stop\"}}";
+            let response = format!(
+                "HTTP/1.1 400 Bad Request\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            socket.write_all(response.as_bytes()).await.unwrap();
+            String::from_utf8_lossy(&request).to_ascii_lowercase()
+        });
+        let mut model = model(OpenAICompat::default());
+        model.base_url = format!("http://{address}");
+        let options = StreamOptions {
+            credential: Some(crate::ResolvedCredential::bearer(format!(
+                "{}workload-token",
+                crate::auth::anthropic_federation::TOKEN_PREFIX
+            ))),
+            ..Default::default()
+        };
+        let _ = crate::stream_simple(&model, &Context::default(), &options)
+            .result()
+            .await;
+        let head = server.await.unwrap();
+        assert!(
+            head.contains("authorization: bearer workload-token"),
+            "{head}"
+        );
+        assert!(head.contains("anthropic-beta: oauth-2025-04-20"), "{head}");
+        assert!(!head.contains("x-api-key"), "{head}");
+        assert!(!head.contains("claude-cli"), "{head}");
+    }
+
+    #[test]
+    fn error_tool_result_images_follow_the_tool_results() {
+        let tool_result = |id: &str, is_error: bool| {
+            Message::ToolResult(crate::types::ToolResultMessage {
+                tool_call_id: id.into(),
+                tool_name: "read".into(),
+                content: vec![
+                    ContentBlock::Text {
+                        text: "failed".into(),
+                        text_signature: None,
+                    },
+                    ContentBlock::Image {
+                        data: "aW1n".into(),
+                        mime_type: "image/png".into(),
+                    },
+                ],
+                details: None,
+                usage: None,
+                is_error,
+                timestamp: 0,
+            })
+        };
+        let context = Context {
+            messages: vec![tool_result("a", true), tool_result("b", false)],
+            ..Default::default()
+        };
+        let body = build_request(
+            &model(OpenAICompat::default()),
+            &context,
+            &StreamOptions::default(),
+        );
+        let content = body["messages"][0]["content"].as_array().unwrap();
+        let types: Vec<&str> = content
+            .iter()
+            .map(|part| part["type"].as_str().unwrap())
+            .collect();
+        assert_eq!(types, ["tool_result", "tool_result", "text", "image"]);
+        assert_eq!(
+            content[0]["content"][1]["text"],
+            ERROR_TOOL_IMAGE_PLACEHOLDER
+        );
+        assert_eq!(content[1]["content"][1]["type"], "image");
+    }
+
     #[test]
     fn foreign_tool_ids_are_sanitized() {
         let id = "call_abc|fc_123";
@@ -668,6 +817,7 @@ mod tests {
                 name: "bash".into(),
                 arguments: json!({}),
                 thought_signature: None,
+                arguments_error: None,
             }));
         let body = build_request(
             &model(OpenAICompat::default()),

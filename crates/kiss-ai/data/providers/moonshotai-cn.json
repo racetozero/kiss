@@ -9,9 +9,9 @@
       "reasoning": true,
       "input": ["text", "image"],
       "cost": {
-        "input": 0.95,
-        "output": 4,
-        "cacheRead": 0.16,
+        "input": 0.9711,
+        "output": 4.0337,
+        "cacheRead": 0.1643,
         "cacheWrite": 0
       },
       "contextWindow": 262144,
@@ -46,9 +46,9 @@
       "reasoning": true,
       "input": ["text", "image"],
       "cost": {
-        "input": 0.95,
-        "output": 4,
-        "cacheRead": 0.19,
+        "input": 0.9711,
+        "output": 4.0337,
+        "cacheRead": 0.1942,
         "cacheWrite": 0
       },
       "contextWindow": 262144,
@@ -86,9 +86,9 @@
       "reasoning": true,
       "input": ["text", "image"],
       "cost": {
-        "input": 1.9,
-        "output": 8,
-        "cacheRead": 0.38,
+        "input": 1.9421,
+        "output": 8.0673,
+        "cacheRead": 0.3884,
         "cacheWrite": 0
       },
       "contextWindow": 262144,

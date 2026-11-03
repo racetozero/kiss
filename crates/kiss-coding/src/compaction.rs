@@ -87,11 +87,10 @@ pub fn serialize_conversation(messages: &[Message]) -> String {
                 let mut tool_calls: Vec<String> = Vec::new();
                 for block in &a.content {
                     match block {
-                        ContentBlock::Thinking { thinking, .. } => {
-                            if !thinking.is_empty() {
-                                out.push_str(&format!("[Assistant thinking]: {thinking}\n"));
-                            }
-                        }
+                        // Replayed thinking is often not in the live context. Including
+                        // it can make the summary request larger than the context it
+                        // summarizes.
+                        ContentBlock::Thinking { .. } => {}
                         ContentBlock::Text { text, .. } => {
                             if !text.is_empty() {
                                 out.push_str(&format!("[Assistant]: {text}\n"));
@@ -487,12 +486,14 @@ mod tests {
             name: "read".into(),
             arguments: json!({"path": "src/a.rs"}),
             thought_signature: None,
+            arguments_error: None,
         }));
         a.content.push(ContentBlock::ToolCall(ToolCall {
             id: "2".into(),
             name: "edit".into(),
             arguments: json!({"path": "src/b.rs"}),
             thought_signature: None,
+            arguments_error: None,
         }));
         let (read, modified) = extract_file_ops(&[AgentMessage::Assistant(a)]);
         assert_eq!(read, vec!["src/a.rs"]);
@@ -532,6 +533,7 @@ mod tests {
             name: "read".into(),
             arguments: json!({"path": "src/lib.rs"}),
             thought_signature: None,
+            arguments_error: None,
         }));
         assert_eq!(
             summary_failure(&message).as_deref(),

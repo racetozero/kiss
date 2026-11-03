@@ -2,7 +2,9 @@
 
 use crate::args::{McpCommand, McpScope, McpServerArgs};
 use anyhow::{Context as _, Result, bail};
-use kiss_mcp::config::{self, AuthMode, AuthSetting, ConfigScope, OAuthConfig, OAuthGrantType};
+use kiss_mcp::config::{
+    self, AuthMode, AuthSetting, ClientRegistration, ConfigScope, OAuthConfig, OAuthGrantType,
+};
 use kiss_mcp::{McpManager, ServerEntry};
 use serde::Serialize;
 use std::io::Write as _;
@@ -45,7 +47,12 @@ pub async fn run(command: &McpCommand) -> Result<i32> {
                     } else {
                         "enabled"
                     };
-                    println!("{name}\t{state}\t{transport}");
+                    match server.description.as_deref() {
+                        Some(description) => {
+                            println!("{name}\t{state}\t{transport}\t{description}")
+                        }
+                        None => println!("{name}\t{state}\t{transport}"),
+                    }
                 }
             }
         }
@@ -72,6 +79,7 @@ pub async fn run(command: &McpCommand) -> Result<i32> {
             server,
         } => {
             let entry = new_server(server)?;
+            reject_project_provider_auth(name, *scope, &entry)?;
             config::add_server(&loaded.paths, scope_value(*scope), name, entry)?;
             println!("Added MCP server `{name}` to {}.", scope_label(*scope));
         }
@@ -87,6 +95,7 @@ pub async fn run(command: &McpCommand) -> Result<i32> {
                 .cloned()
                 .with_context(|| format!("MCP server `{name}` is not configured"))?;
             let entry = update_server(base, server)?;
+            reject_project_provider_auth(name, *scope, &entry)?;
             config::put_server(&loaded.paths, scope_value(*scope), name, entry)?;
             println!("Updated MCP server `{name}` in {}.", scope_label(*scope));
         }
@@ -142,6 +151,17 @@ pub async fn run(command: &McpCommand) -> Result<i32> {
     Ok(0)
 }
 
+fn reject_project_provider_auth(name: &str, scope: McpScope, server: &ServerEntry) -> Result<()> {
+    if scope == McpScope::Project
+        && let Some(provider) = server.auth_provider()
+    {
+        bail!(
+            "MCP server `{name}` uses the `{provider}` login token, which a project config must not send. Add it with --scope user"
+        )
+    }
+    Ok(())
+}
+
 fn new_server(input: &McpServerArgs) -> Result<ServerEntry> {
     let mut server = ServerEntry::default();
     apply_server_args(&mut server, input, true)?;
@@ -183,6 +203,17 @@ fn apply_server_args(
     if let Some(cwd) = &input.cwd {
         server.cwd = Some(cwd.clone());
     }
+    if let Some(description) = &input.description {
+        server.description = Some(description.clone()).filter(|value| !value.trim().is_empty());
+    }
+    if let Some(provider) = &input.auth_provider {
+        server.auth = Some(AuthSetting::Provider {
+            provider: provider.clone(),
+        });
+        server.oauth = None;
+        server.bearer_token = None;
+        server.bearer_token_env = None;
+    }
     if let Some(auth) = &input.auth {
         server.auth = Some(match auth.as_str() {
             "oauth" => AuthSetting::Mode(AuthMode::OAuth),
@@ -203,7 +234,10 @@ fn apply_server_args(
         || input.client_id.is_some()
         || input.client_secret.is_some()
         || input.client_credentials
-        || input.redirect_uri.is_some();
+        || input.redirect_uri.is_some()
+        || input.oauth_client_name.is_some()
+        || input.auth_server_metadata_url.is_some()
+        || input.client_metadata_url.is_some();
     if oauth_changed || matches!(server.auth, Some(AuthSetting::Mode(AuthMode::OAuth))) {
         let oauth = server.oauth.get_or_insert_with(OAuthConfig::default);
         if let Some(scope) = &input.oauth_scope {
@@ -221,6 +255,16 @@ fn apply_server_args(
         if let Some(redirect_uri) = &input.redirect_uri {
             oauth.redirect_uri = Some(redirect_uri.clone());
         }
+        if let Some(client_name) = &input.oauth_client_name {
+            oauth.client_name = Some(client_name.clone());
+        }
+        if let Some(url) = &input.auth_server_metadata_url {
+            oauth.auth_server_metadata_url = Some(url.clone());
+        }
+        if let Some(url) = &input.client_metadata_url {
+            oauth.client_registration = ClientRegistration::Cimd;
+            oauth.client_metadata_url = Some(url.clone());
+        }
     }
     if let Some(timeout) = input.timeout_ms {
         if timeout == 0 {
@@ -233,6 +277,11 @@ fn apply_server_args(
 
 async fn login(loaded: &kiss_mcp::LoadedConfig, name: &str, no_browser: bool) -> Result<()> {
     let server = http_server(loaded, name)?;
+    if let Some(provider) = server.auth_provider() {
+        bail!(
+            "MCP server `{name}` uses your `{provider}` login and has no separate OAuth sign-in. Run kiss login {provider} instead"
+        )
+    }
     let url = server.url.as_deref().context("MCP URL is missing")?;
     let oauth = server.oauth.clone().unwrap_or_default();
     if oauth.grant_type == OAuthGrantType::ClientCredentials {
@@ -365,7 +414,9 @@ mod tests {
             env: vec!["TOKEN=value".to_string()],
             headers: Vec::new(),
             cwd: None,
+            description: None,
             auth: None,
+            auth_provider: None,
             bearer_token: None,
             bearer_token_env: None,
             oauth_scope: None,
@@ -373,6 +424,9 @@ mod tests {
             client_secret: None,
             client_credentials: false,
             redirect_uri: None,
+            oauth_client_name: None,
+            auth_server_metadata_url: None,
+            client_metadata_url: None,
             timeout_ms: None,
             stdio: vec!["demo".to_string(), "--stdio".to_string()],
         };
@@ -380,5 +434,44 @@ mod tests {
         assert_eq!(server.command.as_deref(), Some("demo"));
         assert_eq!(server.args, ["--stdio"]);
         assert_eq!(server.env["TOKEN"], "value");
+    }
+
+    #[test]
+    fn http_flags_set_description_oauth_options_and_provider_auth() {
+        use clap::Parser as _;
+        let parse = |extra: &[&str]| {
+            let mut argv = vec![
+                "kiss",
+                "mcp",
+                "add",
+                "demo",
+                "--url",
+                "https://mcp.example.com",
+            ];
+            argv.extend_from_slice(extra);
+            match crate::args::Args::try_parse_from(argv).unwrap().command {
+                Some(crate::args::Command::Mcp {
+                    command: McpCommand::Add { server, .. },
+                }) => new_server(&server).unwrap(),
+                other => panic!("unexpected command {other:?}"),
+            }
+        };
+        let server = parse(&[
+            "--description",
+            "Team tickets",
+            "--auth-server-metadata-url",
+            "https://auth.example.com/.well-known/oauth-authorization-server",
+            "--client-metadata-url",
+            "https://example.com/kiss/client.json",
+        ]);
+        assert_eq!(server.description.as_deref(), Some("Team tickets"));
+        let oauth = server.oauth.unwrap();
+        assert_eq!(oauth.client_registration, ClientRegistration::Cimd);
+        assert!(oauth.auth_server_metadata_url.is_some());
+
+        let server = parse(&["--auth-provider", "radius"]);
+        assert_eq!(server.auth_provider(), Some("radius"));
+        assert!(reject_project_provider_auth("demo", McpScope::Project, &server).is_err());
+        assert!(reject_project_provider_auth("demo", McpScope::User, &server).is_ok());
     }
 }

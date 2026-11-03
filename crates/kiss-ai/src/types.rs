@@ -57,6 +57,10 @@ pub struct ToolCall {
     pub arguments: Value,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub thought_signature: Option<String>,
+    /// Why the finished arguments text was not a JSON object. `arguments`
+    /// is then empty, and validation reports this text to the model.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arguments_error: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
@@ -319,6 +323,7 @@ mod tests {
             name: "read".into(),
             arguments: serde_json::json!({"path": "x"}),
             thought_signature: None,
+            arguments_error: None,
         });
         let v = serde_json::to_value(&tc).unwrap();
         assert_eq!(v["type"], "toolCall");

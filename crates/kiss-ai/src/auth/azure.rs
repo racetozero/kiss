@@ -6,7 +6,7 @@ use std::sync::{Arc, OnceLock};
 
 const SCOPE: &str = "https://ai.azure.com/.default";
 pub(super) const ENTRA_MARKER: &str = "azure-entra-id";
-pub(super) const PROVIDER: &str = "azure-openai-responses";
+pub(super) const PROVIDER: &str = "azure";
 
 pub(super) fn env_var_names() -> &'static [&'static str] {
     &["AZURE_OPENAI_API_KEY", "AZURE_OPENAI_AUTH_TOKEN"]

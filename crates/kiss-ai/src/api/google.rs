@@ -299,6 +299,12 @@ fn build_request(model: &Model, context: &Context, options: &StreamOptions) -> V
                     })
                     .collect::<Vec<_>>()
                     .join("\n");
+                // Empty or whitespace-only output fails with HTTP 400.
+                let text = if text.trim().is_empty() {
+                    "(no tool output)".into()
+                } else {
+                    text
+                };
                 contents.push(json!({
                     "role": "user",
                     "parts": [{
@@ -321,7 +327,13 @@ fn build_request(model: &Model, context: &Context, options: &StreamOptions) -> V
     if model.reasoning {
         let level = model.map_thinking_level(options.reasoning);
         let id = model.id.to_ascii_lowercase();
-        if (id.contains("gemini-3")
+        // Gemini 3, and Gemini 4 and later such as gemini-4-argon, take a level, not a budget.
+        let gemini_major = id
+            .split("gemini-")
+            .nth(1)
+            .and_then(|rest| rest.split(|c: char| !c.is_ascii_digit()).next())
+            .and_then(|major| major.parse::<u32>().ok());
+        if (gemini_major.is_some_and(|major| major >= 3)
             || matches!(
                 id.as_str(),
                 "gemini-flash-latest" | "gemini-flash-lite-latest"
@@ -408,6 +420,7 @@ mod vertex_tests {
             thinking_level_map: BTreeMap::new(),
             headers: BTreeMap::new(),
             sampling_params: Default::default(),
+            sampling_params_by_thinking_level: Default::default(),
         };
         assert_eq!(
             vertex_url(&model, "project-one", "us-central1"),
@@ -444,6 +457,7 @@ mod vertex_tests {
             thinking_level_map: BTreeMap::new(),
             headers: BTreeMap::new(),
             sampling_params: Default::default(),
+            sampling_params_by_thinking_level: Default::default(),
         };
         model
             .thinking_level_map
@@ -464,6 +478,20 @@ mod vertex_tests {
             body["generationConfig"]["thinkingConfig"]
                 .get("thinkingBudget")
                 .is_none()
+        );
+
+        model.id = "gemini-4-argon".into();
+        let body = build_request(
+            &model,
+            &Context::default(),
+            &StreamOptions {
+                reasoning: crate::ThinkingLevel::Low,
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            body["generationConfig"]["thinkingConfig"]["thinkingLevel"],
+            "MEDIUM"
         );
     }
 }

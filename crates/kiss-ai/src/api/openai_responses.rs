@@ -190,10 +190,21 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
     }
     match provider {
         ResponsesProvider::OpenAiCodex => {
+            // Model headers replace the Codex defaults.
+            let has_header = |name: &str| {
+                model
+                    .headers
+                    .keys()
+                    .any(|key| key.eq_ignore_ascii_case(name))
+            };
+            if !has_header("originator") {
+                request = request.header("originator", "kiss");
+            }
+            if !has_header("user-agent") {
+                request = request.header("user-agent", concat!("kiss/", env!("CARGO_PKG_VERSION")));
+            }
             request = request
                 .bearer_auth(&api_key)
-                .header("originator", "kiss")
-                .header("user-agent", concat!("kiss/", env!("CARGO_PKG_VERSION")))
                 .header("OpenAI-Beta", "responses=experimental")
                 .header("accept", "text/event-stream");
             if let Some(account_id) = codex_account_id.as_deref() {
@@ -292,22 +303,7 @@ pub fn response_url(model: &Model) -> anyhow::Result<String> {
         "openai-codex-responses" if base.ends_with("/codex") => Ok(format!("{base}/responses")),
         "openai-codex-responses" => Ok(format!("{base}/codex/responses")),
         "azure-openai-responses" => {
-            let configured = std::env::var("AZURE_OPENAI_BASE_URL")
-                .ok()
-                .filter(|value| !value.trim().is_empty())
-                .or_else(|| {
-                    std::env::var("AZURE_OPENAI_RESOURCE_NAME")
-                        .ok()
-                        .filter(|value| !value.trim().is_empty())
-                        .map(|resource| format!("https://{resource}.openai.azure.com/openai/v1"))
-                })
-                .or_else(|| (!base.is_empty()).then(|| base.to_string()))
-                .ok_or_else(|| {
-                    anyhow::anyhow!(
-                        "Azure OpenAI needs AZURE_OPENAI_BASE_URL or AZURE_OPENAI_RESOURCE_NAME"
-                    )
-                })?;
-            let configured = configured.trim_end_matches('/');
+            let configured = azure_base_url(base)?;
             let configured = if configured.ends_with("/responses") {
                 configured.to_string()
             } else {
@@ -318,6 +314,46 @@ pub fn response_url(model: &Model) -> anyhow::Result<String> {
         }
         _ => Ok(format!("{base}/responses")),
     }
+}
+
+/// Azure models ship without a base URL. Resolve the user's resource from the
+/// environment and give bare Azure hosts the `/openai/v1` path.
+pub fn azure_base_url(base: &str) -> anyhow::Result<String> {
+    let configured = std::env::var("AZURE_OPENAI_BASE_URL")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| {
+            std::env::var("AZURE_OPENAI_RESOURCE_NAME")
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+                .map(|resource| format!("https://{resource}.openai.azure.com/openai/v1"))
+        })
+        .or_else(|| (!base.is_empty()).then(|| base.to_string()))
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "Azure OpenAI has no endpoint. Set AZURE_OPENAI_BASE_URL (for example https://<resource>.openai.azure.com/openai/v1) or AZURE_OPENAI_RESOURCE_NAME, then retry"
+            )
+        })?;
+    let configured = configured.trim().trim_end_matches('/');
+    let mut url = url::Url::parse(configured).map_err(|error| {
+        anyhow::anyhow!(
+            "Azure OpenAI base URL '{configured}' is invalid ({error}). Use an https URL such as https://<resource>.openai.azure.com/openai/v1"
+        )
+    })?;
+    let host = url.host_str().unwrap_or_default();
+    if [
+        ".openai.azure.com",
+        ".cognitiveservices.azure.com",
+        ".ai.azure.com",
+    ]
+    .iter()
+    .any(|suffix| host.ends_with(suffix))
+        && matches!(url.path().trim_end_matches('/'), "" | "/openai")
+    {
+        url.set_path("/openai/v1");
+        url.set_query(None);
+    }
+    Ok(url.as_str().trim_end_matches('/').to_string())
 }
 
 struct WebSocketFailure {
@@ -400,6 +436,16 @@ async fn connect_websocket(
         .as_str()
         .into_client_request()
         .map_err(|error| WebSocketFailure::protocol(error.to_string()))?;
+    let codex = ResponsesProvider::for_model(model) == ResponsesProvider::OpenAiCodex;
+    // Codex defaults go first so model headers can replace them.
+    if codex {
+        insert_websocket_header(request.headers_mut(), "originator", "kiss")?;
+        insert_websocket_header(
+            request.headers_mut(),
+            "user-agent",
+            concat!("kiss/", env!("CARGO_PKG_VERSION")),
+        )?;
+    }
     for (name, value) in &model.headers {
         insert_websocket_header(request.headers_mut(), name, value)?;
     }
@@ -408,16 +454,10 @@ async fn connect_websocket(
         "authorization",
         &format!("Bearer {api_key}"),
     )?;
-    if ResponsesProvider::for_model(model) == ResponsesProvider::OpenAiCodex {
+    if codex {
         if !account_id.is_empty() {
             insert_websocket_header(request.headers_mut(), "chatgpt-account-id", account_id)?;
         }
-        insert_websocket_header(request.headers_mut(), "originator", "kiss")?;
-        insert_websocket_header(
-            request.headers_mut(),
-            "user-agent",
-            concat!("kiss/", env!("CARGO_PKG_VERSION")),
-        )?;
         insert_websocket_header(request.headers_mut(), "openai-beta", CODEX_WEBSOCKET_BETA)?;
         insert_websocket_header(request.headers_mut(), "x-client-request-id", request_id)?;
         insert_websocket_header(request.headers_mut(), "session-id", request_id)?;
@@ -1184,6 +1224,12 @@ pub(crate) fn response_input(context: &Context) -> Vec<Value> {
                     })
                     .collect::<Vec<_>>()
                     .join("\n");
+                // Empty or whitespace-only output fails with HTTP 400.
+                let text = if text.trim().is_empty() {
+                    "(no tool output)".into()
+                } else {
+                    text
+                };
                 input.push(json!({
                     "type": "function_call_output",
                     "call_id": call_id,
@@ -1271,7 +1317,15 @@ pub(crate) fn build_request(model: &Model, context: &Context, options: &StreamOp
     if let Some(session) = &options.session_id {
         body["prompt_cache_key"] = json!(session);
     }
-    for (key, value) in model.sampling_params.iter().chain(&options.sampling_params) {
+    let level_params = model
+        .sampling_params_by_thinking_level
+        .get(options.reasoning.as_str());
+    for (key, value) in model
+        .sampling_params
+        .iter()
+        .chain(level_params.into_iter().flatten())
+        .chain(&options.sampling_params)
+    {
         body[key] = value.clone();
     }
     body
@@ -1304,6 +1358,7 @@ mod request_tests {
             thinking_level_map: BTreeMap::new(),
             headers: BTreeMap::new(),
             sampling_params: Default::default(),
+            sampling_params_by_thinking_level: Default::default(),
         }
     }
 

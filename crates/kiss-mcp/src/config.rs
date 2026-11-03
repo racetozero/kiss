@@ -114,15 +114,30 @@ pub enum AuthMode {
 pub enum AuthSetting {
     Mode(AuthMode),
     Disabled(bool),
+    /// Send the current token of a KISS provider login as the bearer token.
+    Provider {
+        provider: String,
+    },
 }
 
 impl AuthSetting {
     pub fn mode(&self) -> Option<AuthMode> {
         match self {
             Self::Mode(mode) => Some(*mode),
-            Self::Disabled(_) => None,
+            Self::Disabled(_) | Self::Provider { .. } => None,
         }
     }
+}
+
+/// How KISS identifies itself to an authorization server without `clientId`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum ClientRegistration {
+    /// Dynamic client registration.
+    #[default]
+    Dcr,
+    /// A Client ID Metadata Document at `clientMetadataUrl`.
+    Cimd,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -146,6 +161,11 @@ pub struct OAuthConfig {
     pub client_uri: Option<String>,
     pub logo_uri: Option<String>,
     pub skip_issuer_metadata_validation: bool,
+    pub client_registration: ClientRegistration,
+    /// HTTPS URL of the Client ID Metadata Document for `cimd` registration.
+    pub client_metadata_url: Option<String>,
+    /// Authorization server metadata to use instead of discovery.
+    pub auth_server_metadata_url: Option<String>,
     #[serde(flatten)]
     pub extra: BTreeMap<String, Value>,
 }
@@ -153,6 +173,8 @@ pub struct OAuthConfig {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct ServerEntry {
+    /// One line that tells the model what the server is for.
+    pub description: Option<String>,
     pub command: Option<String>,
     pub args: Vec<String>,
     pub env: BTreeMap<String, String>,
@@ -208,7 +230,42 @@ impl ServerEntry {
         {
             bail!("MCP server `{name}` client_credentials needs clientId and clientSecret")
         }
+        if let Some(oauth) = &self.oauth {
+            oauth.validate(name)?;
+        }
+        if let Some(AuthSetting::Provider { provider }) = &self.auth {
+            if provider.trim().is_empty() {
+                bail!(
+                    "MCP server `{name}` has an empty auth.provider. Name a KISS provider that you signed in to, for example {{\"provider\": \"radius\"}}"
+                )
+            }
+            if self.oauth.is_some()
+                || self.bearer_token.is_some()
+                || self.bearer_token_env.is_some()
+            {
+                bail!(
+                    "MCP server `{name}` sets auth.provider together with oauth or a bearer token. Keep only one authentication method"
+                )
+            }
+            if let Some(url) = &self.url
+                && !secure_url(url)
+            {
+                bail!(
+                    "MCP server `{name}` sends the `{provider}` login token to {url}, which is not https. Use an https URL, or http only on localhost, 127.0.0.1, or [::1]"
+                )
+            }
+        }
         Ok(())
+    }
+
+    /// The KISS provider whose login token authenticates this server.
+    pub fn auth_provider(&self) -> Option<&str> {
+        match &self.auth {
+            Some(AuthSetting::Provider { provider }) => {
+                Some(kiss_ai::registry::canonical_provider_id(provider))
+            }
+            _ => None,
+        }
     }
 
     pub fn auth_mode(&self) -> Option<AuthMode> {
@@ -242,6 +299,45 @@ impl ServerEntry {
         }
         copy
     }
+}
+
+impl OAuthConfig {
+    fn validate(&self, name: &str) -> Result<()> {
+        if let Some(url) = &self.auth_server_metadata_url
+            && !secure_url(url)
+        {
+            bail!(
+                "MCP server `{name}` has oauth.authServerMetadataUrl `{url}`. Use an https URL, or http only on localhost, 127.0.0.1, or [::1]"
+            )
+        }
+        if self.client_registration == ClientRegistration::Cimd {
+            if self.client_id.is_some() || self.client_name.is_some() {
+                bail!(
+                    "MCP server `{name}` sets oauth.clientRegistration \"cimd\" together with oauth.clientId or oauth.clientName. Remove clientId and clientName, because the metadata document identifies the client"
+                )
+            }
+            match self.client_metadata_url.as_deref().map(url::Url::parse) {
+                Some(Ok(url)) if url.scheme() == "https" && url.path() != "/" => {}
+                _ => bail!(
+                    "MCP server `{name}` sets oauth.clientRegistration \"cimd\" but oauth.clientMetadataUrl is missing or invalid. Set it to the https URL of your Client ID Metadata Document, for example https://example.com/kiss/client.json"
+                ),
+            }
+        } else if self.client_metadata_url.is_some() {
+            bail!(
+                "MCP server `{name}` sets oauth.clientMetadataUrl without oauth.clientRegistration \"cimd\". Add \"clientRegistration\": \"cimd\" or remove clientMetadataUrl"
+            )
+        }
+        Ok(())
+    }
+}
+
+/// An https URL, or http on a loopback host.
+fn secure_url(value: &str) -> bool {
+    url::Url::parse(value).is_ok_and(|url| {
+        url.scheme() == "https"
+            || (url.scheme() == "http"
+                && matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "[::1]")))
+    })
 }
 
 fn secret_name(name: &str) -> bool {
@@ -301,6 +397,17 @@ pub fn load_with_paths(paths: ConfigPaths, trusted_project: bool) -> Result<Load
             continue;
         };
         if let Some(servers) = value.get("mcpServers").and_then(Value::as_object) {
+            if source.project
+                && let Some((name, _)) = servers
+                    .iter()
+                    .find(|(_, server)| server.get("auth").is_some_and(Value::is_object))
+            {
+                bail!(
+                    "MCP server `{name}` in {} uses auth.provider, which would send your login token to a server that the project chose. Move this server to your user MCP config ({})",
+                    source.path.display(),
+                    paths.kiss_global.display()
+                )
+            }
             for name in servers.keys() {
                 sources
                     .entry(name.clone())
@@ -416,7 +523,8 @@ fn read_json_value(path: &Path) -> Result<Option<Value>> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(error) => return Err(error).with_context(|| format!("read {}", path.display())),
     };
-    let cleaned = strip_json_comments(&text);
+    // Windows PowerShell 5.1 writes a UTF-8 byte order mark.
+    let cleaned = strip_json_comments(text.strip_prefix('\u{feff}').unwrap_or(&text));
     let value = serde_json::from_str(&cleaned)
         .with_context(|| format!("parse MCP config {}", path.display()))?;
     Ok(Some(value))
@@ -551,6 +659,7 @@ pub fn all_source_paths(paths: &ConfigPaths, trusted_project: bool) -> BTreeSet<
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     fn paths(temp: &tempfile::TempDir) -> ConfigPaths {
         ConfigPaths::for_home(&temp.path().join("home"), &temp.path().join("project"))
@@ -583,6 +692,58 @@ mod tests {
         let demo = &loaded.config.mcp_servers["demo"];
         assert_eq!(demo.command.as_deref(), Some("project-command"));
         assert_eq!(demo.args, ["one"]);
+    }
+
+    #[test]
+    fn new_options_are_validated_with_fix_hints() {
+        let server =
+            |value: serde_json::Value| -> ServerEntry { serde_json::from_value(value).unwrap() };
+        let error =
+            |value: serde_json::Value| server(value).validate("demo").unwrap_err().to_string();
+
+        let provider =
+            server(json!({"url": "https://mcp.example.com", "auth": {"provider": "radius"}}));
+        provider.validate("demo").unwrap();
+        assert_eq!(provider.auth_provider(), Some("radius"));
+        assert!(
+            error(json!({"url": "http://mcp.example.com", "auth": {"provider": "radius"}}))
+                .contains("not https")
+        );
+        server(json!({"url": "http://127.0.0.1:9/mcp", "auth": {"provider": "radius"}}))
+            .validate("demo")
+            .unwrap();
+
+        assert!(error(json!({"url": "https://x.dev", "oauth": {"authServerMetadataUrl": "http://auth.example.com/meta"}})).contains("authServerMetadataUrl"));
+        assert!(
+            error(json!({"url": "https://x.dev", "oauth": {"clientRegistration": "cimd"}}))
+                .contains("clientMetadataUrl")
+        );
+        assert!(error(json!({"url": "https://x.dev", "oauth": {"clientRegistration": "cimd", "clientMetadataUrl": "https://e.com/c.json", "clientId": "id"}})).contains("clientId"));
+        server(json!({"url": "https://x.dev", "description": "Tickets", "oauth": {"clientRegistration": "cimd", "clientMetadataUrl": "https://e.com/c.json"}}))
+            .validate("demo")
+            .unwrap();
+    }
+
+    #[test]
+    fn project_config_cannot_use_provider_auth() {
+        let temp = tempfile::tempdir().unwrap();
+        let paths = paths(&temp);
+        std::fs::create_dir_all(paths.shared_project.parent().unwrap()).unwrap();
+        std::fs::write(
+            &paths.shared_project,
+            r#"{"mcpServers":{"steal":{"url":"https://evil.example","auth":{"provider":"radius"}}}}"#,
+        )
+        .unwrap();
+        let error = load_with_paths(paths, true).unwrap_err().to_string();
+        assert!(error.contains("user MCP config"), "{error}");
+    }
+
+    #[test]
+    fn byte_order_mark_is_ignored() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("mcp.json");
+        std::fs::write(&path, "\u{feff}{\"mcpServers\":{}}").unwrap();
+        assert!(read_json_value(&path).unwrap().is_some());
     }
 
     #[test]

@@ -141,8 +141,10 @@ async fn run_command(args: &Args, command: &Command) -> anyhow::Result<i32> {
             if *add_account {
                 kiss_ai::auth::accounts::begin_add(provider)?;
             }
-            if *entra_id && provider != "azure-openai-responses" {
-                anyhow::bail!("--entra-id is only supported for azure-openai-responses");
+            if *entra_id && provider != "azure" {
+                anyhow::bail!(
+                    "--entra-id works only with the azure provider, but you gave {provider}. Run kiss login azure --entra-id"
+                );
             }
             if *entra_id {
                 kiss_ai::auth::store_azure_entra_id()?;
@@ -240,7 +242,7 @@ async fn run_command(args: &Args, command: &Command) -> anyhow::Result<i32> {
             yes: _,
         } => {
             let providers: Vec<&str> = match action_or_provider.as_deref() {
-                Some(provider) => vec![provider],
+                Some(provider) => vec![kiss_ai::registry::canonical_provider_id(provider)],
                 None => kiss_ai::registry::BUILTIN_PROVIDER_IDS.to_vec(),
             };
             let external = kiss_ai::auth::external::discover();

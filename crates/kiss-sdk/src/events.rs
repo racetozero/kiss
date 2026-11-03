@@ -303,6 +303,7 @@ mod tests {
                 name: "write".into(),
                 arguments: json!({}),
                 thought_signature: None,
+                arguments_error: None,
             },
         });
         assert_eq!(event["type"], "toolcall_start");

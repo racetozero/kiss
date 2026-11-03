@@ -150,6 +150,7 @@ impl TerminalHosts {
                 }
                 for (flag, enabled) in [
                     ("--no-tools", args.no_tools),
+                    ("--no-mcp", args.no_mcp),
                     ("--no-skills", args.no_skills),
                     ("--no-prompt-templates", args.no_prompt_templates),
                     ("--no-themes", args.no_themes),

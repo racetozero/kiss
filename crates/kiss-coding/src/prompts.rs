@@ -91,6 +91,39 @@ pub fn discover(cwd: &Path, project_trusted: bool, extra_paths: &[PathBuf]) -> V
 }
 
 /// Expand `$1..$n`, `$@`/`$ARGUMENTS`, and `${n:-default}` in the body.
+/// Split command arguments on whitespace. Single or double quotes group
+/// words, and an empty quoted string (`""` or `''`) is kept as an argument.
+pub fn parse_args(input: &str) -> Vec<String> {
+    let mut args = Vec::new();
+    let mut current = String::new();
+    let mut has_token = false;
+    let mut quote: Option<char> = None;
+    for c in input.chars() {
+        match quote {
+            Some(open) if c == open => quote = None,
+            Some(_) => current.push(c),
+            None if c == '"' || c == '\'' => {
+                quote = Some(c);
+                has_token = true;
+            }
+            None if c.is_whitespace() => {
+                if has_token {
+                    args.push(std::mem::take(&mut current));
+                    has_token = false;
+                }
+            }
+            None => {
+                current.push(c);
+                has_token = true;
+            }
+        }
+    }
+    if has_token {
+        args.push(current);
+    }
+    args
+}
+
 pub fn expand(body: &str, args: &[&str]) -> String {
     let joined = args.join(" ");
     let mut out = String::with_capacity(body.len());
@@ -166,6 +199,17 @@ pub fn expand(body: &str, args: &[&str]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn quoted_arguments_group_words_and_keep_empty_values() {
+        assert_eq!(
+            parse_args(r#"one "two words" '' 'x' "" last"#),
+            ["one", "two words", "", "x", "", "last"]
+        );
+        let args = parse_args(r#""" b"#);
+        let args: Vec<&str> = args.iter().map(String::as_str).collect();
+        assert_eq!(expand("${1:-first} $2", &args), "first b");
+    }
 
     #[test]
     fn expansion() {

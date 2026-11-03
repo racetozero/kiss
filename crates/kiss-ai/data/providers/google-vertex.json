@@ -43,7 +43,7 @@
         "cacheWrite": 0
       },
       "contextWindow": 1048576,
-      "maxTokens": 65535,
+      "maxTokens": 65536,
       "inputLimits": {
         "images": {
           "resize": {
@@ -146,6 +146,43 @@
       },
       "contextWindow": 1048576,
       "maxTokens": 65536,
+      "inputLimits": {
+        "images": {
+          "resize": {
+            "maxWidth": 2000,
+            "maxHeight": 2000,
+            "maxBytes": 4718592,
+            "jpegQuality": 80
+          }
+        }
+      },
+      "type": "chat"
+    },
+    "chat:gemini-3.1-flash-lite-image": {
+      "id": "gemini-3.1-flash-lite-image",
+      "name": "Nano Banana 2 Lite",
+      "api": "google-vertex",
+      "provider": "google-vertex",
+      "baseUrl": "https://{location}-aiplatform.googleapis.com",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "off": null,
+        "minimal": "minimal",
+        "low": null,
+        "medium": null,
+        "high": "high",
+        "xhigh": null,
+        "max": null
+      },
+      "input": ["text", "image"],
+      "cost": {
+        "input": 0.25,
+        "output": 30,
+        "cacheRead": 0.025,
+        "cacheWrite": 0
+      },
+      "contextWindow": 65536,
+      "maxTokens": 4096,
       "inputLimits": {
         "images": {
           "resize": {
@@ -417,16 +454,16 @@
       },
       "type": "chat"
     },
-    "chat:gemini-flash-latest": {
-      "id": "gemini-flash-latest",
-      "name": "Gemini Flash Latest",
+    "chat:gemini-4-argon": {
+      "id": "gemini-4-argon",
+      "name": "Gemini 4 Argon",
       "api": "google-vertex",
       "provider": "google-vertex",
       "baseUrl": "https://{location}-aiplatform.googleapis.com",
       "reasoning": true,
       "thinkingLevelMap": {
         "off": null,
-        "minimal": "minimal",
+        "minimal": null,
         "low": "low",
         "medium": "medium",
         "high": "high",
@@ -435,46 +472,9 @@
       },
       "input": ["text", "image"],
       "cost": {
-        "input": 1.5,
-        "output": 9,
-        "cacheRead": 0.15,
-        "cacheWrite": 0
-      },
-      "contextWindow": 1048576,
-      "maxTokens": 65536,
-      "inputLimits": {
-        "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
-        }
-      },
-      "type": "chat"
-    },
-    "chat:gemini-flash-lite-latest": {
-      "id": "gemini-flash-lite-latest",
-      "name": "Gemini Flash-Lite Latest",
-      "api": "google-vertex",
-      "provider": "google-vertex",
-      "baseUrl": "https://{location}-aiplatform.googleapis.com",
-      "reasoning": true,
-      "thinkingLevelMap": {
-        "off": null,
-        "minimal": "minimal",
-        "low": "low",
-        "medium": "medium",
-        "high": "high",
-        "xhigh": null,
-        "max": null
-      },
-      "input": ["text", "image"],
-      "cost": {
-        "input": 0.25,
-        "output": 1.5,
-        "cacheRead": 0.025,
+        "input": 2,
+        "output": 10,
+        "cacheRead": 0.1,
         "cacheWrite": 0
       },
       "contextWindow": 1048576,

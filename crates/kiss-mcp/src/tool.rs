@@ -36,7 +36,22 @@ impl AgentTool for McpTool {
     }
 
     fn description(&self) -> String {
-        "Find and use tools, resources, and prompts from configured MCP servers. Start with search or list. Use describe before a tool call when you do not know its input schema.".to_string()
+        let mut description = "Find and use tools, resources, and prompts from configured MCP servers. Start with search or list. Use describe before a tool call when you do not know its input schema.".to_string();
+        // Configuration is fixed for the session, so the description stays
+        // stable for the prompt cache.
+        for (name, server) in &self.manager.config().config.mcp_servers {
+            if let Some(text) = server
+                .description
+                .as_deref()
+                .and_then(|text| text.lines().next())
+                .map(str::trim)
+                && !server.disabled
+                && !text.is_empty()
+            {
+                description.push_str(&format!("\nServer `{name}`: {text}"));
+            }
+        }
+        description
     }
 
     fn parameters(&self) -> Value {

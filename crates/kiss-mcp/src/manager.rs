@@ -72,6 +72,8 @@ pub enum ServerState {
 #[serde(rename_all = "camelCase")]
 pub struct ServerStatus {
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
     pub state: ServerState,
     pub tools: usize,
     pub resources: usize,
@@ -185,6 +187,7 @@ impl McpManager {
             };
             statuses.push(ServerStatus {
                 name: name.clone(),
+                description: server.description.clone(),
                 state,
                 tools: cached.map_or(0, |item| item.tools.len()),
                 resources: cached.map_or(0, |item| item.resources.len()),
@@ -245,20 +248,44 @@ impl McpManager {
             .split_whitespace()
             .map(|term| term.to_ascii_lowercase())
             .collect();
+        let servers = &self.inner.config.config.mcp_servers;
+        let server_description = |server: &str| {
+            servers
+                .get(server)
+                .and_then(|entry| entry.description.as_deref())
+                .unwrap_or("")
+                .to_ascii_lowercase()
+        };
         tools.retain(|tool| {
             let haystack = format!(
-                "{} {} {} {}",
+                "{} {} {} {} {}",
                 tool.server,
+                tool.name,
+                tool.title.as_deref().unwrap_or(""),
+                tool.description.as_deref().unwrap_or(""),
+                server_description(&tool.server),
+            )
+            .to_ascii_lowercase();
+            terms.iter().all(|term| haystack.contains(term))
+        });
+        // Exact names first, then tools whose own text matches every term,
+        // then tools that match only through their server description.
+        tools.sort_by_key(|tool| {
+            let name_match = tool.name.eq_ignore_ascii_case(query);
+            let own_text = format!(
+                "{} {} {}",
                 tool.name,
                 tool.title.as_deref().unwrap_or(""),
                 tool.description.as_deref().unwrap_or("")
             )
             .to_ascii_lowercase();
-            terms.iter().all(|term| haystack.contains(term))
-        });
-        tools.sort_by_key(|tool| {
-            let name_match = tool.name.eq_ignore_ascii_case(query);
-            (!name_match, tool.server.clone(), tool.name.clone())
+            let own_match = terms.iter().all(|term| own_text.contains(term));
+            (
+                !name_match,
+                !own_match,
+                tool.server.clone(),
+                tool.name.clone(),
+            )
         });
         Ok(tools)
     }
@@ -685,6 +712,12 @@ async fn connect(
         return Ok(ClientInfo::default().serve(transport).await?);
     }
 
+    if let Some(provider) = server.auth_provider() {
+        let client = crate::provider_auth::ProviderTokenClient::new(provider);
+        let transport = StreamableHttpClientTransport::with_client(client, transport_config);
+        return Ok(ClientInfo::default().serve(transport).await?);
+    }
+
     let transport = StreamableHttpClientTransport::with_client(
         reqwest_mcp::Client::default(),
         transport_config,
@@ -869,6 +902,26 @@ mod tests {
         let status = manager.status().await;
         assert_eq!(status.len(), 1);
         assert!(!marker.exists());
+    }
+
+    #[tokio::test]
+    async fn server_description_reaches_status_and_the_tool_description() {
+        use kiss_agent::tool::AgentTool as _;
+        let temp = tempfile::tempdir().unwrap();
+        let server = ServerEntry {
+            description: Some("Team tickets and incidents\nignored second line".to_string()),
+            command: Some("true".to_string()),
+            ..Default::default()
+        };
+        let manager =
+            McpManager::with_paths(loaded(&temp, server), temp.path().join("cache.json"), None);
+        let status = manager.status().await;
+        assert_eq!(
+            status[0].description.as_deref(),
+            Some("Team tickets and incidents\nignored second line")
+        );
+        let description = crate::McpTool::new(manager).description();
+        assert!(description.ends_with("\nServer `demo`: Team tickets and incidents"));
     }
 
     #[tokio::test]

@@ -144,6 +144,10 @@ pub struct Model {
     /// Model request defaults. Per-request sampling values take precedence.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub sampling_params: BTreeMap<String, serde_json::Value>,
+    /// Sampling values for one thinking level, keyed by level name. They
+    /// override `sampling_params`; per-request values override both.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub sampling_params_by_thinking_level: BTreeMap<String, BTreeMap<String, serde_json::Value>>,
 }
 
 fn default_input() -> Vec<String> {
@@ -268,6 +272,7 @@ mod tests {
             cost: ModelCost::default(),
             prompt_cache: None,
             sampling_params: Default::default(),
+            sampling_params_by_thinking_level: Default::default(),
             context_window: 1_000,
             max_tokens: 100,
             compat: None,

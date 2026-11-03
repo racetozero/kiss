@@ -806,6 +806,7 @@ mod tests {
             name: "read".into(),
             arguments: json!({}),
             thought_signature: None,
+            arguments_error: None,
         }));
         let history = vec![
             AgentMessage::user("first"),

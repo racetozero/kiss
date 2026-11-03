@@ -64,13 +64,28 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
     let api_key = credential.value().to_string();
     let compat = detect_compat(model);
     let body = build_request(model, context, options, &compat);
-    let base_url = provider_base_url(model, &api_key);
+    let base_url = if model.provider == "azure" {
+        match super::openai_responses::azure_base_url(&model.base_url) {
+            Ok(base_url) => base_url,
+            Err(error) => {
+                builder.fail(format!("{error:#}"), false, model);
+                return;
+            }
+        }
+    } else {
+        provider_base_url(model, &api_key)
+    };
     let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
     let mut request = http_client()
         .post(&url)
-        .bearer_auth(&api_key)
         .header("content-type", "application/json")
         .json(&body);
+    // Azure Foundry takes an API key in `api-key`; Entra ID tokens use bearer auth.
+    request = if model.provider == "azure" && !credential.is_bearer() {
+        request.header("api-key", &api_key)
+    } else {
+        request.bearer_auth(&api_key)
+    };
     for (k, v) in &model.headers {
         request = request.header(k, v);
     }
@@ -240,6 +255,17 @@ fn finish(
     builder.message.raw_stop_reason = state.finish_reason.clone();
     if finish_reason_required && state.finish_reason.is_none() {
         builder.fail("Stream ended without finish_reason", false, model);
+        return;
+    }
+    let failure = match state.finish_reason.as_deref() {
+        // Mistral reports transient server failures this way.
+        Some("error") => Some("error (server error)"),
+        Some("network_error") => Some("network_error (network error)"),
+        Some("content_filter") => Some("content_filter"),
+        _ => None,
+    };
+    if let Some(failure) = failure {
+        builder.fail(format!("Provider finish_reason: {failure}"), false, model);
         return;
     }
     let stop = match state.finish_reason.as_deref() {
@@ -473,6 +499,12 @@ fn build_request(
                     })
                     .collect::<Vec<_>>()
                     .join("\n");
+                // Empty or whitespace-only output fails with HTTP 400.
+                let text = if text.trim().is_empty() {
+                    "(no tool output)".into()
+                } else {
+                    text
+                };
                 messages.push(json!({
                     "role": "tool",
                     "tool_call_id": result.tool_call_id,
@@ -555,7 +587,15 @@ fn build_request(
     if let Some(choice) = &options.tool_choice {
         body["tool_choice"] = choice.openai_chat_value();
     }
-    for (key, value) in model.sampling_params.iter().chain(&options.sampling_params) {
+    let level_params = model
+        .sampling_params_by_thinking_level
+        .get(options.reasoning.as_str());
+    for (key, value) in model
+        .sampling_params
+        .iter()
+        .chain(level_params.into_iter().flatten())
+        .chain(&options.sampling_params)
+    {
         body[key] = value.clone();
     }
     body
@@ -583,6 +623,7 @@ mod tests {
             thinking_level_map: Default::default(),
             headers: Default::default(),
             sampling_params: Default::default(),
+            sampling_params_by_thinking_level: Default::default(),
         }
     }
 
@@ -632,6 +673,30 @@ mod tests {
             &detect_compat(&model),
         );
         assert_eq!(body["temperature"], 0.2);
+        assert_eq!(body["top_p"], 0.8);
+
+        model.sampling_params_by_thinking_level = [(
+            "high".into(),
+            [
+                ("top_p".into(), json!(0.95)),
+                ("temperature".into(), json!(1.0)),
+            ]
+            .into(),
+        )]
+        .into();
+        let high = StreamOptions {
+            reasoning: crate::ThinkingLevel::High,
+            ..options.clone()
+        };
+        let body = build_request(&model, &Context::default(), &high, &detect_compat(&model));
+        assert_eq!(body["temperature"], 0.2);
+        assert_eq!(body["top_p"], 0.95);
+        let body = build_request(
+            &model,
+            &Context::default(),
+            &options,
+            &detect_compat(&model),
+        );
         assert_eq!(body["top_p"], 0.8);
     }
 

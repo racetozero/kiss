@@ -14,7 +14,7 @@ pub mod openai_responses;
 pub mod pi_messages;
 
 use crate::event::{AssistantEvent, EventSink};
-use crate::json_salvage::parse_salvage;
+use crate::json_salvage::{parse_salvage, parse_tool_arguments};
 use crate::model::Model;
 use crate::types::{AssistantMessage, ContentBlock, Cost, StopReason, ToolCall, Usage};
 use crate::types::{Context, Message};
@@ -210,6 +210,7 @@ impl PartialBuilder {
             name,
             arguments: serde_json::Value::Object(Default::default()),
             thought_signature: None,
+            arguments_error: None,
         }));
         let idx = self.message.content.len() - 1;
         self.tool_args.push((idx, String::new()));
@@ -234,9 +235,20 @@ impl PartialBuilder {
         });
     }
 
-    /// Finalize a tool call: parse accumulated raw args (salvaging truncated
-    /// JSON) unless the provider already delivered structured arguments.
+    /// Finalize a tool call: parse the complete raw arguments unless the
+    /// provider already delivered structured arguments.
     pub fn end_tool_call(&mut self, idx: usize, structured_args: Option<serde_json::Value>) {
+        self.finalize_tool_call(idx, structured_args, true);
+    }
+
+    /// `complete` is false for a call cut off by the end of the stream. Its
+    /// truncated JSON is salvaged for display; the agent loop never runs it.
+    fn finalize_tool_call(
+        &mut self,
+        idx: usize,
+        structured_args: Option<serde_json::Value>,
+        complete: bool,
+    ) {
         let raw = self
             .tool_args
             .iter()
@@ -244,9 +256,15 @@ impl PartialBuilder {
             .map(|(_, r)| r.clone())
             .unwrap_or_default();
         if let Some(ContentBlock::ToolCall(tc)) = self.message.content.get_mut(idx) {
-            tc.arguments = structured_args
-                .or_else(|| parse_salvage(&raw))
-                .unwrap_or(serde_json::Value::Object(Default::default()));
+            let empty = || serde_json::Value::Object(Default::default());
+            tc.arguments = match structured_args {
+                Some(arguments) => arguments,
+                None if complete => parse_tool_arguments(&raw).unwrap_or_else(|error| {
+                    tc.arguments_error = Some(error);
+                    empty()
+                }),
+                None => parse_salvage(&raw).unwrap_or_else(empty),
+            };
             let tool_call = tc.clone();
             self.sink.send(AssistantEvent::ToolCallEnd {
                 content_index: idx,
@@ -267,12 +285,12 @@ impl PartialBuilder {
             .tool_args
             .iter()
             .filter(|(i, _)| {
-                matches!(self.message.content.get(*i), Some(ContentBlock::ToolCall(tc)) if tc.arguments.as_object().is_some_and(|o| o.is_empty()))
+                matches!(self.message.content.get(*i), Some(ContentBlock::ToolCall(tc)) if tc.arguments_error.is_none() && tc.arguments.as_object().is_some_and(|o| o.is_empty()))
             })
             .map(|(i, _)| *i)
             .collect();
         for idx in open_tools {
-            self.end_tool_call(idx, None);
+            self.finalize_tool_call(idx, None, false);
         }
     }
 
@@ -500,6 +518,7 @@ mod provider_header_tests {
             thinking_level_map: Default::default(),
             headers: Default::default(),
             sampling_params: Default::default(),
+            sampling_params_by_thinking_level: Default::default(),
         };
         assert_eq!(
             provider_base_url(
@@ -540,6 +559,7 @@ mod provider_header_tests {
             thinking_level_map: Default::default(),
             headers: Default::default(),
             sampling_params: Default::default(),
+            sampling_params_by_thinking_level: Default::default(),
         };
         let mut usage = Usage {
             input: 101,
@@ -584,6 +604,7 @@ mod provider_header_tests {
             thinking_level_map: Default::default(),
             headers: Default::default(),
             sampling_params: Default::default(),
+            sampling_params_by_thinking_level: Default::default(),
         };
         let request = apply_provider_headers(
             crate::stream::http_client().get("https://example.invalid"),
@@ -621,6 +642,7 @@ mod provider_header_tests {
             thinking_level_map: Default::default(),
             headers: Default::default(),
             sampling_params: Default::default(),
+            sampling_params_by_thinking_level: Default::default(),
         };
         let request = apply_provider_headers(
             crate::stream::http_client().get("https://example.invalid"),
@@ -660,6 +682,7 @@ mod provider_header_tests {
             thinking_level_map: Default::default(),
             headers: Default::default(),
             sampling_params: Default::default(),
+            sampling_params_by_thinking_level: Default::default(),
         };
         let mut usage = Usage {
             cache_write: 1_000_000,
@@ -689,6 +712,7 @@ mod provider_header_tests {
             thinking_level_map: Default::default(),
             headers: Default::default(),
             sampling_params: Default::default(),
+            sampling_params_by_thinking_level: Default::default(),
         };
         kiss_bench::measure(
             "stream_text_40k_2000",

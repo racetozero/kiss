@@ -247,11 +247,8 @@ async fn build_request(
         .set_temperature(options.temperature.map(|temperature| temperature as f32))
         .build();
     let tools = convert_tools(context)?;
-    let additional = thinking_budget(options.reasoning, model.max_tokens).map(|budget| {
-        value_to_document(&serde_json::json!({
-            "thinking": {"type": "enabled", "budget_tokens": budget}
-        }))
-    });
+    let additional =
+        reasoning_fields(model, options.reasoning).map(|fields| value_to_document(&fields));
 
     Ok(client
         .converse_stream()
@@ -262,6 +259,45 @@ async fn build_request(
         .set_service_tier(bedrock_service_tier(options))
         .set_tool_config(tools)
         .set_additional_model_request_fields(additional))
+}
+
+/// OpenAI models on Bedrock take a reasoning effort, not a thinking budget.
+/// gpt-oss takes a flat `reasoning_effort` and accepts only low, medium, and high.
+fn reasoning_fields(model: &Model, level: crate::ThinkingLevel) -> Option<Value> {
+    use crate::ThinkingLevel::*;
+    let id = model.id.to_ascii_lowercase();
+    if level == Off {
+        return None;
+    }
+    if id.contains("gpt-oss") {
+        let effort = match level {
+            Medium => "medium",
+            High | Xhigh | Max => "high",
+            _ => "low",
+        };
+        return Some(serde_json::json!({ "reasoning_effort": effort }));
+    }
+    if id.contains("gpt-") {
+        let effort = model
+            .thinking_level_map
+            .get(level.as_str())
+            .cloned()
+            .flatten()
+            .unwrap_or_else(|| {
+                match level {
+                    Off | Minimal | Low => "low",
+                    Medium => "medium",
+                    High => "high",
+                    Xhigh => "xhigh",
+                    Max => "max",
+                }
+                .into()
+            });
+        return Some(serde_json::json!({ "reasoning": { "effort": effort } }));
+    }
+    thinking_budget(level, model.max_tokens).map(
+        |budget| serde_json::json!({ "thinking": { "type": "enabled", "budget_tokens": budget } }),
+    )
 }
 
 fn bedrock_service_tier(options: &StreamOptions) -> Option<ServiceTier> {
@@ -539,6 +575,7 @@ mod tests {
             thinking_level_map: Default::default(),
             headers: Default::default(),
             sampling_params: Default::default(),
+            sampling_params_by_thinking_level: Default::default(),
         }
     }
 
@@ -588,6 +625,25 @@ mod tests {
         let specification = tools.tools()[0].as_tool_spec().unwrap();
         assert_eq!(specification.name(), "read");
         assert!(specification.input_schema().unwrap().is_json());
+    }
+
+    #[test]
+    fn openai_models_use_reasoning_effort() {
+        let mut gpt = model();
+        gpt.id = "global.openai.gpt-6.1-sol".into();
+        assert_eq!(
+            reasoning_fields(&gpt, crate::ThinkingLevel::Xhigh).unwrap(),
+            serde_json::json!({"reasoning": {"effort": "xhigh"}})
+        );
+        gpt.id = "openai.gpt-oss-120b-1:0".into();
+        assert_eq!(
+            reasoning_fields(&gpt, crate::ThinkingLevel::Max).unwrap(),
+            serde_json::json!({"reasoning_effort": "high"})
+        );
+        assert!(reasoning_fields(&gpt, crate::ThinkingLevel::Off).is_none());
+        assert!(
+            reasoning_fields(&model(), crate::ThinkingLevel::High).unwrap()["thinking"].is_object()
+        );
     }
 
     #[test]

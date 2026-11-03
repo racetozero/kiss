@@ -39,7 +39,10 @@ pub fn discover(cwd: &Path) -> Vec<ContextFile> {
         }
     }
 
-    paths.dedup();
+    // A symlinked AGENTS.md, such as one in a git worktree nested inside its
+    // main repository, can name a file that an ancestor already loaded.
+    let mut seen = std::collections::HashSet::new();
+    paths.retain(|path| seen.insert(std::fs::canonicalize(path).unwrap_or_else(|_| path.clone())));
     paths
         .into_iter()
         .filter_map(|path| {
@@ -73,6 +76,23 @@ pub fn system_prompt_files(cwd: &Path) -> SystemPromptFiles {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_context_file_loads_once() {
+        let repo = tempfile::tempdir().unwrap();
+        std::fs::write(repo.path().join("AGENTS.md"), "rules").unwrap();
+        let worktree = repo.path().join("worktrees/feature");
+        std::fs::create_dir_all(&worktree).unwrap();
+        std::os::unix::fs::symlink(repo.path().join("AGENTS.md"), worktree.join("AGENTS.md"))
+            .unwrap();
+        let files: Vec<ContextFile> = discover(&worktree)
+            .into_iter()
+            .filter(|file| file.path.starts_with(repo.path()))
+            .collect();
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].content, "rules");
+    }
 
     #[test]
     fn override_beats_agents_beats_claude() {

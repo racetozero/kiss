@@ -3,11 +3,12 @@
 pub mod config;
 pub mod manager;
 pub mod oauth;
+mod provider_auth;
 pub mod tool;
 
 pub use config::{
-    AuthMode, AuthSetting, ConfigPaths, ConfigScope, LoadedConfig, McpConfig, OAuthConfig,
-    OAuthGrantType, ServerEntry,
+    AuthMode, AuthSetting, ClientRegistration, ConfigPaths, ConfigScope, LoadedConfig, McpConfig,
+    OAuthConfig, OAuthGrantType, ServerEntry,
 };
 pub use manager::{
     CachedPrompt, CachedResource, CachedTool, McpManager, ServerState, ServerStatus,

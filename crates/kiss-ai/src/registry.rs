@@ -8,12 +8,12 @@ use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
-/// Generated model data verified against `@earendil-works/pi-ai` 0.99.1.
+/// Generated model data verified against `@earendil-works/pi-ai` 1.4.0.
 const BUILTIN_PROVIDER_CATALOGS: &[&str] = &[
     include_str!("../data/providers/amazon-bedrock.json"),
     include_str!("../data/providers/ant-ling.json"),
     include_str!("../data/providers/anthropic.json"),
-    include_str!("../data/providers/azure-openai-responses.json"),
+    include_str!("../data/providers/azure.json"),
     include_str!("../data/providers/baseten.json"),
     include_str!("../data/providers/cerebras.json"),
     include_str!("../data/providers/cloudflare-ai-gateway.json"),
@@ -56,11 +56,23 @@ const BUILTIN_PROVIDER_CATALOGS: &[&str] = &[
     include_str!("../data/providers/zai.json"),
 ];
 
+/// Provider IDs that Pi renamed, with their current IDs. KISS still accepts
+/// the old IDs in commands, settings, `models.json`, and saved logins.
+pub(crate) const RENAMED_PROVIDER_IDS: &[(&str, &str)] = &[("azure-openai-responses", "azure")];
+
+/// The current ID of a provider that Pi renamed, otherwise `provider`.
+pub fn canonical_provider_id(provider: &str) -> &str {
+    RENAMED_PROVIDER_IDS
+        .iter()
+        .find(|(old, _)| *old == provider)
+        .map_or(provider, |(_, new)| new)
+}
+
 pub const BUILTIN_PROVIDER_IDS: &[&str] = &[
     "amazon-bedrock",
     "ant-ling",
     "anthropic",
-    "azure-openai-responses",
+    "azure",
     "baseten",
     "cerebras",
     "cloudflare-ai-gateway",
@@ -153,6 +165,8 @@ struct CatalogModel {
     thinking_level_map: BTreeMap<String, Option<String>>,
     #[serde(default)]
     sampling_params: BTreeMap<String, serde_json::Value>,
+    #[serde(default)]
+    sampling_params_by_thinking_level: BTreeMap<String, BTreeMap<String, serde_json::Value>>,
     #[serde(default)]
     base_url: Option<String>,
     #[serde(default)]
@@ -417,6 +431,7 @@ impl Registry {
                 max_tokens: 16_384,
                 compat: None,
                 sampling_params: Default::default(),
+                sampling_params_by_thinking_level: Default::default(),
                 thinking_level_map: BTreeMap::new(),
                 headers,
             });
@@ -465,6 +480,7 @@ impl Registry {
                 max_tokens: model.max_tokens,
                 compat: None,
                 sampling_params: Default::default(),
+                sampling_params_by_thinking_level: Default::default(),
                 thinking_level_map: BTreeMap::new(),
                 headers: BTreeMap::new(),
             });
@@ -540,7 +556,11 @@ impl Registry {
 
     fn merge_catalog(&mut self, text: &str) -> Result<()> {
         let catalog: CatalogFile = serde_json::from_str(text).context("parse model catalog")?;
-        for (provider_id, provider) in catalog.providers {
+        for (provider_id, mut provider) in catalog.providers {
+            let provider_id = canonical_provider_id(&provider_id).to_owned();
+            provider.auth_provider = provider
+                .auth_provider
+                .map(|id| canonical_provider_id(&id).to_owned());
             self.manually_configured_providers
                 .insert(provider_id.clone());
             if let Some(key) = &provider.api_key {
@@ -569,6 +589,7 @@ impl Registry {
                     },
                     thinking_level_map: m.thinking_level_map,
                     sampling_params: m.sampling_params,
+                    sampling_params_by_thinking_level: m.sampling_params_by_thinking_level,
                     headers: if m.headers.is_empty() {
                         provider.headers.clone()
                     } else {
@@ -633,6 +654,7 @@ impl Registry {
         provider: Option<&str>,
     ) -> Option<(Model, Option<ThinkingLevel>)> {
         let (pattern, thinking) = split_thinking_suffix(pattern);
+        let provider = provider.map(canonical_provider_id);
         // A model ID can contain another provider's name (for example
         // Together's moonshotai/Kimi-K3). Resolve exact scoped IDs first.
         if let Some(provider) = provider
@@ -644,7 +666,14 @@ impl Registry {
             return Some((model.clone(), thinking));
         }
         let (provider, pattern) = match pattern.split_once('/') {
-            Some((p, rest)) if self.models.iter().any(|m| m.provider == p) => (Some(p), rest),
+            Some((p, rest))
+                if self
+                    .models
+                    .iter()
+                    .any(|m| m.provider == canonical_provider_id(p)) =>
+            {
+                (Some(canonical_provider_id(p)), rest)
+            }
             _ => (provider, pattern),
         };
         let candidates: Vec<&Model> = self
@@ -652,9 +681,25 @@ impl Registry {
             .iter()
             .filter(|m| provider.is_none_or(|p| m.provider == p))
             .collect();
-        let found = candidates
-            .iter()
-            .find(|m| m.id == pattern)
+        let exact: Vec<&&Model> = candidates.iter().filter(|m| m.id == pattern).collect();
+        // Several providers can offer one ID. Catalog order must not choose a
+        // provider the user cannot authenticate.
+        let exact = if exact.len() > 1 {
+            exact
+                .iter()
+                .find(|m| {
+                    crate::auth::resolve_api_key_local(
+                        self.credential_provider(&m.provider),
+                        &self.declared_keys,
+                    )
+                    .is_some()
+                })
+                .or(exact.first())
+                .copied()
+        } else {
+            exact.first().copied()
+        };
+        let found = exact
             .or_else(|| {
                 let lower = pattern.to_lowercase();
                 candidates.iter().find(|m| {
@@ -667,11 +712,18 @@ impl Registry {
 
     /// Match models against comma-separated glob-ish patterns (`claude-*`).
     pub fn match_patterns(&self, patterns: &[String]) -> Vec<Model> {
+        let patterns: Vec<String> = patterns
+            .iter()
+            .map(|pattern| match pattern.trim().split_once('/') {
+                Some((provider, rest)) => format!("{}/{rest}", canonical_provider_id(provider)),
+                None => pattern.trim().to_owned(),
+            })
+            .collect();
         let mut out = Vec::new();
         for m in &self.models {
-            for pat in patterns {
-                if pattern_matches(pat.trim(), &m.id)
-                    || pattern_matches(pat.trim(), &format!("{}/{}", m.provider, m.id))
+            for pat in &patterns {
+                if pattern_matches(pat, &m.id)
+                    || pattern_matches(pat, &format!("{}/{}", m.provider, m.id))
                 {
                     out.push(m.clone());
                     break;
@@ -840,10 +892,76 @@ mod tests {
         assert!(registry.resolve("radius/balanced", None).is_some());
         assert!(registry.resolve("openai-codex/gpt-5.4", None).is_none());
 
+        // Pi v1.4.0 catalog changes.
+        let (haiku, _) = registry
+            .resolve("anthropic/claude-haiku-5-5", None)
+            .expect("Claude Haiku 5.5");
+        assert!(haiku.reasoning);
+        assert!(
+            registry
+                .resolve("minimax/MiniMax-M3.1-Flash", None)
+                .is_some()
+        );
+        let (foundry, _) = registry
+            .resolve("azure/deepseek-v4-pro", None)
+            .expect("Azure Foundry DeepSeek V4 Pro");
+        assert_eq!(foundry.api, "openai-completions");
+        let (kimi, _) = registry
+            .resolve("kimi-coding/kimi-for-coding", None)
+            .expect("Kimi For Coding");
+        assert_eq!(kimi.api, "openai-completions");
+        assert_eq!(kimi.base_url, "https://api.kimi.com/coding/v1");
+        let (codex, _) = registry
+            .resolve("openai-codex/gpt-6.1-sol", None)
+            .expect("Codex GPT-6.1 Sol");
+        assert_eq!(codex.context_window, 500_000);
+        assert!(registry.resolve("openai-codex/gpt-5.5", None).is_none());
+        assert!(
+            registry
+                .all()
+                .iter()
+                .all(|model| model.provider != "azure-openai-responses")
+        );
+        // The old Azure provider ID still selects Azure models.
+        let (azure, _) = registry
+            .resolve("azure-openai-responses/gpt-6.1-sol", None)
+            .expect("old Azure provider ID");
+        assert_eq!(azure.provider, "azure");
+        let (azure, _) = registry
+            .resolve("gpt-6.1-sol", Some("azure-openai-responses"))
+            .expect("old Azure provider ID with --provider");
+        assert_eq!(azure.provider, "azure");
+        assert!(
+            registry
+                .match_patterns(&["azure-openai-responses/gpt-6.1-*".into()])
+                .iter()
+                .all(|model| model.provider == "azure")
+        );
+        assert!(
+            !registry
+                .match_patterns(&["azure-openai-responses/gpt-6.1-*".into()])
+                .is_empty()
+        );
+        let mut overlay = Registry::from_builtin();
+        overlay
+            .merge_catalog(
+                r#"{"providers":{"azure-openai-responses":{"baseUrl":"https://example.openai.azure.com/openai/v1","api":"azure-openai-responses","models":[{"id":"my-deployment"}]},"router":{"baseUrl":"http://localhost","api":"openai-completions","authProvider":"azure-openai-responses","models":[{"id":"routed"}]}}}"#,
+            )
+            .unwrap();
+        assert_eq!(
+            overlay
+                .resolve("azure/my-deployment", None)
+                .unwrap()
+                .0
+                .provider,
+            "azure"
+        );
+        assert_eq!(overlay.credential_provider("router"), "azure");
+
         for model in [
             "openai/gpt-6.1-sol",
             "openai-codex/gpt-6.1-sol",
-            "azure-openai-responses/gpt-6.1-sol",
+            "azure/gpt-6.1-sol",
             "anthropic/claude-sonnet-5-5",
             "anthropic/claude-opus-5-5",
             "openai/gpt-6-sol",

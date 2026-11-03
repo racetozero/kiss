@@ -861,6 +861,7 @@ mod tests {
                 name: (*name).into(),
                 arguments: json!({"path": format!("{id}.rs")}),
                 thought_signature: None,
+                arguments_error: None,
             }));
         }
         message.stop_reason = StopReason::ToolUse;
@@ -1262,6 +1263,7 @@ mod tests {
                 name: "read".into(),
                 arguments: json!({"path": format!("{id}-{}", "界".repeat(2_000))}),
                 thought_signature: None,
+                arguments_error: None,
             }));
             message.stop_reason = StopReason::ToolUse;
             messages.push(AgentMessage::Assistant(message));

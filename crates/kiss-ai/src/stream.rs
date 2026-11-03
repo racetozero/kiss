@@ -125,8 +125,9 @@ pub fn stream_simple(model: &Model, context: &Context, options: &StreamOptions) 
 }
 
 #[cfg(feature = "native")]
-async fn dispatch(model: Model, context: Context, mut options: StreamOptions, sink: EventSink) {
+async fn dispatch(model: Model, mut context: Context, mut options: StreamOptions, sink: EventSink) {
     options.reasoning = model.map_thinking_level(options.reasoning);
+    drop_foreign_thinking(&model, &mut context);
     if model.base_url.contains("{DATABRICKS_HOST}") {
         let builder = api::PartialBuilder::new(&model, sink);
         builder.fail(
@@ -166,6 +167,24 @@ async fn dispatch(model: Model, context: Context, mut options: StreamOptions, si
     }
 }
 
+/// Thinking is valid only for the model that produced it: signatures and
+/// encrypted reasoning fail elsewhere, and another model reads plain thinking
+/// as part of its own visible reply.
+#[cfg(feature = "native")]
+fn drop_foreign_thinking(model: &Model, context: &mut Context) {
+    for message in &mut context.messages {
+        if let crate::Message::Assistant(assistant) = message
+            && (assistant.provider != model.provider
+                || assistant.api != model.api
+                || assistant.model != model.id)
+        {
+            assistant
+                .content
+                .retain(|block| !matches!(block, crate::ContentBlock::Thinking { .. }));
+        }
+    }
+}
+
 /// Shared HTTP client with connection pooling across requests.
 #[cfg(feature = "native")]
 pub fn http_client() -> &'static reqwest::Client {
@@ -201,5 +220,43 @@ mod tests {
         super::ensure_tls_crypto_provider();
         assert!(rustls::crypto::CryptoProvider::get_default().is_some());
         reqwest::Client::builder().build().unwrap();
+    }
+
+    #[test]
+    fn thinking_from_another_model_is_dropped() {
+        use crate::{AssistantMessage, ContentBlock, Context, Message};
+        let model: crate::Model = serde_json::from_value(serde_json::json!({
+            "id": "new", "api": "openai-responses", "provider": "openai", "baseUrl": "",
+        }))
+        .unwrap();
+        let reply = |model_id: &str| {
+            let mut message = AssistantMessage::empty("openai-responses", "openai", model_id);
+            message.content = vec![
+                ContentBlock::Thinking {
+                    thinking: "plan".into(),
+                    thinking_signature: Some("sig".into()),
+                    redacted: false,
+                },
+                ContentBlock::Text {
+                    text: "answer".into(),
+                    text_signature: None,
+                },
+            ];
+            Message::Assistant(message)
+        };
+        let mut context = Context {
+            messages: vec![reply("old"), reply("new")],
+            ..Default::default()
+        };
+        super::drop_foreign_thinking(&model, &mut context);
+        let lengths: Vec<usize> = context
+            .messages
+            .iter()
+            .map(|message| match message {
+                Message::Assistant(message) => message.content.len(),
+                _ => 0,
+            })
+            .collect();
+        assert_eq!(lengths, [1, 2]);
     }
 }

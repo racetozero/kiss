@@ -56,18 +56,20 @@ fn configured_tools(
     if args.no_tools {
         return Ok((names, None));
     }
+    if args.no_mcp {
+        names.retain(|name| name != "mcp");
+        return Ok((names, None));
+    }
     let loaded = kiss_mcp::config::load(cwd, trusted)?;
     if loaded.enabled_server_count() == 0 {
         names.retain(|name| name != "mcp");
         return Ok((names, None));
     }
-    let explicitly_excluded = Args::split_csv(&args.exclude_tools)
-        .iter()
-        .any(|name| name == "mcp");
-    if args.tools.is_none()
-        && settings.default_tools.is_none()
-        && !explicitly_excluded
-        && !names.iter().any(|name| name == "mcp")
+    if kiss_sdk::tools::includes_mcp_by_default(
+        allow.as_deref(),
+        &Args::split_csv(&args.exclude_tools),
+        settings.default_tools.as_deref(),
+    ) && !names.iter().any(|name| name == "mcp")
     {
         names.push("mcp".to_string());
     }
@@ -232,7 +234,11 @@ fn startup_model(
 
 fn provider_default(registry: &Registry, provider: &str) -> Option<Model> {
     let preferred = match provider {
-        "openai-codex" => Some("gpt-6.1-sol"),
+        "openai-codex" | "github-copilot" => Some("gpt-6.1-sol"),
+        "nvidia" => Some("nvidia/nemotron-3.5-super-vl-120b-a12b"),
+        "xiaomi" | "xiaomi-token-plan-cn" | "xiaomi-token-plan-ams" | "xiaomi-token-plan-sgp" => {
+            Some("mimo-v2.6-pro")
+        }
         "fireworks" => Some("accounts/fireworks/models/kimi-k3"),
         "together" => Some("moonshotai/Kimi-K3"),
         "opencode-go" => Some("kimi-k3"),

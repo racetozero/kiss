@@ -475,7 +475,7 @@ fn canonical_provider(entry_key: &str, kind: ExternalCredentialKind) -> Option<S
         ("anthropic" | "claude", _) => "anthropic",
         ("github-copilot" | "copilot", _) => "github-copilot",
         ("google" | "gemini", ExternalCredentialKind::ApiKey) => "google",
-        ("azure" | "azure-openai", _) => "azure-openai-responses",
+        ("azure" | "azure-openai" | "azure-openai-responses", _) => "azure",
         ("togetherai" | "together-ai", _) => "together",
         ("moonshot", _) => "moonshotai",
         ("kimi", _) => "kimi-coding",

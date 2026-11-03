@@ -77,6 +77,8 @@ pub struct ModelInput {
     pub headers: BTreeMap<String, String>,
     #[serde(default)]
     pub sampling_params: BTreeMap<String, Value>,
+    #[serde(default)]
+    pub sampling_params_by_thinking_level: BTreeMap<String, BTreeMap<String, Value>>,
 }
 
 fn host_api() -> String {
@@ -113,6 +115,7 @@ impl From<ModelInput> for Model {
             thinking_level_map: value.thinking_level_map,
             headers: value.headers,
             sampling_params: value.sampling_params,
+            sampling_params_by_thinking_level: value.sampling_params_by_thinking_level,
         }
     }
 }

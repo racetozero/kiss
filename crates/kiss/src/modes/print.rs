@@ -12,10 +12,12 @@ use std::sync::{Arc, Mutex};
 pub async fn run(args: &Args) -> Result<i32> {
     let final_text: Arc<Mutex<Vec<String>>> = Default::default();
     let error: Arc<Mutex<Option<String>>> = Default::default();
+    let truncated: Arc<Mutex<bool>> = Default::default();
     let workflow_outcomes: Arc<Mutex<Vec<String>>> = Default::default();
     let sink = {
         let final_text = final_text.clone();
         let error = error.clone();
+        let truncated = truncated.clone();
         let workflow_outcomes = workflow_outcomes.clone();
         Arc::new(move |event: SessionEvent| match event {
             SessionEvent::Agent(agent_event) => {
@@ -23,6 +25,7 @@ pub async fn run(args: &Args) -> Result<i32> {
                     message: AgentMessage::Assistant(a),
                 } = *agent_event
                 {
+                    *truncated.lock().unwrap() = a.stop_reason == kiss_ai::StopReason::Length;
                     if a.stop_reason == kiss_ai::StopReason::Error {
                         *error.lock().unwrap() = Some(a.error_message.clone().unwrap_or_default());
                     } else {
@@ -86,6 +89,12 @@ pub async fn run(args: &Args) -> Result<i32> {
     }
     for outcome in workflow_outcomes.lock().unwrap().iter() {
         println!("\n{outcome}");
+    }
+    if *truncated.lock().unwrap() {
+        eprintln!(
+            "warning: the response stopped at the model's output token limit, so it is incomplete. Ask for a shorter answer, or choose a model with a larger output limit"
+        );
+        return Ok(1);
     }
     Ok(0)
 }

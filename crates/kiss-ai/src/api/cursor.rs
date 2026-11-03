@@ -1248,6 +1248,7 @@ pub async fn discover_models(access_token: &str) -> Result<Vec<Model>> {
             thinking_level_map: BTreeMap::new(),
             headers: BTreeMap::new(),
             sampling_params: Default::default(),
+            sampling_params_by_thinking_level: Default::default(),
         });
     }
     Ok(models)
@@ -1275,6 +1276,7 @@ mod tests {
             thinking_level_map: Default::default(),
             headers: Default::default(),
             sampling_params: Default::default(),
+            sampling_params_by_thinking_level: Default::default(),
         }
     }
 
@@ -1293,6 +1295,7 @@ mod tests {
                         name: "read".into(),
                         arguments: serde_json::json!({"path": "x"}),
                         thought_signature: None,
+                        arguments_error: None,
                     })],
                     ..crate::AssistantMessage::empty(API, PROVIDER, "auto")
                 }),
