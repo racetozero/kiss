@@ -176,7 +176,11 @@ pub fn env_var_names(provider: &str) -> &'static [&'static str] {
         "baseten" => &["BASETEN_API_KEY"],
         "cerebras" => &["CEREBRAS_API_KEY"],
         "cloudflare-ai-gateway" => &["CLOUDFLARE_AI_GATEWAY_API_KEY"],
-        "cloudflare-workers-ai" => &["CLOUDFLARE_API_TOKEN"],
+        "cloudflare-workers-ai" => &[
+            "CLOUDFLARE_API_TOKEN",
+            "CLOUDFLARE_API_KEY",
+            "CLOUDFLARE_AUTH_TOKEN",
+        ],
         "cursor" => &["CURSOR_ACCESS_TOKEN"],
         "databricks-unity-gateway" => &["DATABRICKS_TOKEN"],
         "deepseek" => &["DEEPSEEK_API_KEY"],
@@ -188,6 +192,7 @@ pub fn env_var_names(provider: &str) -> &'static [&'static str] {
         "huggingface" => &["HF_TOKEN"],
         "kimi-coding" => &["KIMI_API_KEY"],
         "llama.cpp" => &["LLAMA_API_KEY"],
+        "liquid" => &["LIQUID_API_KEY"],
         "meta" => &["META_API_KEY"],
         "minimax" => &["MINIMAX_API_KEY"],
         "minimax-cn" => &["MINIMAX_CN_API_KEY"],
@@ -778,9 +783,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn typesafe_uses_its_standard_environment_variable() {
+    fn decision_providers_use_standard_environment_variables() {
         assert_eq!(env_var_names("typesafe"), &["TYPESAFE_API_KEY"]);
         assert_eq!(login_methods("typesafe"), vec![LoginMethod::ApiKey]);
+        assert_eq!(env_var_names("liquid"), &["LIQUID_API_KEY"]);
+        assert_eq!(login_methods("liquid"), vec![LoginMethod::ApiKey]);
+        assert!(env_var_names("cloudflare-workers-ai").contains(&"CLOUDFLARE_API_TOKEN"));
     }
 
     #[test]

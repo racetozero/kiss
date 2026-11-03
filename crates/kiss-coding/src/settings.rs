@@ -1,6 +1,7 @@
 //! Settings: global `~/.kiss/agent/settings.json` deep-merged with project
 //! `.kiss/settings.json` (project wins).
 
+use crate::decision::DecisionModel;
 use kiss_ai::Transport;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -13,6 +14,35 @@ pub enum CompactionMode {
     #[default]
     Summary,
     Jev,
+    #[serde(rename = "d1.1", alias = "d1")]
+    D1,
+    #[serde(rename = "d1-ultra")]
+    D1Ultra,
+    Clef,
+    #[serde(rename = "clef-flash")]
+    ClefFlash,
+}
+
+impl CompactionMode {
+    pub const ALL: [Self; 6] = [
+        Self::Summary,
+        Self::Jev,
+        Self::D1Ultra,
+        Self::D1,
+        Self::ClefFlash,
+        Self::Clef,
+    ];
+
+    pub fn decision_model(self) -> Option<DecisionModel> {
+        match self {
+            Self::Summary => None,
+            Self::Jev => Some(DecisionModel::Jev),
+            Self::D1 => Some(DecisionModel::D1),
+            Self::D1Ultra => Some(DecisionModel::D1Ultra),
+            Self::Clef => Some(DecisionModel::Clef),
+            Self::ClefFlash => Some(DecisionModel::ClefFlash),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -50,6 +80,35 @@ pub enum ReasoningEffortMode {
     #[default]
     Fixed,
     Jev,
+    #[serde(rename = "d1.1", alias = "d1")]
+    D1,
+    #[serde(rename = "d1-ultra")]
+    D1Ultra,
+    Clef,
+    #[serde(rename = "clef-flash")]
+    ClefFlash,
+}
+
+impl ReasoningEffortMode {
+    pub const ALL: [Self; 6] = [
+        Self::Fixed,
+        Self::Jev,
+        Self::D1Ultra,
+        Self::D1,
+        Self::ClefFlash,
+        Self::Clef,
+    ];
+
+    pub fn decision_model(self) -> Option<DecisionModel> {
+        match self {
+            Self::Fixed => None,
+            Self::Jev => Some(DecisionModel::Jev),
+            Self::D1 => Some(DecisionModel::D1),
+            Self::D1Ultra => Some(DecisionModel::D1Ultra),
+            Self::Clef => Some(DecisionModel::Clef),
+            Self::ClefFlash => Some(DecisionModel::ClefFlash),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -497,6 +556,50 @@ mod tests {
         assert_eq!(
             serde_json::to_value(settings).unwrap()["reasoningEffort"]["mode"],
             "fixed"
+        );
+    }
+
+    #[test]
+    fn decision_models_roundtrip_and_can_differ_between_features() {
+        for (wire, provider, model) in [
+            ("jev", "typesafe", "jev-latest"),
+            ("d1.1", "liquid", "d1.1"),
+            ("d1-ultra", "liquid", "d1-ultra"),
+            ("clef", "cloudflare-workers-ai", "clef"),
+            ("clef-flash", "cloudflare-workers-ai", "clef-flash"),
+        ] {
+            let settings: Settings = serde_json::from_value(json!({
+                "compaction": {"mode": wire}, "reasoningEffort": {"mode": wire}
+            }))
+            .unwrap();
+            for selected in [
+                settings.compaction.mode.decision_model(),
+                settings.reasoning_effort.mode.decision_model(),
+            ] {
+                let selected = selected.unwrap();
+                assert_eq!((selected.provider(), selected.id()), (provider, model));
+            }
+            let value = serde_json::to_value(settings).unwrap();
+            assert_eq!(value["compaction"]["mode"], wire);
+            assert_eq!(value["reasoningEffort"]["mode"], wire);
+        }
+        let alias: Settings = serde_json::from_value(json!({"compaction":{"mode":"d1"}})).unwrap();
+        assert_eq!(alias.compaction.mode.decision_model().unwrap().id(), "d1.1");
+        assert_eq!(
+            serde_json::to_value(alias).unwrap()["compaction"]["mode"],
+            "d1.1"
+        );
+        let settings = merged_settings(
+            json!({"compaction":{"mode":"jev"}, "reasoningEffort":{"mode":"d1-ultra"}}),
+            Some(json!({"compaction":{"mode":"clef-flash"}})),
+        );
+        assert_eq!(
+            settings.compaction.mode.decision_model(),
+            Some(DecisionModel::ClefFlash)
+        );
+        assert_eq!(
+            settings.reasoning_effort.mode.decision_model(),
+            Some(DecisionModel::D1Ultra)
         );
     }
 

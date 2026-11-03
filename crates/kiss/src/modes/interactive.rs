@@ -11,6 +11,7 @@ use crate::workflow_ui::{self, ViewAction, WorkflowView};
 use anyhow::{Context as _, Result};
 use kiss_agent::{AgentEvent, AgentMessage};
 use kiss_ai::{AssistantEvent, ContentBlock, StopReason, ThinkingLevel, Transport};
+use kiss_coding::decision::DecisionModel;
 use kiss_coding::session_runner::{PromptMode, SessionEvent};
 use kiss_coding::settings::{CompactionMode, MermaidRendering, QueueMode, ReasoningEffortMode};
 use kiss_coding::workflows::workflow_trigger;
@@ -43,6 +44,7 @@ enum Cell {
     },
     Notice(String),
     ReasoningEffort {
+        decision_model: String,
         level: ThinkingLevel,
         generations: u8,
     },
@@ -648,9 +650,13 @@ impl App {
                         }
                     }
                 }
-                Cell::ReasoningEffort { level, generations } => {
+                Cell::ReasoningEffort {
+                    decision_model,
+                    level,
+                    generations,
+                } => {
                     let message = format!(
-                        "◆ Jev changed reasoning to {} for {generations} generation{}",
+                        "◆ {decision_model} changed reasoning to {} for {generations} generation{}",
                         level.as_str(),
                         if *generations == 1 { "" } else { "s" }
                     );
@@ -951,7 +957,12 @@ fn cell_render_key(
         | Cell::Thinking(text)
         | Cell::Notice(text)
         | Cell::Error(text) => text.hash(&mut hasher),
-        Cell::ReasoningEffort { level, generations } => {
+        Cell::ReasoningEffort {
+            decision_model,
+            level,
+            generations,
+        } => {
+            decision_model.hash(&mut hasher);
             (*level as u8).hash(&mut hasher);
             generations.hash(&mut hasher);
         }
@@ -1849,12 +1860,20 @@ fn handle_session_event(
             app.cells
                 .push(Cell::Notice(format!("model: {provider}/{model_id}")));
         }
-        SessionEvent::ReasoningEffortChanged { level, generations } => {
-            app.cells.push(Cell::ReasoningEffort { level, generations });
+        SessionEvent::ReasoningEffortChanged {
+            decision_model,
+            level,
+            generations,
+        } => {
+            app.cells.push(Cell::ReasoningEffort {
+                decision_model,
+                level,
+                generations,
+            });
         }
         SessionEvent::ReasoningEffortFallback { level, reason } => {
             app.cells.push(Cell::Error(format!(
-                "Jev could not select reasoning: {reason}. Using saved effort {}",
+                "Decision model could not select reasoning: {reason}. Using saved effort {}",
                 level.as_str()
             )));
         }
@@ -2656,7 +2675,7 @@ fn command_argument_items(
         "login" => kiss_ai::registry::BUILTIN_PROVIDER_IDS
             .iter()
             .copied()
-            .chain(["typesafe", "llama.cpp"])
+            .chain(["typesafe", "liquid", "llama.cpp"])
             .map(|provider| {
                 (
                     provider.to_string(),
@@ -4684,7 +4703,7 @@ fn open_login_picker_with_filter(app: &mut App, filter: Option<&str>) {
         .iter()
         .map(|provider| (*provider).to_string())
         .collect();
-    providers.extend(["typesafe".into(), "llama.cpp".into()]);
+    providers.extend(["typesafe".into(), "liquid".into(), "llama.cpp".into()]);
     let items = providers
         .iter()
         .enumerate()
@@ -4838,30 +4857,50 @@ fn open_settings_picker(
     app.picker = Some(settings_picker(app, session, resources));
 }
 
-fn typesafe_available(session: &kiss_coding::AgentSession) -> bool {
-    kiss_ai::auth::resolve_credential_local("typesafe", &session.registry.declared_keys).is_some()
+fn decision_model_detail(
+    model: Option<DecisionModel>,
+    fallback: &str,
+    session: &kiss_coding::AgentSession,
+) -> String {
+    match model {
+        None => fallback.into(),
+        Some(model) if model.available(&session.registry.declared_keys) => model.label().into(),
+        Some(model) => format!(
+            "{} unavailable · /login {}",
+            model.label(),
+            model.provider()
+        ),
+    }
 }
 
 fn next_compaction_mode(
     current: CompactionMode,
-    typesafe_available: bool,
+    available: impl Fn(DecisionModel) -> bool,
 ) -> Option<CompactionMode> {
-    if current == CompactionMode::Jev {
-        Some(CompactionMode::Summary)
-    } else {
-        typesafe_available.then_some(CompactionMode::Jev)
-    }
+    let modes = CompactionMode::ALL;
+    let index = modes.iter().position(|mode| *mode == current)?;
+    modes
+        .iter()
+        .cycle()
+        .skip(index + 1)
+        .take(modes.len() - 1)
+        .copied()
+        .find(|mode| mode.decision_model().is_none_or(&available))
 }
 
 fn next_reasoning_effort_mode(
     current: ReasoningEffortMode,
-    typesafe_available: bool,
+    available: impl Fn(DecisionModel) -> bool,
 ) -> Option<ReasoningEffortMode> {
-    if current == ReasoningEffortMode::Jev {
-        Some(ReasoningEffortMode::Fixed)
-    } else {
-        typesafe_available.then_some(ReasoningEffortMode::Jev)
-    }
+    let modes = ReasoningEffortMode::ALL;
+    let index = modes.iter().position(|mode| *mode == current)?;
+    modes
+        .iter()
+        .cycle()
+        .skip(index + 1)
+        .take(modes.len() - 1)
+        .copied()
+        .find(|mode| mode.decision_model().is_none_or(&available))
 }
 
 fn settings_picker(
@@ -5001,22 +5040,20 @@ fn settings_picker(
         },
         SelectItem {
             label: "Compaction method".into(),
-            detail: Some(match settings.compaction.mode {
-                CompactionMode::Summary => "summary".into(),
-                CompactionMode::Jev if typesafe_available(session) => "Jev".into(),
-                CompactionMode::Jev => "Jev unavailable · /login typesafe".into(),
-            }),
+            detail: Some(decision_model_detail(
+                settings.compaction.mode.decision_model(),
+                "summary",
+                session,
+            )),
             value: 15,
         },
         SelectItem {
             label: "Dynamic reasoning".into(),
-            detail: Some(match settings.reasoning_effort.mode {
-                ReasoningEffortMode::Fixed => "fixed".into(),
-                ReasoningEffortMode::Jev if typesafe_available(session) => {
-                    "Jev (reasoning models)".into()
-                }
-                ReasoningEffortMode::Jev => "Jev unavailable · /login typesafe".into(),
-            }),
+            detail: Some(decision_model_detail(
+                settings.reasoning_effort.mode.decision_model(),
+                "fixed",
+                session,
+            )),
             value: 16,
         },
     ];
@@ -6673,12 +6710,11 @@ fn apply_settings_selection(
             resources.settings.workflows.enabled = !resources.settings.workflows.enabled;
         }
         15 => {
-            let Some(mode) = next_compaction_mode(
-                resources.settings.compaction.mode,
-                typesafe_available(session),
-            ) else {
+            let Some(mode) = next_compaction_mode(resources.settings.compaction.mode, |model| {
+                model.available(&session.registry.declared_keys)
+            }) else {
                 app.cells.push(Cell::Notice(
-                    "Jev compaction needs TypeSafe credentials. Run /login typesafe or set TYPESAFE_API_KEY"
+                    "Decision compaction needs credentials. Run /login typesafe, /login liquid, or /login cloudflare-workers-ai"
                         .into(),
                 ));
                 return;
@@ -6686,12 +6722,13 @@ fn apply_settings_selection(
             resources.settings.compaction.mode = mode;
         }
         16 => {
-            let Some(mode) = next_reasoning_effort_mode(
-                resources.settings.reasoning_effort.mode,
-                typesafe_available(session),
-            ) else {
+            let Some(mode) =
+                next_reasoning_effort_mode(resources.settings.reasoning_effort.mode, |model| {
+                    model.available(&session.registry.declared_keys)
+                })
+            else {
                 app.cells.push(Cell::Notice(
-                    "Jev dynamic reasoning was selected, but it needs a TypeSafe API key. Run /login typesafe or set TYPESAFE_API_KEY, then select it again"
+                    "Dynamic reasoning needs credentials. Run /login typesafe, /login liquid, or /login cloudflare-workers-ai"
                         .into(),
                 ));
                 return;
@@ -9248,32 +9285,81 @@ mod tests {
     }
 
     #[test]
-    fn jev_compaction_requires_typesafe_credentials_to_enable() {
-        assert_eq!(next_compaction_mode(CompactionMode::Summary, false), None);
-        assert_eq!(
-            next_compaction_mode(CompactionMode::Summary, true),
-            Some(CompactionMode::Jev)
-        );
-        assert_eq!(
-            next_compaction_mode(CompactionMode::Jev, false),
-            Some(CompactionMode::Summary)
-        );
-    }
-
-    #[test]
-    fn jev_reasoning_requires_typesafe_credentials_to_enable() {
-        assert_eq!(
-            next_reasoning_effort_mode(ReasoningEffortMode::Fixed, false),
-            None
-        );
-        assert_eq!(
-            next_reasoning_effort_mode(ReasoningEffortMode::Fixed, true),
-            Some(ReasoningEffortMode::Jev)
-        );
-        assert_eq!(
-            next_reasoning_effort_mode(ReasoningEffortMode::Jev, false),
-            Some(ReasoningEffortMode::Fixed)
-        );
+    fn decision_settings_cycle_available_models_and_can_always_disable() {
+        for (compaction, reasoning, provider, next_compaction, next_reasoning) in [
+            (
+                CompactionMode::Summary,
+                ReasoningEffortMode::Fixed,
+                "none",
+                None,
+                None,
+            ),
+            (
+                CompactionMode::Summary,
+                ReasoningEffortMode::Fixed,
+                "typesafe",
+                Some(CompactionMode::Jev),
+                Some(ReasoningEffortMode::Jev),
+            ),
+            (
+                CompactionMode::Jev,
+                ReasoningEffortMode::Jev,
+                "none",
+                Some(CompactionMode::Summary),
+                Some(ReasoningEffortMode::Fixed),
+            ),
+            (
+                CompactionMode::Summary,
+                ReasoningEffortMode::Fixed,
+                "liquid",
+                Some(CompactionMode::D1Ultra),
+                Some(ReasoningEffortMode::D1Ultra),
+            ),
+            (
+                CompactionMode::D1Ultra,
+                ReasoningEffortMode::D1Ultra,
+                "liquid",
+                Some(CompactionMode::D1),
+                Some(ReasoningEffortMode::D1),
+            ),
+            (
+                CompactionMode::D1,
+                ReasoningEffortMode::D1,
+                "liquid",
+                Some(CompactionMode::Summary),
+                Some(ReasoningEffortMode::Fixed),
+            ),
+            (
+                CompactionMode::Summary,
+                ReasoningEffortMode::Fixed,
+                "cloudflare-workers-ai",
+                Some(CompactionMode::ClefFlash),
+                Some(ReasoningEffortMode::ClefFlash),
+            ),
+            (
+                CompactionMode::ClefFlash,
+                ReasoningEffortMode::ClefFlash,
+                "cloudflare-workers-ai",
+                Some(CompactionMode::Clef),
+                Some(ReasoningEffortMode::Clef),
+            ),
+            (
+                CompactionMode::Clef,
+                ReasoningEffortMode::Clef,
+                "none",
+                Some(CompactionMode::Summary),
+                Some(ReasoningEffortMode::Fixed),
+            ),
+        ] {
+            assert_eq!(
+                next_compaction_mode(compaction, |model| model.provider() == provider),
+                next_compaction
+            );
+            assert_eq!(
+                next_reasoning_effort_mode(reasoning, |model| model.provider() == provider),
+                next_reasoning
+            );
+        }
     }
 
     #[test]
@@ -9762,7 +9848,7 @@ mod tests {
     }
 
     #[test]
-    fn jev_reasoning_change_uses_the_matching_input_border_color() {
+    fn dynamic_reasoning_change_uses_the_matching_input_border_color() {
         let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
             "/synthetic",
         )));
@@ -9773,6 +9859,7 @@ mod tests {
         handle_session_event(
             &mut app,
             SessionEvent::ReasoningEffortChanged {
+                decision_model: "d1-ultra · Liquid".into(),
                 level: ThinkingLevel::High,
                 generations: 5,
             },
@@ -9784,12 +9871,13 @@ mod tests {
             app.cells.last(),
             Some(Cell::ReasoningEffort {
                 level: ThinkingLevel::High,
-                generations: 5
-            })
+                generations: 5,
+                decision_model,
+            }) if decision_model == "d1-ultra · Liquid"
         ));
         let expected = app.theme.fg(
             thinking_color_token(ThinkingLevel::High),
-            "◆ Jev changed reasoning to high for 5 generations",
+            "◆ d1-ultra · Liquid changed reasoning to high for 5 generations",
         );
         assert!(
             app.render(80, &session)
@@ -9799,7 +9887,7 @@ mod tests {
     }
 
     #[test]
-    fn jev_reasoning_fallback_is_visible_in_the_conversation() {
+    fn dynamic_reasoning_fallback_is_visible_in_the_conversation() {
         let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
             "/synthetic",
         )));
@@ -9820,7 +9908,7 @@ mod tests {
         assert!(matches!(
             app.cells.last(),
             Some(Cell::Error(text))
-                if text == "Jev could not select reasoning: request timed out. Using saved effort medium"
+                if text == "Decision model could not select reasoning: request timed out. Using saved effort medium"
         ));
         assert!(
             app.render(120, &session)
@@ -10202,6 +10290,7 @@ mod tests {
         assert!(providers.contains(&"openai-codex".to_string()));
         assert!(providers.contains(&"anthropic".to_string()));
         assert!(providers.contains(&"typesafe".to_string()));
+        assert!(providers.contains(&"liquid".to_string()));
         assert!(providers.contains(&"llama.cpp".to_string()));
     }
 

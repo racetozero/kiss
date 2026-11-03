@@ -5,9 +5,10 @@ use crate::compaction::{
     self, estimate_context_tokens, extract_file_ops, file_ops_details, plan_compaction,
     should_compact,
 };
+use crate::decision::DecisionModel;
 use crate::iterative::IterativeRuntime;
 use crate::session::manager::SessionManager;
-use crate::settings::{CacheWarmingMode, CompactionMode, QueueMode, ReasoningEffortMode, Settings};
+use crate::settings::{CacheWarmingMode, QueueMode, Settings};
 use crate::subagents::{ForkTurns, SUBAGENT_SYSTEM_PROMPT, SubagentRuntime, fork_messages};
 use crate::workflows::{WorkflowApprover, WorkflowRuntime};
 use anyhow::Context as _;
@@ -47,6 +48,7 @@ pub enum SessionEvent {
         model_id: String,
     },
     ReasoningEffortChanged {
+        decision_model: String,
         level: ThinkingLevel,
         generations: u8,
     },
@@ -177,7 +179,8 @@ pub struct AgentSession {
 }
 
 struct ReasoningRunState {
-    lease: crate::jev::ReasoningLease,
+    decision_model: Option<DecisionModel>,
+    lease: crate::decision::ReasoningLease,
     provider: String,
     model_id: String,
     saved_effort: ThinkingLevel,
@@ -189,12 +192,17 @@ impl ReasoningRunState {
         model: &Model,
         saved_effort: ThinkingLevel,
         current_effort: ThinkingLevel,
-        dynamic_enabled: bool,
+        decision_model: Option<DecisionModel>,
     ) -> (bool, Option<ThinkingLevel>) {
         let model_changed = self.provider != model.provider || self.model_id != model.id;
-        if model_changed || self.saved_effort != saved_effort || !dynamic_enabled {
+        if model_changed
+            || self.saved_effort != saved_effort
+            || self.decision_model != decision_model
+            || decision_model.is_none()
+        {
             self.lease.clear();
         }
+        self.decision_model = decision_model;
         self.provider.clone_from(&model.provider);
         self.model_id.clone_from(&model.id);
         self.saved_effort = saved_effort;
@@ -821,7 +829,8 @@ impl AgentSession {
             Box::pin(async move { drained })
         }));
         let reasoning_run = Arc::new(Mutex::new(ReasoningRunState {
-            lease: crate::jev::ReasoningLease::default(),
+            decision_model: settings.reasoning_effort.mode.decision_model(),
+            lease: crate::decision::ReasoningLease::default(),
             provider: config.model.provider.clone(),
             model_id: config.model.id.clone(),
             saved_effort: config.thinking_level,
@@ -838,11 +847,14 @@ impl AgentSession {
                 let context_file_changed = session.sync_context_file();
                 let model = session.model();
                 let saved_effort = session.thinking_level();
-                let dynamic_enabled =
-                    settings.reasoning_effort.mode == ReasoningEffortMode::Jev && model.reasoning;
+                let decision_model = settings
+                    .reasoning_effort
+                    .mode
+                    .decision_model()
+                    .filter(|_| model.reasoning);
                 let (model_changed, leased) = {
                     let mut run = reasoning_run.lock().unwrap();
-                    run.checkpoint(&model, saved_effort, current_effort, dynamic_enabled)
+                    run.checkpoint(&model, saved_effort, current_effort, decision_model)
                 };
                 let mut update = TurnUpdate {
                     context: (model_changed
@@ -864,16 +876,16 @@ impl AgentSession {
                         context.messages.pop();
                     }
                 }
-                if !dynamic_enabled {
+                let Some(decision_model) = decision_model else {
                     return Some(update);
-                }
+                };
                 if let Some(level) = leased {
                     update.thinking_level = Some(level);
                     return Some(update);
                 }
 
                 let selected = match kiss_ai::auth::resolve_api_key_async(
-                    "typesafe",
+                    decision_model.provider(),
                     &session.registry.declared_keys,
                 )
                 .await
@@ -886,16 +898,23 @@ impl AgentSession {
                             .build_session_context()
                             .messages;
                         let cancel = session.cancel.lock().unwrap().clone();
-                        crate::jev::select_reasoning(&messages, &[], &model, &api_key, cancel)
-                            .await
-                            .map_err(|error| error.to_string())
+                        async {
+                            crate::decision::DecisionClient::new(decision_model, &api_key)?
+                                .select_reasoning(&messages, &[], &model, cancel)
+                                .await
+                        }
+                        .await
+                        .map_err(|error: anyhow::Error| error.to_string())
                     }
-                    Ok(None) => Err(
-                        "TypeSafe credentials are unavailable; run /login typesafe or set TYPESAFE_API_KEY"
-                            .into(),
-                    ),
+                    Ok(None) => Err(format!(
+                        "{} credentials are unavailable; run /login {}",
+                        decision_model.label(),
+                        decision_model.provider(),
+                    )),
                     Err(error) => Err(format!(
-                        "TypeSafe credentials could not be read: {error}; run /login typesafe or set TYPESAFE_API_KEY"
+                        "{} credentials could not be read: {error}; run /login {}",
+                        decision_model.label(),
+                        decision_model.provider(),
                     )),
                 };
                 let latest_model = session.model();
@@ -903,7 +922,7 @@ impl AgentSession {
                 if latest_model.provider != model.provider
                     || latest_model.id != model.id
                     || latest_effort != saved_effort
-                    || session.settings().reasoning_effort.mode != ReasoningEffortMode::Jev
+                    || session.settings().reasoning_effort.mode != settings.reasoning_effort.mode
                 {
                     reasoning_run.lock().unwrap().lease.clear();
                     update.context =
@@ -922,6 +941,7 @@ impl AgentSession {
                             update.on_applied = Some(Box::new(move |_, applied| {
                                 if applied == level {
                                     sink(SessionEvent::ReasoningEffortChanged {
+                                        decision_model: decision_model.label().into(),
                                         level,
                                         generations,
                                     });
@@ -1686,15 +1706,17 @@ impl AgentSession {
             return;
         }
 
-        if settings.compaction.mode == CompactionMode::Jev
-            && let Ok(Some(api_key)) =
-                kiss_ai::auth::resolve_api_key_async("typesafe", &self.registry.declared_keys).await
+        if let Some(decision_model) = settings.compaction.mode.decision_model()
+            && let Ok(Some(api_key)) = kiss_ai::auth::resolve_api_key_async(
+                decision_model.provider(),
+                &self.registry.declared_keys,
+            )
+            .await
+            && let Ok(client) = crate::decision::DecisionClient::new(decision_model, &api_key)
         {
             let cancel = self.cancel.lock().unwrap().clone();
             let pinned_start = ctx.messages.len().saturating_sub(plan.kept.len());
-            if let Ok(result) =
-                crate::jev::compact(&ctx.messages, pinned_start, &api_key, cancel).await
-            {
+            if let Ok(result) = client.compact(&ctx.messages, pinned_start, cancel).await {
                 let estimated_before: u64 = ctx
                     .messages
                     .iter()
@@ -1713,14 +1735,17 @@ impl AgentSession {
                     !auto || !should_compact(tokens_after, model.context_window, reserve_tokens);
                 if useful && resolved_auto_threshold {
                     let summary = format!(
-                        "Jev kept {}, truncated {}, and removed {} of {} older tool interactions",
+                        "{} kept {}, truncated {}, and removed {} of {} older tool interactions",
+                        decision_model.label(),
                         result.stats.kept,
                         result.stats.truncated,
                         result.stats.dropped,
                         result.stats.eligible,
                     );
                     let details = serde_json::json!({
-                        "mode": "jev",
+                        "mode": settings.compaction.mode,
+                        "provider": decision_model.provider(),
+                        "model": decision_model.id(),
                         "stats": result.stats,
                         "estimatedTokensBefore": plan.tokens_before,
                         "estimatedTokensAfter": tokens_after,
@@ -2334,20 +2359,37 @@ mod ephemeral_tests {
     fn reasoning_lease_ends_when_model_saved_effort_or_applied_effort_changes() {
         let model = openai_model();
         let mut run = ReasoningRunState {
-            lease: crate::jev::ReasoningLease::default(),
+            decision_model: Some(DecisionModel::Jev),
+            lease: crate::decision::ReasoningLease::default(),
             provider: model.provider.clone(),
             model_id: model.id.clone(),
             saved_effort: ThinkingLevel::Medium,
         };
-        let selection = crate::jev::ReasoningSelection {
+        let selection = crate::decision::ReasoningSelection {
             level: ThinkingLevel::High,
             generations: 5,
         };
         run.lease.install(&selection);
         assert_eq!(
-            run.checkpoint(&model, ThinkingLevel::Medium, ThinkingLevel::High, true),
+            run.checkpoint(
+                &model,
+                ThinkingLevel::Medium,
+                ThinkingLevel::High,
+                Some(DecisionModel::Jev)
+            ),
             (false, Some(ThinkingLevel::High))
         );
+
+        assert_eq!(
+            run.checkpoint(
+                &model,
+                ThinkingLevel::Medium,
+                ThinkingLevel::High,
+                Some(DecisionModel::D1Ultra)
+            ),
+            (false, None)
+        );
+        run.lease.install(&selection);
 
         let mut other_model = model.clone();
         other_model.provider = "other".into();
@@ -2356,23 +2398,33 @@ mod ephemeral_tests {
                 &other_model,
                 ThinkingLevel::Medium,
                 ThinkingLevel::High,
-                true
+                Some(DecisionModel::Jev)
             ),
             (true, None)
         );
         run.lease.install(&selection);
         assert_eq!(
-            run.checkpoint(&other_model, ThinkingLevel::Low, ThinkingLevel::High, true),
+            run.checkpoint(
+                &other_model,
+                ThinkingLevel::Low,
+                ThinkingLevel::High,
+                Some(DecisionModel::Jev)
+            ),
             (false, None)
         );
         run.lease.install(&selection);
         assert_eq!(
-            run.checkpoint(&other_model, ThinkingLevel::Low, ThinkingLevel::Low, true),
+            run.checkpoint(
+                &other_model,
+                ThinkingLevel::Low,
+                ThinkingLevel::Low,
+                Some(DecisionModel::Jev)
+            ),
             (false, None)
         );
         run.lease.install(&selection);
         assert_eq!(
-            run.checkpoint(&other_model, ThinkingLevel::Low, ThinkingLevel::High, false),
+            run.checkpoint(&other_model, ThinkingLevel::Low, ThinkingLevel::High, None),
             (false, None)
         );
     }

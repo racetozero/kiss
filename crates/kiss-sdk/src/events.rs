@@ -170,8 +170,13 @@ pub fn session_event_json(event: &SessionEvent) -> Option<Value> {
         SessionEvent::ModelChanged { provider, model_id } => {
             json!({"type": "model_changed", "provider": provider, "modelId": model_id})
         }
-        SessionEvent::ReasoningEffortChanged { level, generations } => json!({
+        SessionEvent::ReasoningEffortChanged {
+            decision_model,
+            level,
+            generations,
+        } => json!({
             "type": "reasoning_effort_changed",
+            "decisionModel": decision_model,
             "level": level.as_str(),
             "generations": generations,
         }),
@@ -254,6 +259,7 @@ mod tests {
     #[test]
     fn reasoning_effort_changes_have_a_public_json_event() {
         let event = session_event_json(&SessionEvent::ReasoningEffortChanged {
+            decision_model: "d1-ultra · Liquid".into(),
             level: kiss_ai::ThinkingLevel::Xhigh,
             generations: 2,
         })
@@ -262,6 +268,7 @@ mod tests {
             event,
             json!({
                 "type": "reasoning_effort_changed",
+                "decisionModel": "d1-ultra · Liquid",
                 "level": "xhigh",
                 "generations": 2
             })
