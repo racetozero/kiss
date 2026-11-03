@@ -146,12 +146,98 @@ pub fn convert_to_llm(messages: &[AgentMessage]) -> Vec<Message> {
         Message::User(u) => !u.content.as_text().trim().is_empty() || matches!(&u.content, UserContent::Blocks(b) if b.iter().any(|c| matches!(c, ContentBlock::Image { .. }))),
         _ => true,
     });
+    // A stopped stream or process can leave calls without results in saved
+    // history. Close each batch before the next turn, without running tools.
+    let mut messages = out.into_iter().peekable();
+    let mut out = Vec::new();
+    while let Some(message) = messages.next() {
+        let Message::Assistant(assistant) = &message else {
+            out.push(message);
+            continue;
+        };
+        let mut pending: Vec<_> = assistant.tool_calls().cloned().collect();
+        let timestamp = assistant.timestamp;
+        out.push(message);
+        while matches!(messages.peek(), Some(Message::ToolResult(_))) {
+            if let Some(Message::ToolResult(result)) = messages.next() {
+                pending.retain(|call| call.id != result.tool_call_id);
+                out.push(Message::ToolResult(result));
+            }
+        }
+        for call in pending {
+            out.push(Message::ToolResult(ToolResultMessage {
+                tool_call_id: call.id,
+                tool_name: call.name,
+                content: vec![ContentBlock::text(
+                    "The tool call has no saved result because the previous turn was interrupted. Its execution status is unknown. Check the current state before you repeat the call.",
+                )],
+                details: None,
+                usage: None,
+                is_error: true,
+                timestamp,
+            }));
+        }
+    }
     out
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn incomplete_tool_history_gets_results_before_the_next_turn() {
+        let mut assistant = AssistantMessage::empty("openai-responses", "openai", "test");
+        assistant.stop_reason = kiss_ai::StopReason::Aborted;
+        assistant.content = (0..3)
+            .map(|index| {
+                ContentBlock::ToolCall(kiss_ai::ToolCall {
+                    id: format!("call_{index}|fc_{index}"),
+                    name: "bash".into(),
+                    arguments: serde_json::json!({"command": "echo test"}),
+                    thought_signature: None,
+                    arguments_error: None,
+                })
+            })
+            .collect();
+        let completed = ToolResultMessage {
+            tool_call_id: "call_1|fc_1".into(),
+            tool_name: "bash".into(),
+            content: vec![ContentBlock::text("test")],
+            details: None,
+            usage: None,
+            is_error: false,
+            timestamp: 1,
+        };
+        for next_turn in [vec![], vec![AgentMessage::user("continue")]] {
+            let mut history = vec![
+                AgentMessage::Assistant(assistant.clone()),
+                AgentMessage::ToolResult(completed.clone()),
+            ];
+            history.extend(next_turn.clone());
+            let converted = convert_to_llm(&history);
+            let results: Vec<_> = converted
+                .iter()
+                .filter_map(|message| match message {
+                    Message::ToolResult(result) => Some(result),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(results.len(), 3);
+            assert_eq!(results[0], &completed);
+            for (result, id) in results[1..].iter().zip(["call_0|fc_0", "call_2|fc_2"]) {
+                assert_eq!(result.tool_call_id, id);
+                assert!(result.is_error);
+            }
+            assert_eq!(converted.len(), 4 + next_turn.len());
+            if !next_turn.is_empty() {
+                assert!(matches!(converted.last(), Some(Message::User(_))));
+            }
+            let repaired: Vec<_> = converted.into_iter().map(AgentMessage::from).collect();
+            assert_eq!(convert_to_llm(&repaired).len(), repaired.len());
+            assert_eq!(history.len(), 2 + next_turn.len());
+        }
+    }
 
     #[test]
     fn role_tags_match_pi() {

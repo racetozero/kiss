@@ -135,9 +135,21 @@ async fn run_loop(
                 assistant.stop_reason,
                 StopReason::Error | StopReason::Aborted
             ) {
+                let tool_calls: Vec<_> = assistant.tool_calls().cloned().collect();
+                let batch = fail_tool_batch(
+                    &tool_calls,
+                    "the response was interrupted. Submit a new call with complete arguments to run the tool.",
+                    emit,
+                );
+                for result in &batch.messages {
+                    context
+                        .messages
+                        .push(AgentMessage::ToolResult(result.clone()));
+                    new_messages.push(AgentMessage::ToolResult(result.clone()));
+                }
                 emit(AgentEvent::TurnEnd {
                     message: AgentMessage::Assistant(assistant),
-                    tool_results: Vec::new(),
+                    tool_results: batch.messages,
                 });
                 return;
             }
@@ -148,7 +160,11 @@ async fn run_loop(
 
             if !tool_calls.is_empty() {
                 let batch = if assistant.stop_reason == StopReason::Length {
-                    fail_truncated_batch(&tool_calls, emit)
+                    fail_tool_batch(
+                        &tool_calls,
+                        "the response hit the output token limit, so its arguments may be truncated. Re-issue the tool call with complete arguments.",
+                        emit,
+                    )
                 } else {
                     execute_tool_batch(context, &tool_calls, config, cancel.clone(), emit).await
                 };
@@ -340,8 +356,8 @@ struct FinalizedCall {
     is_error: bool,
 }
 
-/// A `length` stop means arguments may be silently truncated. Fail them all.
-fn fail_truncated_batch(tool_calls: &[ToolCall], emit: &EventSink) -> ExecutedBatch {
+/// Close calls that cannot run because the response is incomplete.
+fn fail_tool_batch(tool_calls: &[ToolCall], reason: &str, emit: &EventSink) -> ExecutedBatch {
     let mut messages = Vec::new();
     for tc in tool_calls {
         emit(AgentEvent::ToolExecutionStart {
@@ -350,7 +366,7 @@ fn fail_truncated_batch(tool_calls: &[ToolCall], emit: &EventSink) -> ExecutedBa
             args: tc.arguments.clone(),
         });
         let result = ToolResult::text(format!(
-            "Tool call \"{}\" was not executed: the response hit the output token limit, so its arguments may be truncated. Re-issue the tool call with complete arguments.",
+            "Tool call \"{}\" was not executed: {reason}",
             tc.name
         ));
         emit(AgentEvent::ToolExecutionEnd {
@@ -405,7 +421,11 @@ async fn execute_tool_batch(
             tool_name: tc.name.clone(),
             args: tc.arguments.clone(),
         });
-        let outcome = prepare_tool_call(context, tc, config, &cancel).await;
+        let outcome = if cancel.is_cancelled() {
+            Err(Box::new(cancelled_tool_call(tc.clone())))
+        } else {
+            prepare_tool_call(context, tc, config, &cancel).await
+        };
         prepared.push(match outcome {
             Ok((tool, args)) => PreparedToolCall::Run {
                 tool,
@@ -414,9 +434,6 @@ async fn execute_tool_batch(
             },
             Err(finalized) => PreparedToolCall::Immediate(*finalized),
         });
-        if cancel.is_cancelled() {
-            break;
-        }
     }
 
     let mut finalized: Vec<FinalizedCall> = Vec::new();
@@ -432,14 +449,14 @@ async fn execute_tool_batch(
                     tool_call,
                     args,
                 } => {
-                    let f =
-                        run_and_finalize(tool, tool_call, args, config, cancel.clone(), emit).await;
+                    let f = if cancel.is_cancelled() {
+                        cancelled_tool_call(tool_call)
+                    } else {
+                        run_and_finalize(tool, tool_call, args, config, cancel.clone(), emit).await
+                    };
                     emit_execution_end(&f, emit);
                     finalized.push(f);
                 }
-            }
-            if cancel.is_cancelled() {
-                break;
             }
         }
     } else {

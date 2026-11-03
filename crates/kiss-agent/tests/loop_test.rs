@@ -602,6 +602,91 @@ async fn error_stop_ends_run() {
 }
 
 #[tokio::test]
+async fn interrupted_response_closes_tool_calls_without_executing_them() {
+    for stop in [StopReason::Aborted, StopReason::Error] {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let mut response = assistant_tool_batch("echo", 3);
+        response.stop_reason = stop;
+        let messages = run_agent_loop(
+            vec![AgentMessage::user("go")],
+            AgentContext {
+                tools: vec![Arc::new(EchoTool {
+                    calls: calls.clone(),
+                })],
+                ..Default::default()
+            },
+            scripted_config(vec![response]),
+            CancellationToken::new(),
+            Arc::new(|_| {}),
+        )
+        .await;
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+        assert_eq!(messages.len(), 5);
+        for (index, message) in messages[2..].iter().enumerate() {
+            let AgentMessage::ToolResult(result) = message else {
+                panic!("expected tool result")
+            };
+            assert_eq!(result.tool_call_id, format!("call_{index}"));
+            assert!(result.is_error);
+        }
+    }
+}
+
+#[tokio::test]
+async fn cancelled_batch_closes_every_tool_call() {
+    use kiss_agent::tool::ExecutionMode;
+    for (mode, during_preflight) in [
+        (ExecutionMode::Sequential, true),
+        (ExecutionMode::Parallel, true),
+        (ExecutionMode::Sequential, false),
+    ] {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let cancel = CancellationToken::new();
+        let mut config = scripted_config(vec![assistant_tool_batch("echo", 3)]);
+        config.tool_execution = mode;
+        if during_preflight {
+            let cancel = cancel.clone();
+            config.before_tool_call = Some(Arc::new(move |_, _| {
+                cancel.cancel();
+                Box::pin(async { None })
+            }));
+        } else {
+            let cancel = cancel.clone();
+            config.after_tool_call = Some(Arc::new(move |_, _, _, _| {
+                cancel.cancel();
+                Box::pin(async { None })
+            }));
+        }
+        let messages = run_agent_loop(
+            vec![AgentMessage::user("go")],
+            AgentContext {
+                tools: vec![Arc::new(EchoTool {
+                    calls: calls.clone(),
+                })],
+                ..Default::default()
+            },
+            config,
+            cancel,
+            Arc::new(|_| {}),
+        )
+        .await;
+        assert_eq!(calls.load(Ordering::SeqCst), usize::from(!during_preflight));
+        let results: Vec<_> = messages
+            .iter()
+            .filter_map(|message| match message {
+                AgentMessage::ToolResult(result) => Some(result),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(results.len(), 3);
+        for (index, result) in results.iter().enumerate() {
+            assert_eq!(result.tool_call_id, format!("call_{index}"));
+            assert_eq!(result.is_error, during_preflight || index > 0);
+        }
+    }
+}
+
+#[tokio::test]
 async fn steering_injected_between_turns() {
     let steering: Arc<Mutex<Vec<AgentMessage>>> =
         Arc::new(Mutex::new(vec![AgentMessage::user("also do Y")]));

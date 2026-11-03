@@ -114,10 +114,10 @@ impl ContextFile {
 fn validate_messages(messages: &[AgentMessage]) -> Result<()> {
     let mut pending: HashMap<&str, &str> = HashMap::new();
     let mut used: HashSet<&str> = HashSet::new();
-    let messages = kiss_agent::convert_to_llm(messages);
-    for message in &messages {
+    // Validate the edited history before provider conversion repairs missing results.
+    for message in messages {
         match message {
-            kiss_ai::Message::ToolResult(result) => {
+            AgentMessage::ToolResult(result) => {
                 if pending.remove(result.tool_call_id.as_str()) != Some(result.tool_name.as_str()) {
                     bail!(
                         "tool result '{}' has no matching call and tool name",
@@ -126,7 +126,7 @@ fn validate_messages(messages: &[AgentMessage]) -> Result<()> {
                 }
             }
             _ if !pending.is_empty() => bail!("a tool call group is missing its results"),
-            kiss_ai::Message::Assistant(assistant) => {
+            AgentMessage::Assistant(assistant) => {
                 for call in assistant.tool_calls() {
                     if call.id.is_empty() || !used.insert(call.id.as_str()) {
                         bail!("tool call IDs must be nonempty and unique");
