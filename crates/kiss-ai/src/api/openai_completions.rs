@@ -110,7 +110,10 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
     let mut parser = SseParser::new();
     let mut events: Vec<SseEvent> = Vec::new();
     let mut body_stream = response.bytes_stream();
-    let mut state = DecodeState::default();
+    let mut state = DecodeState {
+        openrouter: model.provider == "openrouter" || model.base_url.contains("openrouter.ai"),
+        ..Default::default()
+    };
     builder.start();
 
     loop {
@@ -150,6 +153,8 @@ struct DecodeState {
     /// Provider tool-call index -> builder content index.
     tool_map: std::collections::HashMap<u64, usize>,
     finish_reason: Option<String>,
+    /// OpenRouter reports its billed cost in `usage`.
+    openrouter: bool,
 }
 
 fn is_reasoning_detail(value: &Value) -> bool {
@@ -311,6 +316,9 @@ fn handle_chunk(
             .or_else(|| usage["prompt_tokens_details"].get("cache_write_tokens"))
             .is_some();
         builder.message.usage.output = usage["completion_tokens"].as_u64().unwrap_or(0);
+        if state.openrouter {
+            super::apply_openrouter_cost(&mut builder.message.usage, usage);
+        }
         if let Some(r) = usage["completion_tokens_details"]["reasoning_tokens"].as_u64() {
             builder.message.usage.reasoning = Some(r);
         }
@@ -722,6 +730,61 @@ mod tests {
             &detect_compat(&model),
         );
         assert_eq!(fast["service_tier"], "priority");
+    }
+
+    #[test]
+    fn openrouter_billed_cost_replaces_the_catalog_estimate() {
+        let mut model = model_with_compat(OpenAICompat::default());
+        model.cost.input = 1.0;
+        model.cost.output = 1.0;
+        let usage = |accounting: Value| {
+            let mut chunk = json!({
+                "usage": {"prompt_tokens": 1_000_000, "completion_tokens": 1_000_000},
+                "choices": []
+            });
+            chunk["usage"]
+                .as_object_mut()
+                .unwrap()
+                .extend(accounting.as_object().unwrap().clone());
+            let (sink, _stream) = crate::EventStream::channel();
+            let mut builder = PartialBuilder::new(&model, sink);
+            let mut state = DecodeState {
+                openrouter: true,
+                ..Default::default()
+            };
+            handle_chunk(&chunk.to_string(), &mut builder, &mut state).unwrap();
+            let mut usage = builder.message.usage;
+            crate::api::finalize_cost(&mut usage, &model);
+            (usage.cost.total, usage.cost.total_from_provider)
+        };
+        assert_eq!(usage(json!({"cost": 0.5, "is_byok": false})), (0.5, true));
+        assert_eq!(
+            usage(json!({
+                "cost": 0.1,
+                "is_byok": true,
+                "cost_details": {"upstream_inference_cost": 0.4}
+            })),
+            (0.5, true)
+        );
+        assert_eq!(
+            usage(json!({
+                "cost": 0.1,
+                "is_byok": true,
+                "cost_details": {
+                    "upstream_inference_cost": null,
+                    "upstream_inference_prompt_cost": 0.2,
+                    "upstream_inference_completions_cost": 0.3
+                }
+            })),
+            (0.6, true)
+        );
+        // Incomplete accounting keeps the catalog estimate.
+        assert_eq!(usage(json!({"cost": 0.5})), (2.0, false));
+        assert_eq!(usage(json!({"cost": -1, "is_byok": false})), (2.0, false));
+        assert_eq!(
+            usage(json!({"cost": 0.1, "is_byok": true, "cost_details": null})),
+            (2.0, false)
+        );
     }
 
     #[test]

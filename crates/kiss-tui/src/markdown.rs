@@ -839,7 +839,22 @@ fn bare_web_link_ranges(text: &str) -> Vec<std::ops::Range<usize>> {
         let leading = token
             .find(|character: char| !is_link_punctuation(character))
             .unwrap_or(token.len());
-        let trailing = trailing_url_end(&token[leading..]) + leading;
+        // A bare URL ends at CJK punctuation, so in `https://a.dev。然后`
+        // the following text stays text. Explicit links are not affected.
+        let candidate = &token[leading..];
+        let candidate = &candidate[..candidate
+            .find(|character: char| {
+                matches!(
+                    character,
+                    '\u{3001}'..='\u{303f}'
+                        | '\u{30fb}'
+                        | '\u{ff61}'..='\u{ff65}'
+                        | '，' | '．' | '：' | '；' | '！' | '？' | '（' | '）'
+                        | '［' | '］' | '｛' | '｝' | '“' | '”' | '‘' | '’' | '…' | '—'
+                )
+            })
+            .unwrap_or(candidate.len())];
+        let trailing = trailing_url_end(candidate) + leading;
         if leading < trailing && terminal_link_target(&token[leading..trailing]).is_some() {
             ranges.push(token_start + leading..token_start + trailing);
         }
@@ -917,6 +932,21 @@ fn terminal_link_target(destination: &str) -> Option<&str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bare_urls_stop_at_cjk_punctuation() {
+        let text = "访问 https://example.com/docs。然后继续 https://example.com/a（说明）";
+        let ranges = bare_web_link_ranges(text);
+        let links: Vec<&str> = ranges.iter().map(|range| &text[range.clone()]).collect();
+        assert_eq!(links, ["https://example.com/docs", "https://example.com/a"]);
+        // CJK letters without punctuation stay part of the URL.
+        let text = "https://ja.wikipedia.org/wiki/日本 text";
+        let ranges = bare_web_link_ranges(text);
+        assert_eq!(
+            &text[ranges[0].clone()],
+            "https://ja.wikipedia.org/wiki/日本"
+        );
+    }
     use crate::text::strip_ansi;
 
     fn render_plain(md: &str) -> Vec<String> {

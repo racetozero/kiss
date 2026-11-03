@@ -288,6 +288,8 @@ pub struct Settings {
     pub quiet_startup: bool,
     /// User-only opt-in for interactive prompt-completion desktop notifications.
     pub desktop_notifications: bool,
+    /// User-only argv that `kiss update` runs instead of the KISS installer.
+    pub self_update_command: Option<Vec<String>>,
     pub default_project_trust: ProjectTrustDefault,
     pub compaction: CompactionSettings,
     /// Let the model edit its live conversation through a private JSON file.
@@ -356,6 +358,11 @@ fn merged_settings(mut global: Value, project: Option<Value>) -> Settings {
         .get("desktopNotifications")
         .and_then(Value::as_bool)
         .unwrap_or(false);
+    // A project must not choose a command that `kiss update` runs.
+    let self_update_command = global
+        .get("selfUpdateCommand")
+        .cloned()
+        .and_then(|value| serde_json::from_value(value).ok());
     let experimental_context_file = global
         .get("experimentalContextFile")
         .and_then(Value::as_bool)
@@ -407,6 +414,7 @@ fn merged_settings(mut global: Value, project: Option<Value>) -> Settings {
     settings.cache_warming = cache_warming;
     settings.voice_backend = voice_backend;
     settings.desktop_notifications = desktop_notifications;
+    settings.self_update_command = self_update_command;
     settings
 }
 
@@ -495,6 +503,23 @@ mod tests {
             Some(json!({"deviceId":"project-id"})),
         );
         assert_eq!(settings.extra["deviceId"], "user-id");
+    }
+
+    #[test]
+    fn only_user_settings_choose_the_update_command() {
+        let project = Some(json!({"selfUpdateCommand": ["sh", "-c", "evil"]}));
+        assert_eq!(
+            merged_settings(json!({}), project.clone()).self_update_command,
+            None
+        );
+        assert_eq!(
+            merged_settings(
+                json!({"selfUpdateCommand": ["brew", "upgrade", "kiss"]}),
+                project
+            )
+            .self_update_command,
+            Some(vec!["brew".into(), "upgrade".into(), "kiss".into()])
+        );
     }
 
     #[test]

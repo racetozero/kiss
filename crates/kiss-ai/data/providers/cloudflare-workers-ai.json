@@ -8,16 +8,9 @@
       "provider": "cloudflare-workers-ai",
       "baseUrl": "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai",
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.24,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.24, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 65536,
-      "compat": {
-        "imageInput": "images"
-      }
+      "compat": { "imageInput": "images" }
     },
     "classifier:@cf/cloudflare/clef-flash": {
       "type": "classifier",
@@ -27,16 +20,9 @@
       "provider": "cloudflare-workers-ai",
       "baseUrl": "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai",
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.038,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.038, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 24576,
-      "compat": {
-        "imageInput": "images"
-      }
+      "compat": { "imageInput": "images" }
     },
     "classifier:@cf/cloudflare/clef-omni": {
       "type": "classifier",
@@ -46,16 +32,9 @@
       "provider": "cloudflare-workers-ai",
       "baseUrl": "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai",
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.15,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.15, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 64000,
-      "compat": {
-        "imageInput": "images"
-      }
+      "compat": { "imageInput": "images" }
     },
     "classifier:typesafe/jev": {
       "type": "classifier",
@@ -65,16 +44,9 @@
       "provider": "cloudflare-workers-ai",
       "baseUrl": "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai",
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.042,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.042, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 32000,
-      "compat": {
-        "imageInput": "assets"
-      }
+      "compat": { "imageInput": "assets" }
     },
     "classifier:typesafe/jev-1.14.0": {
       "type": "classifier",
@@ -84,16 +56,9 @@
       "provider": "cloudflare-workers-ai",
       "baseUrl": "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai",
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.042,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.042, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 32000,
-      "compat": {
-        "imageInput": "assets"
-      }
+      "compat": { "imageInput": "assets" }
     }
   },
   "openai-completions": {
@@ -105,12 +70,7 @@
       "baseUrl": "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 0.44,
-        "output": 1.32,
-        "cacheRead": 0.014,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.44, "output": 1.32, "cacheRead": 0.014, "cacheWrite": 0 },
       "contextWindow": 1048576,
       "maxTokens": 1048576,
       "compat": {
@@ -139,12 +99,7 @@
       "baseUrl": "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 1.32,
-        "output": 3.96,
-        "cacheRead": 0.044,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 1.32, "output": 3.96, "cacheRead": 0.044, "cacheWrite": 0 },
       "contextWindow": 1048576,
       "maxTokens": 1048576,
       "compat": {
@@ -167,18 +122,13 @@
     },
     "chat:@cf/deepseek-ai/deepseek-v4.1-flash-1017": {
       "id": "@cf/deepseek-ai/deepseek-v4.1-flash-1017",
-      "name": "Deepseek V4.1 Flash 1017",
+      "name": "DeepSeek V4.1 Flash 1017",
       "api": "openai-completions",
       "provider": "cloudflare-workers-ai",
       "baseUrl": "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.3,
-        "output": 1.2,
-        "cacheRead": 0.006,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.3, "output": 1.2, "cacheRead": 0.006, "cacheWrite": 0 },
       "contextWindow": 1048576,
       "maxTokens": 1048576,
       "compat": {
@@ -199,12 +149,7 @@
       },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -217,12 +162,7 @@
       "baseUrl": "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.1,
-        "output": 0.3,
-        "cacheRead": 0.05,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.1, "output": 0.3, "cacheRead": 0.05, "cacheWrite": 0 },
       "contextWindow": 256000,
       "maxTokens": 16384,
       "compat": {
@@ -234,12 +174,7 @@
       },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -252,12 +187,7 @@
       "baseUrl": "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
       "reasoning": false,
       "input": ["text"],
-      "cost": {
-        "input": 0.017,
-        "output": 0.112,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.017, "output": 0.112, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 131000,
       "maxTokens": 131000,
       "compat": {
@@ -277,12 +207,7 @@
       "baseUrl": "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
       "reasoning": false,
       "input": ["text"],
-      "cost": {
-        "input": 0.293,
-        "output": 2.253,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.293, "output": 2.253, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 24000,
       "maxTokens": 24000,
       "compat": {
@@ -302,12 +227,7 @@
       "baseUrl": "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
       "reasoning": false,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.27,
-        "output": 0.85,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.27, "output": 0.85, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 131000,
       "maxTokens": 16384,
       "compat": {
@@ -319,12 +239,7 @@
       },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -337,12 +252,7 @@
       "baseUrl": "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
       "reasoning": false,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.351,
-        "output": 0.555,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.351, "output": 0.555, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 128000,
       "compat": {
@@ -354,12 +264,7 @@
       },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -372,12 +277,7 @@
       "baseUrl": "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.95,
-        "output": 4,
-        "cacheRead": 0.16,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.95, "output": 4, "cacheRead": 0.16, "cacheWrite": 0 },
       "contextWindow": 262144,
       "maxTokens": 256000,
       "compat": {
@@ -398,12 +298,7 @@
       },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -416,12 +311,7 @@
       "baseUrl": "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.95,
-        "output": 4,
-        "cacheRead": 0.19,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.95, "output": 4, "cacheRead": 0.19, "cacheWrite": 0 },
       "contextWindow": 262144,
       "maxTokens": 262144,
       "compat": {
@@ -433,12 +323,7 @@
       },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -451,12 +336,7 @@
       "baseUrl": "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 0.5,
-        "output": 1.5,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.5, "output": 1.5, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 256000,
       "maxTokens": 256000,
       "compat": {
@@ -485,12 +365,7 @@
       "baseUrl": "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 0.35,
-        "output": 0.75,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.35, "output": 0.75, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 16384,
       "compat": {
@@ -519,12 +394,7 @@
       "baseUrl": "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 0.2,
-        "output": 0.3,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.2, "output": 0.3, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 16384,
       "compat": {
@@ -553,12 +423,7 @@
       "baseUrl": "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 0.0509,
-        "output": 0.335,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.0509, "output": 0.335, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 32768,
       "maxTokens": 32768,
       "compat": {
@@ -578,12 +443,7 @@
       "baseUrl": "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.45,
-        "output": 3.2,
-        "cacheRead": 0.05,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.45, "output": 3.2, "cacheRead": 0.05, "cacheWrite": 0 },
       "contextWindow": 262144,
       "maxTokens": 262144,
       "compat": {
@@ -604,12 +464,7 @@
       },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -622,12 +477,7 @@
       "baseUrl": "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 0.0605,
-        "output": 0.4,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.0605, "output": 0.4, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 131072,
       "maxTokens": 131072,
       "compat": {
@@ -647,12 +497,7 @@
       "baseUrl": "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 1.4,
-        "output": 4.4,
-        "cacheRead": 0.26,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 1.4, "output": 4.4, "cacheRead": 0.26, "cacheWrite": 0 },
       "contextWindow": 262144,
       "maxTokens": 256000,
       "compat": {
@@ -681,12 +526,7 @@
       "baseUrl": "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 1.4,
-        "output": 4.4,
-        "cacheRead": 0.26,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 1.4, "output": 4.4, "cacheRead": 0.26, "cacheWrite": 0 },
       "contextWindow": 1048576,
       "maxTokens": 1048576,
       "compat": {
@@ -715,12 +555,7 @@
       "baseUrl": "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.15,
-        "output": 0.5,
-        "cacheRead": 0.03,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.15, "output": 0.5, "cacheRead": 0.03, "cacheWrite": 0 },
       "contextWindow": 1048576,
       "maxTokens": 1048576,
       "compat": {
@@ -741,12 +576,7 @@
       },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"

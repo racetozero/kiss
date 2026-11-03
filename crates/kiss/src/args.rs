@@ -84,6 +84,10 @@ pub struct McpServerArgs {
     #[arg(long, value_name = "URL")]
     pub client_metadata_url: Option<String>,
 
+    /// OAuth client registration: auto (the default), dcr, or cimd.
+    #[arg(long, value_name = "MODE", value_parser = ["auto", "dcr", "cimd"])]
+    pub oauth_client_registration: Option<String>,
+
     /// Request timeout in milliseconds.
     #[arg(long)]
     pub timeout_ms: Option<u64>,

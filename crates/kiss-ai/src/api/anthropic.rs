@@ -132,7 +132,10 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
     let mut parser = SseParser::new();
     let mut events: Vec<SseEvent> = Vec::new();
     let mut body_stream = response.bytes_stream();
-    let mut state = DecodeState::default();
+    let mut state = DecodeState {
+        openrouter: model.provider == "openrouter" || model.base_url.contains("openrouter.ai"),
+        ..Default::default()
+    };
 
     loop {
         let chunk = tokio::select! {
@@ -175,6 +178,8 @@ struct DecodeState {
     /// Provider content index -> our builder content index.
     index_map: std::collections::HashMap<u64, (usize, BlockKind)>,
     stop_reason: StopReason,
+    /// OpenRouter reports its billed cost in `usage`.
+    openrouter: bool,
 }
 
 #[derive(Clone, Copy, Default, PartialEq)]
@@ -340,6 +345,9 @@ fn handle_event(event: &SseEvent, builder: &mut PartialBuilder, state: &mut Deco
             {
                 builder.message.usage.cache_write_1h = cache_write_1h;
             }
+            if state.openrouter {
+                super::apply_openrouter_cost(&mut builder.message.usage, &data["usage"]);
+            }
             Flow::Continue
         }
         "message_stop" => Flow::Done,
@@ -439,7 +447,10 @@ fn build_request(model: &Model, context: &Context, options: &StreamOptions) -> V
             "display": "summarized",
             "block_binding": {"prefix_mismatch_behavior": "drop_block"},
         });
-        body["output_config"] = json!({"effort": "high"});
+        // Effort markers set the level of each reply. The top-level effort is
+        // part of the cached prompt, so it stays fixed. Organizations can cap
+        // effort and reject a higher top-level value, so it is "low".
+        body["output_config"] = json!({"effort": "low"});
     } else if model.reasoning && options.reasoning != crate::ThinkingLevel::Off && adaptive {
         body["thinking"] = json!({"type": "adaptive", "display": "summarized"});
         body["output_config"] = json!({"effort": adaptive_effort(model, options.reasoning)});
@@ -903,7 +914,7 @@ mod tests {
             body["thinking"]["block_binding"]["prefix_mismatch_behavior"],
             "drop_block"
         );
-        assert_eq!(body["output_config"]["effort"], "high");
+        assert_eq!(body["output_config"]["effort"], "low");
         assert_eq!(body["messages"][1]["role"], "system");
         assert_eq!(body["messages"][1]["output_config"]["effort"], "low");
         assert_eq!(

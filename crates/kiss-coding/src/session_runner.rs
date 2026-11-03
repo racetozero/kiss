@@ -520,6 +520,18 @@ impl AgentSession {
         tools
     }
 
+    /// The system prompt and each active tool's name and description.
+    pub fn system_context(&self) -> (String, Vec<(String, String)>) {
+        let tools = self
+            .tools
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|tool| (tool.name().to_string(), tool.description()))
+            .collect();
+        (self.system_prompt.lock().unwrap().clone(), tools)
+    }
+
     pub fn available_tool_names(&self) -> Vec<String> {
         self.tools
             .lock()
@@ -2068,10 +2080,15 @@ fn is_transient(error: &str) -> bool {
         .and_then(|start| serde_json::from_str::<serde_json::Value>(&error[start..]).ok())
     {
         let detail = value.get("error").unwrap_or(&value);
+        // Zhipu/Z.ai code 1308 is the plan's usage limit, sent as HTTP 429.
+        // It resets after hours, not seconds.
         if detail
-            .get("isRetryable")
-            .and_then(serde_json::Value::as_bool)
-            == Some(false)
+            .get("code")
+            .is_some_and(|code| *code == 1308 || *code == "1308")
+            || detail
+                .get("isRetryable")
+                .and_then(serde_json::Value::as_bool)
+                == Some(false)
             || detail
                 .get("details")
                 .and_then(serde_json::Value::as_array)
@@ -2603,6 +2620,11 @@ mod ephemeral_tests {
         assert!(!is_transient(
             "subscription_sharing_workplace_individual_usage_limit_exceeded"
         ));
+        assert!(!is_transient(
+            r#"HTTP 429: {"error":{"code":"1308","message":"Usage limit reached for 5 hour."}}"#
+        ));
+        assert!(!is_transient(r#"HTTP 429: {"code":1308,"msg":"limit"}"#));
+        assert!(is_transient(r#"HTTP 429: {"error":{"code":"13080"}}"#));
         assert!(is_transient("subscription_sharing_usage_unavailable"));
         assert!(is_transient("subscription_sharing_user_unavailable"));
         assert!(!is_transient(

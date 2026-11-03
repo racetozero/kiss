@@ -6,9 +6,6 @@
       "api": "openai-responses",
       "provider": "xai",
       "baseUrl": "https://api.x.ai/v1",
-      "compat": {
-        "supportsLongCacheRetention": false
-      },
       "reasoning": true,
       "input": ["text", "image"],
       "cost": {
@@ -28,6 +25,7 @@
       },
       "contextWindow": 1000000,
       "maxTokens": 30000,
+      "compat": { "supportsLongCacheRetention": false },
       "thinkingLevelMap": {
         "off": "none",
         "minimal": null,
@@ -39,12 +37,7 @@
       },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -55,9 +48,6 @@
       "api": "openai-responses",
       "provider": "xai",
       "baseUrl": "https://api.x.ai/v1",
-      "compat": {
-        "supportsLongCacheRetention": false
-      },
       "reasoning": true,
       "input": ["text", "image"],
       "cost": {
@@ -77,6 +67,7 @@
       },
       "contextWindow": 500000,
       "maxTokens": 500000,
+      "compat": { "supportsLongCacheRetention": false },
       "thinkingLevelMap": {
         "off": null,
         "minimal": null,
@@ -88,12 +79,7 @@
       },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -104,9 +90,6 @@
       "api": "openai-responses",
       "provider": "xai",
       "baseUrl": "https://api.x.ai/v1",
-      "compat": {
-        "supportsLongCacheRetention": false
-      },
       "reasoning": true,
       "input": ["text", "image"],
       "cost": {
@@ -115,17 +98,12 @@
         "cacheRead": 0.5,
         "cacheWrite": 0,
         "tiers": [
-          {
-            "inputTokensAbove": 200000,
-            "input": 4,
-            "output": 12,
-            "cacheRead": 1,
-            "cacheWrite": 0
-          }
+          { "inputTokensAbove": 200000, "input": 4, "output": 12, "cacheRead": 1, "cacheWrite": 0 }
         ]
       },
       "contextWindow": 500000,
       "maxTokens": 500000,
+      "compat": { "supportsLongCacheRetention": false },
       "thinkingLevelMap": {
         "off": null,
         "minimal": null,
@@ -137,12 +115,7 @@
       },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -153,9 +126,6 @@
       "api": "openai-responses",
       "provider": "xai",
       "baseUrl": "https://api.x.ai/v1",
-      "compat": {
-        "supportsLongCacheRetention": false
-      },
       "reasoning": true,
       "input": ["text", "image"],
       "cost": {
@@ -164,17 +134,12 @@
         "cacheRead": 0.5,
         "cacheWrite": 0,
         "tiers": [
-          {
-            "inputTokensAbove": 200000,
-            "input": 4,
-            "output": 12,
-            "cacheRead": 1,
-            "cacheWrite": 0
-          }
+          { "inputTokensAbove": 200000, "input": 4, "output": 12, "cacheRead": 1, "cacheWrite": 0 }
         ]
       },
       "contextWindow": 500000,
       "maxTokens": 500000,
+      "compat": { "supportsLongCacheRetention": false },
       "thinkingLevelMap": {
         "off": null,
         "minimal": null,
@@ -186,12 +151,7 @@
       },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"

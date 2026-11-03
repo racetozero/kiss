@@ -350,6 +350,11 @@ impl InputDecoder {
             b'H' => Key::Home,
             b'F' => Key::End,
             b'Z' => Key::BackTab,
+            // F1-F4 with modifiers: CSI 1;<mods> P/Q/R/S
+            b'P' => Key::F(1),
+            b'Q' => Key::F(2),
+            b'R' => Key::F(3),
+            b'S' => Key::F(4),
             b'~' if parts.first() == Some(&"27") => {
                 // xterm modifyOtherKeys: CSI 27;<mods>;<codepoint>~
                 match parts
@@ -368,7 +373,9 @@ impl InputDecoder {
                 Some(4) | Some(8) => Key::End,
                 Some(5) => Key::PageUp,
                 Some(6) => Key::PageDown,
-                Some(11..=15) => Key::F(parts[0].parse::<u8>().unwrap() - 10),
+                Some(number @ 11..=15) => Key::F(number - 10),
+                Some(number @ 17..=21) => Key::F(number - 11),
+                Some(number @ 23..=24) => Key::F(number - 12),
                 _ => return Some((None, consumed)),
             },
             b'u' => {
@@ -386,6 +393,11 @@ impl InputDecoder {
                     Some('\t') => Key::Tab,
                     Some('\r') | Some('\u{e046}') => Key::Enter,
                     Some('\x1b') => Key::Escape,
+                    // Kitty reports F13-F35 as private-use code points.
+                    Some(c @ '\u{e020}'..='\u{e036}') => Key::F((c as u32 - 0xe020 + 13) as u8),
+                    // Other functional keys, such as keypad and modifier
+                    // keys, are private-use code points and not text.
+                    Some('\u{e000}'..='\u{f8ff}') => return Some((None, consumed)),
                     Some(c) => Key::Char(c),
                     None => return Some((None, consumed)),
                 }
@@ -464,6 +476,38 @@ mod tests {
         assert_eq!(
             decode(b"\x1b[200~\x1b[I\x1b[201~"),
             [InputEvent::Paste("\x1b[I".into())]
+        );
+    }
+
+    #[test]
+    fn function_keys_decode_and_private_use_keys_are_not_text() {
+        let f = |number: u8, shift: bool| {
+            InputEvent::Key(KeyEvent {
+                key: Key::F(number),
+                shift,
+                ..Default::default()
+            })
+        };
+        assert_eq!(decode(b"\x1bOP"), [f(1, false)]);
+        assert_eq!(decode(b"\x1b[1;2P"), [f(1, true)]);
+        assert_eq!(decode(b"\x1b[1;2S"), [f(4, true)]);
+        assert_eq!(decode(b"\x1b[13~"), [f(3, false)]);
+        assert_eq!(decode(b"\x1b[15~"), [f(5, false)]);
+        assert_eq!(decode(b"\x1b[17~"), [f(6, false)]);
+        assert_eq!(decode(b"\x1b[21;2~"), [f(10, true)]);
+        assert_eq!(decode(b"\x1b[23~"), [f(11, false)]);
+        assert_eq!(decode(b"\x1b[24~"), [f(12, false)]);
+        assert_eq!(decode(b"\x1b[57376u"), [f(13, false)]);
+        assert_eq!(decode(b"\x1b[57398;2u"), [f(35, true)]);
+        // Keypad 0 and Left Shift are private-use code points.
+        assert!(decode(b"\x1b[57399u").is_empty());
+        assert!(decode(b"\x1b[57441u").is_empty());
+        assert_eq!(
+            decode(b"\x1b[57414u"),
+            [InputEvent::Key(KeyEvent {
+                key: Key::Enter,
+                ..Default::default()
+            })]
         );
     }
 

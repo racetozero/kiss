@@ -34,13 +34,74 @@ pub async fn run() -> Result<i32> {
             "`kiss update` is not available in debug builds. Install a KISS release to use this command"
         );
     }
+    if let Some(command) = custom_update_command() {
+        run_custom_update(&command).await?;
+        return Ok(0);
+    }
     if installed_by_homebrew() {
         anyhow::bail!(
-            "`kiss update` cannot replace a KISS binary that Homebrew installed. Run `{HOMEBREW_UPGRADE_COMMAND}` to update it"
+            "`kiss update` cannot replace a KISS binary that Homebrew installed. Run `{HOMEBREW_UPGRADE_COMMAND}` to update it, or set KISS_SELF_UPDATE_COMMAND to that command"
         );
     }
     run_release_update().await?;
     Ok(0)
+}
+
+/// The update command of a wrapper or another package manager:
+/// `KISS_SELF_UPDATE_COMMAND`, split on spaces, or the user-only
+/// `selfUpdateCommand` argv setting.
+fn custom_update_command() -> Option<Vec<String>> {
+    std::env::var("KISS_SELF_UPDATE_COMMAND")
+        .ok()
+        .map(|command| command.split_whitespace().map(str::to_owned).collect())
+        .or_else(|| {
+            let cwd = std::env::current_dir().ok()?;
+            kiss_coding::Settings::load(&cwd, false).self_update_command
+        })
+        .filter(|command: &Vec<String>| !command.is_empty())
+}
+
+/// Fill `{packageName}`, `{version}`, and `{installSpec}` for the release.
+fn update_command_argv(template: &[String], latest: &Version) -> Vec<String> {
+    template
+        .iter()
+        .map(|argument| {
+            argument
+                .replace("{installSpec}", &format!("kiss@{latest}"))
+                .replace("{packageName}", "kiss")
+                .replace("{version}", &latest.to_string())
+        })
+        .collect()
+}
+
+async fn run_custom_update(template: &[String]) -> Result<()> {
+    let client = http_client()?;
+    let current = current_version()?;
+    let latest = fetch_latest_version(&client).await?;
+    if latest <= current {
+        println!("kiss v{current} is up to date.");
+        return Ok(());
+    }
+    let argv = update_command_argv(template, &latest);
+    let shown = argv.join(" ");
+    println!("Updating kiss from v{current} to v{latest} with `{shown}`...");
+    let status = tokio::process::Command::new(&argv[0])
+        .args(&argv[1..])
+        .status()
+        .await
+        .with_context(|| {
+            format!(
+                "start the update command `{shown}` from KISS_SELF_UPDATE_COMMAND or selfUpdateCommand. Check that `{}` is installed and on PATH",
+                argv[0]
+            )
+        })?;
+    if !status.success() {
+        anyhow::bail!(
+            "the update command `{shown}` failed ({status}). Fix KISS_SELF_UPDATE_COMMAND or selfUpdateCommand, or remove it to use the KISS installer"
+        );
+    }
+    println!("Updated kiss to v{latest}. Restart KISS to use the new version.");
+    Ok(())
 }
 
 async fn run_release_update() -> Result<()> {
@@ -79,7 +140,7 @@ pub fn check_on_launch() -> Option<Version> {
 
 /// Build the single startup instruction shown for a newer cached release.
 pub fn notice(current: &Version, latest: &Version) -> String {
-    let command = if installed_by_homebrew() {
+    let command = if installed_by_homebrew() && custom_update_command().is_none() {
         HOMEBREW_UPGRADE_COMMAND
     } else {
         "kiss update"
@@ -313,6 +374,23 @@ async fn refresh_cache(path: &Path) -> Result<()> {
 mod tests {
     use super::*;
     use chrono::TimeDelta;
+
+    #[test]
+    fn custom_update_command_gets_the_release_placeholders() {
+        let template: Vec<String> = [
+            "mise",
+            "use",
+            "-g",
+            "cargo:{packageName}@{version}",
+            "{installSpec}",
+        ]
+        .map(String::from)
+        .into();
+        assert_eq!(
+            update_command_argv(&template, &Version::new(1, 2, 3)),
+            ["mise", "use", "-g", "cargo:kiss@1.2.3", "kiss@1.2.3"]
+        );
+    }
 
     #[test]
     fn parses_release_tags_as_semantic_versions() {

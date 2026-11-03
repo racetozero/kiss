@@ -8,31 +8,14 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/anthropic",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 10,
-        "output": 50,
-        "cacheRead": 1,
-        "cacheWrite": 12.5
-      },
+      "cost": { "input": 10, "output": 50, "cacheRead": 1, "cacheWrite": 12.5 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "sendSessionAffinityHeaders": true,
-        "forceAdaptiveThinking": true
-      },
-      "thinkingLevelMap": {
-        "off": null,
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "sendSessionAffinityHeaders": true, "forceAdaptiveThinking": true },
+      "thinkingLevelMap": { "off": null, "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -45,31 +28,14 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/anthropic",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 10,
-        "output": 50,
-        "cacheRead": 0.25,
-        "cacheWrite": 12.5
-      },
+      "cost": { "input": 10, "output": 50, "cacheRead": 0.25, "cacheWrite": 12.5 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "sendSessionAffinityHeaders": true,
-        "forceAdaptiveThinking": true
-      },
-      "thinkingLevelMap": {
-        "off": null,
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "sendSessionAffinityHeaders": true, "forceAdaptiveThinking": true },
+      "thinkingLevelMap": { "off": null, "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -82,25 +48,13 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/anthropic",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 1,
-        "output": 5,
-        "cacheRead": 0.1,
-        "cacheWrite": 1.25
-      },
+      "cost": { "input": 1, "output": 5, "cacheRead": 0.1, "cacheWrite": 1.25 },
       "contextWindow": 200000,
       "maxTokens": 64000,
-      "compat": {
-        "sendSessionAffinityHeaders": true
-      },
+      "compat": { "sendSessionAffinityHeaders": true },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -135,18 +89,10 @@
         "forceAdaptiveThinking": true,
         "supportsTemperature": false
       },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -159,25 +105,13 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/anthropic",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 5,
-        "output": 25,
-        "cacheRead": 0.5,
-        "cacheWrite": 6.25
-      },
+      "cost": { "input": 5, "output": 25, "cacheRead": 0.5, "cacheWrite": 6.25 },
       "contextWindow": 200000,
       "maxTokens": 64000,
-      "compat": {
-        "sendSessionAffinityHeaders": true
-      },
+      "compat": { "sendSessionAffinityHeaders": true },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -190,29 +124,14 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/anthropic",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 5,
-        "output": 25,
-        "cacheRead": 0.5,
-        "cacheWrite": 6.25
-      },
+      "cost": { "input": 5, "output": 25, "cacheRead": 0.5, "cacheWrite": 6.25 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "sendSessionAffinityHeaders": true,
-        "forceAdaptiveThinking": true
-      },
-      "thinkingLevelMap": {
-        "max": "max"
-      },
+      "compat": { "sendSessionAffinityHeaders": true, "forceAdaptiveThinking": true },
+      "thinkingLevelMap": { "max": "max" },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -225,12 +144,7 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/anthropic",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 5,
-        "output": 25,
-        "cacheRead": 0.5,
-        "cacheWrite": 6.25
-      },
+      "cost": { "input": 5, "output": 25, "cacheRead": 0.5, "cacheWrite": 6.25 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
       "compat": {
@@ -238,18 +152,10 @@
         "forceAdaptiveThinking": true,
         "supportsTemperature": false
       },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -262,12 +168,7 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/anthropic",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 5,
-        "output": 25,
-        "cacheRead": 0.5,
-        "cacheWrite": 6.25
-      },
+      "cost": { "input": 5, "output": 25, "cacheRead": 0.5, "cacheWrite": 6.25 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
       "compat": {
@@ -275,18 +176,10 @@
         "forceAdaptiveThinking": true,
         "supportsTemperature": false
       },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -299,12 +192,7 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/anthropic",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 5,
-        "output": 25,
-        "cacheRead": 0.5,
-        "cacheWrite": 6.25
-      },
+      "cost": { "input": 5, "output": 25, "cacheRead": 0.5, "cacheWrite": 6.25 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
       "compat": {
@@ -312,18 +200,10 @@
         "forceAdaptiveThinking": true,
         "supportsTemperature": false
       },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -336,12 +216,7 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/anthropic",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 4,
-        "output": 20,
-        "cacheRead": 0.2,
-        "cacheWrite": 5
-      },
+      "cost": { "input": 4, "output": 20, "cacheRead": 0.2, "cacheWrite": 5 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
       "compat": {
@@ -349,18 +224,10 @@
         "forceAdaptiveThinking": true,
         "supportsTemperature": false
       },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -373,25 +240,13 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/anthropic",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 3,
-        "output": 15,
-        "cacheRead": 0.3,
-        "cacheWrite": 3.75
-      },
+      "cost": { "input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 3.75 },
       "contextWindow": 200000,
       "maxTokens": 64000,
-      "compat": {
-        "sendSessionAffinityHeaders": true
-      },
+      "compat": { "sendSessionAffinityHeaders": true },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -404,29 +259,14 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/anthropic",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 3,
-        "output": 15,
-        "cacheRead": 0.3,
-        "cacheWrite": 3.75
-      },
+      "cost": { "input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 3.75 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "sendSessionAffinityHeaders": true,
-        "forceAdaptiveThinking": true
-      },
-      "thinkingLevelMap": {
-        "max": "max"
-      },
+      "compat": { "sendSessionAffinityHeaders": true, "forceAdaptiveThinking": true },
+      "thinkingLevelMap": { "max": "max" },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -439,30 +279,14 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/anthropic",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 2,
-        "output": 10,
-        "cacheRead": 0.2,
-        "cacheWrite": 2.5
-      },
+      "cost": { "input": 2, "output": 10, "cacheRead": 0.2, "cacheWrite": 2.5 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "sendSessionAffinityHeaders": true,
-        "forceAdaptiveThinking": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "sendSessionAffinityHeaders": true, "forceAdaptiveThinking": true },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -475,12 +299,7 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/anthropic",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 2,
-        "output": 10,
-        "cacheRead": 0.2,
-        "cacheWrite": 2.5
-      },
+      "cost": { "input": 2, "output": 10, "cacheRead": 0.1, "cacheWrite": 2.5 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
       "compat": {
@@ -488,18 +307,10 @@
         "forceAdaptiveThinking": true,
         "supportsTemperature": false
       },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -514,12 +325,7 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 0.44,
-        "output": 1.32,
-        "cacheRead": 0.014,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.44, "output": 1.32, "cacheRead": 0.014, "cacheWrite": 0 },
       "contextWindow": 1048576,
       "maxTokens": 1048576,
       "compat": {
@@ -549,12 +355,7 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 1.32,
-        "output": 3.96,
-        "cacheRead": 0.044,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 1.32, "output": 3.96, "cacheRead": 0.044, "cacheWrite": 0 },
       "contextWindow": 1048576,
       "maxTokens": 1048576,
       "compat": {
@@ -578,18 +379,13 @@
     },
     "chat:workers-ai/@cf/deepseek-ai/deepseek-v4.1-flash-1017": {
       "id": "workers-ai/@cf/deepseek-ai/deepseek-v4.1-flash-1017",
-      "name": "Deepseek V4.1 Flash 1017",
+      "name": "DeepSeek V4.1 Flash 1017",
       "api": "openai-completions",
       "provider": "cloudflare-ai-gateway",
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.3,
-        "output": 1.2,
-        "cacheRead": 0.006,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.3, "output": 1.2, "cacheRead": 0.006, "cacheWrite": 0 },
       "contextWindow": 1048576,
       "maxTokens": 1048576,
       "compat": {
@@ -611,12 +407,7 @@
       },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -629,12 +420,7 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.1,
-        "output": 0.3,
-        "cacheRead": 0.05,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.1, "output": 0.3, "cacheRead": 0.05, "cacheWrite": 0 },
       "contextWindow": 256000,
       "maxTokens": 16384,
       "compat": {
@@ -647,12 +433,7 @@
       },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -665,12 +446,7 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
       "reasoning": false,
       "input": ["text"],
-      "cost": {
-        "input": 0.017,
-        "output": 0.112,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.017, "output": 0.112, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 131000,
       "maxTokens": 131000,
       "compat": {
@@ -691,12 +467,7 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
       "reasoning": false,
       "input": ["text"],
-      "cost": {
-        "input": 0.293,
-        "output": 2.253,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.293, "output": 2.253, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 24000,
       "maxTokens": 24000,
       "compat": {
@@ -717,12 +488,7 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
       "reasoning": false,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.27,
-        "output": 0.85,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.27, "output": 0.85, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 131000,
       "maxTokens": 16384,
       "compat": {
@@ -735,12 +501,7 @@
       },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -753,12 +514,7 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
       "reasoning": false,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.351,
-        "output": 0.555,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.351, "output": 0.555, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 128000,
       "compat": {
@@ -771,12 +527,7 @@
       },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -789,12 +540,7 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.95,
-        "output": 4,
-        "cacheRead": 0.16,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.95, "output": 4, "cacheRead": 0.16, "cacheWrite": 0 },
       "contextWindow": 262144,
       "maxTokens": 256000,
       "compat": {
@@ -807,12 +553,7 @@
       },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -825,12 +566,7 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.95,
-        "output": 4,
-        "cacheRead": 0.19,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.95, "output": 4, "cacheRead": 0.19, "cacheWrite": 0 },
       "contextWindow": 262144,
       "maxTokens": 262144,
       "compat": {
@@ -843,12 +579,7 @@
       },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -861,12 +592,7 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 0.5,
-        "output": 1.5,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.5, "output": 1.5, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 256000,
       "maxTokens": 256000,
       "compat": {
@@ -887,12 +613,7 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 0.35,
-        "output": 0.75,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.35, "output": 0.75, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 16384,
       "compat": {
@@ -913,12 +634,7 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 0.2,
-        "output": 0.3,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.2, "output": 0.3, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 16384,
       "compat": {
@@ -939,12 +655,7 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 0.0509,
-        "output": 0.335,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.0509, "output": 0.335, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 32768,
       "maxTokens": 32768,
       "compat": {
@@ -965,12 +676,7 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.45,
-        "output": 3.2,
-        "cacheRead": 0.05,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.45, "output": 3.2, "cacheRead": 0.05, "cacheWrite": 0 },
       "contextWindow": 262144,
       "maxTokens": 262144,
       "compat": {
@@ -983,12 +689,7 @@
       },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1001,12 +702,7 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 0.0605,
-        "output": 0.4,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.0605, "output": 0.4, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 131072,
       "maxTokens": 131072,
       "compat": {
@@ -1027,12 +723,7 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 1.4,
-        "output": 4.4,
-        "cacheRead": 0.26,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 1.4, "output": 4.4, "cacheRead": 0.26, "cacheWrite": 0 },
       "contextWindow": 262144,
       "maxTokens": 256000,
       "compat": {
@@ -1053,12 +744,7 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 1.4,
-        "output": 4.4,
-        "cacheRead": 0.26,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 1.4, "output": 4.4, "cacheRead": 0.26, "cacheWrite": 0 },
       "contextWindow": 1048576,
       "maxTokens": 1048576,
       "compat": {
@@ -1079,12 +765,7 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.15,
-        "output": 0.5,
-        "cacheRead": 0.03,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.15, "output": 0.5, "cacheRead": 0.03, "cacheWrite": 0 },
       "contextWindow": 1048576,
       "maxTokens": 1048576,
       "compat": {
@@ -1097,12 +778,7 @@
       },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1117,25 +793,13 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai",
       "reasoning": false,
       "input": ["text", "image"],
-      "cost": {
-        "input": 2,
-        "output": 8,
-        "cacheRead": 0.5,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 2, "output": 8, "cacheRead": 0.5, "cacheWrite": 0 },
       "contextWindow": 1047576,
       "maxTokens": 32768,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1148,25 +812,13 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai",
       "reasoning": false,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.4,
-        "output": 1.6,
-        "cacheRead": 0.1,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.4, "output": 1.6, "cacheRead": 0.1, "cacheWrite": 0 },
       "contextWindow": 1047576,
       "maxTokens": 32768,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1179,25 +831,13 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai",
       "reasoning": false,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.1,
-        "output": 0.4,
-        "cacheRead": 0.025,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.1, "output": 0.4, "cacheRead": 0.025, "cacheWrite": 0 },
       "contextWindow": 1000000,
       "maxTokens": 32768,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1210,25 +850,13 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai",
       "reasoning": false,
       "input": ["text", "image"],
-      "cost": {
-        "input": 1.25,
-        "output": 5,
-        "cacheRead": 0.625,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 1.25, "output": 5, "cacheRead": 0.625, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 16384,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1241,25 +869,13 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai",
       "reasoning": false,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.075,
-        "output": 0.3,
-        "cacheRead": 0.0375,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.075, "output": 0.3, "cacheRead": 0.0375, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 16384,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1272,12 +888,7 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 1.25,
-        "output": 10,
-        "cacheRead": 0.125,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 1.25, "output": 10, "cacheRead": 0.125, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 128000,
       "thinkingLevelMap": {
@@ -1289,18 +900,10 @@
         "xhigh": null,
         "max": null
       },
-      "compat": {
-        "supportsStrictMode": true,
-        "supportsOpenAIGrammarTools": true
-      },
+      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1313,12 +916,7 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.25,
-        "output": 2,
-        "cacheRead": 0.025,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.25, "output": 2, "cacheRead": 0.025, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 128000,
       "thinkingLevelMap": {
@@ -1330,18 +928,10 @@
         "xhigh": null,
         "max": null
       },
-      "compat": {
-        "supportsStrictMode": true,
-        "supportsOpenAIGrammarTools": true
-      },
+      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1354,12 +944,7 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.05,
-        "output": 0.4,
-        "cacheRead": 0.005,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.05, "output": 0.4, "cacheRead": 0.005, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 128000,
       "thinkingLevelMap": {
@@ -1371,18 +956,10 @@
         "xhigh": null,
         "max": null
       },
-      "compat": {
-        "supportsStrictMode": true,
-        "supportsOpenAIGrammarTools": true
-      },
+      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1395,12 +972,7 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 1.25,
-        "output": 10,
-        "cacheRead": 0.125,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 1.25, "output": 10, "cacheRead": 0.125, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 128000,
       "thinkingLevelMap": {
@@ -1412,18 +984,10 @@
         "xhigh": null,
         "max": null
       },
-      "compat": {
-        "supportsStrictMode": true,
-        "supportsOpenAIGrammarTools": true
-      },
+      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1436,12 +1000,7 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 2.5,
-        "output": 15,
-        "cacheRead": 0.25,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 2.5, "output": 15, "cacheRead": 0.25, "cacheWrite": 0 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
       "thinkingLevelMap": {
@@ -1453,18 +1012,10 @@
         "xhigh": "xhigh",
         "max": null
       },
-      "compat": {
-        "supportsStrictMode": true,
-        "supportsOpenAIGrammarTools": true
-      },
+      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1477,12 +1028,7 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.75,
-        "output": 4.5,
-        "cacheRead": 0.075,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.75, "output": 4.5, "cacheRead": 0.075, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 128000,
       "thinkingLevelMap": {
@@ -1494,18 +1040,10 @@
         "xhigh": "xhigh",
         "max": null
       },
-      "compat": {
-        "supportsStrictMode": true,
-        "supportsOpenAIGrammarTools": true
-      },
+      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1518,12 +1056,7 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.2,
-        "output": 1.25,
-        "cacheRead": 0.02,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.2, "output": 1.25, "cacheRead": 0.02, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 128000,
       "thinkingLevelMap": {
@@ -1535,18 +1068,10 @@
         "xhigh": "xhigh",
         "max": null
       },
-      "compat": {
-        "supportsStrictMode": true,
-        "supportsOpenAIGrammarTools": true
-      },
+      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1559,12 +1084,7 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 30,
-        "output": 180,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 30, "output": 180, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
       "thinkingLevelMap": {
@@ -1576,18 +1096,10 @@
         "xhigh": "xhigh",
         "max": null
       },
-      "compat": {
-        "supportsStrictMode": true,
-        "supportsOpenAIGrammarTools": true
-      },
+      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1600,12 +1112,7 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 5,
-        "output": 30,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 5, "output": 30, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
       "thinkingLevelMap": {
@@ -1617,18 +1124,10 @@
         "xhigh": "xhigh",
         "max": null
       },
-      "compat": {
-        "supportsStrictMode": true,
-        "supportsOpenAIGrammarTools": true
-      },
+      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1641,12 +1140,7 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 30,
-        "output": 180,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 30, "output": 180, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
       "thinkingLevelMap": {
@@ -1658,18 +1152,10 @@
         "xhigh": "xhigh",
         "max": null
       },
-      "compat": {
-        "supportsStrictMode": true,
-        "supportsOpenAIGrammarTools": true
-      },
+      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1708,18 +1194,10 @@
         "xhigh": "xhigh",
         "max": "max"
       },
-      "compat": {
-        "supportsStrictMode": true,
-        "supportsOpenAIGrammarTools": true
-      },
+      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1758,18 +1236,10 @@
         "xhigh": "xhigh",
         "max": "max"
       },
-      "compat": {
-        "supportsStrictMode": true,
-        "supportsOpenAIGrammarTools": true
-      },
+      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1808,18 +1278,10 @@
         "xhigh": "xhigh",
         "max": "max"
       },
-      "compat": {
-        "supportsStrictMode": true,
-        "supportsOpenAIGrammarTools": true
-      },
+      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1858,18 +1320,10 @@
         "xhigh": "xhigh",
         "max": "max"
       },
-      "compat": {
-        "supportsStrictMode": true,
-        "supportsOpenAIGrammarTools": true
-      },
+      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1908,18 +1362,10 @@
         "xhigh": "xhigh",
         "max": "max"
       },
-      "compat": {
-        "supportsStrictMode": true,
-        "supportsOpenAIGrammarTools": true
-      },
+      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1958,18 +1404,10 @@
         "xhigh": "xhigh",
         "max": "max"
       },
-      "compat": {
-        "supportsStrictMode": true,
-        "supportsOpenAIGrammarTools": true
-      },
+      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -2008,18 +1446,52 @@
         "xhigh": "xhigh",
         "max": "max"
       },
-      "compat": {
-        "supportsStrictMode": true,
-        "supportsOpenAIGrammarTools": true
-      },
+      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      },
+      "type": "chat"
+    },
+    "chat:gpt-6.1-terra": {
+      "id": "gpt-6.1-terra",
+      "name": "GPT-6.1 Terra",
+      "api": "openai-responses",
+      "provider": "cloudflare-ai-gateway",
+      "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": {
+        "input": 1,
+        "output": 5,
+        "cacheRead": 0.05,
+        "cacheWrite": 1.25,
+        "tiers": [
+          {
+            "inputTokensAbove": 272000,
+            "input": 2,
+            "output": 7.5,
+            "cacheRead": 0.1,
+            "cacheWrite": 2.5
           }
+        ]
+      },
+      "contextWindow": 1050000,
+      "maxTokens": 128000,
+      "thinkingLevelMap": {
+        "off": "none",
+        "minimal": null,
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh",
+        "max": "max"
+      },
+      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -2032,12 +1504,7 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 2,
-        "output": 8,
-        "cacheRead": 0.5,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 2, "output": 8, "cacheRead": 0.5, "cacheWrite": 0 },
       "contextWindow": 200000,
       "maxTokens": 100000,
       "thinkingLevelMap": {
@@ -2049,17 +1516,10 @@
         "xhigh": null,
         "max": null
       },
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -2072,12 +1532,7 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 1.1,
-        "output": 4.4,
-        "cacheRead": 0.55,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 1.1, "output": 4.4, "cacheRead": 0.55, "cacheWrite": 0 },
       "contextWindow": 200000,
       "maxTokens": 100000,
       "thinkingLevelMap": {
@@ -2089,9 +1544,7 @@
         "xhigh": null,
         "max": null
       },
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "type": "chat"
     },
     "chat:o4-mini": {
@@ -2102,12 +1555,7 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 1.1,
-        "output": 4.4,
-        "cacheRead": 0.275,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 1.1, "output": 4.4, "cacheRead": 0.275, "cacheWrite": 0 },
       "contextWindow": 200000,
       "maxTokens": 100000,
       "thinkingLevelMap": {
@@ -2119,17 +1567,10 @@
         "xhigh": null,
         "max": null
       },
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"

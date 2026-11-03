@@ -665,17 +665,23 @@ impl Registry {
         {
             return Some((model.clone(), thinking));
         }
-        let (provider, pattern) = match pattern.split_once('/') {
-            Some((p, rest))
-                if self
-                    .models
-                    .iter()
-                    .any(|m| m.provider == canonical_provider_id(p)) =>
-            {
-                (Some(canonical_provider_id(p)), rest)
-            }
-            _ => (provider, pattern),
-        };
+        // Provider IDs can contain `/`, such as URL-derived llama.cpp IDs, so
+        // the longest known provider prefix wins.
+        let (provider, pattern) = self
+            .models
+            .iter()
+            .map(|m| m.provider.as_str())
+            .chain(RENAMED_PROVIDER_IDS.iter().map(|(old, _)| *old))
+            .filter(|p| {
+                pattern.as_bytes().get(p.len()) == Some(&b'/')
+                    && pattern
+                        .get(..p.len())
+                        .is_some_and(|prefix| prefix.eq_ignore_ascii_case(p))
+            })
+            .max_by_key(|p| p.len())
+            .map_or((provider, pattern), |p| {
+                (Some(canonical_provider_id(p)), &pattern[p.len() + 1..])
+            });
         let candidates: Vec<&Model> = self
             .models
             .iter()
@@ -834,6 +840,44 @@ mod tests {
             })
             .collect();
         assert!(unsupported.is_empty(), "unsupported APIs: {unsupported:?}");
+    }
+
+    #[test]
+    fn pi_v1_5_catalog_changes_are_present() {
+        let registry = Registry::from_builtin();
+        for provider in ["openai", "azure", "openai-codex"] {
+            let (terra, _) = registry
+                .resolve(&format!("{provider}/gpt-6.1-terra"), None)
+                .expect("GPT-6.1 Terra");
+            assert_eq!(terra.provider, provider);
+        }
+        let (terra, _) = registry
+            .resolve("openai-codex/gpt-6.1-terra", None)
+            .unwrap();
+        assert_eq!(terra.context_window, 500_000);
+        let (kimi, _) = registry.resolve("kimi-coding/k3.1-pro", None).unwrap();
+        assert_eq!(kimi.api, "openai-completions");
+        let (alias, _) = registry
+            .resolve("openrouter/~anthropic/claude-opus-latest", None)
+            .expect("OpenRouter Claude alias");
+        assert_eq!(alias.api, "anthropic-messages");
+        let (zen, _) = registry.resolve("opencode/claude-opus-5-5", None).unwrap();
+        assert_eq!(zen.base_url, "https://opencode.ai/inference/anthropic");
+        assert!(registry.resolve("openai/gpt-realtime-2.1", None).is_none());
+    }
+
+    #[test]
+    fn provider_ids_with_slashes_resolve_by_longest_prefix() {
+        let mut registry = Registry::from_builtin();
+        registry
+            .merge_catalog(
+                r#"{"providers":{"lan":{"baseUrl":"http://lan","api":"openai-completions","models":[{"id":"box/m1"}]},"lan/box":{"baseUrl":"http://box","api":"openai-completions","models":[{"id":"m1"}]}}}"#,
+            )
+            .unwrap();
+        let (model, _) = registry.resolve("lan/box/m1", None).unwrap();
+        assert_eq!(model.provider, "lan/box");
+        let (model, _) = registry.resolve("LAN/box/m1", None).unwrap();
+        assert_eq!(model.provider, "lan/box");
     }
 
     #[test]

@@ -49,6 +49,13 @@ fn main() -> ExitCode {
             return exit_code(err.exit_code());
         }
     };
+    // Every mode resolves paths from the working directory.
+    if let Err(error) = std::env::current_dir() {
+        eprintln!(
+            "error: KISS cannot read the current working directory ({error}). It may have been deleted. Change to an existing directory, for example with `cd ~`, and run kiss again"
+        );
+        return ExitCode::from(1);
+    }
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
@@ -97,7 +104,7 @@ async fn run(args: Args) -> anyhow::Result<i32> {
             .get(1)
             .map(std::path::PathBuf::from)
             .unwrap_or_else(|| input.with_extension("html"));
-        export::export_session(&manager, &output)?;
+        export::export_session(&manager, &output, None)?;
         println!("exported to {}", output.display());
         return Ok(0);
     }

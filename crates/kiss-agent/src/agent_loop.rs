@@ -605,8 +605,12 @@ async fn prepare_tool_call(
             false,
         ));
     }
-    let args = tool.prepare_arguments(tc.arguments.clone());
-    if let Err(msg) = validate_arguments(&tool.parameters(), &args) {
+    let parameters = tool.parameters();
+    let args = crate::validate::coerce_arguments(
+        &parameters,
+        tool.prepare_arguments(tc.arguments.clone()),
+    );
+    if let Err(msg) = validate_arguments(&parameters, &args) {
         return Err(error(msg, false));
     }
     if let Some(before) = &config.before_tool_call

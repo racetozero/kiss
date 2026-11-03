@@ -6,7 +6,6 @@ use anyhow::{Context as _, Result};
 use serde_json::Value;
 use std::time::Duration;
 use tokio_util::sync::CancellationToken;
-use url::Url;
 
 const CLIENT_ID: &str = "17e5f671-d194-4dfb-9706-5516cb48c098";
 
@@ -80,14 +79,6 @@ fn credential(body: &Value) -> Result<OAuthCredential> {
     })
 }
 
-fn trusted_url(value: &str) -> Result<String> {
-    let url = Url::parse(value).context("Kimi Code returned an invalid verification URL")?;
-    if !matches!(url.scheme(), "http" | "https") {
-        anyhow::bail!("Kimi Code returned an untrusted verification URL");
-    }
-    Ok(url.into())
-}
-
 pub async fn start(
     config: &OAuthConfig,
     cancel: &CancellationToken,
@@ -108,7 +99,7 @@ pub async fn start(
     Ok(DeviceAuthorization {
         device_code: required(&body, "device_code")?,
         user_code: required(&body, "user_code")?,
-        verification_uri: trusted_url(verification)?,
+        verification_uri: super::trusted_http_url(verification, "Kimi Code")?,
         interval: Duration::from_secs(body["interval"].as_u64().unwrap_or(5).max(1)),
         expires_in: Duration::from_secs(body["expires_in"].as_u64().unwrap_or(15 * 60)),
     })

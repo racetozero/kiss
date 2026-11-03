@@ -237,7 +237,8 @@ fn apply_server_args(
         || input.redirect_uri.is_some()
         || input.oauth_client_name.is_some()
         || input.auth_server_metadata_url.is_some()
-        || input.client_metadata_url.is_some();
+        || input.client_metadata_url.is_some()
+        || input.oauth_client_registration.is_some();
     if oauth_changed || matches!(server.auth, Some(AuthSetting::Mode(AuthMode::OAuth))) {
         let oauth = server.oauth.get_or_insert_with(OAuthConfig::default);
         if let Some(scope) = &input.oauth_scope {
@@ -262,8 +263,14 @@ fn apply_server_args(
             oauth.auth_server_metadata_url = Some(url.clone());
         }
         if let Some(url) = &input.client_metadata_url {
-            oauth.client_registration = ClientRegistration::Cimd;
             oauth.client_metadata_url = Some(url.clone());
+        }
+        if let Some(mode) = &input.oauth_client_registration {
+            oauth.client_registration = match mode.as_str() {
+                "dcr" => ClientRegistration::Dcr,
+                "cimd" => ClientRegistration::Cimd,
+                _ => ClientRegistration::Auto,
+            };
         }
     }
     if let Some(timeout) = input.timeout_ms {
@@ -427,6 +434,7 @@ mod tests {
             oauth_client_name: None,
             auth_server_metadata_url: None,
             client_metadata_url: None,
+            oauth_client_registration: None,
             timeout_ms: None,
             stdio: vec!["demo".to_string(), "--stdio".to_string()],
         };
@@ -466,7 +474,17 @@ mod tests {
         ]);
         assert_eq!(server.description.as_deref(), Some("Team tickets"));
         let oauth = server.oauth.unwrap();
-        assert_eq!(oauth.client_registration, ClientRegistration::Cimd);
+        assert_eq!(oauth.client_registration, ClientRegistration::Auto);
+        let server = parse(&[
+            "--client-metadata-url",
+            "https://example.com/kiss/client.json",
+            "--oauth-client-registration",
+            "cimd",
+        ]);
+        assert_eq!(
+            server.oauth.unwrap().client_registration,
+            ClientRegistration::Cimd
+        );
         assert!(oauth.auth_server_metadata_url.is_some());
 
         let server = parse(&["--auth-provider", "radius"]);

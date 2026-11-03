@@ -17,50 +17,20 @@
       "contextWindow": 1048576,
       "maxTokens": 131072,
       "lab": "Moonshot AI",
-      "cost": {
-        "input": 3,
-        "output": 15,
-        "cacheRead": 0.3,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 0 },
       "enabled": true,
       "providers": [
-        {
-          "id": "fireworks",
-          "name": "Fireworks AI",
-          "credential": "radius",
-          "source": "radius"
-        },
-        {
-          "id": "relace",
-          "name": "Relace",
-          "credential": "radius",
-          "source": "radius"
-        },
-        {
-          "id": "sference",
-          "name": "sference",
-          "credential": "radius",
-          "source": "radius"
-        },
-        {
-          "id": "baseten",
-          "name": "Baseten",
-          "credential": "radius",
-          "source": "radius"
-        }
+        { "id": "fireworks", "name": "Fireworks AI", "credential": "radius", "source": "radius" },
+        { "id": "relace", "name": "Relace", "credential": "radius", "source": "radius" },
+        { "id": "sference", "name": "sference", "credential": "radius", "source": "radius" },
+        { "id": "baseten", "name": "Baseten", "credential": "radius", "source": "radius" }
       ],
       "api": "pi-messages",
       "provider": "radius",
       "baseUrl": "https://radius.pi.dev/v1",
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -82,44 +52,19 @@
       "contextWindow": 1000000,
       "maxTokens": 32768,
       "lab": "DeepSeek",
-      "cost": {
-        "input": 0.3,
-        "output": 1.2,
-        "cacheRead": 0.006,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.3, "output": 1.2, "cacheRead": 0.006, "cacheWrite": 0 },
       "enabled": true,
       "providers": [
-        {
-          "id": "fireworks",
-          "name": "Fireworks AI",
-          "credential": "radius",
-          "source": "radius"
-        },
-        {
-          "id": "relace",
-          "name": "Relace",
-          "credential": "radius",
-          "source": "radius"
-        },
-        {
-          "id": "baseten",
-          "name": "Baseten",
-          "credential": "radius",
-          "source": "radius"
-        }
+        { "id": "fireworks", "name": "Fireworks AI", "credential": "radius", "source": "radius" },
+        { "id": "relace", "name": "Relace", "credential": "radius", "source": "radius" },
+        { "id": "baseten", "name": "Baseten", "credential": "radius", "source": "radius" }
       ],
       "api": "pi-messages",
       "provider": "radius",
       "baseUrl": "https://radius.pi.dev/v1",
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -128,45 +73,23 @@
       "id": "claude-fable-5",
       "name": "Claude Fable 5",
       "reasoning": true,
-      "thinkingLevelMap": {
-        "off": null,
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "thinkingLevelMap": { "off": null, "xhigh": "xhigh", "max": "max" },
       "input": ["text", "image"],
       "contextWindow": 1000000,
       "maxTokens": 128000,
       "lab": "Anthropic",
-      "cost": {
-        "input": 10,
-        "output": 50,
-        "cacheRead": 1,
-        "cacheWrite": 12.5
-      },
+      "cost": { "input": 10, "output": 50, "cacheRead": 1, "cacheWrite": 12.5 },
       "enabled": true,
       "providers": [
-        {
-          "id": "anthropic",
-          "name": "Anthropic",
-          "credential": "radius",
-          "source": "radius"
-        }
+        { "id": "anthropic", "name": "Anthropic", "credential": "radius", "source": "radius" }
       ],
-      "promptCache": {
-        "short": 300,
-        "long": 3600
-      },
+      "promptCache": { "short": 300, "long": 3600 },
       "api": "pi-messages",
       "provider": "radius",
       "baseUrl": "https://radius.pi.dev/v1",
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -175,45 +98,23 @@
       "id": "claude-fable-5-1",
       "name": "Claude Fable 5.1",
       "reasoning": true,
-      "thinkingLevelMap": {
-        "off": null,
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "thinkingLevelMap": { "off": null, "xhigh": "xhigh", "max": "max" },
       "input": ["text", "image"],
       "contextWindow": 1000000,
       "maxTokens": 128000,
       "lab": "Anthropic",
-      "cost": {
-        "input": 10,
-        "output": 50,
-        "cacheRead": 0.25,
-        "cacheWrite": 12.5
-      },
+      "cost": { "input": 10, "output": 50, "cacheRead": 0.25, "cacheWrite": 12.5 },
       "enabled": true,
       "providers": [
-        {
-          "id": "anthropic",
-          "name": "Anthropic",
-          "credential": "radius",
-          "source": "radius"
-        }
+        { "id": "anthropic", "name": "Anthropic", "credential": "radius", "source": "radius" }
       ],
-      "promptCache": {
-        "short": 300,
-        "long": 3600
-      },
+      "promptCache": { "short": 300, "long": 3600 },
       "api": "pi-messages",
       "provider": "radius",
       "baseUrl": "https://radius.pi.dev/v1",
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -226,32 +127,17 @@
       "contextWindow": 200000,
       "maxTokens": 64000,
       "lab": "Anthropic",
-      "cost": {
-        "input": 1,
-        "output": 5,
-        "cacheRead": 0.1,
-        "cacheWrite": 1.25
-      },
+      "cost": { "input": 1, "output": 5, "cacheRead": 0.1, "cacheWrite": 1.25 },
       "enabled": true,
       "providers": [
-        {
-          "id": "anthropic",
-          "name": "Anthropic",
-          "credential": "radius",
-          "source": "radius"
-        }
+        { "id": "anthropic", "name": "Anthropic", "credential": "radius", "source": "radius" }
       ],
       "api": "pi-messages",
       "provider": "radius",
       "baseUrl": "https://radius.pi.dev/v1",
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -289,28 +175,15 @@
       },
       "enabled": true,
       "providers": [
-        {
-          "id": "anthropic",
-          "name": "Anthropic",
-          "credential": "radius",
-          "source": "radius"
-        }
+        { "id": "anthropic", "name": "Anthropic", "credential": "radius", "source": "radius" }
       ],
-      "promptCache": {
-        "short": 300,
-        "long": 3600
-      },
+      "promptCache": { "short": 300, "long": 3600 },
       "api": "pi-messages",
       "provider": "radius",
       "baseUrl": "https://radius.pi.dev/v1",
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -323,32 +196,17 @@
       "contextWindow": 200000,
       "maxTokens": 64000,
       "lab": "Anthropic",
-      "cost": {
-        "input": 5,
-        "output": 25,
-        "cacheRead": 0.5,
-        "cacheWrite": 6.25
-      },
+      "cost": { "input": 5, "output": 25, "cacheRead": 0.5, "cacheWrite": 6.25 },
       "enabled": true,
       "providers": [
-        {
-          "id": "anthropic",
-          "name": "Anthropic",
-          "credential": "radius",
-          "source": "radius"
-        }
+        { "id": "anthropic", "name": "Anthropic", "credential": "radius", "source": "radius" }
       ],
       "api": "pi-messages",
       "provider": "radius",
       "baseUrl": "https://radius.pi.dev/v1",
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -357,44 +215,23 @@
       "id": "claude-opus-4-8",
       "name": "Claude Opus 4.8",
       "reasoning": true,
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "input": ["text", "image"],
       "contextWindow": 1000000,
       "maxTokens": 128000,
       "lab": "Anthropic",
-      "cost": {
-        "input": 5,
-        "output": 25,
-        "cacheRead": 0.5,
-        "cacheWrite": 6.25
-      },
+      "cost": { "input": 5, "output": 25, "cacheRead": 0.5, "cacheWrite": 6.25 },
       "enabled": true,
       "providers": [
-        {
-          "id": "anthropic",
-          "name": "Anthropic",
-          "credential": "radius",
-          "source": "radius"
-        }
+        { "id": "anthropic", "name": "Anthropic", "credential": "radius", "source": "radius" }
       ],
-      "promptCache": {
-        "short": 300,
-        "long": 3600
-      },
+      "promptCache": { "short": 300, "long": 3600 },
       "api": "pi-messages",
       "provider": "radius",
       "baseUrl": "https://radius.pi.dev/v1",
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -403,44 +240,23 @@
       "id": "claude-opus-5",
       "name": "Claude Opus 5",
       "reasoning": true,
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "input": ["text", "image"],
       "contextWindow": 1000000,
       "maxTokens": 128000,
       "lab": "Anthropic",
-      "cost": {
-        "input": 5,
-        "output": 25,
-        "cacheRead": 0.5,
-        "cacheWrite": 6.25
-      },
+      "cost": { "input": 5, "output": 25, "cacheRead": 0.5, "cacheWrite": 6.25 },
       "enabled": true,
       "providers": [
-        {
-          "id": "anthropic",
-          "name": "Anthropic",
-          "credential": "radius",
-          "source": "radius"
-        }
+        { "id": "anthropic", "name": "Anthropic", "credential": "radius", "source": "radius" }
       ],
-      "promptCache": {
-        "short": 300,
-        "long": 3600
-      },
+      "promptCache": { "short": 300, "long": 3600 },
       "api": "pi-messages",
       "provider": "radius",
       "baseUrl": "https://radius.pi.dev/v1",
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -462,36 +278,18 @@
       "contextWindow": 1000000,
       "maxTokens": 128000,
       "lab": "Anthropic",
-      "cost": {
-        "input": 4,
-        "output": 20,
-        "cacheRead": 0.2,
-        "cacheWrite": 5
-      },
+      "cost": { "input": 4, "output": 20, "cacheRead": 0.2, "cacheWrite": 5 },
       "enabled": true,
       "providers": [
-        {
-          "id": "anthropic",
-          "name": "Anthropic",
-          "credential": "radius",
-          "source": "radius"
-        }
+        { "id": "anthropic", "name": "Anthropic", "credential": "radius", "source": "radius" }
       ],
-      "promptCache": {
-        "short": 300,
-        "long": 3600
-      },
+      "promptCache": { "short": 300, "long": 3600 },
       "api": "pi-messages",
       "provider": "radius",
       "baseUrl": "https://radius.pi.dev/v1",
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -504,32 +302,17 @@
       "contextWindow": 200000,
       "maxTokens": 64000,
       "lab": "Anthropic",
-      "cost": {
-        "input": 3,
-        "output": 15,
-        "cacheRead": 0.3,
-        "cacheWrite": 3.75
-      },
+      "cost": { "input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 3.75 },
       "enabled": true,
       "providers": [
-        {
-          "id": "anthropic",
-          "name": "Anthropic",
-          "credential": "radius",
-          "source": "radius"
-        }
+        { "id": "anthropic", "name": "Anthropic", "credential": "radius", "source": "radius" }
       ],
       "api": "pi-messages",
       "provider": "radius",
       "baseUrl": "https://radius.pi.dev/v1",
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -538,44 +321,23 @@
       "id": "claude-sonnet-5",
       "name": "Claude Sonnet 5",
       "reasoning": true,
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "input": ["text", "image"],
       "contextWindow": 1000000,
       "maxTokens": 128000,
       "lab": "Anthropic",
-      "cost": {
-        "input": 2,
-        "output": 10,
-        "cacheRead": 0.2,
-        "cacheWrite": 2.5
-      },
+      "cost": { "input": 2, "output": 10, "cacheRead": 0.2, "cacheWrite": 2.5 },
       "enabled": true,
       "providers": [
-        {
-          "id": "anthropic",
-          "name": "Anthropic",
-          "credential": "radius",
-          "source": "radius"
-        }
+        { "id": "anthropic", "name": "Anthropic", "credential": "radius", "source": "radius" }
       ],
-      "promptCache": {
-        "short": 300,
-        "long": 3600
-      },
+      "promptCache": { "short": 300, "long": 3600 },
       "api": "pi-messages",
       "provider": "radius",
       "baseUrl": "https://radius.pi.dev/v1",
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -597,36 +359,18 @@
       "contextWindow": 1000000,
       "maxTokens": 128000,
       "lab": "Anthropic",
-      "cost": {
-        "input": 2,
-        "output": 10,
-        "cacheRead": 0.2,
-        "cacheWrite": 2.5
-      },
+      "cost": { "input": 2, "output": 10, "cacheRead": 0.2, "cacheWrite": 2.5 },
       "enabled": true,
       "providers": [
-        {
-          "id": "anthropic",
-          "name": "Anthropic",
-          "credential": "radius",
-          "source": "radius"
-        }
+        { "id": "anthropic", "name": "Anthropic", "credential": "radius", "source": "radius" }
       ],
-      "promptCache": {
-        "short": 300,
-        "long": 3600
-      },
+      "promptCache": { "short": 300, "long": 3600 },
       "api": "pi-messages",
       "provider": "radius",
       "baseUrl": "https://radius.pi.dev/v1",
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -648,44 +392,19 @@
       "contextWindow": 1000000,
       "maxTokens": 32768,
       "lab": "DeepSeek",
-      "cost": {
-        "input": 0.3,
-        "output": 1.2,
-        "cacheRead": 0.006,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.3, "output": 1.2, "cacheRead": 0.006, "cacheWrite": 0 },
       "enabled": true,
       "providers": [
-        {
-          "id": "fireworks",
-          "name": "Fireworks AI",
-          "credential": "radius",
-          "source": "radius"
-        },
-        {
-          "id": "relace",
-          "name": "Relace",
-          "credential": "radius",
-          "source": "radius"
-        },
-        {
-          "id": "baseten",
-          "name": "Baseten",
-          "credential": "radius",
-          "source": "radius"
-        }
+        { "id": "fireworks", "name": "Fireworks AI", "credential": "radius", "source": "radius" },
+        { "id": "relace", "name": "Relace", "credential": "radius", "source": "radius" },
+        { "id": "baseten", "name": "Baseten", "credential": "radius", "source": "radius" }
       ],
       "api": "pi-messages",
       "provider": "radius",
       "baseUrl": "https://radius.pi.dev/v1",
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -696,49 +415,22 @@
       "reasoning": true,
       "thinkingLevelMap": {
         "off": null,
-        "minimal": "minimal",
+        "minimal": null,
         "low": "low",
-        "medium": "medium",
+        "medium": null,
         "high": "high",
-        "xhigh": "xhigh",
-        "max": "xhigh"
+        "xhigh": null,
+        "max": "max"
       },
       "input": ["text"],
       "contextWindow": 1000000,
       "maxTokens": 131072,
       "lab": "Z.ai",
-      "cost": {
-        "input": 1.4,
-        "output": 4.4,
-        "cacheRead": 0.26,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 1.4, "output": 4.4, "cacheRead": 0.26, "cacheWrite": 0 },
       "enabled": true,
       "providers": [
-        {
-          "id": "sference",
-          "name": "sference",
-          "credential": "radius",
-          "source": "radius"
-        },
-        {
-          "id": "fireworks",
-          "name": "Fireworks AI",
-          "credential": "radius",
-          "source": "radius"
-        },
-        {
-          "id": "baseten",
-          "name": "Baseten",
-          "credential": "radius",
-          "source": "radius"
-        },
-        {
-          "id": "openrouter",
-          "name": "OpenRouter",
-          "credential": "radius",
-          "source": "radius"
-        },
+        { "id": "fireworks", "name": "Fireworks AI", "credential": "radius", "source": "radius" },
+        { "id": "baseten", "name": "Baseten", "credential": "radius", "source": "radius" },
         {
           "id": "vercel-ai-gateway",
           "name": "Vercel AI Gateway",
@@ -768,248 +460,17 @@
       "contextWindow": 1000000,
       "maxTokens": 131072,
       "lab": "Z.ai",
-      "cost": {
-        "input": 0.15,
-        "output": 0.5,
-        "cacheRead": 0.03,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.15, "output": 0.5, "cacheRead": 0.03, "cacheWrite": 0 },
       "enabled": true,
       "providers": [
-        {
-          "id": "fireworks",
-          "name": "Fireworks AI",
-          "credential": "radius",
-          "source": "radius"
-        },
-        {
-          "id": "relace",
-          "name": "Relace",
-          "credential": "radius",
-          "source": "radius"
-        },
-        {
-          "id": "baseten",
-          "name": "Baseten",
-          "credential": "radius",
-          "source": "radius"
-        },
-        {
-          "id": "sference",
-          "name": "sference",
-          "credential": "radius",
-          "source": "radius"
-        }
+        { "id": "fireworks", "name": "Fireworks AI", "credential": "radius", "source": "radius" },
+        { "id": "relace", "name": "Relace", "credential": "radius", "source": "radius" },
+        { "id": "baseten", "name": "Baseten", "credential": "radius", "source": "radius" },
+        { "id": "sference", "name": "sference", "credential": "radius", "source": "radius" }
       ],
       "api": "pi-messages",
       "provider": "radius",
       "baseUrl": "https://radius.pi.dev/v1",
-      "type": "chat"
-    },
-    "chat:gpt-5.3-codex": {
-      "id": "gpt-5.3-codex",
-      "name": "GPT 5.3 Codex",
-      "reasoning": true,
-      "thinkingLevelMap": {
-        "off": "none",
-        "minimal": null,
-        "low": "low",
-        "medium": "medium",
-        "high": "high",
-        "xhigh": "xhigh",
-        "max": null
-      },
-      "input": ["text", "image"],
-      "contextWindow": 400000,
-      "maxTokens": 128000,
-      "lab": "OpenAI",
-      "cost": {
-        "input": 1.75,
-        "output": 14,
-        "cacheRead": 0.175,
-        "cacheWrite": 0
-      },
-      "enabled": true,
-      "providers": [
-        {
-          "id": "openai",
-          "name": "OpenAI",
-          "credential": "radius",
-          "source": "radius"
-        }
-      ],
-      "api": "pi-messages",
-      "provider": "radius",
-      "baseUrl": "https://radius.pi.dev/v1",
-      "inputLimits": {
-        "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
-        }
-      },
-      "type": "chat"
-    },
-    "chat:gpt-5.4": {
-      "id": "gpt-5.4",
-      "name": "GPT 5.4",
-      "reasoning": true,
-      "thinkingLevelMap": {
-        "off": "none",
-        "minimal": null,
-        "low": "low",
-        "medium": "medium",
-        "high": "high",
-        "xhigh": "xhigh",
-        "max": null
-      },
-      "input": ["text", "image"],
-      "contextWindow": 272000,
-      "maxTokens": 128000,
-      "lab": "OpenAI",
-      "cost": {
-        "input": 2.5,
-        "output": 15,
-        "cacheRead": 0.25,
-        "cacheWrite": 0,
-        "tiers": [
-          {
-            "inputTokensAbove": 272000,
-            "input": 5,
-            "output": 22.5,
-            "cacheRead": 0.5,
-            "cacheWrite": 0
-          }
-        ]
-      },
-      "enabled": true,
-      "providers": [
-        {
-          "id": "openai",
-          "name": "OpenAI",
-          "credential": "radius",
-          "source": "radius"
-        }
-      ],
-      "api": "pi-messages",
-      "provider": "radius",
-      "baseUrl": "https://radius.pi.dev/v1",
-      "inputLimits": {
-        "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
-        }
-      },
-      "type": "chat"
-    },
-    "chat:gpt-5.4-mini": {
-      "id": "gpt-5.4-mini",
-      "name": "GPT 5.4 Mini",
-      "reasoning": true,
-      "thinkingLevelMap": {
-        "off": "none",
-        "minimal": null,
-        "low": "low",
-        "medium": "medium",
-        "high": "high",
-        "xhigh": "xhigh",
-        "max": null
-      },
-      "input": ["text", "image"],
-      "contextWindow": 400000,
-      "maxTokens": 128000,
-      "lab": "OpenAI",
-      "cost": {
-        "input": 0.75,
-        "output": 4.5,
-        "cacheRead": 0.075,
-        "cacheWrite": 0
-      },
-      "enabled": true,
-      "providers": [
-        {
-          "id": "openai",
-          "name": "OpenAI",
-          "credential": "radius",
-          "source": "radius"
-        }
-      ],
-      "api": "pi-messages",
-      "provider": "radius",
-      "baseUrl": "https://radius.pi.dev/v1",
-      "inputLimits": {
-        "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
-        }
-      },
-      "type": "chat"
-    },
-    "chat:gpt-5.5": {
-      "id": "gpt-5.5",
-      "name": "GPT 5.5",
-      "reasoning": true,
-      "thinkingLevelMap": {
-        "off": "none",
-        "minimal": null,
-        "low": "low",
-        "medium": "medium",
-        "high": "high",
-        "xhigh": "xhigh",
-        "max": null
-      },
-      "input": ["text", "image"],
-      "contextWindow": 272000,
-      "maxTokens": 128000,
-      "lab": "OpenAI",
-      "cost": {
-        "input": 5,
-        "output": 30,
-        "cacheRead": 0.5,
-        "cacheWrite": 0,
-        "tiers": [
-          {
-            "inputTokensAbove": 272000,
-            "input": 10,
-            "output": 45,
-            "cacheRead": 1,
-            "cacheWrite": 0
-          }
-        ]
-      },
-      "enabled": true,
-      "providers": [
-        {
-          "id": "openai",
-          "name": "OpenAI",
-          "credential": "radius",
-          "source": "radius"
-        }
-      ],
-      "api": "pi-messages",
-      "provider": "radius",
-      "baseUrl": "https://radius.pi.dev/v1",
-      "inputLimits": {
-        "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
-        }
-      },
       "type": "chat"
     },
     "chat:gpt-5.6-luna": {
@@ -1046,24 +507,14 @@
       },
       "enabled": true,
       "providers": [
-        {
-          "id": "openai",
-          "name": "OpenAI",
-          "credential": "radius",
-          "source": "radius"
-        }
+        { "id": "openai", "name": "OpenAI", "credential": "radius", "source": "radius" }
       ],
       "api": "pi-messages",
       "provider": "radius",
       "baseUrl": "https://radius.pi.dev/v1",
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1102,24 +553,14 @@
       },
       "enabled": true,
       "providers": [
-        {
-          "id": "openai",
-          "name": "OpenAI",
-          "credential": "radius",
-          "source": "radius"
-        }
+        { "id": "openai", "name": "OpenAI", "credential": "radius", "source": "radius" }
       ],
       "api": "pi-messages",
       "provider": "radius",
       "baseUrl": "https://radius.pi.dev/v1",
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1158,24 +599,14 @@
       },
       "enabled": true,
       "providers": [
-        {
-          "id": "openai",
-          "name": "OpenAI",
-          "credential": "radius",
-          "source": "radius"
-        }
+        { "id": "openai", "name": "OpenAI", "credential": "radius", "source": "radius" }
       ],
       "api": "pi-messages",
       "provider": "radius",
       "baseUrl": "https://radius.pi.dev/v1",
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1214,24 +645,14 @@
       },
       "enabled": true,
       "providers": [
-        {
-          "id": "openai",
-          "name": "OpenAI",
-          "credential": "radius",
-          "source": "radius"
-        }
+        { "id": "openai", "name": "OpenAI", "credential": "radius", "source": "radius" }
       ],
       "api": "pi-messages",
       "provider": "radius",
       "baseUrl": "https://radius.pi.dev/v1",
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1270,24 +691,14 @@
       },
       "enabled": true,
       "providers": [
-        {
-          "id": "openai",
-          "name": "OpenAI",
-          "credential": "radius",
-          "source": "radius"
-        }
+        { "id": "openai", "name": "OpenAI", "credential": "radius", "source": "radius" }
       ],
       "api": "pi-messages",
       "provider": "radius",
       "baseUrl": "https://radius.pi.dev/v1",
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1326,24 +737,14 @@
       },
       "enabled": true,
       "providers": [
-        {
-          "id": "openai",
-          "name": "OpenAI",
-          "credential": "radius",
-          "source": "radius"
-        }
+        { "id": "openai", "name": "OpenAI", "credential": "radius", "source": "radius" }
       ],
       "api": "pi-messages",
       "provider": "radius",
       "baseUrl": "https://radius.pi.dev/v1",
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1382,24 +783,14 @@
       },
       "enabled": true,
       "providers": [
-        {
-          "id": "openai",
-          "name": "OpenAI",
-          "credential": "radius",
-          "source": "radius"
-        }
+        { "id": "openai", "name": "OpenAI", "credential": "radius", "source": "radius" }
       ],
       "api": "pi-messages",
       "provider": "radius",
       "baseUrl": "https://radius.pi.dev/v1",
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1427,35 +818,17 @@
         "cacheRead": 0.5,
         "cacheWrite": 0,
         "tiers": [
-          {
-            "inputTokensAbove": 200000,
-            "input": 4,
-            "output": 12,
-            "cacheRead": 1,
-            "cacheWrite": 0
-          }
+          { "inputTokensAbove": 200000, "input": 4, "output": 12, "cacheRead": 1, "cacheWrite": 0 }
         ]
       },
       "enabled": true,
-      "providers": [
-        {
-          "id": "xai",
-          "name": "xAI",
-          "credential": "radius",
-          "source": "radius"
-        }
-      ],
+      "providers": [{ "id": "xai", "name": "xAI", "credential": "radius", "source": "radius" }],
       "api": "pi-messages",
       "provider": "radius",
       "baseUrl": "https://radius.pi.dev/v1",
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1477,50 +850,20 @@
       "contextWindow": 1048576,
       "maxTokens": 131072,
       "lab": "Moonshot AI",
-      "cost": {
-        "input": 3,
-        "output": 15,
-        "cacheRead": 0.3,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 0 },
       "enabled": true,
       "providers": [
-        {
-          "id": "fireworks",
-          "name": "Fireworks AI",
-          "credential": "radius",
-          "source": "radius"
-        },
-        {
-          "id": "relace",
-          "name": "Relace",
-          "credential": "radius",
-          "source": "radius"
-        },
-        {
-          "id": "sference",
-          "name": "sference",
-          "credential": "radius",
-          "source": "radius"
-        },
-        {
-          "id": "baseten",
-          "name": "Baseten",
-          "credential": "radius",
-          "source": "radius"
-        }
+        { "id": "fireworks", "name": "Fireworks AI", "credential": "radius", "source": "radius" },
+        { "id": "relace", "name": "Relace", "credential": "radius", "source": "radius" },
+        { "id": "sference", "name": "sference", "credential": "radius", "source": "radius" },
+        { "id": "baseten", "name": "Baseten", "credential": "radius", "source": "radius" }
       ],
       "api": "pi-messages",
       "provider": "radius",
       "baseUrl": "https://radius.pi.dev/v1",
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1542,32 +885,17 @@
       "contextWindow": 1000000,
       "maxTokens": 524288,
       "lab": "MiniMax",
-      "cost": {
-        "input": 0.15,
-        "output": 0.6,
-        "cacheRead": 0.015,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.15, "output": 0.6, "cacheRead": 0.015, "cacheWrite": 0 },
       "enabled": true,
       "providers": [
-        {
-          "id": "minimax",
-          "name": "MiniMax",
-          "credential": "radius",
-          "source": "radius"
-        }
+        { "id": "minimax", "name": "MiniMax", "credential": "radius", "source": "radius" }
       ],
       "api": "pi-messages",
       "provider": "radius",
       "baseUrl": "https://radius.pi.dev/v1",
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1606,24 +934,14 @@
       },
       "enabled": true,
       "providers": [
-        {
-          "id": "openai",
-          "name": "OpenAI",
-          "credential": "radius",
-          "source": "radius"
-        }
+        { "id": "openai", "name": "OpenAI", "credential": "radius", "source": "radius" }
       ],
       "api": "pi-messages",
       "provider": "radius",
       "baseUrl": "https://radius.pi.dev/v1",
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1645,20 +963,10 @@
       "contextWindow": 262144,
       "maxTokens": 65536,
       "lab": "Recursive",
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
       "enabled": true,
       "providers": [
-        {
-          "id": "recursive",
-          "name": "Recursive",
-          "credential": "radius",
-          "source": "radius"
-        }
+        { "id": "recursive", "name": "Recursive", "credential": "radius", "source": "radius" }
       ],
       "free": true,
       "api": "pi-messages",

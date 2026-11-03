@@ -11,8 +11,27 @@ fn escape(text: &str) -> String {
         .replace('>', "&gt;")
 }
 
-pub fn export_html(manager: &SessionManager, target: &Path) -> Result<()> {
+/// The system prompt and each tool's name and description, when a live
+/// session exports. Session files do not store them.
+pub type SystemContext = (String, Vec<(String, String)>);
+
+pub fn export_html(
+    manager: &SessionManager,
+    target: &Path,
+    system: Option<&SystemContext>,
+) -> Result<()> {
     let mut body = String::new();
+    if let Some((prompt, tools)) = system {
+        let tools: String = tools
+            .iter()
+            .map(|(name, description)| format!("- {name}: {description}\n"))
+            .collect();
+        body.push_str(&format!(
+            "<details class=\"meta\"><summary>system prompt and tools</summary><pre>{}</pre><pre>{}</pre></details>\n",
+            escape(prompt),
+            escape(&tools)
+        ));
+    }
     for entry in manager.build_context_entries() {
         match entry {
             SessionEntry::Message { message, .. } => {
@@ -111,11 +130,15 @@ pub fn export_jsonl(manager: &SessionManager, target: &Path) -> Result<()> {
     Ok(())
 }
 
-pub fn export_session(manager: &SessionManager, target: &Path) -> Result<()> {
+pub fn export_session(
+    manager: &SessionManager,
+    target: &Path,
+    system: Option<&SystemContext>,
+) -> Result<()> {
     if target.extension().and_then(|extension| extension.to_str()) == Some("jsonl") {
         export_jsonl(manager, target)
     } else {
-        export_html(manager, target)
+        export_html(manager, target, system)
     }
 }
 
@@ -129,8 +152,24 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let target = dir.path().join("portable.jsonl");
         let manager = SessionManager::in_memory(Path::new("/tmp/project"));
-        export_session(&manager, &target).unwrap();
+        export_session(&manager, &target, None).unwrap();
         let reopened = SessionManager::open(&target).unwrap();
         assert_eq!(reopened.session_id(), manager.session_id());
+    }
+
+    #[test]
+    fn html_export_shows_the_system_prompt_and_tools() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("session.html");
+        let manager = SessionManager::in_memory(Path::new("/tmp/project"));
+        let system = (
+            "You are <kiss>".to_string(),
+            vec![("read".to_string(), "Read a file".to_string())],
+        );
+        export_session(&manager, &target, Some(&system)).unwrap();
+        let html = std::fs::read_to_string(&target).unwrap();
+        assert!(html.contains("system prompt and tools"));
+        assert!(html.contains("You are &lt;kiss&gt;"));
+        assert!(html.contains("- read: Read a file"));
     }
 }

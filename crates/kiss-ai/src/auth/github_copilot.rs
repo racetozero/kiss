@@ -108,15 +108,11 @@ pub async fn start(
     if !status.is_success() {
         anyhow::bail!("GitHub device authorization failed (HTTP {status})");
     }
-    let verification = required(&body, "verification_uri")?;
-    let url = Url::parse(&verification).context("GitHub returned an invalid verification URL")?;
-    if !matches!(url.scheme(), "http" | "https") {
-        anyhow::bail!("GitHub returned an untrusted verification URL");
-    }
+    let url = super::trusted_http_url(&required(&body, "verification_uri")?, "GitHub")?;
     Ok(DeviceAuthorization {
         device_code: required(&body, "device_code")?,
         user_code: required(&body, "user_code")?,
-        verification_uri: url.into(),
+        verification_uri: url,
         interval: Duration::from_secs(body["interval"].as_u64().unwrap_or(5).max(1)),
         expires_in: Duration::from_secs(body["expires_in"].as_u64().unwrap_or(900)),
     })

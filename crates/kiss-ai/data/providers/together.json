@@ -7,20 +7,10 @@
       "provider": "together",
       "baseUrl": "https://api.together.ai/v1",
       "reasoning": true,
-      "thinkingLevelMap": {
-        "minimal": null,
-        "low": null,
-        "medium": null,
-        "high": "high",
-        "xhigh": null
-      },
       "input": ["text"],
-      "cost": {
-        "input": 1.32,
-        "output": 3.96,
-        "cacheRead": 0.13,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 1.32, "output": 3.96, "cacheRead": 0.13, "cacheWrite": 0 },
+      "contextWindow": 1048576,
+      "maxTokens": 384000,
       "compat": {
         "supportsStore": false,
         "supportsDeveloperRole": false,
@@ -30,8 +20,13 @@
         "supportsLongCacheRetention": false,
         "supportsStrictMode": false
       },
-      "contextWindow": 1048576,
-      "maxTokens": 384000,
+      "thinkingLevelMap": {
+        "minimal": null,
+        "low": null,
+        "medium": null,
+        "high": "high",
+        "xhigh": null
+      },
       "type": "chat"
     },
     "chat:deepseek-ai/DeepSeek-V4.1-Flash": {
@@ -41,18 +36,10 @@
       "provider": "together",
       "baseUrl": "https://api.together.ai/v1",
       "reasoning": true,
-      "thinkingLevelMap": {
-        "minimal": null,
-        "low": null,
-        "medium": null
-      },
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.3,
-        "output": 1.2,
-        "cacheRead": 0.006,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.3, "output": 1.2, "cacheRead": 0.006, "cacheWrite": 0 },
+      "contextWindow": 1048576,
+      "maxTokens": 384000,
       "compat": {
         "supportsStore": false,
         "supportsDeveloperRole": false,
@@ -62,16 +49,10 @@
         "supportsLongCacheRetention": false,
         "supportsStrictMode": false
       },
-      "contextWindow": 1048576,
-      "maxTokens": 384000,
+      "thinkingLevelMap": { "minimal": null, "low": null, "medium": null },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -83,18 +64,10 @@
       "provider": "together",
       "baseUrl": "https://api.together.ai/v1",
       "reasoning": true,
-      "thinkingLevelMap": {
-        "minimal": null,
-        "low": null,
-        "medium": null
-      },
       "input": ["text", "image"],
-      "cost": {
-        "input": 1.25,
-        "output": 4.25,
-        "cacheRead": 0.15,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 1.25, "output": 4.25, "cacheRead": 0.15, "cacheWrite": 0 },
+      "contextWindow": 1048576,
+      "maxTokens": 131072,
       "compat": {
         "supportsStore": false,
         "supportsDeveloperRole": false,
@@ -104,16 +77,10 @@
         "supportsLongCacheRetention": false,
         "supportsStrictMode": false
       },
-      "contextWindow": 1048576,
-      "maxTokens": 131072,
+      "thinkingLevelMap": { "minimal": null, "low": null, "medium": null },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -125,18 +92,10 @@
       "provider": "together",
       "baseUrl": "https://api.together.ai/v1",
       "reasoning": true,
-      "thinkingLevelMap": {
-        "minimal": null,
-        "low": null,
-        "medium": null
-      },
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.3,
-        "output": 1.2,
-        "cacheRead": 0.06,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.3, "output": 1.2, "cacheRead": 0.06, "cacheWrite": 0 },
+      "contextWindow": 524288,
+      "maxTokens": 524288,
       "compat": {
         "supportsStore": false,
         "supportsDeveloperRole": false,
@@ -146,16 +105,10 @@
         "supportsLongCacheRetention": false,
         "supportsStrictMode": false
       },
-      "contextWindow": 524288,
-      "maxTokens": 524288,
+      "thinkingLevelMap": { "minimal": null, "low": null, "medium": null },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -167,18 +120,10 @@
       "provider": "together",
       "baseUrl": "https://api.together.ai/v1",
       "reasoning": true,
-      "thinkingLevelMap": {
-        "minimal": null,
-        "low": null,
-        "medium": null
-      },
       "input": ["text", "image"],
-      "cost": {
-        "input": 3,
-        "output": 15,
-        "cacheRead": 0.3,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 0 },
+      "contextWindow": 1048576,
+      "maxTokens": 131072,
       "compat": {
         "supportsStore": false,
         "supportsDeveloperRole": false,
@@ -188,16 +133,10 @@
         "supportsLongCacheRetention": false,
         "supportsStrictMode": false
       },
-      "contextWindow": 1048576,
-      "maxTokens": 131072,
+      "thinkingLevelMap": { "minimal": null, "low": null, "medium": null },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -209,18 +148,10 @@
       "provider": "together",
       "baseUrl": "https://api.together.ai/v1",
       "reasoning": true,
-      "thinkingLevelMap": {
-        "minimal": null,
-        "low": null,
-        "medium": null
-      },
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.15,
-        "output": 0.5,
-        "cacheRead": 0.02,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.15, "output": 0.5, "cacheRead": 0.02, "cacheWrite": 0 },
+      "contextWindow": 262144,
+      "maxTokens": 262144,
       "compat": {
         "supportsStore": false,
         "supportsDeveloperRole": false,
@@ -230,16 +161,10 @@
         "supportsLongCacheRetention": false,
         "supportsStrictMode": false
       },
-      "contextWindow": 262144,
-      "maxTokens": 262144,
+      "thinkingLevelMap": { "minimal": null, "low": null, "medium": null },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -251,22 +176,10 @@
       "provider": "together",
       "baseUrl": "https://api.together.ai/v1",
       "reasoning": true,
-      "thinkingLevelMap": {
-        "off": null,
-        "minimal": null,
-        "low": "low",
-        "medium": "medium",
-        "high": "high",
-        "xhigh": null,
-        "max": null
-      },
       "input": ["text"],
-      "cost": {
-        "input": 0.15,
-        "output": 0.6,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.15, "output": 0.6, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 131072,
+      "maxTokens": 131072,
       "compat": {
         "supportsStore": false,
         "supportsDeveloperRole": false,
@@ -276,8 +189,15 @@
         "supportsLongCacheRetention": false,
         "supportsStrictMode": false
       },
-      "contextWindow": 131072,
-      "maxTokens": 131072,
+      "thinkingLevelMap": {
+        "off": null,
+        "minimal": null,
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": null,
+        "max": null
+      },
       "type": "chat"
     },
     "chat:Qwen/Qwen3.5-9B": {
@@ -287,18 +207,10 @@
       "provider": "together",
       "baseUrl": "https://api.together.ai/v1",
       "reasoning": true,
-      "thinkingLevelMap": {
-        "minimal": null,
-        "low": null,
-        "medium": null
-      },
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.17,
-        "output": 0.25,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.17, "output": 0.25, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 262144,
+      "maxTokens": 65536,
       "compat": {
         "supportsStore": false,
         "supportsDeveloperRole": false,
@@ -308,16 +220,10 @@
         "supportsLongCacheRetention": false,
         "supportsStrictMode": false
       },
-      "contextWindow": 262144,
-      "maxTokens": 65536,
+      "thinkingLevelMap": { "minimal": null, "low": null, "medium": null },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -329,18 +235,10 @@
       "provider": "together",
       "baseUrl": "https://api.together.ai/v1",
       "reasoning": true,
-      "thinkingLevelMap": {
-        "minimal": null,
-        "low": null,
-        "medium": null
-      },
       "input": ["text"],
-      "cost": {
-        "input": 0.5,
-        "output": 3,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.5, "output": 3, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 1000000,
+      "maxTokens": 65536,
       "compat": {
         "supportsStore": false,
         "supportsDeveloperRole": false,
@@ -350,8 +248,7 @@
         "supportsLongCacheRetention": false,
         "supportsStrictMode": false
       },
-      "contextWindow": 1000000,
-      "maxTokens": 65536,
+      "thinkingLevelMap": { "minimal": null, "low": null, "medium": null },
       "type": "chat"
     },
     "chat:Qwen/Qwen3.7-Max": {
@@ -361,18 +258,10 @@
       "provider": "together",
       "baseUrl": "https://api.together.ai/v1",
       "reasoning": true,
-      "thinkingLevelMap": {
-        "minimal": null,
-        "low": null,
-        "medium": null
-      },
       "input": ["text"],
-      "cost": {
-        "input": 2.5,
-        "output": 7.5,
-        "cacheRead": 0.5,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 2.5, "output": 7.5, "cacheRead": 0.5, "cacheWrite": 0 },
+      "contextWindow": 1000000,
+      "maxTokens": 131072,
       "compat": {
         "supportsStore": false,
         "supportsDeveloperRole": false,
@@ -382,8 +271,7 @@
         "supportsLongCacheRetention": false,
         "supportsStrictMode": false
       },
-      "contextWindow": 1000000,
-      "maxTokens": 131072,
+      "thinkingLevelMap": { "minimal": null, "low": null, "medium": null },
       "type": "chat"
     },
     "chat:reflection/Beam-1.0-501B-A23B": {
@@ -393,18 +281,10 @@
       "provider": "together",
       "baseUrl": "https://api.together.ai/v1",
       "reasoning": true,
-      "thinkingLevelMap": {
-        "minimal": null,
-        "low": null,
-        "medium": null
-      },
       "input": ["text"],
-      "cost": {
-        "input": 0.4,
-        "output": 1.2,
-        "cacheRead": 0.04,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.4, "output": 1.2, "cacheRead": 0.04, "cacheWrite": 0 },
+      "contextWindow": 1048576,
+      "maxTokens": 131072,
       "compat": {
         "supportsStore": false,
         "supportsDeveloperRole": false,
@@ -414,8 +294,7 @@
         "supportsLongCacheRetention": false,
         "supportsStrictMode": false
       },
-      "contextWindow": 1048576,
-      "maxTokens": 131072,
+      "thinkingLevelMap": { "minimal": null, "low": null, "medium": null },
       "type": "chat"
     },
     "chat:thinkingmachines/Inkling": {
@@ -425,18 +304,10 @@
       "provider": "together",
       "baseUrl": "https://api.together.ai/v1",
       "reasoning": true,
-      "thinkingLevelMap": {
-        "minimal": null,
-        "low": null,
-        "medium": null
-      },
       "input": ["text", "image"],
-      "cost": {
-        "input": 1,
-        "output": 4.05,
-        "cacheRead": 0.17,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 1, "output": 4.05, "cacheRead": 0.17, "cacheWrite": 0 },
+      "contextWindow": 524288,
+      "maxTokens": 131072,
       "compat": {
         "supportsStore": false,
         "supportsDeveloperRole": false,
@@ -446,16 +317,10 @@
         "supportsLongCacheRetention": false,
         "supportsStrictMode": false
       },
-      "contextWindow": 524288,
-      "maxTokens": 131072,
+      "thinkingLevelMap": { "minimal": null, "low": null, "medium": null },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -467,18 +332,10 @@
       "provider": "together",
       "baseUrl": "https://api.together.ai/v1",
       "reasoning": true,
-      "thinkingLevelMap": {
-        "minimal": null,
-        "low": null,
-        "medium": null
-      },
       "input": ["text"],
-      "cost": {
-        "input": 1.4,
-        "output": 4.4,
-        "cacheRead": 0.26,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 1.4, "output": 4.4, "cacheRead": 0.26, "cacheWrite": 0 },
+      "contextWindow": 1048575,
+      "maxTokens": 164000,
       "compat": {
         "supportsStore": false,
         "supportsDeveloperRole": false,
@@ -488,8 +345,7 @@
         "supportsLongCacheRetention": false,
         "supportsStrictMode": false
       },
-      "contextWindow": 1048575,
-      "maxTokens": 164000,
+      "thinkingLevelMap": { "minimal": null, "low": null, "medium": null },
       "type": "chat"
     },
     "chat:zai-org/GLM-5.3": {
@@ -499,18 +355,10 @@
       "provider": "together",
       "baseUrl": "https://api.together.ai/v1",
       "reasoning": true,
-      "thinkingLevelMap": {
-        "minimal": null,
-        "low": null,
-        "medium": null
-      },
       "input": ["text"],
-      "cost": {
-        "input": 1.4,
-        "output": 4.4,
-        "cacheRead": 0.26,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 1.4, "output": 4.4, "cacheRead": 0.26, "cacheWrite": 0 },
+      "contextWindow": 1048575,
+      "maxTokens": 262144,
       "compat": {
         "supportsStore": false,
         "supportsDeveloperRole": false,
@@ -520,8 +368,7 @@
         "supportsLongCacheRetention": false,
         "supportsStrictMode": false
       },
-      "contextWindow": 1048575,
-      "maxTokens": 262144,
+      "thinkingLevelMap": { "minimal": null, "low": null, "medium": null },
       "type": "chat"
     },
     "chat:zai-org/GLM-5.3-Flash": {
@@ -531,18 +378,10 @@
       "provider": "together",
       "baseUrl": "https://api.together.ai/v1",
       "reasoning": true,
-      "thinkingLevelMap": {
-        "minimal": null,
-        "low": null,
-        "medium": null
-      },
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.15,
-        "output": 0.5,
-        "cacheRead": 0.03,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.15, "output": 0.5, "cacheRead": 0.03, "cacheWrite": 0 },
+      "contextWindow": 1048575,
+      "maxTokens": 400000,
       "compat": {
         "supportsStore": false,
         "supportsDeveloperRole": false,
@@ -552,16 +391,10 @@
         "supportsLongCacheRetention": false,
         "supportsStrictMode": false
       },
-      "contextWindow": 1048575,
-      "maxTokens": 400000,
+      "thinkingLevelMap": { "minimal": null, "low": null, "medium": null },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"

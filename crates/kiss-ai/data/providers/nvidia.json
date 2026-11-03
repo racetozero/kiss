@@ -6,17 +6,12 @@
       "api": "openai-completions",
       "provider": "nvidia",
       "baseUrl": "https://integrate.api.nvidia.com/v1",
-      "headers": {
-        "NVCF-POLL-SECONDS": "3600"
-      },
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 1000000,
+      "maxTokens": 384000,
+      "headers": { "NVCF-POLL-SECONDS": "3600" },
       "compat": {
         "supportsStore": false,
         "supportsDeveloperRole": false,
@@ -27,8 +22,6 @@
         "requiresReasoningContentOnAssistantMessages": true,
         "thinkingFormat": "deepseek"
       },
-      "contextWindow": 1000000,
-      "maxTokens": 384000,
       "thinkingLevelMap": {
         "minimal": null,
         "low": null,
@@ -38,12 +31,7 @@
       },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -54,17 +42,12 @@
       "api": "openai-completions",
       "provider": "nvidia",
       "baseUrl": "https://integrate.api.nvidia.com/v1",
-      "headers": {
-        "NVCF-POLL-SECONDS": "3600"
-      },
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 250000,
+      "maxTokens": 32768,
+      "headers": { "NVCF-POLL-SECONDS": "3600" },
       "compat": {
         "supportsStore": false,
         "supportsDeveloperRole": false,
@@ -73,16 +56,9 @@
         "supportsLongCacheRetention": false,
         "supportsStrictMode": false
       },
-      "contextWindow": 250000,
-      "maxTokens": 32768,
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -93,17 +69,12 @@
       "api": "openai-completions",
       "provider": "nvidia",
       "baseUrl": "https://integrate.api.nvidia.com/v1",
-      "headers": {
-        "NVCF-POLL-SECONDS": "3600"
-      },
       "reasoning": false,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 131072,
+      "maxTokens": 16384,
+      "headers": { "NVCF-POLL-SECONDS": "3600" },
       "compat": {
         "supportsStore": false,
         "supportsDeveloperRole": false,
@@ -112,16 +83,9 @@
         "supportsLongCacheRetention": false,
         "supportsStrictMode": false
       },
-      "contextWindow": 131072,
-      "maxTokens": 16384,
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -132,17 +96,12 @@
       "api": "openai-completions",
       "provider": "nvidia",
       "baseUrl": "https://integrate.api.nvidia.com/v1",
-      "headers": {
-        "NVCF-POLL-SECONDS": "3600"
-      },
       "reasoning": false,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 131072,
+      "maxTokens": 16384,
+      "headers": { "NVCF-POLL-SECONDS": "3600" },
       "compat": {
         "supportsStore": false,
         "supportsDeveloperRole": false,
@@ -151,16 +110,9 @@
         "supportsLongCacheRetention": false,
         "supportsStrictMode": false
       },
-      "contextWindow": 131072,
-      "maxTokens": 16384,
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -171,17 +123,12 @@
       "api": "openai-completions",
       "provider": "nvidia",
       "baseUrl": "https://integrate.api.nvidia.com/v1",
-      "headers": {
-        "NVCF-POLL-SECONDS": "3600"
-      },
       "reasoning": false,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 128000,
+      "maxTokens": 4096,
+      "headers": { "NVCF-POLL-SECONDS": "3600" },
       "compat": {
         "supportsStore": false,
         "supportsDeveloperRole": false,
@@ -190,16 +137,9 @@
         "supportsLongCacheRetention": false,
         "supportsStrictMode": false
       },
-      "contextWindow": 128000,
-      "maxTokens": 4096,
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -210,17 +150,12 @@
       "api": "openai-completions",
       "provider": "nvidia",
       "baseUrl": "https://integrate.api.nvidia.com/v1",
-      "headers": {
-        "NVCF-POLL-SECONDS": "3600"
-      },
       "reasoning": false,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 128000,
+      "maxTokens": 8192,
+      "headers": { "NVCF-POLL-SECONDS": "3600" },
       "compat": {
         "supportsStore": false,
         "supportsDeveloperRole": false,
@@ -229,16 +164,9 @@
         "supportsLongCacheRetention": false,
         "supportsStrictMode": false
       },
-      "contextWindow": 128000,
-      "maxTokens": 8192,
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -249,17 +177,12 @@
       "api": "openai-completions",
       "provider": "nvidia",
       "baseUrl": "https://integrate.api.nvidia.com/v1",
-      "headers": {
-        "NVCF-POLL-SECONDS": "3600"
-      },
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 131072,
+      "maxTokens": 131072,
+      "headers": { "NVCF-POLL-SECONDS": "3600" },
       "compat": {
         "supportsStore": false,
         "supportsDeveloperRole": false,
@@ -268,16 +191,36 @@
         "supportsLongCacheRetention": false,
         "supportsStrictMode": false
       },
-      "contextWindow": 131072,
-      "maxTokens": 131072,
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      },
+      "type": "chat"
+    },
+    "chat:minimaxai/minimax-m3.1-flash": {
+      "id": "minimaxai/minimax-m3.1-flash",
+      "name": "MiniMax-M3.1-Flash",
+      "api": "openai-completions",
+      "provider": "nvidia",
+      "baseUrl": "https://integrate.api.nvidia.com/v1",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 262144,
+      "maxTokens": 262144,
+      "headers": { "NVCF-POLL-SECONDS": "3600" },
+      "compat": {
+        "supportsStore": false,
+        "supportsDeveloperRole": false,
+        "supportsReasoningEffort": false,
+        "maxTokensField": "max_tokens",
+        "supportsLongCacheRetention": false,
+        "supportsStrictMode": false
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -288,17 +231,12 @@
       "api": "openai-completions",
       "provider": "nvidia",
       "baseUrl": "https://integrate.api.nvidia.com/v1",
-      "headers": {
-        "NVCF-POLL-SECONDS": "3600"
-      },
       "reasoning": false,
       "input": ["text"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 65536,
+      "maxTokens": 65536,
+      "headers": { "NVCF-POLL-SECONDS": "3600" },
       "compat": {
         "supportsStore": false,
         "supportsDeveloperRole": false,
@@ -307,8 +245,6 @@
         "supportsLongCacheRetention": false,
         "supportsStrictMode": false
       },
-      "contextWindow": 65536,
-      "maxTokens": 65536,
       "type": "chat"
     },
     "chat:moonshotai/kimi-k2.6": {
@@ -317,17 +253,12 @@
       "api": "openai-completions",
       "provider": "nvidia",
       "baseUrl": "https://integrate.api.nvidia.com/v1",
-      "headers": {
-        "NVCF-POLL-SECONDS": "3600"
-      },
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 262144,
+      "maxTokens": 262144,
+      "headers": { "NVCF-POLL-SECONDS": "3600" },
       "compat": {
         "supportsStore": false,
         "supportsDeveloperRole": false,
@@ -336,16 +267,9 @@
         "supportsLongCacheRetention": false,
         "supportsStrictMode": false
       },
-      "contextWindow": 262144,
-      "maxTokens": 262144,
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -356,17 +280,12 @@
       "api": "openai-completions",
       "provider": "nvidia",
       "baseUrl": "https://integrate.api.nvidia.com/v1",
-      "headers": {
-        "NVCF-POLL-SECONDS": "3600"
-      },
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 131072,
+      "maxTokens": 16384,
+      "headers": { "NVCF-POLL-SECONDS": "3600" },
       "compat": {
         "supportsStore": false,
         "supportsDeveloperRole": false,
@@ -375,16 +294,9 @@
         "supportsLongCacheRetention": false,
         "supportsStrictMode": false
       },
-      "contextWindow": 131072,
-      "maxTokens": 16384,
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -395,17 +307,12 @@
       "api": "openai-completions",
       "provider": "nvidia",
       "baseUrl": "https://integrate.api.nvidia.com/v1",
-      "headers": {
-        "NVCF-POLL-SECONDS": "3600"
-      },
       "reasoning": false,
       "input": ["text"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 128000,
+      "maxTokens": 8192,
+      "headers": { "NVCF-POLL-SECONDS": "3600" },
       "compat": {
         "supportsStore": false,
         "supportsDeveloperRole": false,
@@ -414,8 +321,6 @@
         "supportsLongCacheRetention": false,
         "supportsStrictMode": false
       },
-      "contextWindow": 128000,
-      "maxTokens": 8192,
       "type": "chat"
     },
     "chat:nvidia/llama-3.1-nemotron-ultra-253b-v1": {
@@ -424,17 +329,12 @@
       "api": "openai-completions",
       "provider": "nvidia",
       "baseUrl": "https://integrate.api.nvidia.com/v1",
-      "headers": {
-        "NVCF-POLL-SECONDS": "3600"
-      },
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 128000,
+      "maxTokens": 16384,
+      "headers": { "NVCF-POLL-SECONDS": "3600" },
       "compat": {
         "supportsStore": false,
         "supportsDeveloperRole": false,
@@ -443,8 +343,6 @@
         "supportsLongCacheRetention": false,
         "supportsStrictMode": false
       },
-      "contextWindow": 128000,
-      "maxTokens": 16384,
       "type": "chat"
     },
     "chat:nvidia/nemotron-3-nano-omni-30b-a3b-reasoning": {
@@ -453,17 +351,12 @@
       "api": "openai-completions",
       "provider": "nvidia",
       "baseUrl": "https://integrate.api.nvidia.com/v1",
-      "headers": {
-        "NVCF-POLL-SECONDS": "3600"
-      },
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 256000,
+      "maxTokens": 65536,
+      "headers": { "NVCF-POLL-SECONDS": "3600" },
       "compat": {
         "supportsStore": false,
         "supportsDeveloperRole": false,
@@ -472,16 +365,9 @@
         "supportsLongCacheRetention": false,
         "supportsStrictMode": false
       },
-      "contextWindow": 256000,
-      "maxTokens": 65536,
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -492,17 +378,12 @@
       "api": "openai-completions",
       "provider": "nvidia",
       "baseUrl": "https://integrate.api.nvidia.com/v1",
-      "headers": {
-        "NVCF-POLL-SECONDS": "3600"
-      },
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 1000000,
+      "maxTokens": 65536,
+      "headers": { "NVCF-POLL-SECONDS": "3600" },
       "compat": {
         "supportsStore": false,
         "supportsDeveloperRole": false,
@@ -511,8 +392,6 @@
         "supportsLongCacheRetention": false,
         "supportsStrictMode": false
       },
-      "contextWindow": 1000000,
-      "maxTokens": 65536,
       "type": "chat"
     },
     "chat:nvidia/nemotron-3.5-lightning-30b-a3b": {
@@ -521,17 +400,12 @@
       "api": "openai-completions",
       "provider": "nvidia",
       "baseUrl": "https://integrate.api.nvidia.com/v1",
-      "headers": {
-        "NVCF-POLL-SECONDS": "3600"
-      },
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 262144,
+      "maxTokens": 262144,
+      "headers": { "NVCF-POLL-SECONDS": "3600" },
       "compat": {
         "supportsStore": false,
         "supportsDeveloperRole": false,
@@ -540,8 +414,6 @@
         "supportsLongCacheRetention": false,
         "supportsStrictMode": false
       },
-      "contextWindow": 262144,
-      "maxTokens": 262144,
       "type": "chat"
     },
     "chat:nvidia/nemotron-3.5-super-vl-120b-a12b": {
@@ -550,17 +422,12 @@
       "api": "openai-completions",
       "provider": "nvidia",
       "baseUrl": "https://integrate.api.nvidia.com/v1",
-      "headers": {
-        "NVCF-POLL-SECONDS": "3600"
-      },
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 1048576,
+      "maxTokens": 8192,
+      "headers": { "NVCF-POLL-SECONDS": "3600" },
       "compat": {
         "supportsStore": false,
         "supportsDeveloperRole": false,
@@ -569,16 +436,9 @@
         "supportsLongCacheRetention": false,
         "supportsStrictMode": false
       },
-      "contextWindow": 1048576,
-      "maxTokens": 8192,
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -589,17 +449,12 @@
       "api": "openai-completions",
       "provider": "nvidia",
       "baseUrl": "https://integrate.api.nvidia.com/v1",
-      "headers": {
-        "NVCF-POLL-SECONDS": "3600"
-      },
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 131072,
+      "maxTokens": 32768,
+      "headers": { "NVCF-POLL-SECONDS": "3600" },
       "compat": {
         "supportsStore": false,
         "supportsDeveloperRole": false,
@@ -608,8 +463,6 @@
         "supportsLongCacheRetention": false,
         "supportsStrictMode": false
       },
-      "contextWindow": 131072,
-      "maxTokens": 32768,
       "type": "chat"
     },
     "chat:poolside/laguna-xs-2.1": {
@@ -618,17 +471,12 @@
       "api": "openai-completions",
       "provider": "nvidia",
       "baseUrl": "https://integrate.api.nvidia.com/v1",
-      "headers": {
-        "NVCF-POLL-SECONDS": "3600"
-      },
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 262144,
+      "maxTokens": 16384,
+      "headers": { "NVCF-POLL-SECONDS": "3600" },
       "compat": {
         "supportsStore": false,
         "supportsDeveloperRole": false,
@@ -637,8 +485,6 @@
         "supportsLongCacheRetention": false,
         "supportsStrictMode": false
       },
-      "contextWindow": 262144,
-      "maxTokens": 16384,
       "type": "chat"
     },
     "chat:stepfun-ai/step-5-preview": {
@@ -647,56 +493,12 @@
       "api": "openai-completions",
       "provider": "nvidia",
       "baseUrl": "https://integrate.api.nvidia.com/v1",
-      "headers": {
-        "NVCF-POLL-SECONDS": "3600"
-      },
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "compat": {
-        "supportsStore": false,
-        "supportsDeveloperRole": false,
-        "supportsReasoningEffort": false,
-        "maxTokensField": "max_tokens",
-        "supportsLongCacheRetention": false,
-        "supportsStrictMode": false
-      },
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 1048576,
       "maxTokens": 1048576,
-      "inputLimits": {
-        "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
-        }
-      },
-      "type": "chat"
-    },
-    "chat:z-ai/glm-5.3": {
-      "id": "z-ai/glm-5.3",
-      "name": "GLM-5.3",
-      "api": "openai-completions",
-      "provider": "nvidia",
-      "baseUrl": "https://integrate.api.nvidia.com/v1",
-      "headers": {
-        "NVCF-POLL-SECONDS": "3600"
-      },
-      "reasoning": true,
-      "input": ["text"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "headers": { "NVCF-POLL-SECONDS": "3600" },
       "compat": {
         "supportsStore": false,
         "supportsDeveloperRole": false,
@@ -705,8 +507,11 @@
         "supportsLongCacheRetention": false,
         "supportsStrictMode": false
       },
-      "contextWindow": 1000000,
-      "maxTokens": 131072,
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      },
       "type": "chat"
     },
     "chat:z-ai/glm-5.3-flash": {
@@ -715,17 +520,12 @@
       "api": "openai-completions",
       "provider": "nvidia",
       "baseUrl": "https://integrate.api.nvidia.com/v1",
-      "headers": {
-        "NVCF-POLL-SECONDS": "3600"
-      },
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 1000000,
+      "maxTokens": 131072,
+      "headers": { "NVCF-POLL-SECONDS": "3600" },
       "compat": {
         "supportsStore": false,
         "supportsDeveloperRole": false,
@@ -734,16 +534,9 @@
         "supportsLongCacheRetention": false,
         "supportsStrictMode": false
       },
-      "contextWindow": 1000000,
-      "maxTokens": 131072,
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"

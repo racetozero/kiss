@@ -371,7 +371,7 @@ fn build_request(model: &Model, context: &Context, options: &StreamOptions) -> V
                 .map(|t| json!({
                     "name": t.name,
                     "description": t.description,
-                    "parameters": sanitize_schema(&t.parameters),
+                    "parameters": sanitize_schema(&t.parameters, false),
                 }))
                 .collect::<Vec<Value>>(),
         }]);
@@ -379,20 +379,68 @@ fn build_request(model: &Model, context: &Context, options: &StreamOptions) -> V
     body
 }
 
-/// Gemini rejects some JSON-schema keywords. Strip the unsupported ones.
-fn sanitize_schema(schema: &Value) -> Value {
+/// Gemini rejects some JSON Schema keywords and ignores `const`. Strip the
+/// unsupported keywords, and send string and number `const` values as
+/// single-value `enum`s. `name_map` marks an object whose keys are names,
+/// such as `properties`. Property names and literal data stay unchanged.
+fn sanitize_schema(schema: &Value, name_map: bool) -> Value {
+    const NAME_MAPS: &[&str] = &[
+        "properties",
+        "patternProperties",
+        "$defs",
+        "definitions",
+        "dependentSchemas",
+        "dependencies",
+    ];
+    const SUBSCHEMAS: &[&str] = &[
+        "unevaluatedProperties",
+        "propertyNames",
+        "items",
+        "prefixItems",
+        "additionalItems",
+        "unevaluatedItems",
+        "contains",
+        "allOf",
+        "anyOf",
+        "oneOf",
+        "not",
+        "if",
+        "then",
+        "else",
+        "contentSchema",
+    ];
     match schema {
+        Value::Array(items) => Value::Array(
+            items
+                .iter()
+                .map(|item| sanitize_schema(item, false))
+                .collect(),
+        ),
         Value::Object(map) => {
             let mut out = serde_json::Map::new();
-            for (k, v) in map {
-                if matches!(k.as_str(), "additionalProperties" | "$schema" | "default") {
+            for (key, value) in map {
+                let value = if name_map || SUBSCHEMAS.contains(&key.as_str()) {
+                    sanitize_schema(value, false)
+                } else if NAME_MAPS.contains(&key.as_str()) {
+                    sanitize_schema(value, true)
+                } else if matches!(key.as_str(), "additionalProperties" | "$schema" | "default") {
                     continue;
-                }
-                out.insert(k.clone(), sanitize_schema(v));
+                } else {
+                    value.clone()
+                };
+                out.insert(key.clone(), value);
+            }
+            if !name_map
+                && !out.contains_key("enum")
+                && out
+                    .get("const")
+                    .is_some_and(|value| value.is_string() || value.is_number())
+                && let Some(value) = out.remove("const")
+            {
+                out.insert("enum".into(), json!([value]));
             }
             Value::Object(out)
         }
-        Value::Array(items) => Value::Array(items.iter().map(sanitize_schema).collect()),
         other => other.clone(),
     }
 }
@@ -401,6 +449,35 @@ fn sanitize_schema(schema: &Value) -> Value {
 mod vertex_tests {
     use super::*;
     use std::collections::BTreeMap;
+
+    #[test]
+    fn tool_schemas_send_const_as_enum_and_keep_property_names() {
+        let schema = json!({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "mode": {"const": "fast", "default": "fast"},
+                "default": {"type": "number", "const": 2},
+                "const": {"type": "boolean", "const": true},
+                "choice": {"anyOf": [{"const": "a"}, {"const": "b", "enum": ["b"]}]},
+            },
+            "examples": [{"const": "literal"}],
+        });
+        assert_eq!(
+            sanitize_schema(&schema, false),
+            json!({
+                "type": "object",
+                "properties": {
+                    "mode": {"enum": ["fast"]},
+                    "default": {"type": "number", "enum": [2]},
+                    "const": {"type": "boolean", "const": true},
+                    "choice": {"anyOf": [{"enum": ["a"]}, {"const": "b", "enum": ["b"]}]},
+                },
+                "examples": [{"const": "literal"}],
+            })
+        );
+    }
 
     #[test]
     fn builds_vertex_stream_url() {

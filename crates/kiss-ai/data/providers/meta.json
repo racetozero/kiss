@@ -8,12 +8,7 @@
       "baseUrl": "https://api.meta.ai/v1",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 1.25,
-        "output": 4.25,
-        "cacheRead": 0.15,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 1.25, "output": 4.25, "cacheRead": 0.15, "cacheWrite": 0 },
       "contextWindow": 1048576,
       "maxTokens": 131072,
       "thinkingLevelMap": {
@@ -27,12 +22,7 @@
       },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -45,12 +35,7 @@
       "baseUrl": "https://api.meta.ai/v1",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 1.25,
-        "output": 4.25,
-        "cacheRead": 0.15,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 1.25, "output": 4.25, "cacheRead": 0.15, "cacheWrite": 0 },
       "contextWindow": 1048576,
       "maxTokens": 131072,
       "thinkingLevelMap": {
@@ -64,12 +49,7 @@
       },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -82,12 +62,7 @@
       "baseUrl": "https://api.meta.ai/v1",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.1,
-        "output": 0.2,
-        "cacheRead": 0.002,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.1, "output": 0.2, "cacheRead": 0.002, "cacheWrite": 0 },
       "contextWindow": 1048576,
       "maxTokens": 131072,
       "thinkingLevelMap": {
@@ -101,12 +76,7 @@
       },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -119,12 +89,7 @@
       "baseUrl": "https://api.meta.ai/v1",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 1.25,
-        "output": 4.25,
-        "cacheRead": 0.15,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 1.25, "output": 4.25, "cacheRead": 0.15, "cacheWrite": 0 },
       "contextWindow": 1048576,
       "maxTokens": 131072,
       "thinkingLevelMap": {
@@ -138,12 +103,7 @@
       },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -156,12 +116,7 @@
       "baseUrl": "https://api.meta.ai/v1",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.1,
-        "output": 0.2,
-        "cacheRead": 0.002,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.1, "output": 0.2, "cacheRead": 0.002, "cacheWrite": 0 },
       "contextWindow": 1048576,
       "maxTokens": 131072,
       "thinkingLevelMap": {
@@ -175,12 +130,7 @@
       },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -193,12 +143,7 @@
       "baseUrl": "https://api.meta.ai/v1",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 4,
-        "output": 20,
-        "cacheRead": 0.2,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 4, "output": 20, "cacheRead": 0.2, "cacheWrite": 0 },
       "contextWindow": 1048576,
       "maxTokens": 131072,
       "thinkingLevelMap": {
@@ -212,12 +157,7 @@
       },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"

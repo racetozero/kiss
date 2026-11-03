@@ -6,6 +6,11 @@
       "api": "openai-completions",
       "provider": "qwen-token-plan-individual",
       "baseUrl": "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
+      "reasoning": true,
+      "input": ["text"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 1000000,
+      "maxTokens": 384000,
       "compat": {
         "supportsStrictMode": true,
         "thinkingFormat": "qwen",
@@ -22,16 +27,6 @@
         "xhigh": null,
         "max": "max"
       },
-      "reasoning": true,
-      "input": ["text"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "contextWindow": 1000000,
-      "maxTokens": 384000,
       "type": "chat"
     },
     "chat:deepseek-v4-pro": {
@@ -40,6 +35,11 @@
       "api": "openai-completions",
       "provider": "qwen-token-plan-individual",
       "baseUrl": "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
+      "reasoning": true,
+      "input": ["text"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 1000000,
+      "maxTokens": 384000,
       "compat": {
         "supportsStrictMode": true,
         "thinkingFormat": "qwen",
@@ -56,16 +56,6 @@
         "xhigh": null,
         "max": "max"
       },
-      "reasoning": true,
-      "input": ["text"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "contextWindow": 1000000,
-      "maxTokens": 384000,
       "type": "chat"
     },
     "chat:deepseek-v4-pro-0813": {
@@ -74,6 +64,11 @@
       "api": "openai-completions",
       "provider": "qwen-token-plan-individual",
       "baseUrl": "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
+      "reasoning": true,
+      "input": ["text"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 1000000,
+      "maxTokens": 384000,
       "compat": {
         "supportsStrictMode": true,
         "thinkingFormat": "qwen",
@@ -90,16 +85,6 @@
         "xhigh": null,
         "max": "max"
       },
-      "reasoning": true,
-      "input": ["text"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "contextWindow": 1000000,
-      "maxTokens": 384000,
       "type": "chat"
     },
     "chat:glm-5.2": {
@@ -108,6 +93,11 @@
       "api": "openai-completions",
       "provider": "qwen-token-plan-individual",
       "baseUrl": "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
+      "reasoning": true,
+      "input": ["text"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 1000000,
+      "maxTokens": 131072,
       "compat": {
         "supportsStrictMode": true,
         "thinkingFormat": "qwen",
@@ -124,16 +114,6 @@
         "xhigh": null,
         "max": "max"
       },
-      "reasoning": true,
-      "input": ["text"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "contextWindow": 1000000,
-      "maxTokens": 131072,
       "type": "chat"
     },
     "chat:qwen3.6-flash": {
@@ -142,6 +122,11 @@
       "api": "openai-completions",
       "provider": "qwen-token-plan-individual",
       "baseUrl": "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 1000000,
+      "maxTokens": 65536,
       "compat": {
         "supportsStrictMode": true,
         "thinkingFormat": "qwen",
@@ -149,24 +134,9 @@
         "supportsStore": false,
         "supportsReasoningEffort": false
       },
-      "reasoning": true,
-      "input": ["text", "image"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "contextWindow": 1000000,
-      "maxTokens": 65536,
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -177,6 +147,11 @@
       "api": "openai-completions",
       "provider": "qwen-token-plan-individual",
       "baseUrl": "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
+      "reasoning": true,
+      "input": ["text"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 1000000,
+      "maxTokens": 131072,
       "compat": {
         "supportsStrictMode": true,
         "thinkingFormat": "qwen",
@@ -184,16 +159,6 @@
         "supportsStore": false,
         "supportsReasoningEffort": false
       },
-      "reasoning": true,
-      "input": ["text"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "contextWindow": 1000000,
-      "maxTokens": 131072,
       "type": "chat"
     },
     "chat:qwen3.7-plus": {
@@ -202,6 +167,11 @@
       "api": "openai-completions",
       "provider": "qwen-token-plan-individual",
       "baseUrl": "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 1000000,
+      "maxTokens": 65536,
       "compat": {
         "supportsStrictMode": true,
         "thinkingFormat": "qwen",
@@ -209,24 +179,9 @@
         "supportsStore": false,
         "supportsReasoningEffort": false
       },
-      "reasoning": true,
-      "input": ["text", "image"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "contextWindow": 1000000,
-      "maxTokens": 65536,
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -237,6 +192,11 @@
       "api": "openai-completions",
       "provider": "qwen-token-plan-individual",
       "baseUrl": "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 1000000,
+      "maxTokens": 131072,
       "compat": {
         "supportsStrictMode": true,
         "thinkingFormat": "qwen",
@@ -253,24 +213,9 @@
         "xhigh": "xhigh",
         "max": null
       },
-      "reasoning": true,
-      "input": ["text", "image"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "contextWindow": 1000000,
-      "maxTokens": 131072,
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -281,6 +226,11 @@
       "api": "openai-completions",
       "provider": "qwen-token-plan-individual",
       "baseUrl": "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 1000000,
+      "maxTokens": 131072,
       "compat": {
         "supportsStrictMode": true,
         "thinkingFormat": "qwen",
@@ -297,24 +247,9 @@
         "xhigh": "xhigh",
         "max": null
       },
-      "reasoning": true,
-      "input": ["text", "image"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "contextWindow": 1000000,
-      "maxTokens": 131072,
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"

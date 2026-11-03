@@ -72,6 +72,13 @@ pub struct Cost {
     #[serde(rename = "cacheWrite")]
     pub cache_write: f64,
     pub total: f64,
+    /// `total` is the cost that the provider billed, not a catalog estimate.
+    #[serde(
+        default,
+        rename = "totalFromProvider",
+        skip_serializing_if = "std::ops::Not::not"
+    )]
+    pub total_from_provider: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
@@ -93,6 +100,9 @@ pub struct Usage {
 
 impl Usage {
     pub fn add(&mut self, other: &Usage) {
+        // A sum is provider-reported only when every part is.
+        self.cost.total_from_provider = other.cost.total_from_provider
+            && (self.cost.total_from_provider || *self == Usage::default());
         self.input += other.input;
         self.output += other.output;
         self.cache_read += other.cache_read;
@@ -301,6 +311,39 @@ impl ThinkingLevel {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn summed_usage_is_provider_reported_only_when_every_part_is() {
+        let reported = Usage {
+            cost: Cost {
+                total: 1.0,
+                total_from_provider: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let estimated = Usage {
+            cost: Cost {
+                total: 1.0,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let mut sum = Usage::default();
+        sum.add(&reported);
+        sum.add(&reported);
+        assert!(sum.cost.total_from_provider);
+        sum.add(&estimated);
+        assert!(!sum.cost.total_from_provider);
+        sum.add(&reported);
+        assert!(!sum.cost.total_from_provider);
+        assert_eq!(sum.cost.total, 4.0);
+        assert!(
+            serde_json::to_value(estimated).unwrap()["cost"]
+                .get("totalFromProvider")
+                .is_none()
+        );
+    }
 
     #[test]
     fn message_json_shape_matches_pi() {

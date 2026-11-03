@@ -133,10 +133,14 @@ impl AuthSetting {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum ClientRegistration {
-    /// Dynamic client registration.
+    /// The Client ID Metadata Document at `clientMetadataUrl` when the
+    /// authorization server supports it, otherwise dynamic registration.
+    /// `clientName` or `redirectUri` selects dynamic registration.
     #[default]
+    Auto,
+    /// Always dynamic client registration.
     Dcr,
-    /// A Client ID Metadata Document at `clientMetadataUrl`.
+    /// Always the Client ID Metadata Document at `clientMetadataUrl`.
     Cimd,
 }
 
@@ -310,22 +314,25 @@ impl OAuthConfig {
                 "MCP server `{name}` has oauth.authServerMetadataUrl `{url}`. Use an https URL, or http only on localhost, 127.0.0.1, or [::1]"
             )
         }
-        if self.client_registration == ClientRegistration::Cimd {
-            if self.client_id.is_some() || self.client_name.is_some() {
+        let metadata_url = self.client_metadata_url.as_deref().map(|url| {
+            url::Url::parse(url).is_ok_and(|url| url.scheme() == "https" && url.path() != "/")
+        });
+        match self.client_registration {
+            ClientRegistration::Cimd if self.client_id.is_some() || self.client_name.is_some() => {
                 bail!(
                     "MCP server `{name}` sets oauth.clientRegistration \"cimd\" together with oauth.clientId or oauth.clientName. Remove clientId and clientName, because the metadata document identifies the client"
                 )
             }
-            match self.client_metadata_url.as_deref().map(url::Url::parse) {
-                Some(Ok(url)) if url.scheme() == "https" && url.path() != "/" => {}
-                _ => bail!(
-                    "MCP server `{name}` sets oauth.clientRegistration \"cimd\" but oauth.clientMetadataUrl is missing or invalid. Set it to the https URL of your Client ID Metadata Document, for example https://example.com/kiss/client.json"
-                ),
-            }
-        } else if self.client_metadata_url.is_some() {
-            bail!(
-                "MCP server `{name}` sets oauth.clientMetadataUrl without oauth.clientRegistration \"cimd\". Add \"clientRegistration\": \"cimd\" or remove clientMetadataUrl"
-            )
+            ClientRegistration::Cimd if metadata_url != Some(true) => bail!(
+                "MCP server `{name}` sets oauth.clientRegistration \"cimd\" but oauth.clientMetadataUrl is missing or invalid. Set it to the https URL of your Client ID Metadata Document, for example https://example.com/kiss/client.json"
+            ),
+            ClientRegistration::Auto if metadata_url == Some(false) => bail!(
+                "MCP server `{name}` has an invalid oauth.clientMetadataUrl. Set it to the https URL of your Client ID Metadata Document, for example https://example.com/kiss/client.json"
+            ),
+            ClientRegistration::Dcr if metadata_url.is_some() => bail!(
+                "MCP server `{name}` sets oauth.clientMetadataUrl with oauth.clientRegistration \"dcr\", which never uses it. Remove clientMetadataUrl, or set clientRegistration to \"auto\" or \"cimd\""
+            ),
+            _ => {}
         }
         Ok(())
     }
@@ -722,6 +729,17 @@ mod tests {
         server(json!({"url": "https://x.dev", "description": "Tickets", "oauth": {"clientRegistration": "cimd", "clientMetadataUrl": "https://e.com/c.json"}}))
             .validate("demo")
             .unwrap();
+        // `auto` is the default and accepts a document URL with a client name.
+        let auto = server(
+            json!({"url": "https://x.dev", "oauth": {"clientMetadataUrl": "https://e.com/c.json", "clientName": "Team"}}),
+        );
+        auto.validate("demo").unwrap();
+        assert_eq!(
+            auto.oauth.unwrap().client_registration,
+            ClientRegistration::Auto
+        );
+        assert!(error(json!({"url": "https://x.dev", "oauth": {"clientMetadataUrl": "http://e.com/c.json"}})).contains("invalid oauth.clientMetadataUrl"));
+        assert!(error(json!({"url": "https://x.dev", "oauth": {"clientRegistration": "dcr", "clientMetadataUrl": "https://e.com/c.json"}})).contains("never uses it"));
     }
 
     #[test]

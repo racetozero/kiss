@@ -60,11 +60,13 @@ pub fn resolve_non_interactive(
     if let Some(explicit) = cli_override {
         return explicit;
     }
-    if !has_project_resources(cwd) {
-        return true; // nothing project-local to gate
-    }
+    // A saved decision wins, also "Do not trust" for a project with nothing
+    // that needs trust, such as a folder with only AGENTS.md.
     if let Some(saved) = saved_decision(cwd) {
         return saved;
+    }
+    if !has_project_resources(cwd) {
+        return true; // nothing project-local to gate
     }
     matches!(default, ProjectTrustDefault::Always)
 }

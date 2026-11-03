@@ -6,13 +6,17 @@
       "api": "openai-completions",
       "provider": "xiaomi-token-plan-cn",
       "baseUrl": "https://token-plan-cn.xiaomimimo.com/v1",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 1048576,
+      "maxTokens": 131072,
       "compat": {
         "supportsStrictMode": true,
         "supportsReasoningEffort": false,
         "requiresReasoningContentOnAssistantMessages": true,
         "thinkingFormat": "deepseek"
       },
-      "reasoning": true,
       "thinkingLevelMap": {
         "off": "off",
         "minimal": null,
@@ -22,23 +26,9 @@
         "xhigh": null,
         "max": null
       },
-      "input": ["text", "image"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "contextWindow": 1048576,
-      "maxTokens": 131072,
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -49,13 +39,17 @@
       "api": "openai-completions",
       "provider": "xiaomi-token-plan-cn",
       "baseUrl": "https://token-plan-cn.xiaomimimo.com/v1",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 1048576,
+      "maxTokens": 131072,
       "compat": {
         "supportsStrictMode": true,
         "supportsReasoningEffort": false,
         "requiresReasoningContentOnAssistantMessages": true,
         "thinkingFormat": "deepseek"
       },
-      "reasoning": true,
       "thinkingLevelMap": {
         "off": "off",
         "minimal": null,
@@ -65,23 +59,9 @@
         "xhigh": null,
         "max": null
       },
-      "input": ["text", "image"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "contextWindow": 1048576,
-      "maxTokens": 131072,
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"

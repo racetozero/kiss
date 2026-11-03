@@ -97,7 +97,7 @@ fn default_prompt(options: &SystemPromptOptions) -> String {
         .join("\n");
 
     format!(
-        "You are an expert coding assistant operating inside kiss, a coding agent harness. You help users by reading files, executing commands, editing code, and writing new files.\n\nAvailable tools:\n{tools_list}\n\nIn addition to the tools above, you may have access to other custom tools depending on the project.\n\nGuidelines:\n{guidelines_list}"
+        "You are a coding assistant running inside kiss, a coding agent harness. Help users inspect files, run commands, and modify code.\n\nAvailable tools:\n{tools_list}\n\nAdditional tools may be available.\n\nGuidelines:\n{guidelines_list}"
     )
 }
 
@@ -124,6 +124,8 @@ mod tests {
         assert!(p.contains("- bash:"));
         assert!(p.contains("Use bash for file operations"));
         assert!(p.ends_with("Current working directory: /work"));
+        assert!(p.starts_with("You are a coding assistant running inside kiss"));
+        assert!(p.contains("\n\nAdditional tools may be available.\n\n"));
     }
 
     #[test]

@@ -162,10 +162,12 @@ pub async fn start_device(
             .as_str()
             .context("Radius device response has no user_code")?
             .into(),
-        verification_uri: body["verification_uri"]
-            .as_str()
-            .context("Radius device response has no verification_uri")?
-            .into(),
+        verification_uri: super::trusted_http_url(
+            body["verification_uri"]
+                .as_str()
+                .context("Radius device response has no verification_uri")?,
+            "Radius",
+        )?,
         interval: Duration::from_secs(body["interval"].as_u64().unwrap_or(5).max(1)),
         expires_in: Duration::from_secs(body["expires_in"].as_u64().unwrap_or(900)),
     })
@@ -234,14 +236,17 @@ pub async fn login_browser(
     if !status.is_success() {
         anyhow::bail!("could not load Radius OAuth config (HTTP {status})");
     }
-    let authorization_endpoint = body["authorizationEndpoint"]
-        .as_str()
-        .context("Radius OAuth config has no authorizationEndpoint")?;
+    let authorization_endpoint = super::trusted_http_url(
+        body["authorizationEndpoint"]
+            .as_str()
+            .context("Radius OAuth config has no authorizationEndpoint")?,
+        "Radius",
+    )?;
     let listener = TcpListener::bind((config.callback_host.as_str(), config.callback_port)).await?;
     let (verifier, challenge) = create_pkce();
     let state = uuid::Uuid::new_v4().to_string();
     let redirect_uri = config.redirect_uri();
-    let mut url = Url::parse(authorization_endpoint)?;
+    let mut url = Url::parse(&authorization_endpoint)?;
     url.query_pairs_mut()
         .append_pair("response_type", "code")
         .append_pair("client_id", CLIENT_ID)

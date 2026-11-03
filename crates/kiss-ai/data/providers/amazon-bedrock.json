@@ -8,23 +8,13 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.33,
-        "output": 2.75,
-        "cacheRead": 0.0825,
-        "cacheWrite": 0.33
-      },
+      "cost": { "input": 0.33, "output": 2.75, "cacheRead": 0.0825, "cacheWrite": 0.33 },
       "contextWindow": 1000000,
       "maxTokens": 65535,
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -37,23 +27,13 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": false,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.06,
-        "output": 0.24,
-        "cacheRead": 0.015,
-        "cacheWrite": 0.06
-      },
+      "cost": { "input": 0.06, "output": 0.24, "cacheRead": 0.015, "cacheWrite": 0.06 },
       "contextWindow": 300000,
       "maxTokens": 10000,
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -66,12 +46,7 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": false,
       "input": ["text"],
-      "cost": {
-        "input": 0.035,
-        "output": 0.14,
-        "cacheRead": 0.00875,
-        "cacheWrite": 0.035
-      },
+      "cost": { "input": 0.035, "output": 0.14, "cacheRead": 0.00875, "cacheWrite": 0.035 },
       "contextWindow": 128000,
       "maxTokens": 10000,
       "type": "chat"
@@ -84,23 +59,13 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": false,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.8,
-        "output": 3.2,
-        "cacheRead": 0.2,
-        "cacheWrite": 0.8
-      },
+      "cost": { "input": 0.8, "output": 3.2, "cacheRead": 0.2, "cacheWrite": 0.8 },
       "contextWindow": 300000,
       "maxTokens": 10000,
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -113,31 +78,15 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 10,
-        "output": 50,
-        "cacheRead": 1,
-        "cacheWrite": 12.5
-      },
+      "cost": { "input": 10, "output": 50, "cacheRead": 1, "cacheWrite": 12.5 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "off": null,
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "off": null, "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -150,31 +99,15 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 10,
-        "output": 50,
-        "cacheRead": 0.25,
-        "cacheWrite": 12.5
-      },
+      "cost": { "input": 10, "output": 50, "cacheRead": 0.25, "cacheWrite": 12.5 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "off": null,
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "off": null, "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -187,26 +120,14 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 1,
-        "output": 5,
-        "cacheRead": 0.1,
-        "cacheWrite": 1.25
-      },
+      "cost": { "input": 1, "output": 5, "cacheRead": 0.1, "cacheWrite": 1.25 },
       "contextWindow": 200000,
       "maxTokens": 64000,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -236,22 +157,12 @@
       },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -264,23 +175,13 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 15,
-        "output": 75,
-        "cacheRead": 1.5,
-        "cacheWrite": 18.75
-      },
+      "cost": { "input": 15, "output": 75, "cacheRead": 1.5, "cacheWrite": 18.75 },
       "contextWindow": 200000,
       "maxTokens": 32000,
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -293,26 +194,14 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 5,
-        "output": 25,
-        "cacheRead": 0.5,
-        "cacheWrite": 6.25
-      },
+      "cost": { "input": 5, "output": 25, "cacheRead": 0.5, "cacheWrite": 6.25 },
       "contextWindow": 200000,
       "maxTokens": 64000,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -325,29 +214,15 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 5.5,
-        "output": 27.5,
-        "cacheRead": 0.55,
-        "cacheWrite": 6.875
-      },
+      "cost": { "input": 5.5, "output": 27.5, "cacheRead": 0.55, "cacheWrite": 6.875 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -360,30 +235,15 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 5,
-        "output": 25,
-        "cacheRead": 0.5,
-        "cacheWrite": 6.25
-      },
+      "cost": { "input": 5, "output": 25, "cacheRead": 0.5, "cacheWrite": 6.25 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -396,30 +256,15 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 5,
-        "output": 25,
-        "cacheRead": 0.5,
-        "cacheWrite": 6.25
-      },
+      "cost": { "input": 5, "output": 25, "cacheRead": 0.5, "cacheWrite": 6.25 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -432,30 +277,15 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 4,
-        "output": 20,
-        "cacheRead": 0.2,
-        "cacheWrite": 5
-      },
+      "cost": { "input": 4, "output": 20, "cacheRead": 0.2, "cacheWrite": 5 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -468,26 +298,14 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 3,
-        "output": 15,
-        "cacheRead": 0.3,
-        "cacheWrite": 3.75
-      },
+      "cost": { "input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 3.75 },
       "contextWindow": 200000,
       "maxTokens": 64000,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -500,29 +318,15 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 3.3,
-        "output": 16.5,
-        "cacheRead": 0.33,
-        "cacheWrite": 4.125
-      },
+      "cost": { "input": 3.3, "output": 16.5, "cacheRead": 0.33, "cacheWrite": 4.125 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -535,30 +339,15 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 2,
-        "output": 10,
-        "cacheRead": 0.2,
-        "cacheWrite": 2.5
-      },
+      "cost": { "input": 2, "output": 10, "cacheRead": 0.2, "cacheWrite": 2.5 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -571,30 +360,15 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 2,
-        "output": 10,
-        "cacheRead": 0.1,
-        "cacheWrite": 2.5
-      },
+      "cost": { "input": 2, "output": 10, "cacheRead": 0.1, "cacheWrite": 2.5 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -607,23 +381,13 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": false,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.063,
-        "output": 0.252,
-        "cacheRead": 0.01575,
-        "cacheWrite": 0.063
-      },
+      "cost": { "input": 0.063, "output": 0.252, "cacheRead": 0.01575, "cacheWrite": 0.063 },
       "contextWindow": 300000,
       "maxTokens": 10000,
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -636,12 +400,7 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": false,
       "input": ["text"],
-      "cost": {
-        "input": 0.037,
-        "output": 0.148,
-        "cacheRead": 0.00925,
-        "cacheWrite": 0.037
-      },
+      "cost": { "input": 0.037, "output": 0.148, "cacheRead": 0.00925, "cacheWrite": 0.037 },
       "contextWindow": 128000,
       "maxTokens": 10000,
       "type": "chat"
@@ -654,23 +413,13 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": false,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.84,
-        "output": 3.36,
-        "cacheRead": 0.21,
-        "cacheWrite": 0.84
-      },
+      "cost": { "input": 0.84, "output": 3.36, "cacheRead": 0.21, "cacheWrite": 0.84 },
       "contextWindow": 300000,
       "maxTokens": 10000,
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -683,23 +432,13 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 3,
-        "output": 15,
-        "cacheRead": 0.3,
-        "cacheWrite": 3.75
-      },
+      "cost": { "input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 3.75 },
       "contextWindow": 200000,
       "maxTokens": 64000,
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -712,26 +451,14 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 1.1,
-        "output": 5.5,
-        "cacheRead": 0.11,
-        "cacheWrite": 1.375
-      },
+      "cost": { "input": 1.1, "output": 5.5, "cacheRead": 0.11, "cacheWrite": 1.375 },
       "contextWindow": 200000,
       "maxTokens": 64000,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -761,22 +488,12 @@
       },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -789,29 +506,15 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 5.5,
-        "output": 27.5,
-        "cacheRead": 0.55,
-        "cacheWrite": 6.875
-      },
+      "cost": { "input": 5.5, "output": 27.5, "cacheRead": 0.55, "cacheWrite": 6.875 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -824,30 +527,15 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 5.5,
-        "output": 27.5,
-        "cacheRead": 0.55,
-        "cacheWrite": 6.875
-      },
+      "cost": { "input": 5.5, "output": 27.5, "cacheRead": 0.55, "cacheWrite": 6.875 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -860,30 +548,15 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 5.5,
-        "output": 27.5,
-        "cacheRead": 0.55,
-        "cacheWrite": 6.875
-      },
+      "cost": { "input": 5.5, "output": 27.5, "cacheRead": 0.55, "cacheWrite": 6.875 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -896,30 +569,15 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 5.5,
-        "output": 27.5,
-        "cacheRead": 0.55,
-        "cacheWrite": 6.875
-      },
+      "cost": { "input": 5.5, "output": 27.5, "cacheRead": 0.55, "cacheWrite": 6.875 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -932,30 +590,15 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 4.4,
-        "output": 22,
-        "cacheRead": 0.22,
-        "cacheWrite": 5.5
-      },
+      "cost": { "input": 4.4, "output": 22, "cacheRead": 0.22, "cacheWrite": 5.5 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -968,26 +611,14 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 3.3,
-        "output": 16.5,
-        "cacheRead": 0.33,
-        "cacheWrite": 4.125
-      },
+      "cost": { "input": 3.3, "output": 16.5, "cacheRead": 0.33, "cacheWrite": 4.125 },
       "contextWindow": 200000,
       "maxTokens": 64000,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1000,29 +631,15 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 3.3,
-        "output": 16.5,
-        "cacheRead": 0.33,
-        "cacheWrite": 4.125
-      },
+      "cost": { "input": 3.3, "output": 16.5, "cacheRead": 0.33, "cacheWrite": 4.125 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1035,30 +652,36 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 2.2,
-        "output": 11,
-        "cacheRead": 0.22,
-        "cacheWrite": 2.75
-      },
+      "cost": { "input": 2.2, "output": 11, "cacheRead": 0.22, "cacheWrite": 2.75 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      },
+      "type": "chat"
+    },
+    "chat:au.anthropic.claude-sonnet-5-5": {
+      "id": "au.anthropic.claude-sonnet-5-5",
+      "name": "Claude Sonnet 5.5 (AU)",
+      "api": "bedrock-converse-stream",
+      "provider": "amazon-bedrock",
+      "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 2.2, "output": 11, "cacheRead": 0.11, "cacheWrite": 2.75 },
+      "contextWindow": 1000000,
+      "maxTokens": 128000,
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
+      "inputLimits": {
+        "images": {
+          "maxPerMessage": 20,
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1071,23 +694,13 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": false,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.064,
-        "output": 0.256,
-        "cacheRead": 0.016,
-        "cacheWrite": 0.064
-      },
+      "cost": { "input": 0.064, "output": 0.256, "cacheRead": 0.016, "cacheWrite": 0.064 },
       "contextWindow": 300000,
       "maxTokens": 10000,
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1100,17 +713,10 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 0.58,
-        "output": 1.68,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.58, "output": 1.68, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 163840,
       "maxTokens": 81920,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "type": "chat"
     },
     "chat:deepseek.v3.2": {
@@ -1121,17 +727,10 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 0.62,
-        "output": 1.85,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.62, "output": 1.85, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 163840,
       "maxTokens": 81920,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "type": "chat"
     },
     "chat:eu.amazon.nova-2-lite-v1:0": {
@@ -1142,23 +741,13 @@
       "baseUrl": "https://bedrock-runtime.eu-central-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.374,
-        "output": 3.157,
-        "cacheRead": 0.0935,
-        "cacheWrite": 0.374
-      },
+      "cost": { "input": 0.374, "output": 3.157, "cacheRead": 0.0935, "cacheWrite": 0.374 },
       "contextWindow": 1000000,
       "maxTokens": 65535,
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1171,23 +760,13 @@
       "baseUrl": "https://bedrock-runtime.eu-central-1.amazonaws.com",
       "reasoning": false,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.069,
-        "output": 0.276,
-        "cacheRead": 0.01725,
-        "cacheWrite": 0.069
-      },
+      "cost": { "input": 0.069, "output": 0.276, "cacheRead": 0.01725, "cacheWrite": 0.069 },
       "contextWindow": 300000,
       "maxTokens": 10000,
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1200,12 +779,7 @@
       "baseUrl": "https://bedrock-runtime.eu-central-1.amazonaws.com",
       "reasoning": false,
       "input": ["text"],
-      "cost": {
-        "input": 0.04,
-        "output": 0.16,
-        "cacheRead": 0.01,
-        "cacheWrite": 0.04
-      },
+      "cost": { "input": 0.04, "output": 0.16, "cacheRead": 0.01, "cacheWrite": 0.04 },
       "contextWindow": 128000,
       "maxTokens": 10000,
       "type": "chat"
@@ -1218,23 +792,13 @@
       "baseUrl": "https://bedrock-runtime.eu-central-1.amazonaws.com",
       "reasoning": false,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.92,
-        "output": 3.68,
-        "cacheRead": 0.23,
-        "cacheWrite": 0.92
-      },
+      "cost": { "input": 0.92, "output": 3.68, "cacheRead": 0.23, "cacheWrite": 0.92 },
       "contextWindow": 300000,
       "maxTokens": 10000,
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1247,31 +811,15 @@
       "baseUrl": "https://bedrock-runtime.eu-central-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 11,
-        "output": 55,
-        "cacheRead": 1.1,
-        "cacheWrite": 13.75
-      },
+      "cost": { "input": 11, "output": 55, "cacheRead": 1.1, "cacheWrite": 13.75 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "off": null,
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "off": null, "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1284,26 +832,14 @@
       "baseUrl": "https://bedrock-runtime.eu-central-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 1.1,
-        "output": 5.5,
-        "cacheRead": 0.11,
-        "cacheWrite": 1.375
-      },
+      "cost": { "input": 1.1, "output": 5.5, "cacheRead": 0.11, "cacheWrite": 1.375 },
       "contextWindow": 200000,
       "maxTokens": 64000,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1333,22 +869,12 @@
       },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1361,26 +887,14 @@
       "baseUrl": "https://bedrock-runtime.eu-central-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 5.5,
-        "output": 27.5,
-        "cacheRead": 0.55,
-        "cacheWrite": 6.875
-      },
+      "cost": { "input": 5.5, "output": 27.5, "cacheRead": 0.55, "cacheWrite": 6.875 },
       "contextWindow": 200000,
       "maxTokens": 64000,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1393,29 +907,15 @@
       "baseUrl": "https://bedrock-runtime.eu-central-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 5.5,
-        "output": 27.5,
-        "cacheRead": 0.55,
-        "cacheWrite": 6.875
-      },
+      "cost": { "input": 5.5, "output": 27.5, "cacheRead": 0.55, "cacheWrite": 6.875 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1428,30 +928,15 @@
       "baseUrl": "https://bedrock-runtime.eu-central-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 5.5,
-        "output": 27.5,
-        "cacheRead": 0.55,
-        "cacheWrite": 6.875
-      },
+      "cost": { "input": 5.5, "output": 27.5, "cacheRead": 0.55, "cacheWrite": 6.875 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1464,30 +949,15 @@
       "baseUrl": "https://bedrock-runtime.eu-central-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 5.5,
-        "output": 27.5,
-        "cacheRead": 0.55,
-        "cacheWrite": 6.875
-      },
+      "cost": { "input": 5.5, "output": 27.5, "cacheRead": 0.55, "cacheWrite": 6.875 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1500,30 +970,15 @@
       "baseUrl": "https://bedrock-runtime.eu-central-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 5.5,
-        "output": 27.5,
-        "cacheRead": 0.55,
-        "cacheWrite": 6.875
-      },
+      "cost": { "input": 5.5, "output": 27.5, "cacheRead": 0.55, "cacheWrite": 6.875 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1536,30 +991,15 @@
       "baseUrl": "https://bedrock-runtime.eu-central-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 4.4,
-        "output": 22,
-        "cacheRead": 0.22,
-        "cacheWrite": 5.5
-      },
+      "cost": { "input": 4.4, "output": 22, "cacheRead": 0.22, "cacheWrite": 5.5 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1572,23 +1012,13 @@
       "baseUrl": "https://bedrock-runtime.eu-central-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 3,
-        "output": 15,
-        "cacheRead": 0.3,
-        "cacheWrite": 3.75
-      },
+      "cost": { "input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 3.75 },
       "contextWindow": 200000,
       "maxTokens": 64000,
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1601,26 +1031,14 @@
       "baseUrl": "https://bedrock-runtime.eu-central-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 3.3,
-        "output": 16.5,
-        "cacheRead": 0.33,
-        "cacheWrite": 4.125
-      },
+      "cost": { "input": 3.3, "output": 16.5, "cacheRead": 0.33, "cacheWrite": 4.125 },
       "contextWindow": 200000,
       "maxTokens": 64000,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1633,29 +1051,15 @@
       "baseUrl": "https://bedrock-runtime.eu-central-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 3.3,
-        "output": 16.5,
-        "cacheRead": 0.33,
-        "cacheWrite": 4.125
-      },
+      "cost": { "input": 3.3, "output": 16.5, "cacheRead": 0.33, "cacheWrite": 4.125 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1668,30 +1072,15 @@
       "baseUrl": "https://bedrock-runtime.eu-central-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 2.2,
-        "output": 11,
-        "cacheRead": 0.22,
-        "cacheWrite": 2.75
-      },
+      "cost": { "input": 2.2, "output": 11, "cacheRead": 0.22, "cacheWrite": 2.75 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1704,30 +1093,15 @@
       "baseUrl": "https://bedrock-runtime.eu-central-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 2.2,
-        "output": 11,
-        "cacheRead": 0.11,
-        "cacheWrite": 2.75
-      },
+      "cost": { "input": 2.2, "output": 11, "cacheRead": 0.11, "cacheWrite": 2.75 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1740,23 +1114,13 @@
       "baseUrl": "https://bedrock-runtime.eu-central-1.amazonaws.com",
       "reasoning": false,
       "input": ["text", "image"],
-      "cost": {
-        "input": 2,
-        "output": 6,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 2, "output": 6, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 8192,
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1769,23 +1133,13 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.3,
-        "output": 2.5,
-        "cacheRead": 0.075,
-        "cacheWrite": 0.3
-      },
+      "cost": { "input": 0.3, "output": 2.5, "cacheRead": 0.075, "cacheWrite": 0.3 },
       "contextWindow": 1000000,
       "maxTokens": 65535,
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1798,31 +1152,15 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 10,
-        "output": 50,
-        "cacheRead": 1,
-        "cacheWrite": 12.5
-      },
+      "cost": { "input": 10, "output": 50, "cacheRead": 1, "cacheWrite": 12.5 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "off": null,
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "off": null, "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1835,31 +1173,15 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 10,
-        "output": 50,
-        "cacheRead": 0.25,
-        "cacheWrite": 12.5
-      },
+      "cost": { "input": 10, "output": 50, "cacheRead": 0.25, "cacheWrite": 12.5 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "off": null,
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "off": null, "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1872,26 +1194,14 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 1,
-        "output": 5,
-        "cacheRead": 0.1,
-        "cacheWrite": 1.25
-      },
+      "cost": { "input": 1, "output": 5, "cacheRead": 0.1, "cacheWrite": 1.25 },
       "contextWindow": 200000,
       "maxTokens": 64000,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1921,22 +1231,12 @@
       },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1949,26 +1249,14 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 5,
-        "output": 25,
-        "cacheRead": 0.5,
-        "cacheWrite": 6.25
-      },
+      "cost": { "input": 5, "output": 25, "cacheRead": 0.5, "cacheWrite": 6.25 },
       "contextWindow": 200000,
       "maxTokens": 64000,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -1981,29 +1269,15 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 5,
-        "output": 25,
-        "cacheRead": 0.5,
-        "cacheWrite": 6.25
-      },
+      "cost": { "input": 5, "output": 25, "cacheRead": 0.5, "cacheWrite": 6.25 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -2016,30 +1290,15 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 5,
-        "output": 25,
-        "cacheRead": 0.5,
-        "cacheWrite": 6.25
-      },
+      "cost": { "input": 5, "output": 25, "cacheRead": 0.5, "cacheWrite": 6.25 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -2052,30 +1311,15 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 5,
-        "output": 25,
-        "cacheRead": 0.5,
-        "cacheWrite": 6.25
-      },
+      "cost": { "input": 5, "output": 25, "cacheRead": 0.5, "cacheWrite": 6.25 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -2088,30 +1332,15 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 5,
-        "output": 25,
-        "cacheRead": 0.5,
-        "cacheWrite": 6.25
-      },
+      "cost": { "input": 5, "output": 25, "cacheRead": 0.5, "cacheWrite": 6.25 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -2124,30 +1353,15 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 4,
-        "output": 20,
-        "cacheRead": 0.2,
-        "cacheWrite": 5
-      },
+      "cost": { "input": 4, "output": 20, "cacheRead": 0.2, "cacheWrite": 5 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -2160,23 +1374,13 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 3,
-        "output": 15,
-        "cacheRead": 0.3,
-        "cacheWrite": 3.75
-      },
+      "cost": { "input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 3.75 },
       "contextWindow": 200000,
       "maxTokens": 64000,
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -2189,26 +1393,14 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 3,
-        "output": 15,
-        "cacheRead": 0.3,
-        "cacheWrite": 3.75
-      },
+      "cost": { "input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 3.75 },
       "contextWindow": 200000,
       "maxTokens": 64000,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -2221,29 +1413,15 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 3,
-        "output": 15,
-        "cacheRead": 0.3,
-        "cacheWrite": 3.75
-      },
+      "cost": { "input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 3.75 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -2256,30 +1434,15 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 2,
-        "output": 10,
-        "cacheRead": 0.2,
-        "cacheWrite": 2.5
-      },
+      "cost": { "input": 2, "output": 10, "cacheRead": 0.2, "cacheWrite": 2.5 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -2292,30 +1455,15 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 2,
-        "output": 10,
-        "cacheRead": 0.1,
-        "cacheWrite": 2.5
-      },
+      "cost": { "input": 2, "output": 10, "cacheRead": 0.1, "cacheWrite": 2.5 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -2328,26 +1476,14 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 3,
-        "output": 15,
-        "cacheRead": 0.3,
-        "cacheWrite": 3.75
-      },
+      "cost": { "input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 3.75 },
       "contextWindow": 1048576,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -2377,21 +1513,12 @@
       },
       "contextWindow": 1050000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -2421,21 +1548,12 @@
       },
       "contextWindow": 1050000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -2465,21 +1583,12 @@
       },
       "contextWindow": 1050000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -2509,21 +1618,12 @@
       },
       "contextWindow": 1050000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -2553,21 +1653,12 @@
       },
       "contextWindow": 1050000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -2597,21 +1688,12 @@
       },
       "contextWindow": 1050000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -2641,21 +1723,47 @@
       },
       "contextWindow": 1050000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      },
+      "type": "chat"
+    },
+    "chat:global.openai.gpt-6.1-terra": {
+      "id": "global.openai.gpt-6.1-terra",
+      "name": "GPT-6.1 Terra (Global)",
+      "api": "bedrock-converse-stream",
+      "provider": "amazon-bedrock",
+      "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": {
+        "input": 1,
+        "output": 5,
+        "cacheRead": 0.05,
+        "cacheWrite": 1.25,
+        "tiers": [
+          {
+            "inputTokensAbove": 272000,
+            "input": 2,
+            "output": 7.5,
+            "cacheRead": 0.1,
+            "cacheWrite": 2.5
           }
+        ]
+      },
+      "contextWindow": 1050000,
+      "maxTokens": 128000,
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh" },
+      "inputLimits": {
+        "images": {
+          "maxPerMessage": 20,
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -2668,23 +1776,13 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 2,
-        "output": 6,
-        "cacheRead": 0.5,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 2, "output": 6, "cacheRead": 0.5, "cacheWrite": 0 },
       "contextWindow": 500000,
       "maxTokens": 500000,
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -2697,26 +1795,14 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 2,
-        "output": 6,
-        "cacheRead": 0.5,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 2, "output": 6, "cacheRead": 0.5, "cacheWrite": 0 },
       "contextWindow": 500000,
       "maxTokens": 500000,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -2729,17 +1815,10 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 1.68,
-        "output": 5.28,
-        "cacheRead": 0.312,
-        "cacheWrite": 2.1
-      },
+      "cost": { "input": 1.68, "output": 5.28, "cacheRead": 0.312, "cacheWrite": 2.1 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "type": "chat"
     },
     "chat:google.gemma-4-26b-a4b": {
@@ -2750,26 +1829,14 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.13,
-        "output": 0.4,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.13, "output": 0.4, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 262144,
       "maxTokens": 32768,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -2782,26 +1849,14 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.14,
-        "output": 0.4,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.14, "output": 0.4, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 262144,
       "maxTokens": 32768,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -2814,26 +1869,14 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.04,
-        "output": 0.08,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.04, "output": 0.08, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 131072,
       "maxTokens": 8192,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -2846,23 +1889,13 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 1.1,
-        "output": 5.5,
-        "cacheRead": 0.11,
-        "cacheWrite": 1.375
-      },
+      "cost": { "input": 1.1, "output": 5.5, "cacheRead": 0.11, "cacheWrite": 1.375 },
       "contextWindow": 200000,
       "maxTokens": 64000,
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -2875,27 +1908,14 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 5.5,
-        "output": 27.5,
-        "cacheRead": 0.55,
-        "cacheWrite": 6.875
-      },
+      "cost": { "input": 5.5, "output": 27.5, "cacheRead": 0.55, "cacheWrite": 6.875 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -2908,27 +1928,14 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 2.2,
-        "output": 11,
-        "cacheRead": 0.22,
-        "cacheWrite": 2.75
-      },
+      "cost": { "input": 2.2, "output": 11, "cacheRead": 0.22, "cacheWrite": 2.75 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -2958,21 +1965,12 @@
       },
       "contextWindow": 1050000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -3002,21 +2000,12 @@
       },
       "contextWindow": 1050000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -3029,23 +2018,13 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.396,
-        "output": 3.311,
-        "cacheRead": 0.099,
-        "cacheWrite": 0.396
-      },
+      "cost": { "input": 0.396, "output": 3.311, "cacheRead": 0.099, "cacheWrite": 0.396 },
       "contextWindow": 1000000,
       "maxTokens": 65535,
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -3058,26 +2037,14 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 1.1,
-        "output": 5.5,
-        "cacheRead": 0.11,
-        "cacheWrite": 1.375
-      },
+      "cost": { "input": 1.1, "output": 5.5, "cacheRead": 0.11, "cacheWrite": 1.375 },
       "contextWindow": 200000,
       "maxTokens": 64000,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -3107,22 +2074,12 @@
       },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -3135,30 +2092,15 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 5.5,
-        "output": 27.5,
-        "cacheRead": 0.55,
-        "cacheWrite": 6.875
-      },
+      "cost": { "input": 5.5, "output": 27.5, "cacheRead": 0.55, "cacheWrite": 6.875 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -3171,30 +2113,15 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 5.5,
-        "output": 27.5,
-        "cacheRead": 0.55,
-        "cacheWrite": 6.875
-      },
+      "cost": { "input": 5.5, "output": 27.5, "cacheRead": 0.55, "cacheWrite": 6.875 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -3207,30 +2134,15 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 5.5,
-        "output": 27.5,
-        "cacheRead": 0.55,
-        "cacheWrite": 6.875
-      },
+      "cost": { "input": 5.5, "output": 27.5, "cacheRead": 0.55, "cacheWrite": 6.875 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -3243,30 +2155,15 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 4.4,
-        "output": 22,
-        "cacheRead": 0.22,
-        "cacheWrite": 5.5
-      },
+      "cost": { "input": 4.4, "output": 22, "cacheRead": 0.22, "cacheWrite": 5.5 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -3279,26 +2176,14 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 3.3,
-        "output": 16.5,
-        "cacheRead": 0.33,
-        "cacheWrite": 4.125
-      },
+      "cost": { "input": 3.3, "output": 16.5, "cacheRead": 0.33, "cacheWrite": 4.125 },
       "contextWindow": 200000,
       "maxTokens": 64000,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -3311,29 +2196,15 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 3.3,
-        "output": 16.5,
-        "cacheRead": 0.33,
-        "cacheWrite": 4.125
-      },
+      "cost": { "input": 3.3, "output": 16.5, "cacheRead": 0.33, "cacheWrite": 4.125 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -3346,30 +2217,15 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 2.2,
-        "output": 11,
-        "cacheRead": 0.22,
-        "cacheWrite": 2.75
-      },
+      "cost": { "input": 2.2, "output": 11, "cacheRead": 0.22, "cacheWrite": 2.75 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -3382,12 +2238,7 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": false,
       "input": ["text"],
-      "cost": {
-        "input": 0.72,
-        "output": 0.72,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.72, "output": 0.72, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 4096,
       "type": "chat"
@@ -3400,12 +2251,7 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": false,
       "input": ["text"],
-      "cost": {
-        "input": 0.22,
-        "output": 0.22,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.22, "output": 0.22, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 4096,
       "type": "chat"
@@ -3418,12 +2264,7 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": false,
       "input": ["text"],
-      "cost": {
-        "input": 0.72,
-        "output": 0.72,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.72, "output": 0.72, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 4096,
       "type": "chat"
@@ -3436,23 +2277,13 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": false,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.24,
-        "output": 0.97,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.24, "output": 0.97, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 1000000,
       "maxTokens": 8192,
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -3465,23 +2296,13 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": false,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.17,
-        "output": 0.66,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.17, "output": 0.66, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 10000000,
       "maxTokens": 8192,
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -3494,17 +2315,10 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 0.3,
-        "output": 1.2,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.3, "output": 1.2, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 204608,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "type": "chat"
     },
     "chat:minimax.minimax-m2.1": {
@@ -3515,17 +2329,10 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 0.3,
-        "output": 1.2,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.3, "output": 1.2, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 196608,
       "maxTokens": 131072,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "type": "chat"
     },
     "chat:minimax.minimax-m2.5": {
@@ -3536,17 +2343,10 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 0.3,
-        "output": 1.2,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.3, "output": 1.2, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 196608,
       "maxTokens": 98304,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "type": "chat"
     },
     "chat:mistral.devstral-2-123b": {
@@ -3557,17 +2357,10 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": false,
       "input": ["text"],
-      "cost": {
-        "input": 0.4,
-        "output": 2,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.4, "output": 2, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 262144,
       "maxTokens": 8192,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "type": "chat"
     },
     "chat:mistral.magistral-small-2509": {
@@ -3578,26 +2371,14 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.5,
-        "output": 1.5,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.5, "output": 1.5, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 40000,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -3610,26 +2391,14 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": false,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.2,
-        "output": 0.2,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.2, "output": 0.2, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 4096,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -3642,26 +2411,14 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": false,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.1,
-        "output": 0.1,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.1, "output": 0.1, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 256000,
       "maxTokens": 8192,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -3674,26 +2431,14 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": false,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.15,
-        "output": 0.15,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.15, "output": 0.15, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 4096,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -3706,26 +2451,14 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": false,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.5,
-        "output": 1.5,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.5, "output": 1.5, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 262144,
       "maxTokens": 8192,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -3738,23 +2471,13 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": false,
       "input": ["text", "image"],
-      "cost": {
-        "input": 2,
-        "output": 6,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 2, "output": 6, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 8192,
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -3767,17 +2490,10 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": false,
       "input": ["text"],
-      "cost": {
-        "input": 0.04,
-        "output": 0.04,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.04, "output": 0.04, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 32768,
       "maxTokens": 4096,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "type": "chat"
     },
     "chat:mistral.voxtral-small-24b-2507": {
@@ -3788,17 +2504,10 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": false,
       "input": ["text"],
-      "cost": {
-        "input": 0.1,
-        "output": 0.3,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.1, "output": 0.3, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 32768,
       "maxTokens": 8192,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "type": "chat"
     },
     "chat:moonshot.kimi-k2-thinking": {
@@ -3809,17 +2518,10 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 0.6,
-        "output": 2.5,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.6, "output": 2.5, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 262144,
       "maxTokens": 16000,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "type": "chat"
     },
     "chat:moonshotai.kimi-k2.5": {
@@ -3830,26 +2532,14 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.6,
-        "output": 3,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.6, "output": 3, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 262144,
       "maxTokens": 16384,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -3862,26 +2552,14 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": false,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.2,
-        "output": 0.6,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.2, "output": 0.6, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 131072,
       "maxTokens": 8192,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -3894,17 +2572,10 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 0.06,
-        "output": 0.24,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.06, "output": 0.24, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 262144,
       "maxTokens": 8192,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "type": "chat"
     },
     "chat:nvidia.nemotron-nano-9b-v2": {
@@ -3915,17 +2586,10 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": false,
       "input": ["text"],
-      "cost": {
-        "input": 0.06,
-        "output": 0.23,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.06, "output": 0.23, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 131072,
       "maxTokens": 8192,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "type": "chat"
     },
     "chat:nvidia.nemotron-super-3-120b": {
@@ -3936,17 +2600,10 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 0.15,
-        "output": 0.65,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.15, "output": 0.65, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 262144,
       "maxTokens": 131072,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "type": "chat"
     },
     "chat:openai.gpt-5.4": {
@@ -3957,29 +2614,15 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 2.75,
-        "output": 16.5,
-        "cacheRead": 0.275,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 2.75, "output": 16.5, "cacheRead": 0.275, "cacheWrite": 0 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -3992,29 +2635,15 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 5.5,
-        "output": 33,
-        "cacheRead": 0.55,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 5.5, "output": 33, "cacheRead": 0.55, "cacheWrite": 0 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -4044,21 +2673,12 @@
       },
       "contextWindow": 1050000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -4088,21 +2708,12 @@
       },
       "contextWindow": 1050000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -4132,21 +2743,12 @@
       },
       "contextWindow": 1050000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -4176,21 +2778,12 @@
       },
       "contextWindow": 1050000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -4220,21 +2813,12 @@
       },
       "contextWindow": 1050000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -4264,21 +2848,12 @@
       },
       "contextWindow": 1050000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -4308,21 +2883,47 @@
       },
       "contextWindow": 1050000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      },
+      "type": "chat"
+    },
+    "chat:openai.gpt-6.1-terra": {
+      "id": "openai.gpt-6.1-terra",
+      "name": "GPT-6.1 Terra",
+      "api": "bedrock-converse-stream",
+      "provider": "amazon-bedrock",
+      "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": {
+        "input": 1.1,
+        "output": 5.5,
+        "cacheRead": 0.055,
+        "cacheWrite": 1.375,
+        "tiers": [
+          {
+            "inputTokensAbove": 272000,
+            "input": 2.2,
+            "output": 8.25,
+            "cacheRead": 0.11,
+            "cacheWrite": 2.75
           }
+        ]
+      },
+      "contextWindow": 1050000,
+      "maxTokens": 128000,
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh" },
+      "inputLimits": {
+        "images": {
+          "maxPerMessage": 20,
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -4335,17 +2936,10 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 0.15,
-        "output": 0.6,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.15, "output": 0.6, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 131072,
       "maxTokens": 131072,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "type": "chat"
     },
     "chat:openai.gpt-oss-120b-1:0": {
@@ -4356,17 +2950,10 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 0.15,
-        "output": 0.6,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.15, "output": 0.6, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 131072,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "type": "chat"
     },
     "chat:openai.gpt-oss-20b": {
@@ -4377,17 +2964,10 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 0.07,
-        "output": 0.3,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.07, "output": 0.3, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 131072,
       "maxTokens": 131072,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "type": "chat"
     },
     "chat:openai.gpt-oss-20b-1:0": {
@@ -4398,17 +2978,10 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 0.07,
-        "output": 0.3,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.07, "output": 0.3, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 131072,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "type": "chat"
     },
     "chat:openai.gpt-oss-safeguard-120b": {
@@ -4419,17 +2992,10 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 0.15,
-        "output": 0.6,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.15, "output": 0.6, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 16384,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "type": "chat"
     },
     "chat:openai.gpt-oss-safeguard-20b": {
@@ -4440,17 +3006,10 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 0.07,
-        "output": 0.2,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.07, "output": 0.2, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 16384,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "type": "chat"
     },
     "chat:qwen.qwen3-235b-a22b-2507-v1:0": {
@@ -4461,17 +3020,10 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": false,
       "input": ["text"],
-      "cost": {
-        "input": 0.22,
-        "output": 0.88,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.22, "output": 0.88, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 262144,
       "maxTokens": 131072,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "type": "chat"
     },
     "chat:qwen.qwen3-32b-v1:0": {
@@ -4482,17 +3034,10 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 0.15,
-        "output": 0.6,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.15, "output": 0.6, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 32768,
       "maxTokens": 16384,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "type": "chat"
     },
     "chat:qwen.qwen3-coder-30b-a3b-v1:0": {
@@ -4503,17 +3048,10 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": false,
       "input": ["text"],
-      "cost": {
-        "input": 0.15,
-        "output": 0.6,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.15, "output": 0.6, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 262144,
       "maxTokens": 131072,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "type": "chat"
     },
     "chat:qwen.qwen3-coder-480b-a35b-v1:0": {
@@ -4524,17 +3062,10 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": false,
       "input": ["text"],
-      "cost": {
-        "input": 0.45,
-        "output": 1.8,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.45, "output": 1.8, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 131072,
       "maxTokens": 65536,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "type": "chat"
     },
     "chat:qwen.qwen3-coder-next": {
@@ -4545,17 +3076,10 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": false,
       "input": ["text"],
-      "cost": {
-        "input": 0.5,
-        "output": 1.2,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.5, "output": 1.2, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 262144,
       "maxTokens": 65536,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "type": "chat"
     },
     "chat:qwen.qwen3-next-80b-a3b": {
@@ -4566,17 +3090,10 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": false,
       "input": ["text"],
-      "cost": {
-        "input": 0.15,
-        "output": 1.2,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.15, "output": 1.2, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 262144,
       "maxTokens": 262000,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "type": "chat"
     },
     "chat:qwen.qwen3-vl-235b-a22b": {
@@ -4587,26 +3104,14 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": false,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.53,
-        "output": 2.66,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.53, "output": 2.66, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 262144,
       "maxTokens": 262000,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -4619,17 +3124,10 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 0.18,
-        "output": 0.72,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.18, "output": 0.72, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 16384,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "type": "chat"
     },
     "chat:us-gov.openai.gpt-oss-20b-1:0": {
@@ -4640,17 +3138,10 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 0.084,
-        "output": 0.36,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.084, "output": 0.36, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 16384,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "type": "chat"
     },
     "chat:us.amazon.nova-2-lite-v1:0": {
@@ -4661,23 +3152,13 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.33,
-        "output": 2.75,
-        "cacheRead": 0.0825,
-        "cacheWrite": 0.33
-      },
+      "cost": { "input": 0.33, "output": 2.75, "cacheRead": 0.0825, "cacheWrite": 0.33 },
       "contextWindow": 1000000,
       "maxTokens": 65535,
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -4690,23 +3171,13 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": false,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.06,
-        "output": 0.24,
-        "cacheRead": 0.015,
-        "cacheWrite": 0.06
-      },
+      "cost": { "input": 0.06, "output": 0.24, "cacheRead": 0.015, "cacheWrite": 0.06 },
       "contextWindow": 300000,
       "maxTokens": 10000,
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -4719,12 +3190,7 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": false,
       "input": ["text"],
-      "cost": {
-        "input": 0.035,
-        "output": 0.14,
-        "cacheRead": 0.00875,
-        "cacheWrite": 0.035
-      },
+      "cost": { "input": 0.035, "output": 0.14, "cacheRead": 0.00875, "cacheWrite": 0.035 },
       "contextWindow": 128000,
       "maxTokens": 10000,
       "type": "chat"
@@ -4737,23 +3203,13 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": false,
       "input": ["text", "image"],
-      "cost": {
-        "input": 2.5,
-        "output": 12.5,
-        "cacheRead": 0.625,
-        "cacheWrite": 2.5
-      },
+      "cost": { "input": 2.5, "output": 12.5, "cacheRead": 0.625, "cacheWrite": 2.5 },
       "contextWindow": 1000000,
       "maxTokens": 10000,
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -4766,23 +3222,13 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": false,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.8,
-        "output": 3.2,
-        "cacheRead": 0.2,
-        "cacheWrite": 0.8
-      },
+      "cost": { "input": 0.8, "output": 3.2, "cacheRead": 0.2, "cacheWrite": 0.8 },
       "contextWindow": 300000,
       "maxTokens": 10000,
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -4795,31 +3241,15 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 11,
-        "output": 55,
-        "cacheRead": 1.1,
-        "cacheWrite": 13.75
-      },
+      "cost": { "input": 11, "output": 55, "cacheRead": 1.1, "cacheWrite": 13.75 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "off": null,
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "off": null, "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -4832,31 +3262,15 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 11,
-        "output": 55,
-        "cacheRead": 0.275,
-        "cacheWrite": 13.75
-      },
+      "cost": { "input": 11, "output": 55, "cacheRead": 0.275, "cacheWrite": 13.75 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "off": null,
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "off": null, "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -4869,26 +3283,14 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 1.1,
-        "output": 5.5,
-        "cacheRead": 0.11,
-        "cacheWrite": 1.375
-      },
+      "cost": { "input": 1.1, "output": 5.5, "cacheRead": 0.11, "cacheWrite": 1.375 },
       "contextWindow": 200000,
       "maxTokens": 64000,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -4918,22 +3320,12 @@
       },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -4946,23 +3338,13 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 15,
-        "output": 75,
-        "cacheRead": 1.5,
-        "cacheWrite": 18.75
-      },
+      "cost": { "input": 15, "output": 75, "cacheRead": 1.5, "cacheWrite": 18.75 },
       "contextWindow": 200000,
       "maxTokens": 32000,
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -4975,26 +3357,14 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 5.5,
-        "output": 27.5,
-        "cacheRead": 0.55,
-        "cacheWrite": 6.875
-      },
+      "cost": { "input": 5.5, "output": 27.5, "cacheRead": 0.55, "cacheWrite": 6.875 },
       "contextWindow": 200000,
       "maxTokens": 64000,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -5007,29 +3377,15 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 5.5,
-        "output": 27.5,
-        "cacheRead": 0.55,
-        "cacheWrite": 6.875
-      },
+      "cost": { "input": 5.5, "output": 27.5, "cacheRead": 0.55, "cacheWrite": 6.875 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -5042,30 +3398,15 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 5.5,
-        "output": 27.5,
-        "cacheRead": 0.55,
-        "cacheWrite": 6.875
-      },
+      "cost": { "input": 5.5, "output": 27.5, "cacheRead": 0.55, "cacheWrite": 6.875 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -5078,30 +3419,15 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 5.5,
-        "output": 27.5,
-        "cacheRead": 0.55,
-        "cacheWrite": 6.875
-      },
+      "cost": { "input": 5.5, "output": 27.5, "cacheRead": 0.55, "cacheWrite": 6.875 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -5114,30 +3440,15 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 5.5,
-        "output": 27.5,
-        "cacheRead": 0.55,
-        "cacheWrite": 6.875
-      },
+      "cost": { "input": 5.5, "output": 27.5, "cacheRead": 0.55, "cacheWrite": 6.875 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -5150,30 +3461,15 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 4.4,
-        "output": 22,
-        "cacheRead": 0.22,
-        "cacheWrite": 5.5
-      },
+      "cost": { "input": 4.4, "output": 22, "cacheRead": 0.22, "cacheWrite": 5.5 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -5186,23 +3482,13 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 3,
-        "output": 15,
-        "cacheRead": 0.3,
-        "cacheWrite": 3.75
-      },
+      "cost": { "input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 3.75 },
       "contextWindow": 200000,
       "maxTokens": 64000,
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -5215,26 +3501,14 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 3.3,
-        "output": 16.5,
-        "cacheRead": 0.33,
-        "cacheWrite": 4.125
-      },
+      "cost": { "input": 3.3, "output": 16.5, "cacheRead": 0.33, "cacheWrite": 4.125 },
       "contextWindow": 200000,
       "maxTokens": 64000,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -5247,29 +3521,15 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 3.3,
-        "output": 16.5,
-        "cacheRead": 0.33,
-        "cacheWrite": 4.125
-      },
+      "cost": { "input": 3.3, "output": 16.5, "cacheRead": 0.33, "cacheWrite": 4.125 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -5282,30 +3542,15 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 2.2,
-        "output": 11,
-        "cacheRead": 0.22,
-        "cacheWrite": 2.75
-      },
+      "cost": { "input": 2.2, "output": 11, "cacheRead": 0.22, "cacheWrite": 2.75 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -5318,30 +3563,15 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 2.2,
-        "output": 11,
-        "cacheRead": 0.11,
-        "cacheWrite": 2.75
-      },
+      "cost": { "input": 2.2, "output": 11, "cacheRead": 0.11, "cacheWrite": 2.75 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh",
-        "max": "max"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -5354,12 +3584,7 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": false,
       "input": ["text"],
-      "cost": {
-        "input": 0.72,
-        "output": 0.72,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.72, "output": 0.72, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 4096,
       "type": "chat"
@@ -5372,12 +3597,7 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": false,
       "input": ["text"],
-      "cost": {
-        "input": 0.22,
-        "output": 0.22,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.22, "output": 0.22, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 4096,
       "type": "chat"
@@ -5390,12 +3610,7 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": false,
       "input": ["text"],
-      "cost": {
-        "input": 0.72,
-        "output": 0.72,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.72, "output": 0.72, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 4096,
       "type": "chat"
@@ -5408,23 +3623,13 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": false,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.24,
-        "output": 0.97,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.24, "output": 0.97, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 1000000,
       "maxTokens": 8192,
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -5437,23 +3642,13 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": false,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.17,
-        "output": 0.66,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.17, "output": 0.66, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 10000000,
       "maxTokens": 8192,
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -5466,23 +3661,13 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": false,
       "input": ["text", "image"],
-      "cost": {
-        "input": 2,
-        "output": 6,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 2, "output": 6, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 8192,
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -5495,26 +3680,14 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 3.3,
-        "output": 16.5,
-        "cacheRead": 0.33,
-        "cacheWrite": 4.125
-      },
+      "cost": { "input": 3.3, "output": 16.5, "cacheRead": 0.33, "cacheWrite": 4.125 },
       "contextWindow": 1048576,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -5544,21 +3717,12 @@
       },
       "contextWindow": 1050000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -5588,21 +3752,12 @@
       },
       "contextWindow": 1050000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -5632,21 +3787,12 @@
       },
       "contextWindow": 1050000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -5676,21 +3822,12 @@
       },
       "contextWindow": 1050000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -5720,21 +3857,12 @@
       },
       "contextWindow": 1050000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -5764,21 +3892,12 @@
       },
       "contextWindow": 1050000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -5808,21 +3927,47 @@
       },
       "contextWindow": 1050000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
-      "thinkingLevelMap": {
-        "xhigh": "xhigh"
-      },
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh" },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      },
+      "type": "chat"
+    },
+    "chat:us.openai.gpt-6.1-terra": {
+      "id": "us.openai.gpt-6.1-terra",
+      "name": "GPT-6.1 Terra (US)",
+      "api": "bedrock-converse-stream",
+      "provider": "amazon-bedrock",
+      "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": {
+        "input": 1.1,
+        "output": 5.5,
+        "cacheRead": 0.055,
+        "cacheWrite": 1.375,
+        "tiers": [
+          {
+            "inputTokensAbove": 272000,
+            "input": 2.2,
+            "output": 8.25,
+            "cacheRead": 0.11,
+            "cacheWrite": 2.75
           }
+        ]
+      },
+      "contextWindow": 1050000,
+      "maxTokens": 128000,
+      "compat": { "supportsStrictMode": true },
+      "thinkingLevelMap": { "xhigh": "xhigh" },
+      "inputLimits": {
+        "images": {
+          "maxPerMessage": 20,
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -5835,12 +3980,7 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 2.5,
-        "output": 10,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 2.5, "output": 10, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 122880,
       "maxTokens": 8192,
       "type": "chat"
@@ -5853,12 +3993,7 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 0.6,
-        "output": 6,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.6, "output": 6, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 1040000,
       "maxTokens": 8192,
       "type": "chat"
@@ -5871,23 +4006,13 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 2.2,
-        "output": 6.6,
-        "cacheRead": 0.55,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 2.2, "output": 6.6, "cacheRead": 0.55, "cacheWrite": 0 },
       "contextWindow": 500000,
       "maxTokens": 500000,
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -5900,26 +4025,14 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 2.2,
-        "output": 6.6,
-        "cacheRead": 0.55,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 2.2, "output": 6.6, "cacheRead": 0.55, "cacheWrite": 0 },
       "contextWindow": 500000,
       "maxTokens": 500000,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -5932,17 +4045,10 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 1.848,
-        "output": 5.808,
-        "cacheRead": 0.3432,
-        "cacheWrite": 2.31
-      },
+      "cost": { "input": 1.848, "output": 5.808, "cacheRead": 0.3432, "cacheWrite": 2.31 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "type": "chat"
     },
     "chat:writer.palmyra-x4-v1:0": {
@@ -5953,12 +4059,7 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 2.5,
-        "output": 10,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 2.5, "output": 10, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 122880,
       "maxTokens": 8192,
       "type": "chat"
@@ -5971,12 +4072,7 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 0.6,
-        "output": 6,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.6, "output": 6, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 1040000,
       "maxTokens": 8192,
       "type": "chat"
@@ -5989,26 +4085,14 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 1.25,
-        "output": 2.5,
-        "cacheRead": 0.2,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 1.25, "output": 2.5, "cacheRead": 0.2, "cacheWrite": 0 },
       "contextWindow": 1000000,
       "maxTokens": 131072,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -6021,26 +4105,14 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 2.2,
-        "output": 6.6,
-        "cacheRead": 0.55,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 2.2, "output": 6.6, "cacheRead": 0.55, "cacheWrite": 0 },
       "contextWindow": 500000,
       "maxTokens": 500000,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "inputLimits": {
         "images": {
           "maxPerMessage": 20,
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -6053,17 +4125,10 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 0.6,
-        "output": 2.2,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.6, "output": 2.2, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 202752,
       "maxTokens": 131072,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "type": "chat"
     },
     "chat:zai.glm-4.7-flash": {
@@ -6074,17 +4139,10 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 0.07,
-        "output": 0.4,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.07, "output": 0.4, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 202752,
       "maxTokens": 131072,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "type": "chat"
     },
     "chat:zai.glm-5": {
@@ -6095,17 +4153,10 @@
       "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 1,
-        "output": 3.2,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 1, "output": 3.2, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 202752,
       "maxTokens": 131072,
-      "compat": {
-        "supportsStrictMode": true
-      },
+      "compat": { "supportsStrictMode": true },
       "type": "chat"
     }
   }

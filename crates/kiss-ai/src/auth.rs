@@ -225,6 +225,19 @@ pub fn env_var_names(provider: &str) -> &'static [&'static str] {
     }
 }
 
+/// Check a URL that a sign-in server sent before KISS opens or prints it.
+/// The platform URL handler would also run `file:` URLs and custom protocol
+/// handlers, so only `http` and `https` are accepted. Parsing percent-encodes
+/// control characters, so the result is safe in a terminal hyperlink.
+pub(crate) fn trusted_http_url(value: &str, server: &str) -> Result<String> {
+    match url::Url::parse(value) {
+        Ok(url) if matches!(url.scheme(), "http" | "https") => Ok(url.into()),
+        _ => anyhow::bail!(
+            "{server} sent the sign-in URL {value:?}, which is not an http or https URL. KISS does not open it. Try the login again later, or report the problem to {server}"
+        ),
+    }
+}
+
 pub fn auth_file_path() -> Option<PathBuf> {
     dirs::home_dir().map(|home| home.join(".kiss/agent/auth.json"))
 }
@@ -809,6 +822,29 @@ mod tests {
         assert_eq!(env_var_names("liquid"), &["LIQUID_API_KEY"]);
         assert_eq!(login_methods("liquid"), vec![LoginMethod::ApiKey]);
         assert!(env_var_names("cloudflare-workers-ai").contains(&"CLOUDFLARE_API_TOKEN"));
+    }
+
+    #[test]
+    fn sign_in_urls_must_be_web_urls() {
+        assert_eq!(
+            trusted_http_url("https://github.com/login/device", "GitHub").unwrap(),
+            "https://github.com/login/device"
+        );
+        // Control characters are percent-encoded, so the URL cannot end a
+        // terminal hyperlink early.
+        assert_eq!(
+            trusted_http_url("https://example.com/a\u{1b}]8;;b", "Radius").unwrap(),
+            "https://example.com/a%1B]8;;b"
+        );
+        for url in [
+            "file:///etc/passwd",
+            "javascript:alert(1)",
+            "vscode://x",
+            "not a url",
+        ] {
+            let error = trusted_http_url(url, "Radius").unwrap_err().to_string();
+            assert!(error.contains("not an http or https URL"), "{error}");
+        }
     }
 
     #[test]

@@ -6,6 +6,11 @@
       "api": "openai-completions",
       "provider": "qwen-token-plan-cn",
       "baseUrl": "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+      "reasoning": true,
+      "input": ["text"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 131072,
+      "maxTokens": 65536,
       "compat": {
         "supportsStrictMode": true,
         "thinkingFormat": "qwen",
@@ -13,16 +18,6 @@
         "supportsStore": false,
         "supportsReasoningEffort": false
       },
-      "reasoning": true,
-      "input": ["text"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "contextWindow": 131072,
-      "maxTokens": 65536,
       "type": "chat"
     },
     "chat:deepseek-v4-flash": {
@@ -31,6 +26,11 @@
       "api": "openai-completions",
       "provider": "qwen-token-plan-cn",
       "baseUrl": "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+      "reasoning": true,
+      "input": ["text"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 1000000,
+      "maxTokens": 384000,
       "compat": {
         "supportsStrictMode": true,
         "thinkingFormat": "qwen",
@@ -47,16 +47,6 @@
         "xhigh": null,
         "max": "max"
       },
-      "reasoning": true,
-      "input": ["text"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "contextWindow": 1000000,
-      "maxTokens": 384000,
       "type": "chat"
     },
     "chat:deepseek-v4-flash-0731": {
@@ -65,6 +55,11 @@
       "api": "openai-completions",
       "provider": "qwen-token-plan-cn",
       "baseUrl": "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+      "reasoning": true,
+      "input": ["text"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 1000000,
+      "maxTokens": 384000,
       "compat": {
         "supportsStrictMode": true,
         "thinkingFormat": "qwen",
@@ -81,16 +76,6 @@
         "xhigh": null,
         "max": "max"
       },
-      "reasoning": true,
-      "input": ["text"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "contextWindow": 1000000,
-      "maxTokens": 384000,
       "type": "chat"
     },
     "chat:deepseek-v4-pro": {
@@ -99,6 +84,11 @@
       "api": "openai-completions",
       "provider": "qwen-token-plan-cn",
       "baseUrl": "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+      "reasoning": true,
+      "input": ["text"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 1000000,
+      "maxTokens": 384000,
       "compat": {
         "supportsStrictMode": true,
         "thinkingFormat": "qwen",
@@ -115,16 +105,6 @@
         "xhigh": null,
         "max": "max"
       },
-      "reasoning": true,
-      "input": ["text"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "contextWindow": 1000000,
-      "maxTokens": 384000,
       "type": "chat"
     },
     "chat:deepseek-v4-pro-0813": {
@@ -133,6 +113,11 @@
       "api": "openai-completions",
       "provider": "qwen-token-plan-cn",
       "baseUrl": "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+      "reasoning": true,
+      "input": ["text"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 1000000,
+      "maxTokens": 384000,
       "compat": {
         "supportsStrictMode": true,
         "thinkingFormat": "qwen",
@@ -149,16 +134,6 @@
         "xhigh": null,
         "max": "max"
       },
-      "reasoning": true,
-      "input": ["text"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "contextWindow": 1000000,
-      "maxTokens": 384000,
       "type": "chat"
     },
     "chat:deepseek-v4.1-flash": {
@@ -167,6 +142,11 @@
       "api": "openai-completions",
       "provider": "qwen-token-plan-cn",
       "baseUrl": "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 1000000,
+      "maxTokens": 384000,
       "compat": {
         "supportsStrictMode": true,
         "thinkingFormat": "qwen",
@@ -183,24 +163,9 @@
         "xhigh": null,
         "max": "max"
       },
-      "reasoning": true,
-      "input": ["text", "image"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "contextWindow": 1000000,
-      "maxTokens": 384000,
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -211,6 +176,11 @@
       "api": "openai-completions",
       "provider": "qwen-token-plan-cn",
       "baseUrl": "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 1000000,
+      "maxTokens": 384000,
       "compat": {
         "supportsStrictMode": true,
         "thinkingFormat": "qwen",
@@ -227,24 +197,9 @@
         "xhigh": null,
         "max": "max"
       },
-      "reasoning": true,
-      "input": ["text", "image"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "contextWindow": 1000000,
-      "maxTokens": 384000,
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -255,6 +210,11 @@
       "api": "openai-completions",
       "provider": "qwen-token-plan-cn",
       "baseUrl": "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+      "reasoning": true,
+      "input": ["text"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 202752,
+      "maxTokens": 16384,
       "compat": {
         "supportsStrictMode": true,
         "thinkingFormat": "qwen",
@@ -270,16 +230,6 @@
         "xhigh": null,
         "max": "max"
       },
-      "reasoning": true,
-      "input": ["text"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "contextWindow": 202752,
-      "maxTokens": 16384,
       "type": "chat"
     },
     "chat:glm-5.1": {
@@ -288,6 +238,11 @@
       "api": "openai-completions",
       "provider": "qwen-token-plan-cn",
       "baseUrl": "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+      "reasoning": true,
+      "input": ["text"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 202752,
+      "maxTokens": 128000,
       "compat": {
         "supportsStrictMode": true,
         "thinkingFormat": "qwen",
@@ -303,16 +258,6 @@
         "xhigh": null,
         "max": "max"
       },
-      "reasoning": true,
-      "input": ["text"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "contextWindow": 202752,
-      "maxTokens": 128000,
       "type": "chat"
     },
     "chat:glm-5.2": {
@@ -321,6 +266,11 @@
       "api": "openai-completions",
       "provider": "qwen-token-plan-cn",
       "baseUrl": "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+      "reasoning": true,
+      "input": ["text"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 1000000,
+      "maxTokens": 131072,
       "compat": {
         "supportsStrictMode": true,
         "thinkingFormat": "qwen",
@@ -337,16 +287,6 @@
         "xhigh": null,
         "max": "max"
       },
-      "reasoning": true,
-      "input": ["text"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "contextWindow": 1000000,
-      "maxTokens": 131072,
       "type": "chat"
     },
     "chat:glm-5.3": {
@@ -355,6 +295,11 @@
       "api": "openai-completions",
       "provider": "qwen-token-plan-cn",
       "baseUrl": "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+      "reasoning": true,
+      "input": ["text"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 1000000,
+      "maxTokens": 131072,
       "compat": {
         "supportsStrictMode": true,
         "thinkingFormat": "qwen",
@@ -371,16 +316,6 @@
         "xhigh": null,
         "max": "max"
       },
-      "reasoning": true,
-      "input": ["text"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "contextWindow": 1000000,
-      "maxTokens": 131072,
       "type": "chat"
     },
     "chat:kimi-k2.5": {
@@ -389,6 +324,11 @@
       "api": "openai-completions",
       "provider": "qwen-token-plan-cn",
       "baseUrl": "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 262144,
+      "maxTokens": 98304,
       "compat": {
         "supportsStrictMode": true,
         "thinkingFormat": "qwen",
@@ -396,24 +336,9 @@
         "supportsStore": false,
         "supportsReasoningEffort": false
       },
-      "reasoning": true,
-      "input": ["text", "image"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "contextWindow": 262144,
-      "maxTokens": 98304,
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -424,6 +349,11 @@
       "api": "openai-completions",
       "provider": "qwen-token-plan-cn",
       "baseUrl": "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 262144,
+      "maxTokens": 262144,
       "compat": {
         "supportsStrictMode": true,
         "thinkingFormat": "qwen",
@@ -431,24 +361,9 @@
         "supportsStore": false,
         "supportsReasoningEffort": false
       },
-      "reasoning": true,
-      "input": ["text", "image"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "contextWindow": 262144,
-      "maxTokens": 262144,
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -459,6 +374,11 @@
       "api": "openai-completions",
       "provider": "qwen-token-plan-cn",
       "baseUrl": "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 262144,
+      "maxTokens": 262144,
       "compat": {
         "supportsStrictMode": true,
         "thinkingFormat": "qwen",
@@ -466,24 +386,9 @@
         "supportsStore": false,
         "supportsReasoningEffort": false
       },
-      "reasoning": true,
-      "input": ["text", "image"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "contextWindow": 262144,
-      "maxTokens": 262144,
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -494,6 +399,11 @@
       "api": "openai-completions",
       "provider": "qwen-token-plan-cn",
       "baseUrl": "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+      "reasoning": true,
+      "input": ["text"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 196608,
+      "maxTokens": 32768,
       "compat": {
         "supportsStrictMode": true,
         "thinkingFormat": "qwen",
@@ -501,16 +411,6 @@
         "supportsStore": false,
         "supportsReasoningEffort": false
       },
-      "reasoning": true,
-      "input": ["text"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "contextWindow": 196608,
-      "maxTokens": 32768,
       "type": "chat"
     },
     "chat:qwen3.6-flash": {
@@ -519,6 +419,11 @@
       "api": "openai-completions",
       "provider": "qwen-token-plan-cn",
       "baseUrl": "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 1000000,
+      "maxTokens": 65536,
       "compat": {
         "supportsStrictMode": true,
         "thinkingFormat": "qwen",
@@ -526,24 +431,9 @@
         "supportsStore": false,
         "supportsReasoningEffort": false
       },
-      "reasoning": true,
-      "input": ["text", "image"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "contextWindow": 1000000,
-      "maxTokens": 65536,
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -554,6 +444,11 @@
       "api": "openai-completions",
       "provider": "qwen-token-plan-cn",
       "baseUrl": "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 1000000,
+      "maxTokens": 65536,
       "compat": {
         "supportsStrictMode": true,
         "thinkingFormat": "qwen",
@@ -561,24 +456,9 @@
         "supportsStore": false,
         "supportsReasoningEffort": false
       },
-      "reasoning": true,
-      "input": ["text", "image"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "contextWindow": 1000000,
-      "maxTokens": 65536,
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -589,6 +469,11 @@
       "api": "openai-completions",
       "provider": "qwen-token-plan-cn",
       "baseUrl": "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+      "reasoning": true,
+      "input": ["text"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 1000000,
+      "maxTokens": 131072,
       "compat": {
         "supportsStrictMode": true,
         "thinkingFormat": "qwen",
@@ -596,16 +481,6 @@
         "supportsStore": false,
         "supportsReasoningEffort": false
       },
-      "reasoning": true,
-      "input": ["text"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "contextWindow": 1000000,
-      "maxTokens": 131072,
       "type": "chat"
     },
     "chat:qwen3.7-plus": {
@@ -614,6 +489,11 @@
       "api": "openai-completions",
       "provider": "qwen-token-plan-cn",
       "baseUrl": "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 1000000,
+      "maxTokens": 65536,
       "compat": {
         "supportsStrictMode": true,
         "thinkingFormat": "qwen",
@@ -621,24 +501,9 @@
         "supportsStore": false,
         "supportsReasoningEffort": false
       },
-      "reasoning": true,
-      "input": ["text", "image"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "contextWindow": 1000000,
-      "maxTokens": 65536,
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -649,6 +514,11 @@
       "api": "openai-completions",
       "provider": "qwen-token-plan-cn",
       "baseUrl": "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 1000000,
+      "maxTokens": 131072,
       "compat": {
         "supportsStrictMode": true,
         "thinkingFormat": "qwen",
@@ -665,24 +535,9 @@
         "xhigh": "xhigh",
         "max": null
       },
-      "reasoning": true,
-      "input": ["text", "image"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "contextWindow": 1000000,
-      "maxTokens": 131072,
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -693,6 +548,11 @@
       "api": "openai-completions",
       "provider": "qwen-token-plan-cn",
       "baseUrl": "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 1000000,
+      "maxTokens": 131072,
       "compat": {
         "supportsStrictMode": true,
         "thinkingFormat": "qwen",
@@ -709,24 +569,9 @@
         "xhigh": "xhigh",
         "max": null
       },
-      "reasoning": true,
-      "input": ["text", "image"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "contextWindow": 1000000,
-      "maxTokens": 131072,
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"

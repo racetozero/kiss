@@ -190,23 +190,47 @@ async fn begin_login_with_path(
                 .metadata
         }
     };
-    let mut request = AuthorizationRequest::new(&redirect_uri)
-        .with_client_name(oauth.client_name.as_deref().unwrap_or("KISS MCP Client"));
-    if oauth.client_registration == ClientRegistration::Cimd {
-        // rmcp silently falls back to dynamic registration without support.
-        if metadata
-            .additional_fields
-            .get("client_id_metadata_document_supported")
-            .and_then(serde_json::Value::as_bool)
-            != Some(true)
+    // KISS opens the authorization URL with the platform URL handler, which
+    // would also run `file:` URLs and custom protocol handlers.
+    for (field, url) in [
+        (
+            "authorization_endpoint",
+            Some(&metadata.authorization_endpoint),
+        ),
+        ("token_endpoint", Some(&metadata.token_endpoint)),
+        (
+            "registration_endpoint",
+            metadata.registration_endpoint.as_ref(),
+        ),
+    ] {
+        if let Some(url) = url
+            && !url::Url::parse(url).is_ok_and(|url| matches!(url.scheme(), "http" | "https"))
         {
             bail!(
-                "the authorization server of MCP server `{server_name}` does not support Client ID Metadata Documents. Remove oauth.clientRegistration \"cimd\" to use dynamic client registration"
+                "the authorization server of MCP server `{server_name}` sent {field} {url:?}, which is not an http or https URL. KISS does not open it. Ask the server owner to fix the OAuth metadata, or set oauth.authServerMetadataUrl to a correct document"
             )
         }
-        if let Some(url) = &oauth.client_metadata_url {
-            request = request.with_client_metadata_url(url);
+    }
+    let mut request = AuthorizationRequest::new(&redirect_uri)
+        .with_client_name(oauth.client_name.as_deref().unwrap_or("KISS MCP Client"));
+    let cimd_supported = metadata
+        .additional_fields
+        .get("client_id_metadata_document_supported")
+        .and_then(serde_json::Value::as_bool)
+        == Some(true);
+    let use_cimd = match oauth.client_registration {
+        // rmcp silently falls back to dynamic registration without support.
+        ClientRegistration::Cimd if !cimd_supported => bail!(
+            "the authorization server of MCP server `{server_name}` does not support Client ID Metadata Documents. Set oauth.clientRegistration to \"auto\" or \"dcr\" to use dynamic client registration"
+        ),
+        ClientRegistration::Cimd => true,
+        ClientRegistration::Auto => {
+            cimd_supported && oauth.client_name.is_none() && oauth.redirect_uri.is_none()
         }
+        ClientRegistration::Dcr => false,
+    };
+    if use_cimd && let Some(url) = &oauth.client_metadata_url {
+        request = request.with_client_metadata_url(url);
     }
     manager.set_metadata(metadata);
     if let Some(scopes) = &oauth.scope {
@@ -510,6 +534,19 @@ mod tests {
                             }))
                             .unwrap(),
                         )
+                        } else if target == "/file-metadata" {
+                            (
+                                "200 OK",
+                                "application/json",
+                                serde_json::to_vec(&json!({
+                                    "issuer": base,
+                                    "authorization_endpoint": "file:///Applications/Calculator.app",
+                                    "token_endpoint": format!("{base}/token"),
+                                    "response_types_supported": ["code"],
+                                    "code_challenge_methods_supported": ["S256"]
+                                }))
+                                .unwrap(),
+                            )
                         } else if target == "/token" {
                             (
                                 "200 OK",
@@ -535,6 +572,31 @@ mod tests {
             }
         });
         (base, cancel)
+    }
+
+    #[tokio::test]
+    async fn login_refuses_oauth_metadata_urls_that_are_not_web_urls() {
+        let temp = tempfile::tempdir().unwrap();
+        let (base, server_cancel) = start_oauth_server().await;
+        let oauth = OAuthConfig {
+            client_id: Some("kiss-test-client".to_string()),
+            auth_server_metadata_url: Some(format!("{base}/file-metadata")),
+            ..Default::default()
+        };
+        let error = begin_login_with_path(
+            "demo",
+            &format!("{base}/mcp"),
+            &oauth,
+            None,
+            Some(temp.path().join("oauth.json")),
+        )
+        .await
+        .err()
+        .unwrap();
+        let error = format!("{error:#}");
+        assert!(error.contains("authorization_endpoint"), "{error}");
+        assert!(error.contains("not an http or https URL"), "{error}");
+        server_cancel.cancel();
     }
 
     #[tokio::test]
@@ -613,13 +675,23 @@ mod tests {
             auth_server_metadata_url: Some(format!("{base}/configured-metadata")),
             ..cimd
         };
-        let pending = begin_login_with_path("demo", &server_url, &configured, None, Some(path))
-            .await
-            .unwrap();
-        let authorization = url::Url::parse(&pending.authorization_url).unwrap();
-        assert_eq!(authorization.path(), "/configured-authorize");
-        let params = authorization.query_pairs().collect::<BTreeMap<_, _>>();
-        assert_eq!(params.get("client_id").unwrap(), document);
+        // `auto`, the default, uses a supported document the same way.
+        for configured in [
+            configured.clone(),
+            OAuthConfig {
+                client_registration: ClientRegistration::Auto,
+                ..configured
+            },
+        ] {
+            let pending =
+                begin_login_with_path("demo", &server_url, &configured, None, Some(path.clone()))
+                    .await
+                    .unwrap();
+            let authorization = url::Url::parse(&pending.authorization_url).unwrap();
+            assert_eq!(authorization.path(), "/configured-authorize");
+            let params = authorization.query_pairs().collect::<BTreeMap<_, _>>();
+            assert_eq!(params.get("client_id").unwrap(), document);
+        }
         server_cancel.cancel();
     }
 }

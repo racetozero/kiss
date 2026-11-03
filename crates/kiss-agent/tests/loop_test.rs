@@ -713,8 +713,9 @@ async fn before_hook_blocks_tool() {
 #[tokio::test]
 async fn invalid_arguments_rejected_by_schema() {
     let calls = Arc::new(AtomicUsize::new(0));
+    // An object cannot be coerced to the string that the schema requires.
     let config = scripted_config(vec![
-        assistant_tool_call("echo", json!({"value": 42}), StopReason::ToolUse),
+        assistant_tool_call("echo", json!({"value": {"text": 42}}), StopReason::ToolUse),
         assistant_text("ok", StopReason::Stop),
     ]);
     let (sink, _log) = collect_events();

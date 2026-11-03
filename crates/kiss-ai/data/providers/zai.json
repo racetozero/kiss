@@ -8,12 +8,9 @@
       "baseUrl": "https://api.z.ai/api/coding/paas/v4",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 0.6,
-        "output": 2.2,
-        "cacheRead": 0.11,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.6, "output": 2.2, "cacheRead": 0.11, "cacheWrite": 0 },
+      "contextWindow": 204800,
+      "maxTokens": 131072,
       "compat": {
         "supportsStore": false,
         "supportsDeveloperRole": false,
@@ -23,8 +20,6 @@
         "supportsStrictMode": true,
         "zaiToolStream": true
       },
-      "contextWindow": 204800,
-      "maxTokens": 131072,
       "type": "chat"
     },
     "chat:glm-5-turbo": {
@@ -35,12 +30,9 @@
       "baseUrl": "https://api.z.ai/api/coding/paas/v4",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 1.2,
-        "output": 4,
-        "cacheRead": 0.24,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 1.2, "output": 4, "cacheRead": 0.24, "cacheWrite": 0 },
+      "contextWindow": 200000,
+      "maxTokens": 131072,
       "compat": {
         "supportsStore": false,
         "supportsDeveloperRole": false,
@@ -50,8 +42,6 @@
         "supportsStrictMode": true,
         "zaiToolStream": true
       },
-      "contextWindow": 200000,
-      "maxTokens": 131072,
       "type": "chat"
     },
     "chat:glm-5.2": {
@@ -61,6 +51,10 @@
       "provider": "zai",
       "baseUrl": "https://api.z.ai/api/coding/paas/v4",
       "reasoning": true,
+      "input": ["text"],
+      "cost": { "input": 1.4, "output": 4.4, "cacheRead": 0.26, "cacheWrite": 0 },
+      "contextWindow": 1000000,
+      "maxTokens": 131072,
       "thinkingLevelMap": {
         "off": "none",
         "minimal": null,
@@ -69,13 +63,6 @@
         "high": "high",
         "xhigh": null,
         "max": "max"
-      },
-      "input": ["text"],
-      "cost": {
-        "input": 1.4,
-        "output": 4.4,
-        "cacheRead": 0.26,
-        "cacheWrite": 0
       },
       "compat": {
         "supportsStore": false,
@@ -86,8 +73,6 @@
         "supportsStrictMode": true,
         "zaiToolStream": true
       },
-      "contextWindow": 1000000,
-      "maxTokens": 131072,
       "type": "chat"
     },
     "chat:glm-5.2-highspeed": {
@@ -97,6 +82,10 @@
       "provider": "zai",
       "baseUrl": "https://api.z.ai/api/coding/paas/v4",
       "reasoning": true,
+      "input": ["text"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 1000000,
+      "maxTokens": 131072,
       "thinkingLevelMap": {
         "off": "none",
         "minimal": null,
@@ -106,13 +95,6 @@
         "xhigh": null,
         "max": "max"
       },
-      "input": ["text"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
       "compat": {
         "supportsStore": false,
         "supportsDeveloperRole": false,
@@ -122,8 +104,6 @@
         "supportsStrictMode": true,
         "zaiToolStream": true
       },
-      "contextWindow": 1000000,
-      "maxTokens": 131072,
       "type": "chat"
     },
     "chat:glm-5.3": {
@@ -133,6 +113,10 @@
       "provider": "zai",
       "baseUrl": "https://api.z.ai/api/coding/paas/v4",
       "reasoning": true,
+      "input": ["text"],
+      "cost": { "input": 1.4, "output": 4.4, "cacheRead": 0.26, "cacheWrite": 0 },
+      "contextWindow": 1000000,
+      "maxTokens": 131072,
       "thinkingLevelMap": {
         "off": null,
         "minimal": null,
@@ -141,13 +125,6 @@
         "high": "high",
         "xhigh": null,
         "max": "max"
-      },
-      "input": ["text"],
-      "cost": {
-        "input": 1.4,
-        "output": 4.4,
-        "cacheRead": 0.26,
-        "cacheWrite": 0
       },
       "compat": {
         "supportsStore": false,
@@ -158,8 +135,6 @@
         "supportsStrictMode": true,
         "zaiToolStream": true
       },
-      "contextWindow": 1000000,
-      "maxTokens": 131072,
       "type": "chat"
     },
     "chat:glm-5.3-flash": {
@@ -169,6 +144,10 @@
       "provider": "zai",
       "baseUrl": "https://api.z.ai/api/coding/paas/v4",
       "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 0.15, "output": 0.5, "cacheRead": 0.03, "cacheWrite": 0 },
+      "contextWindow": 1000000,
+      "maxTokens": 131072,
       "thinkingLevelMap": {
         "off": null,
         "minimal": null,
@@ -177,13 +156,6 @@
         "high": "high",
         "xhigh": null,
         "max": "max"
-      },
-      "input": ["text", "image"],
-      "cost": {
-        "input": 0.15,
-        "output": 0.5,
-        "cacheRead": 0.03,
-        "cacheWrite": 0
       },
       "compat": {
         "supportsStore": false,
@@ -194,16 +166,9 @@
         "supportsStrictMode": true,
         "zaiToolStream": true
       },
-      "contextWindow": 1000000,
-      "maxTokens": 131072,
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -215,6 +180,10 @@
       "provider": "zai",
       "baseUrl": "https://api.z.ai/api/coding/paas/v4",
       "reasoning": true,
+      "input": ["text"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 1000000,
+      "maxTokens": 131072,
       "thinkingLevelMap": {
         "off": null,
         "minimal": null,
@@ -223,13 +192,6 @@
         "high": "high",
         "xhigh": null,
         "max": "max"
-      },
-      "input": ["text"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
       },
       "compat": {
         "supportsStore": false,
@@ -240,8 +202,6 @@
         "supportsStrictMode": true,
         "zaiToolStream": true
       },
-      "contextWindow": 1000000,
-      "maxTokens": 131072,
       "type": "chat"
     }
   }

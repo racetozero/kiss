@@ -28,45 +28,13 @@ impl PreparedFuzzyQuery {
         {
             return score_ascii(query, candidate.as_bytes());
         }
-        if self.chars.is_empty() {
-            return Some(0);
-        }
-
-        let mut score: i64 = 0;
-        let mut query_index = 0usize;
-        let mut last_match: Option<usize> = None;
-        let mut previous = None;
-        let mut candidate_len = 0usize;
-        for (candidate_index, candidate_char) in
-            candidate.chars().flat_map(char::to_lowercase).enumerate()
-        {
-            candidate_len = candidate_index + 1;
-            if query_index < self.chars.len() && candidate_char == self.chars[query_index] {
-                let mut bonus = 1;
-                if candidate_index == 0 {
-                    bonus += 8; // start of candidate
-                } else if previous
-                    .is_some_and(|character| matches!(character, '/' | '_' | '-' | '.' | ' '))
-                {
-                    bonus += 6; // word boundary
-                }
-                if let Some(last) = last_match
-                    && candidate_index == last + 1
-                {
-                    bonus += 4; // consecutive
-                }
-                score += bonus;
-                last_match = Some(candidate_index);
-                query_index += 1;
-            }
-            previous = Some(candidate_char);
-        }
-        if query_index < self.chars.len() {
-            return None;
-        }
-        // Prefer shorter candidates.
-        score -= (candidate_len as i64) / 8;
-        Some(score)
+        let candidate: Vec<char> = candidate.chars().flat_map(char::to_lowercase).collect();
+        best_alignment(
+            &self.chars,
+            &candidate,
+            |character| character,
+            |character| matches!(character, '/' | '_' | '-' | '.' | ' '),
+        )
     }
 
     /// A safe letter-and-digit presence filter for ASCII candidates.
@@ -76,34 +44,65 @@ impl PreparedFuzzyQuery {
 }
 
 fn score_ascii(query: &[u8], candidate: &[u8]) -> Option<i64> {
+    best_alignment(
+        query,
+        candidate,
+        |byte| byte.to_ascii_lowercase(),
+        |byte| matches!(byte, b'/' | b'_' | b'-' | b'.' | b' '),
+    )
+}
+
+/// Score `query` against `candidate`, both already split into characters.
+/// `lower` folds a candidate character to match the lowercase query.
+fn best_alignment<T: Copy + PartialEq>(
+    query: &[T],
+    candidate: &[T],
+    lower: impl Fn(T) -> T,
+    boundary: impl Fn(T) -> bool,
+) -> Option<i64> {
     if query.is_empty() {
         return Some(0);
     }
-    let mut score = 0i64;
-    let mut query_index = 0usize;
-    let mut last_match = None;
-    let mut previous = None;
-    for (candidate_index, raw) in candidate.iter().copied().enumerate() {
-        let byte = raw.to_ascii_lowercase();
-        if query_index < query.len() && byte == query[query_index] {
-            let mut bonus = 1;
-            if candidate_index == 0 {
-                bonus += 8;
-            } else if previous
-                .is_some_and(|previous| matches!(previous, b'/' | b'_' | b'-' | b'.' | b' '))
-            {
-                bonus += 6;
+    let greedy_from = |start: usize| {
+        let mut score = 0i64;
+        let mut query_index = 0usize;
+        let mut last_match = None;
+        let mut previous = start.checked_sub(1).map(|index| lower(candidate[index]));
+        for (candidate_index, raw) in candidate.iter().copied().enumerate().skip(start) {
+            let item = lower(raw);
+            if query_index < query.len() && item == query[query_index] {
+                let mut bonus = 1;
+                if candidate_index == 0 {
+                    bonus += 8; // start of candidate
+                } else if previous.is_some_and(&boundary) {
+                    bonus += 6; // word boundary
+                }
+                if last_match.is_some_and(|last| candidate_index == last + 1) {
+                    bonus += 4; // consecutive
+                }
+                score += bonus;
+                last_match = Some(candidate_index);
+                query_index += 1;
             }
-            if last_match.is_some_and(|last| candidate_index == last + 1) {
-                bonus += 4;
-            }
-            score += bonus;
-            last_match = Some(candidate_index);
-            query_index += 1;
+            previous = Some(item);
         }
-        previous = Some(byte);
-    }
-    (query_index == query.len()).then_some(score - candidate.len() as i64 / 8)
+        (query_index == query.len()).then_some(score)
+    };
+    // The greedy alignment can scatter the query over an earlier, unrelated
+    // part of the candidate (`opus` in `openrouter/...`), so also score each
+    // contiguous occurrence and keep the best alignment.
+    let contiguous = (1..=candidate.len().saturating_sub(query.len())).filter(|&start| {
+        candidate[start..start + query.len()]
+            .iter()
+            .zip(query)
+            .all(|(item, query)| lower(*item) == *query)
+    });
+    std::iter::once(0)
+        .chain(contiguous)
+        .filter_map(greedy_from)
+        .max()
+        // Prefer shorter candidates.
+        .map(|score| score - candidate.len() as i64 / 8)
 }
 
 fn ascii_mask(bytes: &[u8]) -> u64 {
@@ -147,6 +146,23 @@ mod tests {
     fn ranks_boundary_matches_higher() {
         let ranked = fuzzy_rank("sm", ["src/main.rs", "somefile.txt"]);
         assert_eq!(ranked[0].0, "src/main.rs");
+    }
+
+    #[test]
+    fn contiguous_matches_beat_letters_scattered_over_an_earlier_part() {
+        let ranked = fuzzy_rank(
+            "opus",
+            [
+                "openrouter/openai/gpt-oss-120b",
+                "github-copilot/claude-sonnet-4.5",
+                "anthropic/claude-opus-4.1",
+            ],
+        );
+        assert_eq!(ranked[0].0, "anthropic/claude-opus-4.1");
+        let ranked = fuzzy_rank("astra", ["radius/gpt-6-sol", "openai/gpt-6-astra"]);
+        assert_eq!(ranked[0].0, "openai/gpt-6-astra");
+        let ranked = fuzzy_rank("ÖL", ["öffentlich/datei-l", "src/öl.rs"]);
+        assert_eq!(ranked[0].0, "src/öl.rs");
     }
 
     #[test]

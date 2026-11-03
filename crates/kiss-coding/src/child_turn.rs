@@ -82,6 +82,7 @@ fn usage_delta(after: Usage, before: Usage) -> Usage {
             cache_read: (after.cost.cache_read - before.cost.cache_read).max(0.0),
             cache_write: (after.cost.cache_write - before.cost.cache_write).max(0.0),
             total: (after.cost.total - before.cost.total).max(0.0),
+            total_from_provider: after.cost.total_from_provider,
         },
     }
 }

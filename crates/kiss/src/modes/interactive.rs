@@ -7918,10 +7918,15 @@ fn run_slash_command(
             }
         }
         "export" => {
+            let system = session.system_context();
             let manager = session.manager.lock().unwrap();
             let target = parse_path_argument(&rest)
                 .unwrap_or_else(|| format!("session-{}.html", manager.session_id()));
-            match crate::export::export_session(&manager, std::path::Path::new(&target)) {
+            match crate::export::export_session(
+                &manager,
+                std::path::Path::new(&target),
+                Some(&system),
+            ) {
                 Ok(()) => app
                     .cells
                     .push(Cell::Notice(format!("exported to {target}"))),
@@ -8159,6 +8164,7 @@ fn start_share_session(
     session: &Arc<kiss_coding::AgentSession>,
     command_tx: &mpsc::UnboundedSender<CommandEvent>,
 ) {
+    let system = session.system_context();
     let (id, jsonl, target) = {
         let manager = session.manager.lock().unwrap();
         let id = manager.session_id().to_string();
@@ -8176,7 +8182,7 @@ fn start_share_session(
             std::process::id(),
             chrono::Utc::now().timestamp_millis()
         ));
-        if let Err(error) = crate::export::export_html(&manager, &target) {
+        if let Err(error) = crate::export::export_html(&manager, &target, Some(&system)) {
             app.cells.push(Cell::Error(format!(
                 "could not prepare session share: {error:#}"
             )));
@@ -8796,6 +8802,27 @@ mod tests {
             tool_title("read", &serde_json::json!({"path": "file.rs"})),
             "read file.rs"
         );
+    }
+
+    #[test]
+    fn tool_output_hides_prefixed_control_sequences() {
+        let mut app = test_app();
+        app.cells.push(Cell::ToolCall {
+            title: "bash".into(),
+            output: "a\x1b[<35;59;1Mb\x1b[>0;276;0cc\x1b[=5ud\x1b=keypad\x1b>numeric".into(),
+            is_error: false,
+            done: true,
+        });
+        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
+            "/synthetic",
+        )));
+        let rendered = kiss_tui::text::strip_ansi(&app.render(80, &session).join("\n"));
+        assert!(rendered.contains("abcd"), "{rendered:?}");
+        assert!(rendered.contains("keypad"), "{rendered:?}");
+        assert!(rendered.contains("numeric"), "{rendered:?}");
+        for parameters in ["35;59;1M", "0;276;0c", "5u"] {
+            assert!(!rendered.contains(parameters), "{rendered:?}");
+        }
     }
 
     #[test]

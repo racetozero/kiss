@@ -330,6 +330,40 @@ impl PartialBuilder {
     }
 }
 
+/// Use OpenRouter's billed cost as the usage total when its accounting is
+/// complete. With the user's own upstream key (BYOK), OpenRouter's charge
+/// does not include the upstream inference cost, so the total adds it.
+pub(crate) fn apply_openrouter_cost(usage: &mut Usage, reported: &serde_json::Value) {
+    let valid = |value: &serde_json::Value| {
+        value
+            .as_f64()
+            .filter(|value| value.is_finite() && *value >= 0.0)
+    };
+    let Some(cost) = valid(&reported["cost"]) else {
+        return;
+    };
+    let total = match reported["is_byok"].as_bool() {
+        Some(false) => cost,
+        Some(true) => {
+            let details = &reported["cost_details"];
+            let upstream = match details.get("upstream_inference_cost") {
+                Some(serde_json::Value::Null) => valid(&details["upstream_inference_prompt_cost"])
+                    .zip(valid(&details["upstream_inference_completions_cost"]))
+                    .map(|(prompt, completion)| prompt + completion),
+                Some(value) => valid(value),
+                None => None,
+            };
+            let Some(upstream) = upstream else {
+                return;
+            };
+            cost + upstream
+        }
+        None => return,
+    };
+    usage.cost.total = total;
+    usage.cost.total_from_provider = true;
+}
+
 pub fn finalize_cost(usage: &mut Usage, model: &Model) {
     let per = |tokens: u64, rate: f64| tokens as f64 * rate / 1_000_000.0;
     let c = &model.cost;
@@ -354,9 +388,13 @@ pub fn finalize_cost(usage: &mut Usage, model: &Model) {
             tier.map_or(c.input, |tier| tier.input) * 2.0,
         ),
         total: 0.0,
+        total_from_provider: false,
     };
+    // A billed total from the provider replaces the catalog estimate.
+    let reported = usage.cost.total_from_provider.then_some(usage.cost.total);
     usage.cost = Cost {
-        total: cost.input + cost.output + cost.cache_read + cost.cache_write,
+        total: reported.unwrap_or(cost.input + cost.output + cost.cache_read + cost.cache_write),
+        total_from_provider: reported.is_some(),
         ..cost
     };
     usage.total_tokens = usage.input + usage.output + usage.cache_read + usage.cache_write;

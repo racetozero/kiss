@@ -8,12 +8,9 @@
       "baseUrl": "https://open.bigmodel.cn/api/coding/paas/v4",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.3,
-        "output": 0.9,
-        "cacheRead": 0.05,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.3, "output": 0.9, "cacheRead": 0.05, "cacheWrite": 0 },
+      "contextWindow": 128000,
+      "maxTokens": 32768,
       "compat": {
         "supportsStore": false,
         "supportsDeveloperRole": false,
@@ -23,16 +20,9 @@
         "supportsStrictMode": true,
         "zaiToolStream": true
       },
-      "contextWindow": 128000,
-      "maxTokens": 32768,
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -44,6 +34,10 @@
       "provider": "zai-coding-cn",
       "baseUrl": "https://open.bigmodel.cn/api/coding/paas/v4",
       "reasoning": true,
+      "input": ["text"],
+      "cost": { "input": 1.4, "output": 4.4, "cacheRead": 0.26, "cacheWrite": 0 },
+      "contextWindow": 1000000,
+      "maxTokens": 131072,
       "thinkingLevelMap": {
         "off": null,
         "minimal": null,
@@ -52,13 +46,6 @@
         "high": "high",
         "xhigh": null,
         "max": "max"
-      },
-      "input": ["text"],
-      "cost": {
-        "input": 1.4,
-        "output": 4.4,
-        "cacheRead": 0.26,
-        "cacheWrite": 0
       },
       "compat": {
         "supportsStore": false,
@@ -69,8 +56,6 @@
         "supportsStrictMode": true,
         "zaiToolStream": true
       },
-      "contextWindow": 1000000,
-      "maxTokens": 131072,
       "type": "chat"
     },
     "chat:glm-5.3-flash": {
@@ -80,6 +65,10 @@
       "provider": "zai-coding-cn",
       "baseUrl": "https://open.bigmodel.cn/api/coding/paas/v4",
       "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 0.15, "output": 0.5, "cacheRead": 0.03, "cacheWrite": 0 },
+      "contextWindow": 1000000,
+      "maxTokens": 131072,
       "thinkingLevelMap": {
         "off": null,
         "minimal": null,
@@ -88,13 +77,6 @@
         "high": "high",
         "xhigh": null,
         "max": "max"
-      },
-      "input": ["text", "image"],
-      "cost": {
-        "input": 0.15,
-        "output": 0.5,
-        "cacheRead": 0.03,
-        "cacheWrite": 0
       },
       "compat": {
         "supportsStore": false,
@@ -105,16 +87,9 @@
         "supportsStrictMode": true,
         "zaiToolStream": true
       },
-      "contextWindow": 1000000,
-      "maxTokens": 131072,
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -126,6 +101,10 @@
       "provider": "zai-coding-cn",
       "baseUrl": "https://open.bigmodel.cn/api/coding/paas/v4",
       "reasoning": true,
+      "input": ["text"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 1000000,
+      "maxTokens": 131072,
       "thinkingLevelMap": {
         "off": null,
         "minimal": null,
@@ -134,13 +113,6 @@
         "high": "high",
         "xhigh": null,
         "max": "max"
-      },
-      "input": ["text"],
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
       },
       "compat": {
         "supportsStore": false,
@@ -151,8 +123,6 @@
         "supportsStrictMode": true,
         "zaiToolStream": true
       },
-      "contextWindow": 1000000,
-      "maxTokens": 131072,
       "type": "chat"
     }
   }

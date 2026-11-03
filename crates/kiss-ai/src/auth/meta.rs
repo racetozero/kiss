@@ -6,7 +6,6 @@ use anyhow::{Context as _, Result};
 use serde_json::Value;
 use std::time::Duration;
 use tokio_util::sync::CancellationToken;
-use url::Url;
 
 const CLIENT_ID: &str = "1031625952748946";
 const API_KEY_LIFETIME_MS: i64 = 24 * 60 * 60 * 1000;
@@ -59,14 +58,6 @@ fn error_detail(body: &Value) -> String {
         .unwrap_or_default()
 }
 
-fn trusted_verification_url(value: &str) -> Result<String> {
-    let url = Url::parse(value).context("Meta returned an invalid verification URL")?;
-    if !matches!(url.scheme(), "http" | "https") {
-        anyhow::bail!("Meta returned an untrusted verification URL");
-    }
-    Ok(url.into())
-}
-
 pub async fn start(
     config: &OAuthConfig,
     cancel: &CancellationToken,
@@ -94,7 +85,7 @@ pub async fn start(
     Ok(DeviceAuthorization {
         device_code: required(&body, "device_code")?,
         user_code: required(&body, "user_code")?,
-        verification_uri: trusted_verification_url(verification)?,
+        verification_uri: super::trusted_http_url(verification, "Meta")?,
         interval: Duration::from_secs(body["interval"].as_u64().unwrap_or(5).max(1)),
         expires_in: Duration::from_secs(body["expires_in"].as_u64().unwrap_or(900)),
     })
@@ -136,7 +127,7 @@ async fn mint(
     let Some(access) = access else {
         let setup = body["action_url"]
             .as_str()
-            .and_then(|value| trusted_verification_url(value).ok())
+            .and_then(|value| super::trusted_http_url(value, "Meta").ok())
             .map(|url| format!(" Complete setup at {url}"))
             .unwrap_or_default();
         anyhow::bail!("Meta did not issue an API key.{setup}");
@@ -208,8 +199,8 @@ mod tests {
 
     #[test]
     fn verification_url_rejects_non_http_schemes() {
-        assert!(trusted_verification_url("https://auth.meta.com/device").is_ok());
-        assert!(trusted_verification_url("javascript:alert(1)").is_err());
+        assert!(super::super::trusted_http_url("https://auth.meta.com/device", "Meta").is_ok());
+        assert!(super::super::trusted_http_url("javascript:alert(1)", "Meta").is_err());
     }
 
     #[test]

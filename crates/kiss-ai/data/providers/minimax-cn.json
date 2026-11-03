@@ -8,12 +8,7 @@
       "baseUrl": "https://api.minimaxi.com/anthropic",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 0.3137,
-        "output": 1.2549,
-        "cacheRead": 0.0627,
-        "cacheWrite": 0.3922
-      },
+      "cost": { "input": 0.3137, "output": 1.2549, "cacheRead": 0.0627, "cacheWrite": 0.3922 },
       "contextWindow": 204800,
       "maxTokens": 131072,
       "type": "chat"
@@ -26,12 +21,7 @@
       "baseUrl": "https://api.minimaxi.com/anthropic",
       "reasoning": true,
       "input": ["text"],
-      "cost": {
-        "input": 0.6275,
-        "output": 2.5098,
-        "cacheRead": 0.0627,
-        "cacheWrite": 0.3922
-      },
+      "cost": { "input": 0.6275, "output": 2.5098, "cacheRead": 0.0627, "cacheWrite": 0.3922 },
       "contextWindow": 204800,
       "maxTokens": 131072,
       "type": "chat"
@@ -63,12 +53,7 @@
       "maxTokens": 524288,
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"
@@ -81,12 +66,7 @@
       "baseUrl": "https://api.minimaxi.com/anthropic",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": {
-        "input": 0.1494,
-        "output": 0.5976,
-        "cacheRead": 0.0149,
-        "cacheWrite": 0
-      },
+      "cost": { "input": 0.1494, "output": 0.5976, "cacheRead": 0.0149, "cacheWrite": 0 },
       "contextWindow": 1000000,
       "maxTokens": 524288,
       "thinkingLevelMap": {
@@ -98,17 +78,10 @@
         "xhigh": "xhigh",
         "max": "max"
       },
-      "compat": {
-        "forceAdaptiveThinking": true
-      },
+      "compat": { "forceAdaptiveThinking": true },
       "inputLimits": {
         "images": {
-          "resize": {
-            "maxWidth": 2000,
-            "maxHeight": 2000,
-            "maxBytes": 4718592,
-            "jpegQuality": 80
-          }
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
       },
       "type": "chat"

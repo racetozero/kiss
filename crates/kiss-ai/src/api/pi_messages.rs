@@ -114,12 +114,29 @@ fn handle_event(event: &SseEvent, builder: &mut PartialBuilder) -> Option<Termin
     let Ok(data) = serde_json::from_str::<Value>(&event.data) else {
         return None;
     };
+    let kind = data["type"].as_str().unwrap_or_default();
+    if let Some(index) = data.get("contentIndex") {
+        // A start adds the next block. Other events need an existing block.
+        let blocks = builder.message.content.len();
+        let valid = index.as_u64().is_some_and(|index| {
+            if kind.ends_with("_start") {
+                index == blocks as u64
+            } else {
+                index < blocks as u64
+            }
+        });
+        if !valid {
+            return Some(Terminal::Error {
+                message: format!("Invalid contentIndex {index} in pi-messages {kind} event"),
+                aborted: false,
+            });
+        }
+    }
     let index = || data["contentIndex"].as_u64().unwrap_or_default() as usize;
-    match data["type"].as_str().unwrap_or_default() {
+    match kind {
         "start" => builder.start(),
         "text_start" => {
-            let actual = builder.begin_text();
-            debug_assert_eq!(actual, index());
+            builder.begin_text();
         }
         "text_delta" => {
             if let Some(delta) = data["delta"].as_str() {
@@ -133,8 +150,7 @@ fn handle_event(event: &SseEvent, builder: &mut PartialBuilder) -> Option<Termin
             builder.end_text(index());
         }
         "thinking_start" => {
-            let actual = builder.begin_thinking();
-            debug_assert_eq!(actual, index());
+            builder.begin_thinking();
         }
         "thinking_delta" => {
             if let Some(delta) = data["delta"].as_str() {
@@ -153,11 +169,10 @@ fn handle_event(event: &SseEvent, builder: &mut PartialBuilder) -> Option<Termin
             builder.end_thinking(index());
         }
         "toolcall_start" => {
-            let actual = builder.begin_tool_call(
+            builder.begin_tool_call(
                 data["id"].as_str().unwrap_or_default().to_string(),
                 data["toolName"].as_str().unwrap_or_default().to_string(),
             );
-            debug_assert_eq!(actual, index());
         }
         "toolcall_delta" => {
             if let Some(delta) = data["delta"].as_str() {
@@ -206,6 +221,10 @@ fn apply_terminal_fields(data: &Value, builder: &mut PartialBuilder) {
     }
     if let Some(level) = data["providerThinkingLevel"].as_str() {
         builder.message.provider_thinking_level = Some(level.to_string());
+    }
+    // The concrete model that answered, also for a virtual model request.
+    if let Some(model) = data["responseModel"].as_str() {
+        builder.message.response_model = Some(model.to_string());
     }
 }
 
@@ -262,6 +281,7 @@ mod tests {
                     "type":"done",
                     "reason":"stop",
                     "responseId":"radius-response",
+                    "responseModel":"claude-opus-5-5",
                     "providerThinkingLevel":"xhigh",
                     "usage":{
                         "input":4,"output":1,"cacheRead":0,"cacheWrite":0,
@@ -323,6 +343,7 @@ mod tests {
         assert_eq!(output.text(), "hello");
         assert_eq!(output.response_id.as_deref(), Some("radius-response"));
         assert_eq!(output.provider_thinking_level.as_deref(), Some("xhigh"));
+        assert_eq!(output.response_model.as_deref(), Some("claude-opus-5-5"));
         assert_eq!(output.usage.input, 4);
 
         let request = server.await.unwrap();
@@ -337,5 +358,34 @@ mod tests {
         assert_eq!(payload["model"], "radius-model");
         assert_eq!(payload["context"]["systemPrompt"], "system");
         assert_eq!(payload["context"]["messages"][0]["role"], "user");
+    }
+
+    #[test]
+    fn content_indices_out_of_range_end_the_stream() {
+        let model = crate::Registry::from_builtin().all()[0].clone();
+        let event = |data: Value| SseEvent {
+            event: None,
+            data: data.to_string(),
+        };
+        for events in [
+            vec![json!({"type":"text_start","contentIndex":1})],
+            vec![json!({"type":"text_delta","contentIndex":0,"delta":"x"})],
+            vec![
+                json!({"type":"text_start","contentIndex":0}),
+                json!({"type":"toolcall_delta","contentIndex":"0","delta":"{}"}),
+            ],
+            vec![json!({"type":"text_start","contentIndex":-1})],
+        ] {
+            let (sink, _stream) = crate::EventStream::channel();
+            let mut builder = PartialBuilder::new(&model, sink);
+            let terminal = events
+                .into_iter()
+                .find_map(|data| handle_event(&event(data), &mut builder));
+            assert!(matches!(
+                terminal,
+                Some(Terminal::Error { message, aborted: false })
+                    if message.starts_with("Invalid contentIndex")
+            ));
+        }
     }
 }

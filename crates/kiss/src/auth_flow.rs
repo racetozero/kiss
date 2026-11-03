@@ -40,6 +40,11 @@ pub async fn login_browser(
 }
 
 pub fn open_browser(url: &str) -> bool {
+    // The platform URL handler would also run `file:` URLs and custom
+    // protocol handlers. Open only web URLs.
+    if !url::Url::parse(url).is_ok_and(|url| matches!(url.scheme(), "http" | "https")) {
+        return false;
+    }
     #[cfg(target_os = "windows")]
     if std::env::var_os("SSH_CONNECTION").is_some()
         || std::env::var_os("SSH_TTY").is_some()
@@ -67,4 +72,19 @@ pub fn open_browser(url: &str) -> bool {
     return false;
 
     command.arg(url).spawn().is_ok()
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn browser_opens_only_web_urls() {
+        for url in [
+            "file:///Applications/Calculator.app",
+            "javascript:alert(1)",
+            "x-custom:run",
+            "/etc/passwd",
+        ] {
+            assert!(!super::open_browser(url), "{url}");
+        }
+    }
 }

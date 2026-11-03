@@ -234,7 +234,7 @@ fn startup_model(
 
 fn provider_default(registry: &Registry, provider: &str) -> Option<Model> {
     let preferred = match provider {
-        "openai-codex" | "github-copilot" => Some("gpt-6.1-sol"),
+        "openai" | "openai-codex" | "github-copilot" => Some("gpt-6.1-sol"),
         "nvidia" => Some("nvidia/nemotron-3.5-super-vl-120b-a12b"),
         "xiaomi" | "xiaomi-token-plan-cn" | "xiaomi-token-plan-ams" | "xiaomi-token-plan-sgp" => {
             Some("mimo-v2.6-pro")
@@ -504,6 +504,7 @@ mod tests {
             "muse-spark-1.3"
         );
         for (provider, id) in [
+            ("openai", "gpt-6.1-sol"),
             ("openai-codex", "gpt-6.1-sol"),
             ("fireworks", "accounts/fireworks/models/kimi-k3"),
             ("together", "moonshotai/Kimi-K3"),

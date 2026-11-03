@@ -244,50 +244,11 @@ impl McpManager {
         for name in missing {
             tools.extend(self.refresh_tools(&name, cancel).await?);
         }
-        let terms: Vec<String> = query
-            .split_whitespace()
-            .map(|term| term.to_ascii_lowercase())
-            .collect();
-        let servers = &self.inner.config.config.mcp_servers;
-        let server_description = |server: &str| {
-            servers
-                .get(server)
-                .and_then(|entry| entry.description.as_deref())
-                .unwrap_or("")
-                .to_ascii_lowercase()
-        };
-        tools.retain(|tool| {
-            let haystack = format!(
-                "{} {} {} {} {}",
-                tool.server,
-                tool.name,
-                tool.title.as_deref().unwrap_or(""),
-                tool.description.as_deref().unwrap_or(""),
-                server_description(&tool.server),
-            )
-            .to_ascii_lowercase();
-            terms.iter().all(|term| haystack.contains(term))
-        });
-        // Exact names first, then tools whose own text matches every term,
-        // then tools that match only through their server description.
-        tools.sort_by_key(|tool| {
-            let name_match = tool.name.eq_ignore_ascii_case(query);
-            let own_text = format!(
-                "{} {} {}",
-                tool.name,
-                tool.title.as_deref().unwrap_or(""),
-                tool.description.as_deref().unwrap_or("")
-            )
-            .to_ascii_lowercase();
-            let own_match = terms.iter().all(|term| own_text.contains(term));
-            (
-                !name_match,
-                !own_match,
-                tool.server.clone(),
-                tool.name.clone(),
-            )
-        });
-        Ok(tools)
+        Ok(rank_search_results(
+            tools,
+            query,
+            &self.inner.config.config.mcp_servers,
+        ))
     }
 
     pub async fn describe_tool(
@@ -861,6 +822,61 @@ fn save_cache(path: &Path, cache: &CacheFile) -> Result<()> {
     Ok(())
 }
 
+/// Keep the tools whose text contains every query word, best matches first.
+fn rank_search_results(
+    mut tools: Vec<CachedTool>,
+    query: &str,
+    servers: &BTreeMap<String, ServerEntry>,
+) -> Vec<CachedTool> {
+    let terms: Vec<String> = query.split_whitespace().map(str::to_lowercase).collect();
+    let server_description = |server: &str| {
+        servers
+            .get(server)
+            .and_then(|entry| entry.description.as_deref())
+            .unwrap_or("")
+            .to_lowercase()
+    };
+    tools.retain(|tool| {
+        let haystack = format!(
+            "{} {} {} {} {}",
+            tool.server,
+            tool.name,
+            tool.title.as_deref().unwrap_or(""),
+            tool.description.as_deref().unwrap_or(""),
+            server_description(&tool.server),
+        )
+        .to_lowercase();
+        terms.iter().all(|term| haystack.contains(term))
+    });
+    // Exact names first, then tools whose server and tool name are both
+    // query words (`peekaboo app`), then tools whose own text matches
+    // every term, then tools that match only through their server
+    // description.
+    tools.sort_by_key(|tool| {
+        let name_match = tool.name.to_lowercase() == query.trim().to_lowercase();
+        let full_name_match = [&tool.server, &tool.name]
+            .iter()
+            .all(|name| terms.contains(&name.to_lowercase()));
+        let own_text = format!(
+            "{} {} {} {}",
+            tool.server,
+            tool.name,
+            tool.title.as_deref().unwrap_or(""),
+            tool.description.as_deref().unwrap_or("")
+        )
+        .to_lowercase();
+        let own_match = terms.iter().all(|term| own_text.contains(term));
+        (
+            !name_match,
+            !full_name_match,
+            !own_match,
+            tool.server.clone(),
+            tool.name.clone(),
+        )
+    });
+    tools
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -902,6 +918,37 @@ mod tests {
         let status = manager.status().await;
         assert_eq!(status.len(), 1);
         assert!(!marker.exists());
+    }
+
+    #[test]
+    fn search_ranks_full_name_matches_and_folds_unicode_case() {
+        let tool = |server: &str, name: &str, description: &str| CachedTool {
+            server: server.into(),
+            name: name.into(),
+            title: None,
+            description: Some(description.into()),
+            input_schema: json!({}),
+        };
+        let tools = vec![
+            tool("browser", "open", "Open an app window in peekaboo mode"),
+            tool(
+                "notes",
+                "peekaboo_list",
+                "List the apps that peekaboo can see",
+            ),
+            tool("peekaboo", "app", "Control an application"),
+            tool("search", "suche", "Durchsucht CAFÉ-Notizen und 搜索记录"),
+        ];
+        let names = |query: &str| {
+            rank_search_results(tools.clone(), query, &BTreeMap::new())
+                .into_iter()
+                .map(|tool| format!("{}/{}", tool.server, tool.name))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(names("peekaboo app")[0], "peekaboo/app");
+        assert_eq!(names("café"), ["search/suche"]);
+        assert_eq!(names("搜索"), ["search/suche"]);
+        assert_eq!(names("Suche")[0], "search/suche");
     }
 
     #[tokio::test]

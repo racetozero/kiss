@@ -254,6 +254,14 @@ impl AgentTool for BashTool {
         let kill_child = |pgid_opt: Option<i32>, child: &mut tokio::process::Child| {
             #[cfg(unix)]
             if let Some(pgid) = pgid_opt {
+                // macOS signals group members one at a time. A killed child
+                // can wake its shell before the shell gets the signal, so
+                // `a; b` could start `b`. Stopping the group first narrows
+                // this race. SIGKILL also ends stopped processes.
+                #[cfg(target_os = "macos")]
+                unsafe {
+                    libc::killpg(pgid, libc::SIGSTOP);
+                }
                 unsafe {
                     libc::killpg(pgid, libc::SIGKILL);
                 }
@@ -576,6 +584,28 @@ mod tests {
             .unwrap_err();
         assert!(start.elapsed() < Duration::from_secs(3));
         assert!(format!("{err:#}").contains("timed out"));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn cancel_does_not_run_the_next_command_of_a_list() {
+        let directory = tempfile::tempdir().unwrap();
+        let marker = directory.path().join("next-ran");
+        let cancel = CancellationToken::new();
+        let c2 = cancel.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            c2.cancel();
+        });
+        let command = format!("sleep 1; touch '{}'", marker.display());
+        assert!(
+            tool()
+                .execute("1", json!({"command": command}), cancel, None)
+                .await
+                .is_err()
+        );
+        tokio::time::sleep(Duration::from_millis(1500)).await;
+        assert!(!marker.exists());
     }
 
     #[tokio::test]
