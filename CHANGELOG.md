@@ -12,6 +12,105 @@
   static musl build, so KISS does not require glibc. For a Homebrew
   install, `kiss update` stops and tells you to run
   `brew upgrade racetozero/tap/kiss`.
+- `--tools` and `--exclude-tools` accept `*` patterns. A `--tools` list of
+  only `+name` and `-name` entries changes the default tools. `--no-mcp`
+  turns off MCP servers for one run.
+- `samplingParamsByThinkingLevel` in `models.json` sets sampling values for
+  each thinking level on OpenAI-compatible APIs.
+- The `sessionShareDestination` setting selects `auto`, `gist`, or `radius`
+  for `/share`.
+- Prompt template arguments accept single and double quotes. An empty quoted
+  argument keeps its position.
+- Anthropic workload identity federation. With `ANTHROPIC_FEDERATION_RULE_ID`,
+  `ANTHROPIC_ORGANIZATION_ID`, and `ANTHROPIC_IDENTITY_TOKEN_FILE` set, KISS
+  exchanges the workload's OIDC token for a short-lived Anthropic token.
+- MCP servers accept a `description`, which the `mcp` tool lists and tool
+  search matches. Set it with `kiss mcp add --description`.
+- MCP `"auth": { "provider": "<provider>" }` sends a KISS provider login token
+  to an HTTP server. User configuration only.
+- MCP `oauth.authServerMetadataUrl` replaces authorization server discovery.
+  `oauth.clientRegistration: "cimd"` with `oauth.clientMetadataUrl` uses a
+  Client ID Metadata Document instead of dynamic client registration.
+  `kiss mcp add` has matching flags, and `--oauth-client-name` sets
+  `oauth.clientName`.
+- MCP `oauth.clientRegistration` accepts `auto`, the new default, and `dcr`.
+  `auto` uses `oauth.clientMetadataUrl` when the server supports it, and
+  dynamic registration otherwise. Set the mode with
+  `kiss mcp add --oauth-client-registration`.
+- `kiss update` can run another updater. Set `KISS_SELF_UPDATE_COMMAND`, or
+  the `selfUpdateCommand` argv list in your user settings. KISS fills
+  `{packageName}`, `{version}`, and `{installSpec}` from the new release.
+- `/export` and `/share` HTML pages include the system prompt and tools.
+
+### Changed
+
+- Updated the Pi baseline and model catalog to v1.5.0. Added GPT-6.1 Terra
+  and Kimi K3.1 Pro. OpenCode uses its protocol-specific endpoints, and the
+  OpenRouter `~anthropic/*-latest` models use Anthropic Messages. The default
+  OpenAI model is `gpt-6.1-sol`.
+- Tool arguments are converted to the tool's schema before validation, for
+  built-in and MCP tools. For example, `"42"` becomes a number and a single
+  value becomes a one-item list.
+- The default system prompt uses a shorter introduction.
+- Updated the Pi baseline and model catalog to v1.4.0. Added Claude Haiku 5.5,
+  MiniMax M3.1 Flash, and Azure Foundry Chat Completions models. Kimi For
+  Coding uses OpenAI Chat Completions. Codex GPT-6.1 Sol has a 500K context
+  window. GitHub Copilot, NVIDIA, and Xiaomi have new default models.
+- Renamed the `azure-openai-responses` provider to `azure`, as Pi does. The
+  old name still works in commands, model names, settings, `models.json`,
+  `mcp.json`, and saved logins. The `AZURE_OPENAI_*` variables do not change.
+- `--provider` requires `--model`.
+- `--tools` keeps the MCP tool unless an entry names `mcp`.
+- A model switch drops thinking from the earlier model instead of sending it
+  to the new model.
+- Compaction and branch summaries omit thinking blocks.
+- When several providers offer the same model ID, `--model` prefers a
+  provider that has credentials.
+
+### Fixed
+
+- Retry more temporary provider errors: `server_busy`, model capacity,
+  temporary service outages, gateway upstream failures, interrupted HTTP/2
+  streams, and Mistral `finish_reason: "error"`. ChatGPT Business workspace
+  usage limits are not retried.
+- Tool calls with malformed final arguments no longer run with part of their
+  arguments. The model receives the error and the arguments it sent. Invalid
+  `\u` escapes, such as `\usepackage`, are kept as text.
+- Print mode exits with status 1 and a warning when the response stops at the
+  output token limit.
+- Anthropic requests no longer fail when an error tool result contains
+  images. The images follow the tool results.
+- Whitespace-only tool output no longer causes HTTP 400 errors on OpenAI and
+  Google APIs.
+- Gemini 4 models use thinking levels instead of thinking budgets.
+- OpenAI models on Amazon Bedrock use the selected reasoning effort.
+- Model `headers` replace the Codex `originator` and `User-Agent` headers.
+- A UTF-8 byte order mark in `mcp.json` no longer stops it from loading.
+- A symlinked `AGENTS.md` loads once.
+- Slash command completion works when the input starts with whitespace.
+- Zhipu and Z.ai usage limit errors (code 1308) are not retried.
+- Anthropic requests with per-message effort no longer fail for
+  organizations that cap effort below `high`.
+- Gemini tool schemas send `const` values as `enum`, and properties named
+  `default` are no longer removed.
+- OpenRouter usage shows the billed cost when OpenRouter reports it.
+- Sign-in flows accept only `http` and `https` URLs from servers, and KISS
+  opens only web URLs in the browser. MCP login rejects OAuth endpoints that
+  are not web URLs.
+- A saved "Do not trust" decision applies to projects that have no
+  project-local resources.
+- Aborting a bash command on macOS no longer can start the next command of a
+  list such as `a; b`.
+- Starting KISS from a deleted directory explains how to fix it.
+- F1 to F35 work with the Kitty keyboard protocol, and other Kitty
+  function keys no longer insert invisible characters.
+- `--model provider/id` works for provider IDs that contain `/`.
+- `/model` and file search rank a real match above letters spread over an
+  earlier part, for example `opus` over `openrouter/...`.
+- MCP tool search matches non-ASCII case and ranks `server tool` queries
+  first.
+- Bare URLs stop at CJK punctuation.
+- pi-messages streams with invalid content indices end with an error.
 
 ## 0.0.35 - 2026-10-06
 

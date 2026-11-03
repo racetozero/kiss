@@ -5,7 +5,7 @@ objects sent to standard input, one per line. Responses and asynchronous agent
 events are JSON objects read from standard output, one per line.
 
 ```sh
-kiss --mode rpc --no-session [--provider anthropic] [--model claude-sonnet-4-5]
+kiss --mode rpc --no-session [--model claude-sonnet-4-5 [--provider anthropic]]
 ```
 
 For browsers, use a WebSocket listener:

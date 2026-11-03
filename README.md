@@ -178,20 +178,30 @@ refresh is expected to save money. This is automatic.
 To change this behavior, set `cacheWarming` to `off` to disable refreshes, or
 to `idle` to protect the cache while you decide what to do next.
 
-### Jev options
+### Choose a decision model
 
-Enable the [Jev](https://typesafe.ai/) features in `/settings`:
+A decision model is a small, fast classifier that helps your main model.
+Turn it on in `/settings` for one or both features:
 
-- **Compaction method → Jev:** Selects which older tool interactions to keep,
-  shorten, or remove.
-- **Dynamic reasoning → Jev:** Selects the reasoning effort for supported
-  reasoning models.
+- **Compaction method:** Keep, shorten, or remove older tool interactions
+  instead of summarizing the whole conversation.
+- **Dynamic reasoning:** Raise or lower reasoning effort as the task changes.
 
-To sign in, run `/login` and select **TypeSafe**, or run `/login typesafe`.
-You can also set `TYPESAFE_API_KEY`.
+| Decision model         | Provider   | Sign in                        |
+| ---------------------- | ---------- | ------------------------------ |
+| d1-ultra (recommended) | Liquid     | `/login liquid`                |
+| d1.1                   | Liquid     | `/login liquid`                |
+| Jev                    | TypeSafe   | `/login typesafe`              |
+| Clef Flash, Clef       | Cloudflare | `/login cloudflare-workers-ai` |
 
-Both features send conversation context to Jev. They are opt-in. The default
-settings are summary compaction and fixed reasoning effort.
+Start with d1-ultra for the best balance of quality and cost, or keep Jev if
+it already works well for you. Clef Flash costs less, and Clef scores higher
+at a higher cost. Cloudflare needs an API token and an account ID. You can
+also set `compaction.mode` and `reasoningEffort.mode` in your settings.
+
+Both features are off by default. They send conversation context to the
+selected provider, which can add cost. If the decision model is unavailable,
+KISS uses summary compaction or your saved reasoning effort.
 
 <img width="432" height="62" alt="image" src="https://github.com/user-attachments/assets/3a3ce46e-3b70-49ce-ba7c-d02996a64630" />
 
@@ -335,6 +345,18 @@ kiss logout openai
 kiss --list-models
 kiss --model sonnet:high
 ```
+
+#### Anthropic workload identity federation
+
+Run KISS in a cloud workload without storing an Anthropic API key. Set
+`ANTHROPIC_FEDERATION_RULE_ID` and `ANTHROPIC_ORGANIZATION_ID`, and set
+`ANTHROPIC_IDENTITY_TOKEN_FILE` to the file where your platform writes the
+workload's identity token. KISS trades that token for a short-lived Anthropic
+token and renews it automatically.
+
+Set `ANTHROPIC_WORKSPACE_ID` when the federation rule covers more than one
+workspace, and `ANTHROPIC_SERVICE_ACCOUNT_ID` to choose a service account. A
+saved Anthropic login or API key takes precedence.
 
 #### Corporate proxies
 
@@ -508,6 +530,25 @@ kiss mcp test local
 - Use `--scope project` to save a server in `.mcp.json`.
 - Use `kiss mcp login remote --no-browser` for headless OAuth.
 - Use `/mcp` to manage servers in the terminal interface.
+- Use `--description "Team tickets"` to tell the model when to use a server.
+  The model sees each description and can find the server's tools by it.
+
+Some servers need special sign-in settings in `mcp.json`:
+
+- **Reuse a KISS login:** `"auth": { "provider": "radius" }` signs in to the
+  server with your KISS Radius login and stays signed in as the login
+  refreshes. On the command line, use `--auth-provider radius`. To protect
+  your login, only your user `mcp.json` can use this, and the server must use
+  HTTPS.
+- **Fix sign-in discovery:** Set `oauth.authServerMetadataUrl` when the
+  server points to the wrong sign-in server, or to none.
+- **Use your own client identity:** Set `oauth.clientMetadataUrl` to a
+  client metadata document that you host. KISS uses it when the sign-in
+  server supports it, and registers a client otherwise. Set
+  `oauth.clientRegistration` to `"cimd"` to require the document, or to
+  `"dcr"` to always register.
+- **Name the client:** Set `oauth.clientName` for servers that accept only
+  known client names.
 
 ### WebMCP
 
@@ -741,12 +782,12 @@ source `3ab0483`) with `8e5243c` on the same Apple M4, macOS 27.0, Rust 1.99.0,
 and normal release settings with mimalloc.
 
 | History entries | Compacted | Before footprint, MiB [range] | After footprint, MiB [range] |
-| --- | --- | ---: | ---: |
-| 0 | No | 9.329 [9.313–9.360] | 10.313 [10.266–10.329] |
-| 1,000 | No | 38.172 [37.438–39.610] | 33.141 [33.126–33.141] |
-| 1,000 | Yes | 35.704 [35.532–35.704] | 33.157 [31.782–33.516] |
-| 5,000 | No | 131.532 [128.063–131.548] | 126.985 [122.766–127.001] |
-| 5,000 | Yes | 127.282 [127.266–127.282] | 126.641 [126.641–126.985] |
+| --------------- | --------- | ----------------------------: | ---------------------------: |
+| 0               | No        |           9.329 [9.313–9.360] |       10.313 [10.266–10.329] |
+| 1,000           | No        |        38.172 [37.438–39.610] |       33.141 [33.126–33.141] |
+| 1,000           | Yes       |        35.704 [35.532–35.704] |       33.157 [31.782–33.516] |
+| 5,000           | No        |     131.532 [128.063–131.548] |    126.985 [122.766–127.001] |
+| 5,000           | Yes       |     127.282 [127.266–127.282] |    126.641 [126.641–126.985] |
 
 Values are physical footprint after 20 local shell updates and a further idle
 sample. They are medians of three process medians; brackets give the process
@@ -788,23 +829,23 @@ and size. Scalar session tests used three. Each process used 15 timed samples
 after warm-up. Version order alternated. No compilation ran during measurement.
 Background applications remained active.
 
-| Operation | Source text | Before, ms [range] | After, ms [range] |
-| --- | ---: | ---: | ---: |
-| Cached app frame | 2 MiB | 0.688 [0.667–0.757] | 0.528 [0.521–0.572] |
-| Cached app frame | 10 MiB | 4.091 [3.839–6.585] | 3.537 [3.093–6.183] |
-| Cached app frame | 40 MiB | 18.580 [16.351–21.714] | 18.349 [15.945–24.019] |
-| Cached app + first renderer frame | 2 MiB | 7.729 [7.567–11.043] | 7.299 [7.140–9.645] |
-| Cached app + first renderer frame | 10 MiB | 41.769 [40.766–71.307] | 40.673 [39.253–54.521] |
-| Cached app + first renderer frame | 40 MiB | 174.991 [166.846–195.499] | 169.566 [160.932–189.722] |
-| App + spinner renderer frame | 2 MiB | 3.842 [3.717–4.891] | 3.665 [3.582–4.764] |
-| App + spinner renderer frame | 10 MiB | 22.497 [22.074–38.716] | 24.056 [22.124–27.292] |
-| App + spinner renderer frame | 40 MiB | 97.527 [89.271–120.684] | 93.142 [89.905–117.022] |
-| Context message count | 2 MiB | 0.038 [0.038–0.041] | 0.003 [0.003–0.004] |
-| Context message count | 10 MiB | 0.262 [0.246–0.613] | 0.018 [0.017–0.019] |
-| Context message count | 40 MiB | 2.367 [1.321–2.945] | 0.083 [0.080–0.087] |
-| Saved model and thinking settings | 2 MiB | 0.039 [0.038–0.040] | 0.003 [0.003–0.004] |
-| Saved model and thinking settings | 10 MiB | 0.279 [0.269–0.605] | 0.018 [0.016–0.019] |
-| Saved model and thinking settings | 40 MiB | 2.776 [1.336–2.813] | 0.079 [0.079–0.083] |
+| Operation                         | Source text |        Before, ms [range] |         After, ms [range] |
+| --------------------------------- | ----------: | ------------------------: | ------------------------: |
+| Cached app frame                  |       2 MiB |       0.688 [0.667–0.757] |       0.528 [0.521–0.572] |
+| Cached app frame                  |      10 MiB |       4.091 [3.839–6.585] |       3.537 [3.093–6.183] |
+| Cached app frame                  |      40 MiB |    18.580 [16.351–21.714] |    18.349 [15.945–24.019] |
+| Cached app + first renderer frame |       2 MiB |      7.729 [7.567–11.043] |       7.299 [7.140–9.645] |
+| Cached app + first renderer frame |      10 MiB |    41.769 [40.766–71.307] |    40.673 [39.253–54.521] |
+| Cached app + first renderer frame |      40 MiB | 174.991 [166.846–195.499] | 169.566 [160.932–189.722] |
+| App + spinner renderer frame      |       2 MiB |       3.842 [3.717–4.891] |       3.665 [3.582–4.764] |
+| App + spinner renderer frame      |      10 MiB |    22.497 [22.074–38.716] |    24.056 [22.124–27.292] |
+| App + spinner renderer frame      |      40 MiB |   97.527 [89.271–120.684] |   93.142 [89.905–117.022] |
+| Context message count             |       2 MiB |       0.038 [0.038–0.041] |       0.003 [0.003–0.004] |
+| Context message count             |      10 MiB |       0.262 [0.246–0.613] |       0.018 [0.017–0.019] |
+| Context message count             |      40 MiB |       2.367 [1.321–2.945] |       0.083 [0.080–0.087] |
+| Saved model and thinking settings |       2 MiB |       0.039 [0.038–0.040] |       0.003 [0.003–0.004] |
+| Saved model and thinking settings |      10 MiB |       0.279 [0.269–0.605] |       0.018 [0.016–0.019] |
+| Saved model and thinking settings |      40 MiB |       2.776 [1.336–2.813] |       0.079 [0.079–0.083] |
 
 The 2 MiB cached app frame fell from 0.688 to 0.528 ms, about 23% less time.
 Context counts and saved settings also show clear gains. At 40 MiB, counts
@@ -816,14 +857,14 @@ speed gain for complete large frames. The 10 MiB spinner median rose from
 Peak RSS was more consistent. These values cover the whole component test
 process, including its fixtures and render work. They are not CLI session RSS.
 
-| Component test | Source text | Before peak RSS, MiB [range] | After peak RSS, MiB [range] |
-| --- | ---: | ---: | ---: |
-| App and renderer | 2 MiB | 63.734 [63.734–63.750] | 42.578 [42.562–42.594] |
-| App and renderer | 10 MiB | 176.594 [176.578–176.594] | 151.766 [151.484–151.781] |
-| App and renderer | 40 MiB | 687.945 [683.375–688.234] | 472.961 [468.375–473.109] |
-| Scalar session reads | 2 MiB | 13.156 [13.156–13.172] | 11.016 [11.016–11.016] |
-| Scalar session reads | 10 MiB | 30.203 [30.203–30.203] | 19.453 [19.438–19.453] |
-| Scalar session reads | 40 MiB | 91.797 [91.797–91.797] | 51.531 [51.516–51.531] |
+| Component test       | Source text | Before peak RSS, MiB [range] | After peak RSS, MiB [range] |
+| -------------------- | ----------: | ---------------------------: | --------------------------: |
+| App and renderer     |       2 MiB |       63.734 [63.734–63.750] |      42.578 [42.562–42.594] |
+| App and renderer     |      10 MiB |    176.594 [176.578–176.594] |   151.766 [151.484–151.781] |
+| App and renderer     |      40 MiB |    687.945 [683.375–688.234] |   472.961 [468.375–473.109] |
+| Scalar session reads |       2 MiB |       13.156 [13.156–13.172] |      11.016 [11.016–11.016] |
+| Scalar session reads |      10 MiB |       30.203 [30.203–30.203] |      19.453 [19.438–19.453] |
+| Scalar session reads |      40 MiB |       91.797 [91.797–91.797] |      51.531 [51.516–51.531] |
 
 At 40 MiB, app and renderer peak RSS fell by about 31%, from 687.945 to
 472.961 MiB. Scalar read peak RSS fell from 91.797 to 51.531 MiB. The small
@@ -948,14 +989,14 @@ process trials per version and 15 warmed samples per process. No compilation
 ran during measurement. Values are medians of process medians; brackets show
 the lowest and highest process median.
 
-| App and renderer operation | Source text | Before, ms [range] | After, ms [range] |
-| --- | ---: | ---: | ---: |
-| First full frame | 2 MiB | 7.091 [7.048–7.411] | 6.562 [6.548–6.647] |
-| First full frame | 10 MiB | 38.746 [38.418–38.985] | 34.768 [34.574–34.961] |
-| First full frame | 40 MiB | 157.679 [156.874–158.318] | 141.834 [141.437–149.600] |
-| Spinner frame | 2 MiB | 3.601 [3.585–3.652] | 1.138 [1.134–1.145] |
-| Spinner frame | 10 MiB | 21.779 [21.482–22.236] | 8.451 [8.400–9.256] |
-| Spinner frame | 40 MiB | 88.294 [87.830–89.091] | 39.172 [39.037–42.093] |
+| App and renderer operation | Source text |        Before, ms [range] |         After, ms [range] |
+| -------------------------- | ----------: | ------------------------: | ------------------------: |
+| First full frame           |       2 MiB |       7.091 [7.048–7.411] |       6.562 [6.548–6.647] |
+| First full frame           |      10 MiB |    38.746 [38.418–38.985] |    34.768 [34.574–34.961] |
+| First full frame           |      40 MiB | 157.679 [156.874–158.318] | 141.834 [141.437–149.600] |
+| Spinner frame              |       2 MiB |       3.601 [3.585–3.652] |       1.138 [1.134–1.145] |
+| Spinner frame              |      10 MiB |    21.779 [21.482–22.236] |       8.451 [8.400–9.256] |
+| Spinner frame              |      40 MiB |    88.294 [87.830–89.091] |    39.172 [39.037–42.093] |
 
 The 40 MiB spinner frame used about 56% less time, from 88.294 to 39.172 ms.
 The first full frame used about 10% less time, from 157.679 to 141.834 ms.
@@ -964,10 +1005,10 @@ The small-cell spinner medians were 0.027 and 0.017 ms, but their process
 ranges overlap. No stable small-cell speed claim is made.
 
 | App and renderer component | Before peak RSS, MiB [range] | After peak RSS, MiB [range] |
-| --- | ---: | ---: |
-| 2 MiB source text | 42.547 [42.547–42.562] | 39.078 [39.078–39.078] |
-| 10 MiB source text | 151.766 [151.750–151.766] | 117.766 [117.766–117.766] |
-| 40 MiB source text | 473.078 [473.078–473.094] | 415.750 [415.750–415.766] |
+| -------------------------- | ---------------------------: | --------------------------: |
+| 2 MiB source text          |       42.547 [42.547–42.562] |      39.078 [39.078–39.078] |
+| 10 MiB source text         |    151.766 [151.750–151.766] |   117.766 [117.766–117.766] |
+| 40 MiB source text         |    473.078 [473.078–473.094] |   415.750 [415.750–415.766] |
 
 At 40 MiB, component peak RSS fell by about 12%, from 473.078 to 415.750 MiB.
 The small component rose from 16.500 to 16.547 MiB. All ten processes at each
@@ -1144,12 +1185,52 @@ Use `/config voice-language es` to select Spanish. The default is `en`.
 
 ## Configuration
 
+### Desktop notifications
+
+Get a notification when a prompt finishes or when KISS needs your input, such
+as a workflow approval, a trust decision, or a login. Turn on **Desktop
+notifications** in `/settings`. They are off by default, and only your user
+settings can turn them on.
+
+A notification says only "Your prompt has finished." or "Your input is
+required." It never includes prompt text, code, paths, or model output. KISS
+skips notifications while you look at the terminal. If the terminal cannot
+report focus, KISS waits six seconds and cancels the notice when you type.
+Notifications apply only to the interactive terminal.
+
+KISS picks one delivery route:
+
+| Where KISS runs                  | Delivery                                                                    |
+| -------------------------------- | --------------------------------------------------------------------------- |
+| cmux                             | `cmux notify` for the current pane                                          |
+| Kitty                            | Kitty notification (OSC 99)                                                 |
+| iTerm2, Warp                     | OSC 9                                                                       |
+| Ghostty, WezTerm, rxvt           | OSC 777                                                                     |
+| Other terminals on your computer | Notification Center on macOS, a toast on Windows, or `notify-send` on Linux |
+
+Over SSH, KISS notifies only through a supported terminal, and stays silent
+otherwise. In tmux, add `set -g allow-passthrough on` to your tmux
+configuration. Your system settings, such as Do Not Disturb, still apply.
+Rex and Herdr can also notify you on their own, so turn one source off if
+you get duplicates.
+
+### Terminal integrations
+
+KISS works in any terminal. These terminals also show what KISS is doing:
+
+| Terminal | Status                              | Resume saved sessions | Notifications                   |
+| -------- | ----------------------------------- | --------------------- | ------------------------------- |
+| Rex      | Idle, working, done, blocked, error | No                    | Rex, or the desktop route above |
+| Herdr    | Idle, working, blocked              | Yes                   | The desktop route above         |
+| cmux     | Idle, working, blocked              | Yes                   | `cmux notify`                   |
+| Others   | Shown when the terminal supports it | No                    | The desktop route above         |
+
 ### Terminal program status
 
 Interactive KISS reports its state with the Program Status Protocol
-(OSC 7501). Terminals that support it, such as Rex and terminals built on
-libghostty, can show this state in a tab or notification. No setup is
-required, and other terminals ignore the reports.
+(OSC 7501). Terminals that support it, such as Rex, can show this state in
+a tab or notification. No setup is required, and other terminals ignore
+the reports.
 
 | State     | When KISS reports it                                           |
 | --------- | -------------------------------------------------------------- |
@@ -1161,13 +1242,26 @@ required, and other terminals ignore the reports.
 
 KISS clears its status when you exit.
 
+### Rex
+
+Run `kiss` in Rex to see in the tab when work is active, finished, or needs
+your input. No setup is required.
+
+To let KISS open tabs, split panes, or read terminal output, install the Rex
+skill at `~/.agents/skills/rex/SKILL.md` and keep the Bash tool on. KISS finds
+the skill at the next session start. Without the skill, ask KISS to run
+`rex skill show`. The `rex` command must be on `PATH`.
+`rex skill setup --agent` does not list KISS yet, so follow the
+[Rex agent guide](https://www.superlogical.com/rex/docs/automate/agent-skill#supported-agents)
+to install the skill.
+
 ### Herdr and cmux
 
 Run `kiss` in a Herdr or cmux pane to enable native support. No hook script
 is required. KISS reports when it is working, idle, or waiting for a workflow
 approval, project trust decision, or login input. Reports include active
-workflows and jobs. Each cmux surface has its own KISS status entry and
-receives notifications when work finishes or a decision is required.
+workflows and jobs. Each cmux surface has its own KISS status entry, and it
+receives KISS notifications when **Desktop notifications** is on.
 
 For saved sessions, KISS registers `kiss --session <file>` with the current
 model and reasoning level. The command changes when you switch sessions or
@@ -1187,6 +1281,8 @@ Commands**. KISS does not change these approvals. The cmux CLI must be on
 Resume commands do not contain the original user prompt or an `--api-key`
 override. Use saved credentials or environment variables for sessions that
 must resume. This integration applies to interactive terminal mode.
+
+### Files and settings
 
 KISS stores user configuration in `~/.kiss/agent`. It loads project
 configuration only after you trust the project.
@@ -1221,6 +1317,11 @@ project can provide its own selection or adjust yours with `+` and `-` entries.
 For a single run, `--tools` selects the tools, `--exclude-tools` removes tools,
 and `--no-tools` disables them all. These options override your saved selection.
 
+Both options accept `*` patterns. For example, `--exclude-tools 'gr*'` removes
+grep. To adjust your saved selection for one run, use only `+` and `-`
+entries, such as `kiss --tools +grep,-write`. Your MCP servers stay available
+unless the `--tools` list names `mcp`. Use `--no-mcp` to run without them.
+
 ## Experimental context file
 
 For long tasks, let the model decide which conversation details to keep.
@@ -1252,12 +1353,13 @@ reduce provider cache reuse and increase cost.
 
 ## Compatibility
 
-KISS tracks [Pi v0.99.1](https://github.com/earendil-works/pi/releases/tag/v0.99.1).
+KISS tracks [Pi v1.5.0](https://github.com/earendil-works/pi/releases/tag/v1.5.0).
 You can continue compatible Pi sessions and use the updated model catalog,
 core commands, and conversation compaction. KISS also supports OpenAI
 Responses over WebSocket.
 
-KISS does not include Pi's TypeScript extension runtime or JavaScript codemode.
+KISS does not include Pi's TypeScript extension runtime, JavaScript codemode,
+or the experimental `pi-durable` runtime.
 The tracked Pi release is recorded in `Cargo.toml`.
 
 ## Development
