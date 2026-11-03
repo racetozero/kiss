@@ -25,6 +25,10 @@ use tokio_util::sync::CancellationToken;
 #[derive(Debug, Clone)]
 pub enum SessionEvent {
     Agent(Box<AgentEvent>),
+    /// The full prompt finished, after all retries and automatic compaction.
+    PromptEnd {
+        cancelled: bool,
+    },
     QueueUpdate {
         steering: Vec<String>,
         follow_up: Vec<String>,
@@ -1508,6 +1512,9 @@ impl AgentSession {
         if self.settings.lock().unwrap().cache_warming == CacheWarmingMode::Streaming {
             self.cache_warm_cancel.lock().unwrap().cancel();
         }
+        (self.sink)(SessionEvent::PromptEnd {
+            cancelled: cancel.is_cancelled(),
+        });
     }
 
     fn on_agent_event(self: &Arc<Self>, event: &AgentEvent) {
@@ -2138,6 +2145,105 @@ mod ephemeral_tests {
             thinking_level_map: BTreeMap::new(),
             headers: BTreeMap::new(),
             sampling_params: Default::default(),
+        }
+    }
+
+    #[tokio::test]
+    async fn prompt_end_follows_retries_and_reports_cancellation() {
+        for cancel_retry in [false, true] {
+            let events = Arc::new(Mutex::new(Vec::new()));
+            let saved_events = events.clone();
+            let session = AgentSession::new(
+                SessionManager::in_memory(Path::new("/test")),
+                Vec::new(),
+                Registry::load(None),
+                Settings {
+                    compaction: crate::settings::CompactionSettings {
+                        enabled: false,
+                        ..Default::default()
+                    },
+                    retry: crate::settings::RetrySettings {
+                        base_delay_ms: if cancel_retry { 60_000 } else { 0 },
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+                "test".into(),
+                openai_model(),
+                ThinkingLevel::Off,
+                None,
+                Arc::new(move |event| saved_events.lock().unwrap().push(event)),
+            );
+            let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            let observed_calls = calls.clone();
+            session.set_stream_fn(Some(Arc::new(move |_, _, _| {
+                let step = observed_calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                let mut message =
+                    kiss_ai::AssistantMessage::empty("openai-responses", "openai", "gpt-test");
+                let (sink, stream) = kiss_ai::EventStream::channel();
+                if step == 0 {
+                    message.stop_reason = StopReason::Error;
+                    message.error_message = Some("HTTP 503".into());
+                    sink.error(message);
+                } else {
+                    message.stop_reason = StopReason::Stop;
+                    sink.done(message);
+                }
+                stream
+            })));
+            let task_session = session.clone();
+            let task = tokio::spawn(async move {
+                task_session
+                    .prompt(vec![AgentMessage::user("finish")])
+                    .await;
+            });
+            if cancel_retry {
+                tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                    loop {
+                        if events
+                            .lock()
+                            .unwrap()
+                            .iter()
+                            .any(|event| matches!(event, SessionEvent::Retry { .. }))
+                        {
+                            break;
+                        }
+                        tokio::task::yield_now().await;
+                    }
+                })
+                .await
+                .unwrap();
+                // Intermediate agent completion must not announce a finished prompt.
+                assert!(
+                    !events
+                        .lock()
+                        .unwrap()
+                        .iter()
+                        .any(|event| matches!(event, SessionEvent::PromptEnd { .. }))
+                );
+                session.abort();
+            }
+            tokio::time::timeout(std::time::Duration::from_secs(5), task)
+                .await
+                .unwrap()
+                .unwrap();
+            let events = events.lock().unwrap();
+            assert!(
+                matches!(events.last(), Some(SessionEvent::PromptEnd { cancelled }) if *cancelled == cancel_retry)
+            );
+            assert_eq!(
+                events
+                    .iter()
+                    .filter(|event| matches!(event, SessionEvent::PromptEnd { .. }))
+                    .count(),
+                1
+            );
+            assert_eq!(events.iter().filter(|event| matches!(event, SessionEvent::Agent(agent) if matches!(agent.as_ref(), AgentEvent::AgentEnd { .. }))).count(), if cancel_retry { 1 } else { 2 });
+            assert_eq!(
+                calls.load(std::sync::atomic::Ordering::SeqCst),
+                if cancel_retry { 1 } else { 2 }
+            );
+            assert!(!session.is_running());
         }
     }
 

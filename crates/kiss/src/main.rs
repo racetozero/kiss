@@ -13,6 +13,7 @@ mod modes {
     pub mod rpc;
 }
 mod mcp_cli;
+mod notifications;
 mod provider_cli;
 mod session_sources;
 mod setup;

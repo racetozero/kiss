@@ -275,6 +275,8 @@ pub struct Settings {
     pub hide_thinking_block: bool,
     pub theme: Option<String>,
     pub quiet_startup: bool,
+    /// User-only opt-in for interactive prompt-completion desktop notifications.
+    pub desktop_notifications: bool,
     pub default_project_trust: ProjectTrustDefault,
     pub compaction: CompactionSettings,
     /// Let the model edit its live conversation through a private JSON file.
@@ -338,6 +340,10 @@ fn deep_merge(base: &mut Value, overlay: Value) {
 }
 
 fn merged_settings(mut global: Value, project: Option<Value>) -> Settings {
+    let desktop_notifications = global
+        .get("desktopNotifications")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     let experimental_context_file = global
         .get("experimentalContextFile")
         .and_then(Value::as_bool)
@@ -388,6 +394,7 @@ fn merged_settings(mut global: Value, project: Option<Value>) -> Settings {
     settings.workflows.enabled = workflows_enabled;
     settings.cache_warming = cache_warming;
     settings.voice_backend = voice_backend;
+    settings.desktop_notifications = desktop_notifications;
     settings
 }
 
@@ -476,6 +483,28 @@ mod tests {
             Some(json!({"deviceId":"project-id"})),
         );
         assert_eq!(settings.extra["deviceId"], "user-id");
+    }
+
+    #[test]
+    fn desktop_notifications_require_user_opt_in() {
+        assert!(!Settings::default().desktop_notifications);
+        let old: Settings = serde_json::from_value(json!({})).unwrap();
+        assert!(!old.desktop_notifications);
+        assert!(
+            !merged_settings(json!({}), Some(json!({"desktopNotifications": true})))
+                .desktop_notifications
+        );
+        for enabled in [false, true] {
+            let settings = merged_settings(
+                json!({"desktopNotifications": enabled}),
+                Some(json!({"desktopNotifications": !enabled})),
+            );
+            assert_eq!(settings.desktop_notifications, enabled);
+            let saved = serde_json::to_value(settings).unwrap();
+            assert_eq!(saved["desktopNotifications"], enabled);
+            let restored: Settings = serde_json::from_value(saved).unwrap();
+            assert_eq!(restored.desktop_notifications, enabled);
+        }
     }
 
     #[test]

@@ -84,6 +84,7 @@ struct App {
     terminal_title_dirty: bool,
     title_generation_pending: bool,
     idle_status: ProgramStatus,
+    notifications: crate::notifications::Notifications,
     picker: Option<Picker>,
     model_catalog: Option<Arc<kiss_ai::Registry>>,
     command_menu: Option<CommandCompletion>,
@@ -312,6 +313,7 @@ struct LlamaStatus {
 }
 
 enum CommandEvent {
+    DesktopNotificationFinished(std::result::Result<(), String>),
     BrowserLoginUrl {
         url: String,
         opened: bool,
@@ -1148,6 +1150,23 @@ fn provisional_lines(editor: &mut Editor, theme: &Theme, width: usize) -> Vec<St
     lines
 }
 
+// Empty bytes signal the decoder's standalone-Escape deadline, not EOF.
+async fn read_terminal_input(
+    receiver: &mut mpsc::UnboundedReceiver<Vec<u8>>,
+    escape_deadline: Option<Instant>,
+) -> Option<Vec<u8>> {
+    if let Some(deadline) = escape_deadline {
+        match tokio::time::timeout_at(tokio::time::Instant::from_std(deadline), receiver.recv())
+            .await
+        {
+            Ok(bytes) => bytes,
+            Err(_) => Some(Vec::new()),
+        }
+    } else {
+        receiver.recv().await
+    }
+}
+
 pub async fn run(args: &Args) -> Result<i32> {
     let hosts = crate::terminal_hosts::TerminalHosts::from_env();
     let result = run_with_hosts(args, &hosts).await;
@@ -1168,6 +1187,7 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
     terminal.set_activity(true, 0)?;
     let mut renderer = DiffRenderer::new();
     let mut decoder = InputDecoder::default();
+    let mut notifications = crate::notifications::Notifications::from_env();
     let provisional_theme = Theme::dark();
     let mut provisional_editor = Editor::new(provisional_theme.clone());
     provisional_editor.placeholder =
@@ -1236,10 +1256,12 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
                     }
                 }
             }
-            Some(bytes) = stdin_rx.recv() => {
+            Some(bytes) = read_terminal_input(&mut stdin_rx, decoder.escape_deadline()) => {
                 let mut events = Vec::new();
                 decoder.feed(&bytes, &mut events);
+                if bytes.is_empty() { decoder.flush_escape(&mut events); }
                 for event in events {
+                    notifications.input(&event);
                     match handle_startup_input(&mut provisional_editor, &event) {
                         StartupInput::Continue => {}
                         StartupInput::Submit => submit_after_startup = true,
@@ -1380,6 +1402,7 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
         terminal_title_dirty: true,
         title_generation_pending: false,
         idle_status: ProgramStatus::Idle,
+        notifications,
         picker: None,
         model_catalog: None,
         command_menu: None,
@@ -1463,6 +1486,22 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
 
     'main: loop {
         let status = terminal_host_state(&app, &session);
+        if session.is_running() {
+            app.notifications.started();
+        }
+        app.notifications.status(
+            status,
+            resources.settings.desktop_notifications,
+            Instant::now(),
+        );
+        // Drain already buffered input before deciding the user is away.
+        let input_is_idle = stdin_rx.is_empty() && decoder.escape_deadline().is_none();
+        if input_is_idle {
+            deliver_notifications(&mut app, &command_tx);
+        }
+        let notification_deadline = app.notifications.deadline().filter(|_| input_is_idle);
+        let notification_at =
+            notification_deadline.unwrap_or_else(|| Instant::now() + Duration::from_secs(86_400));
         if hosts.enabled() {
             hosts.update(status, &session, args);
         }
@@ -1502,6 +1541,8 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
         }
 
         tokio::select! {
+            _ = tokio::time::sleep_until(tokio::time::Instant::from_std(notification_at)),
+                if notification_deadline.is_some() => { dirty = true; }
             _ = tokio::time::sleep_until(tokio::time::Instant::from_std(next_render_at)),
                 if dirty && !resize_state.pending() && Instant::now() < next_render_at => {}
             _ = async {
@@ -1564,9 +1605,10 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
                 }
                 dirty = true;
             }
-            Some(bytes) = stdin_rx.recv() => {
+            Some(bytes) = read_terminal_input(&mut stdin_rx, decoder.escape_deadline()) => {
                 let mut events = Vec::new();
                 decoder.feed(&bytes, &mut events);
+                if bytes.is_empty() { decoder.flush_escape(&mut events); }
                 for event in events {
                     let flow = handle_input(
                         &mut app,
@@ -1599,6 +1641,34 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
         println!("resume with: kiss -c");
     }
     Ok(0)
+}
+
+fn finish_notification(app: &mut App, result: std::result::Result<(), String>) {
+    app.notifications.delivery_finished(&result);
+    if let Err(error) = result {
+        app.cells.push(Cell::Notice(format!(
+            "desktop notification failed (disabled for this session): {error}"
+        )));
+    }
+}
+
+fn deliver_notifications(app: &mut App, command_tx: &mpsc::UnboundedSender<CommandEvent>) {
+    let result = app
+        .notifications
+        .poll(Instant::now(), &mut std::io::stdout().lock());
+    match result {
+        Ok(Some(command)) => {
+            let tx = command_tx.clone();
+            tokio::spawn(async move {
+                let result = crate::notifications::send(command)
+                    .await
+                    .map_err(|error| format!("{error:#}"));
+                let _ = tx.send(CommandEvent::DesktopNotificationFinished(result));
+            });
+        }
+        Ok(None) => {}
+        Err(error) => finish_notification(app, Err(format!("{error:#}"))),
+    }
 }
 
 enum Flow {
@@ -1652,8 +1722,18 @@ fn handle_session_event(
     session: &Arc<kiss_coding::AgentSession>,
 ) {
     match event {
+        SessionEvent::PromptEnd { cancelled } => {
+            app.notifications.prompt_finished(
+                cancelled,
+                session.settings().desktop_notifications,
+                Instant::now(),
+            );
+        }
         SessionEvent::Agent(agent_event) => match *agent_event {
-            AgentEvent::AgentStart => app.working = true,
+            AgentEvent::AgentStart => {
+                app.notifications.started();
+                app.working = true;
+            }
             AgentEvent::AgentEnd { .. } => {
                 app.working = false;
                 // Solidify any streaming cell.
@@ -2207,6 +2287,9 @@ fn handle_command_event(
     session: &Arc<kiss_coding::AgentSession>,
 ) {
     match event {
+        CommandEvent::DesktopNotificationFinished(result) => {
+            finish_notification(app, result);
+        }
         CommandEvent::VoicePreview { generation, text } => {
             if generation == app.voice_generation {
                 app.voice_preview = Some(text);
@@ -3253,6 +3336,10 @@ fn handle_input(
     file_search: &mut FileSearchService,
     command_tx: &mpsc::UnboundedSender<CommandEvent>,
 ) -> Flow {
+    app.notifications.input(event);
+    if matches!(event, InputEvent::Focus(_)) {
+        return Flow::Continue;
+    }
     note_user_activity(app);
 
     if app.recording.is_some()
@@ -3631,7 +3718,7 @@ fn handle_secret_prompt(
     command_tx: &mpsc::UnboundedSender<CommandEvent>,
 ) -> Flow {
     match event {
-        InputEvent::KeyRelease(_) => {}
+        InputEvent::KeyRelease(_) | InputEvent::Focus(_) => {}
         InputEvent::Paste(text) => {
             if let Some(prompt) = &mut app.secret_prompt {
                 prompt.value.push_str(text.trim());
@@ -5055,6 +5142,15 @@ fn settings_picker(
                 session,
             )),
             value: 16,
+        },
+        SelectItem {
+            label: "Desktop notifications".into(),
+            detail: Some(if settings.desktop_notifications {
+                format!("on · {}", app.notifications.description())
+            } else {
+                "off".into()
+            }),
+            value: 17,
         },
     ];
     Picker {
@@ -6735,6 +6831,7 @@ fn apply_settings_selection(
             };
             resources.settings.reasoning_effort.mode = mode;
         }
+        17 => resources.settings.desktop_notifications = !resources.settings.desktop_notifications,
         _ => return,
     }
     save_interactive_settings(app, session, resources);
@@ -8281,6 +8378,7 @@ mod tests {
             terminal_title_dirty: false,
             title_generation_pending: false,
             idle_status: ProgramStatus::Idle,
+            notifications: Default::default(),
             picker: None,
             model_catalog: None,
             command_menu: None,
@@ -9378,6 +9476,23 @@ mod tests {
             picker.list.current().unwrap().detail.as_deref(),
             Some("fixed")
         );
+    }
+
+    #[test]
+    fn settings_picker_shows_desktop_notifications_opt_in() {
+        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
+            "/synthetic",
+        )));
+        let app = test_app();
+        let mut resources = test_resources();
+        for (enabled, expected) in [(false, "off"), (true, "on · unavailable in this session")] {
+            resources.settings.desktop_notifications = enabled;
+            let mut picker = settings_picker(&app, &session, &resources);
+            assert!(picker.list.select_value(17));
+            let item = picker.list.current().unwrap();
+            assert_eq!(item.label, "Desktop notifications");
+            assert_eq!(item.detail.as_deref(), Some(expected));
+        }
     }
 
     #[test]

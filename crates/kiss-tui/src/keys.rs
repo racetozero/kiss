@@ -133,6 +133,7 @@ impl fmt::Display for KeyEvent {
 #[derive(Debug, Default)]
 pub struct InputDecoder {
     buffer: Vec<u8>,
+    escape_since: Option<std::time::Instant>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -140,6 +141,8 @@ pub enum InputEvent {
     Key(KeyEvent),
     KeyRelease(KeyEvent),
     Paste(String),
+    /// Terminal focus reporting (CSI I / CSI O).
+    Focus(bool),
 }
 
 impl InputDecoder {
@@ -150,6 +153,30 @@ impl InputDecoder {
             if let Some(event) = event {
                 out.push(event);
             }
+        }
+        if self.buffer == [0x1b] {
+            self.escape_since
+                .get_or_insert_with(std::time::Instant::now);
+        } else {
+            self.escape_since = None;
+        }
+    }
+
+    /// Give split escape sequences a short window before treating ESC as a key.
+    pub fn escape_deadline(&self) -> Option<std::time::Instant> {
+        self.escape_since
+            .map(|since| since + std::time::Duration::from_millis(30))
+    }
+
+    /// Call when escape_deadline expires without receiving more bytes.
+    pub fn flush_escape(&mut self, out: &mut Vec<InputEvent>) {
+        if self.buffer == [0x1b] {
+            self.buffer.clear();
+            self.escape_since = None;
+            out.push(InputEvent::Key(KeyEvent {
+                key: Key::Escape,
+                ..Default::default()
+            }));
         }
     }
 
@@ -163,15 +190,10 @@ impl InputDecoder {
         if buf[0] != 0x1b {
             return self.decode_plain();
         }
-        // Lone escape: emit only if nothing else is buffered (ambiguous).
+        // A lone ESC may be the first byte of a fragmented focus/key report.
+        // The input owner calls flush_escape after the disambiguation deadline.
         if buf.len() == 1 {
-            return Some((
-                Some(InputEvent::Key(KeyEvent {
-                    key: Key::Escape,
-                    ..Default::default()
-                })),
-                1,
-            ));
+            return None;
         }
         match buf[1] {
             b'[' => self.decode_csi(),
@@ -283,6 +305,10 @@ impl InputDecoder {
         let final_byte = buf[end];
         let params: String = buf[2..end].iter().map(|&b| b as char).collect();
         let consumed = end + 1;
+
+        if params.is_empty() && matches!(final_byte, b'I' | b'O') {
+            return Some((Some(InputEvent::Focus(final_byte == b'I')), consumed));
+        }
 
         // Bracketed paste: ESC[200~ ... ESC[201~
         if final_byte == b'~' && params == "200" {
@@ -398,6 +424,47 @@ mod tests {
         let mut out = Vec::new();
         d.feed(bytes, &mut out);
         out
+    }
+
+    #[test]
+    fn focus_reports_survive_fragmentation_without_becoming_cancel_or_editor_input() {
+        let wire = b"\x1b[I\x1b[O";
+        for split in 0..=wire.len() {
+            let mut decoder = InputDecoder::default();
+            let mut events = Vec::new();
+            decoder.feed(&wire[..split], &mut events);
+            decoder.feed(&wire[split..], &mut events);
+            assert_eq!(
+                events,
+                [InputEvent::Focus(true), InputEvent::Focus(false)],
+                "split {split}"
+            );
+            assert!(decoder.escape_deadline().is_none());
+        }
+        let mut decoder = InputDecoder::default();
+        let mut events = Vec::new();
+        for byte in wire {
+            decoder.feed(&[*byte], &mut events);
+        }
+        assert_eq!(events, [InputEvent::Focus(true), InputEvent::Focus(false)]);
+        events.clear();
+        decoder.feed(b"\x1b", &mut events);
+        assert!(events.is_empty());
+        assert!(decoder.escape_deadline().is_some());
+        decoder.flush_escape(&mut events);
+        decoder.flush_escape(&mut events);
+        assert_eq!(
+            events,
+            [InputEvent::Key(KeyEvent {
+                key: Key::Escape,
+                ..Default::default()
+            })]
+        );
+        assert!(decoder.escape_deadline().is_none());
+        assert_eq!(
+            decode(b"\x1b[200~\x1b[I\x1b[201~"),
+            [InputEvent::Paste("\x1b[I".into())]
+        );
     }
 
     #[test]
