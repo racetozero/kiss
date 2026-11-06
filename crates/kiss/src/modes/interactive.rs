@@ -158,8 +158,9 @@ impl VoiceMode {
 
 /// A background task that the footer reports and that blocks other commands.
 ///
-/// At most one runs at a time, so a finish event always belongs to the current
-/// command. The slot stays occupied after a cancel until the task reports back.
+/// At most one runs at a time, so a finish event belongs to the current command.
+/// The slot stays occupied after a cancel until the task reports back, or until
+/// a second cancel request gives up on the task.
 struct BackgroundCommand {
     status: String,
     control: CommandControl,
@@ -242,15 +243,6 @@ enum McpPanelState {
     NeedsAuthentication(String),
     Failed(String),
     Disabled,
-}
-
-impl McpPanelState {
-    fn error(&self) -> Option<&str> {
-        match self {
-            Self::NeedsAuthentication(error) | Self::Failed(error) => Some(error),
-            Self::Checking | Self::Connected | Self::Disabled => None,
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -360,7 +352,7 @@ struct LlamaStatus {
 }
 
 enum CommandEvent {
-    /// A task whose result events are shared with work outside the command slot.
+    /// A task with no result event of its own to end the command.
     CommandFinished,
     DesktopNotificationFinished(std::result::Result<(), String>),
     BrowserLoginUrl {
@@ -426,7 +418,6 @@ enum CommandEvent {
     /// A saved workflow passed its cost prompt and is ready to show.
     WorkflowStarted(Arc<kiss_coding::workflows::RunRecord>),
     /// A saved workflow was cancelled before it made a run record.
-    WorkflowCancelled,
     VoiceFinished {
         generation: u64,
         result: std::result::Result<String, String>,
@@ -1216,9 +1207,7 @@ fn note_user_activity(app: &mut App) {
 
 /// A recap that the user asked for survives input. An automatic one does not.
 fn cancel_automatic_recap(app: &mut App) {
-    if app.recap_job.as_ref().is_some_and(|job| job.automatic)
-        && let Some(job) = app.recap_job.take()
-    {
+    if let Some(job) = app.recap_job.take_if(|job| job.automatic) {
         job.cancel.cancel();
         app.recap_request_id = app.recap_request_id.wrapping_add(1);
     }
@@ -1825,12 +1814,12 @@ fn streaming_cell(app: &App) -> Option<usize> {
         .rposition(|cell| matches!(cell, Cell::AssistantStreaming(_)))
 }
 
-/// The unfinished cell of one tool call. A panicked tool task reports an empty
-/// ID, and then the newest unfinished cell receives the failure.
+/// The unfinished cell of one tool call.
 fn active_tool_cell<'a>(app: &'a mut App, tool_call_id: &str) -> Option<&'a mut Cell> {
-    app.cells.iter_mut().rev().find(|cell| {
-        matches!(cell, Cell::ToolCall { id, done: false, .. } if tool_call_id.is_empty() || id == tool_call_id)
-    })
+    app.cells
+        .iter_mut()
+        .rev()
+        .find(|cell| matches!(cell, Cell::ToolCall { id, done: false, .. } if id == tool_call_id))
 }
 
 fn handle_session_event(
@@ -1855,11 +1844,10 @@ fn handle_session_event(
             AgentEvent::AgentStart => app.notifications.started(),
             AgentEvent::AgentEnd { .. } => {
                 // Solidify any streaming cell.
-                if let Some(cell) = streaming_cell(app) {
-                    let Cell::AssistantStreaming(text) = &app.cells[cell] else {
-                        unreachable!("streaming_cell finds a streaming cell");
-                    };
-                    app.cells[cell] = Cell::AssistantFinal(text.clone());
+                if let Some(cell) = streaming_cell(app)
+                    && let Cell::AssistantStreaming(text) = &mut app.cells[cell]
+                {
+                    app.cells[cell] = Cell::AssistantFinal(std::mem::take(text));
                 }
                 for outcome in app.workflow_outcomes.drain(..) {
                     app.cells.push(Cell::Notice(outcome));
@@ -2726,9 +2714,6 @@ fn handle_command_event(
             set_command_status(app, format!("running workflow {}", record.name));
             app.workflow_view = Some(WorkflowView::new(record));
         }
-        CommandEvent::WorkflowCancelled => {
-            app.command = None;
-        }
     }
 }
 
@@ -3354,59 +3339,58 @@ fn voice_input(
         return false;
     };
     match app.voice {
-        VoiceState::Transcribing { .. } => true,
+        VoiceState::Transcribing { .. } => return true,
         VoiceState::Recording { .. } => {
             if pressed == (app.voice_mode == VoiceMode::Tap) {
                 stop_voice(app);
             }
-            true
+            return true;
         }
-        VoiceState::Idle => {
-            if app.input_layer() != InputLayer::Editor {
-                return false;
-            }
-            if !pressed {
-                return true;
-            }
-            // Allow /voice off, /config, and other slash commands to be typed normally.
-            if app.editor.text().starts_with('/') {
-                return false;
-            }
-            match crate::voice::start(backend, language.to_owned()) {
-                Ok((recording, mut events)) => {
-                    let generation = app.voice_generation;
-                    let tx = tx.clone();
-                    tokio::spawn(async move {
-                        while let Some(event) = events.recv().await {
-                            let command = match event {
-                                crate::voice::Event::Preview(text) => {
-                                    CommandEvent::VoicePreview { generation, text }
-                                }
-                                crate::voice::Event::Finished(result) => {
-                                    CommandEvent::VoiceFinished { generation, result }
-                                }
-                            };
-                            if tx.send(command).is_err() {
-                                break;
-                            }
-                        }
-                    });
-                    app.voice = VoiceState::Recording {
-                        recording,
-                        preview: String::new(),
-                    };
-                    app.cells.push(Cell::Notice(format!(
-                        "recording voice ({})… (Esc cancels)",
-                        backend.name()
-                    )));
-                }
-                Err(error) => app
-                    .cells
-                    .push(Cell::Error(format!("could not record voice: {error:#}"))),
-            }
-            true
-        }
+        VoiceState::Idle => {}
     }
+    if app.input_layer() != InputLayer::Editor {
+        return false;
+    }
+    if !pressed {
+        return true;
+    }
+    // Allow /voice off, /config, and other slash commands to be typed normally.
+    if app.editor.text().starts_with('/') {
+        return false;
+    }
+    match crate::voice::start(backend, language.to_owned()) {
+        Ok((recording, mut events)) => {
+            let generation = app.voice_generation;
+            let tx = tx.clone();
+            tokio::spawn(async move {
+                while let Some(event) = events.recv().await {
+                    let command = match event {
+                        crate::voice::Event::Preview(text) => {
+                            CommandEvent::VoicePreview { generation, text }
+                        }
+                        crate::voice::Event::Finished(result) => {
+                            CommandEvent::VoiceFinished { generation, result }
+                        }
+                    };
+                    if tx.send(command).is_err() {
+                        break;
+                    }
+                }
+            });
+            app.voice = VoiceState::Recording {
+                recording,
+                preview: String::new(),
+            };
+            app.cells.push(Cell::Notice(format!(
+                "recording voice ({})… (Esc cancels)",
+                backend.name()
+            )));
+        }
+        Err(error) => app
+            .cells
+            .push(Cell::Error(format!("could not record voice: {error:#}"))),
+    }
+    true
 }
 
 fn handle_input(
@@ -4324,7 +4308,7 @@ fn deliver_prompt(
     command_tx: &mpsc::UnboundedSender<CommandEvent>,
 ) {
     let stored_text = stored_user_text(&display_text, &model_text);
-    if let Some(run) = session.submit(AgentMessage::user(stored_text), prompt_mode, kind) {
+    if let Some(run) = session.submit(vec![AgentMessage::user(stored_text)], prompt_mode, kind) {
         maybe_generate_session_title(app, session, &display_text, command_tx);
         app.cells.push(Cell::User(display_text));
         tokio::spawn(run);
@@ -5317,7 +5301,7 @@ fn start_saved_workflow(
     let runtime = runtime.clone();
     tokio::spawn(async move {
         if runtime.approve(plan).await == kiss_coding::workflows::ApprovalDecision::Cancel {
-            let _ = command_tx.send(CommandEvent::WorkflowCancelled);
+            let _ = command_tx.send(CommandEvent::CommandFinished);
             return;
         }
         let record = match runtime.prepare(script, args, Default::default()) {
@@ -5825,7 +5809,8 @@ fn mcp_server_intro(theme: &Theme, server: &McpPanelServer, width: usize) -> Vec
         lines.push("Capabilities: tools".to_string());
         lines.push(format!("Tools:   {} tools", server.tools.len()));
     }
-    if let Some(error) = server.state.error() {
+    if let McpPanelState::NeedsAuthentication(error) | McpPanelState::Failed(error) = &server.state
+    {
         lines.push(theme.fg(
             "error",
             &kiss_tui::text::truncate_to_width(&format!("Error:   {error}"), width),
@@ -8548,10 +8533,24 @@ mod tests {
 
     fn open_menu(app: &mut App, text: &str) {
         app.editor.set_text(text);
-        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
-            "/synthetic",
-        )));
+        let session = synthetic_session();
         sync_command_menu(app, &session, &[], &[], &[]);
+    }
+
+    fn test_workflow_plan() -> Box<kiss_coding::workflows::WorkflowPlan> {
+        Box::new(kiss_coding::workflows::WorkflowPlan {
+            name: "test".into(),
+            description: "test".into(),
+            phases: Vec::new(),
+            estimated_agents: Some(1),
+            source: "".into(),
+        })
+    }
+
+    fn synthetic_session() -> Arc<kiss_coding::AgentSession> {
+        test_session(kiss_coding::SessionManager::in_memory(Path::new(
+            "/synthetic",
+        )))
     }
 
     fn test_session(manager: kiss_coding::SessionManager) -> Arc<kiss_coding::AgentSession> {
@@ -8633,9 +8632,7 @@ mod tests {
     fn terminal_hosts_follow_compaction_queue_and_required_decisions() {
         use crate::terminal_hosts::State;
         let mut app = test_app();
-        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
-            "/synthetic",
-        )));
+        let session = synthetic_session();
         let (tx, _rx) = mpsc::unbounded_channel();
         let mut search = FileSearchService::new(tx);
         assert_eq!(terminal_host_state(&app, &session), State::Idle);
@@ -8671,17 +8668,7 @@ mod tests {
         );
         assert_eq!(terminal_host_state(&app, &session), State::Done);
         let (reply, _answer) = tokio::sync::oneshot::channel();
-        open_workflow_approval(
-            &mut app,
-            Box::new(kiss_coding::workflows::WorkflowPlan {
-                name: "test".into(),
-                description: "test".into(),
-                phases: Vec::new(),
-                estimated_agents: Some(1),
-                source: "".into(),
-            }),
-            reply,
-        );
+        open_workflow_approval(&mut app, test_workflow_plan(), reply);
         assert_eq!(
             terminal_host_state(&app, &session),
             State::Blocked(
@@ -8822,23 +8809,14 @@ mod tests {
     fn ctrl_w_reaches_the_editor_and_deletes_the_previous_word() {
         let mut app = test_app();
         app.editor.set_text("one two");
-        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
-            "/synthetic",
-        )));
-        let args = Args::parse_from(["kiss"]);
+        let session = synthetic_session();
         let mut resources = test_resources();
-        let (file_tx, _file_rx) = mpsc::unbounded_channel();
-        let mut file_search = FileSearchService::new(file_tx);
-        let (command_tx, _command_rx) = mpsc::unbounded_channel();
 
-        let flow = handle_input(
+        let flow = press(
             &mut app,
             &session,
-            &InputEvent::Key(KeyEvent::ctrl('w')),
-            &args,
             &mut resources,
-            &mut file_search,
-            &command_tx,
+            InputEvent::Key(KeyEvent::ctrl('w')),
         );
 
         assert!(matches!(flow, Flow::Continue));
@@ -8879,9 +8857,7 @@ mod tests {
             is_error: false,
             done: true,
         });
-        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
-            "/synthetic",
-        )));
+        let session = synthetic_session();
         let rendered = kiss_tui::text::strip_ansi(&app.render(80, &session).join("\n"));
         assert!(rendered.contains("abcd"), "{rendered:?}");
         assert!(rendered.contains("keypad"), "{rendered:?}");
@@ -8904,24 +8880,15 @@ mod tests {
             is_error: false,
             done: true,
         });
-        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
-            "/synthetic",
-        )));
+        let session = synthetic_session();
         assert!(app.render(80, &session).join("\n").contains("3 more lines"));
 
-        let args = Args::parse_from(["kiss"]);
         let mut resources = test_resources();
-        let (file_tx, _file_rx) = mpsc::unbounded_channel();
-        let mut file_search = FileSearchService::new(file_tx);
-        let (command_tx, _command_rx) = mpsc::unbounded_channel();
-        handle_input(
+        press(
             &mut app,
             &session,
-            &InputEvent::Key(KeyEvent::ctrl('r')),
-            &args,
             &mut resources,
-            &mut file_search,
-            &command_tx,
+            InputEvent::Key(KeyEvent::ctrl('r')),
         );
 
         let expanded = kiss_tui::text::strip_ansi(&app.render(80, &session).join("\n"));
@@ -8970,9 +8937,7 @@ mod tests {
         assert_eq!(VoiceMode::parse("off"), Some(VoiceMode::Off));
         assert_eq!(VoiceMode::parse("oops"), None);
         let mut app = test_app();
-        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
-            "/synthetic",
-        )));
+        let session = synthetic_session();
         let mut resources = test_resources();
         run_command_for_test(&mut app, &session, &mut resources, "voice nope");
         assert!(matches!(app.cells.last(), Some(Cell::Error(_))));
@@ -8992,9 +8957,7 @@ mod tests {
     #[test]
     fn voice_result_edits_draft_without_sending() {
         let mut app = test_app();
-        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
-            "/synthetic",
-        )));
+        let session = synthetic_session();
         let mut resources = test_resources();
         let (tx, _) = mpsc::unbounded_channel();
         let mut search = FileSearchService::new(tx);
@@ -9229,9 +9192,7 @@ mod tests {
 
     #[test]
     fn unmatched_model_and_login_arguments_open_filtered_selectors() {
-        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
-            "/synthetic",
-        )));
+        let session = synthetic_session();
         let mut app = test_app();
         let mut resources = test_resources();
 
@@ -9255,9 +9216,7 @@ mod tests {
             r#"{"providers":{"cursor":{"baseUrl":"http://localhost","api":"cursor-agent","models":[{"id":"gpt-5.5-high"},{"id":"cursor-grok-4.7-high"}]}}}"#,
         ).unwrap();
         let registry = kiss_ai::Registry::load(Some(&catalog));
-        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
-            "/synthetic",
-        )));
+        let session = synthetic_session();
         let (file_tx, _file_rx) = mpsc::unbounded_channel();
         let mut file_search = FileSearchService::new(file_tx);
         let (tx, mut rx) = mpsc::unbounded_channel();
@@ -9368,9 +9327,7 @@ mod tests {
 
     #[test]
     fn generated_session_title_persists_without_overwriting_manual_name() {
-        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
-            "/synthetic",
-        )));
+        let session = synthetic_session();
         let session_id = session.manager.lock().unwrap().session_id().to_string();
         let mut app = test_app();
         let mut resources = test_resources();
@@ -9414,9 +9371,7 @@ mod tests {
 
     #[test]
     fn fast_command_toggles_session_state_for_supported_models() {
-        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
-            "/synthetic",
-        )));
+        let session = synthetic_session();
         let model = session
             .registry
             .all()
@@ -9447,9 +9402,7 @@ mod tests {
 
     #[tokio::test]
     async fn update_command_uses_the_shared_updater() {
-        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
-            "/synthetic",
-        )));
+        let session = synthetic_session();
         let mut app = test_app();
         let mut resources = test_resources();
         let args = Args::parse_from(["kiss"]);
@@ -9483,9 +9436,7 @@ mod tests {
 
     #[test]
     fn rebuilt_settings_picker_keeps_filter_selection_and_new_value() {
-        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
-            "/synthetic",
-        )));
+        let session = synthetic_session();
         let mut app = test_app();
         let mut resources = test_resources();
         open_settings_picker(&mut app, &session, &resources);
@@ -9589,9 +9540,7 @@ mod tests {
 
     #[test]
     fn settings_picker_shows_dynamic_reasoning_as_fixed_by_default() {
-        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
-            "/synthetic",
-        )));
+        let session = synthetic_session();
         let mut app = test_app();
         let resources = test_resources();
 
@@ -9607,9 +9556,7 @@ mod tests {
 
     #[test]
     fn settings_picker_shows_desktop_notifications_opt_in() {
-        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
-            "/synthetic",
-        )));
+        let session = synthetic_session();
         let app = test_app();
         let mut resources = test_resources();
         for (enabled, expected) in [(false, "off"), (true, "on · unavailable in this session")] {
@@ -9624,9 +9571,7 @@ mod tests {
 
     #[test]
     fn settings_picker_shows_the_opt_in_subagent_toggle() {
-        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
-            "/synthetic",
-        )));
+        let session = synthetic_session();
         let mut app = test_app();
         let mut resources = test_resources();
 
@@ -9693,9 +9638,7 @@ mod tests {
 
     #[test]
     fn saved_default_model_stays_in_an_active_scope() {
-        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
-            "/synthetic",
-        )));
+        let session = synthetic_session();
         let mut resources = test_resources();
         let first = session.registry.all()[0].clone();
         let selected = session
@@ -9991,9 +9934,7 @@ mod tests {
 
     #[test]
     fn delta_only_updates_build_the_streaming_cells() {
-        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
-            "/synthetic",
-        )));
+        let session = synthetic_session();
         let (tx, _rx) = mpsc::unbounded_channel();
         let mut file_search = FileSearchService::new(tx);
         let mut app = test_app();
@@ -10054,9 +9995,7 @@ mod tests {
 
     #[test]
     fn verified_workflow_cancellation_is_shown_after_assistant_text() {
-        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
-            "/synthetic",
-        )));
+        let session = synthetic_session();
         let (tx, _rx) = mpsc::unbounded_channel();
         let mut file_search = FileSearchService::new(tx);
         let mut app = test_app();
@@ -10091,9 +10030,7 @@ mod tests {
 
     #[test]
     fn dynamic_reasoning_change_uses_the_matching_input_border_color() {
-        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
-            "/synthetic",
-        )));
+        let session = synthetic_session();
         let (tx, _rx) = mpsc::unbounded_channel();
         let mut file_search = FileSearchService::new(tx);
         let mut app = test_app();
@@ -10130,9 +10067,7 @@ mod tests {
 
     #[test]
     fn dynamic_reasoning_fallback_is_visible_in_the_conversation() {
-        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
-            "/synthetic",
-        )));
+        let session = synthetic_session();
         let (tx, _rx) = mpsc::unbounded_channel();
         let mut file_search = FileSearchService::new(tx);
         let mut app = test_app();
@@ -10241,9 +10176,7 @@ mod tests {
     #[test]
     fn dollar_completion_opens_inline_and_preserves_prompt() {
         let mut app = test_app();
-        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
-            "/synthetic",
-        )));
+        let session = synthetic_session();
         let skills = vec![kiss_coding::skills::Skill {
             name: "release".into(),
             description: "Prepare a release".into(),
@@ -10270,9 +10203,7 @@ mod tests {
     #[test]
     fn slash_skill_completion_uses_direct_name_and_allows_a_chain() {
         let mut app = test_app();
-        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
-            "/synthetic",
-        )));
+        let session = synthetic_session();
         let skills = vec![
             kiss_coding::skills::Skill {
                 name: "review".into(),
@@ -10643,9 +10574,7 @@ mod tests {
     #[test]
     #[ignore = "release-mode performance benchmark"]
     fn benchmark_performance_transcript_and_context() {
-        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
-            "/synthetic",
-        )));
+        let session = synthetic_session();
         let mut app = test_app();
         let paragraph = "A deterministic assistant paragraph has **styled text**, a source/path.rs name, and enough words to wrap across terminal rows.";
         for index in 0..360 {
@@ -10725,9 +10654,7 @@ mod tests {
             [0, 2, 10, 40].contains(&mib),
             "Use KISS_PERF_MIB=0, 2, 10, or 40; 0 selects one small cell."
         );
-        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
-            "/synthetic",
-        )));
+        let session = synthetic_session();
         let mut app = test_app();
         let paragraph = "A deterministic assistant paragraph has **styled text**, a source/path.rs name, and enough words to wrap across terminal rows.\n\n";
         let text = paragraph.repeat(8192 / paragraph.len() + 1);
@@ -10956,14 +10883,19 @@ mod tests {
         );
     }
 
-    fn visible_frame(app: &mut App, session: &Arc<kiss_coding::AgentSession>) -> String {
-        kiss_tui::text::strip_ansi(&app.render(200, session).join("\n"))
+    fn apply_command_event(
+        app: &mut App,
+        session: &Arc<kiss_coding::AgentSession>,
+        resources: &mut InteractiveResources,
+        event: CommandEvent,
+    ) {
+        let (search_tx, _search_rx) = mpsc::unbounded_channel();
+        let mut search = FileSearchService::new(search_tx);
+        handle_command_event(app, event, resources, &mut search, session);
     }
 
-    fn synthetic_session() -> Arc<kiss_coding::AgentSession> {
-        test_session(kiss_coding::SessionManager::in_memory(Path::new(
-            "/synthetic",
-        )))
+    fn visible_frame(app: &mut App, session: &Arc<kiss_coding::AgentSession>) -> String {
+        kiss_tui::text::strip_ansi(&app.render(200, session).join("\n"))
     }
 
     #[test]
@@ -11166,14 +11098,11 @@ mod tests {
         assert!(frame.contains("stopping"), "{frame}");
         assert!(!frame.contains("running !sleep 32 (esc"), "{frame}");
 
-        let (search_tx, _search_rx) = mpsc::unbounded_channel();
-        let mut search = FileSearchService::new(search_tx);
-        handle_command_event(
+        apply_command_event(
             &mut app,
-            CommandEvent::ShellFinished(Err("cancelled".into())),
-            &mut resources,
-            &mut search,
             &session,
+            &mut resources,
+            CommandEvent::ShellFinished(Err("cancelled".into())),
         );
         start_shell_passthrough(&mut app, &session, "sleep 32".into(), &tx);
         assert!(visible_frame(&mut app, &session).contains("running !sleep 32 (esc"));
@@ -11184,17 +11113,14 @@ mod tests {
         let mut app = test_app();
         let session = synthetic_session();
         let mut resources = test_resources();
-        let (search_tx, _search_rx) = mpsc::unbounded_channel();
-        let mut search = FileSearchService::new(search_tx);
-        handle_command_event(
+        apply_command_event(
             &mut app,
+            &session,
+            &mut resources,
             CommandEvent::WorkflowFinished {
                 name: "audit".into(),
                 result: Ok("all clear".into()),
             },
-            &mut resources,
-            &mut search,
-            &session,
         );
         assert!(session.reclaim_queued().is_empty());
         let context = session.manager.lock().unwrap().build_session_context();
@@ -11210,10 +11136,10 @@ mod tests {
         let mut resources = test_resources();
         let (tx, _rx) = mpsc::unbounded_channel();
         start_shell_passthrough(&mut app, &session, "sleep 30".into(), &tx);
-        let (search_tx, _search_rx) = mpsc::unbounded_channel();
-        let mut search = FileSearchService::new(search_tx);
-        handle_command_event(
+        apply_command_event(
             &mut app,
+            &session,
+            &mut resources,
             CommandEvent::McpServerChecked(Box::new(McpPanelServer {
                 name: "example".into(),
                 entry: Default::default(),
@@ -11223,9 +11149,6 @@ mod tests {
                 source: "KISS global".into(),
                 scope: kiss_mcp::config::ConfigScope::User,
             })),
-            &mut resources,
-            &mut search,
-            &session,
         );
         assert!(visible_frame(&mut app, &session).contains("running !sleep 30 (esc"));
     }
@@ -11237,17 +11160,7 @@ mod tests {
         let mut resources = test_resources();
         app.job_view = Some(JobView::new(session.iterative_jobs().unwrap()));
         let (reply, mut answer) = tokio::sync::oneshot::channel();
-        open_workflow_approval(
-            &mut app,
-            Box::new(kiss_coding::workflows::WorkflowPlan {
-                name: "test".into(),
-                description: "test".into(),
-                phases: Vec::new(),
-                estimated_agents: Some(1),
-                source: "".into(),
-            }),
-            reply,
-        );
+        open_workflow_approval(&mut app, test_workflow_plan(), reply);
         let frame = visible_frame(&mut app, &session);
         assert!(frame.contains("Run it"), "{frame}");
         press(

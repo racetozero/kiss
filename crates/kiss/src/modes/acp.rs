@@ -44,7 +44,7 @@ struct ActiveSession {
     cwd: PathBuf,
     events: tokio::sync::Mutex<mpsc::UnboundedReceiver<AcpEvent>>,
     prompt: tokio::sync::Mutex<()>,
-    lifecycle: std::sync::Mutex<AcpLifecycle>,
+    lifecycle: Mutex<AcpLifecycle>,
 }
 
 /// What the next waiting prompt must do. Prompts wait on `prompt` one at a
@@ -74,16 +74,8 @@ impl ActiveSession {
         }
     }
 
-    /// A new prompt request is not covered by an earlier cancel.
-    fn accept_prompt(&self) {
-        let mut lifecycle = self.lifecycle();
-        if *lifecycle == AcpLifecycle::CancelRequested {
-            *lifecycle = AcpLifecycle::Open;
-        }
-    }
-
-    /// Read the state when a prompt reaches the front, and consume a cancel.
-    fn begin_prompt(&self) -> AcpLifecycle {
+    /// Read the state and consume a pending cancel.
+    fn take_cancel(&self) -> AcpLifecycle {
         let mut lifecycle = self.lifecycle();
         let current = *lifecycle;
         if current == AcpLifecycle::CancelRequested {
@@ -175,7 +167,7 @@ impl KissAcpAgent {
             cwd,
             events: tokio::sync::Mutex::new(receiver),
             prompt: tokio::sync::Mutex::new(()),
-            lifecycle: std::sync::Mutex::new(AcpLifecycle::Open),
+            lifecycle: Mutex::new(AcpLifecycle::Open),
         });
         self.sessions
             .lock()
@@ -439,10 +431,11 @@ impl KissAcpAgent {
             Err(error) => return responder.respond_with_error(error),
         };
         let session_id = request.session_id;
-        session.accept_prompt();
+        // A new prompt request is not covered by an earlier cancel.
+        session.take_cancel();
         connection.clone().spawn(async move {
             let _guard = session.prompt.lock().await;
-            match session.begin_prompt() {
+            match session.take_cancel() {
                 AcpLifecycle::Closed => {
                     return responder.respond_with_error(
                         agent_client_protocol::Error::resource_not_found(Some(

@@ -514,6 +514,57 @@ async fn cancellation_during_generation_preparation_reports_aborted_message() {
     );
 }
 
+struct PanickingTool;
+
+#[async_trait::async_trait]
+impl AgentTool for PanickingTool {
+    fn name(&self) -> &str {
+        "panics"
+    }
+    fn description(&self) -> String {
+        "Always panics".into()
+    }
+    fn parameters(&self) -> Value {
+        json!({"type": "object"})
+    }
+    async fn execute(
+        &self,
+        _tool_call_id: &str,
+        _args: Value,
+        _cancel: CancellationToken,
+        _on_update: Option<ToolUpdateSink>,
+    ) -> anyhow::Result<ToolResult> {
+        panic!("tool bug");
+    }
+}
+
+#[tokio::test]
+async fn a_panicked_tool_call_gets_a_real_result_with_its_own_id() {
+    let config = scripted_config(vec![
+        assistant_tool_call("panics", json!({}), StopReason::ToolUse),
+        assistant_text("done", StopReason::Stop),
+    ]);
+    let context = AgentContext {
+        system_prompt: "test".into(),
+        openai_responses_input: None,
+        messages: Vec::new(),
+        tools: vec![Arc::new(PanickingTool)],
+    };
+    let messages = run_agent_loop(
+        vec![AgentMessage::user("go")],
+        context,
+        config,
+        CancellationToken::new(),
+        Arc::new(|_| {}),
+    )
+    .await;
+    assert!(messages.iter().any(|message| matches!(
+        message,
+        AgentMessage::ToolResult(result)
+            if !result.tool_call_id.is_empty() && result.is_error
+    )));
+}
+
 #[tokio::test]
 async fn unknown_tool_yields_error_result() {
     let config = scripted_config(vec![

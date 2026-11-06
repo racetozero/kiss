@@ -323,7 +323,10 @@ impl Session {
     /// the run to finish. When the message was queued rather than started, this
     /// returns as soon as it was queued.
     pub async fn prompt_with(self: &Arc<Self>, args: PromptArgs) -> Result<(), SdkError> {
-        if let Some(run) = self.accept_prompt(&args)? {
+        let run = self.accept_prompt(&args)?;
+        // A run can last for hours, and images in the arguments are large.
+        drop(args);
+        if let Some(run) = run {
             run.await;
             self.emit(agent_settled());
         }
@@ -354,20 +357,17 @@ impl Session {
         let message = user_message(args);
         let mode = self.inner.prompt_mode_for(&args.message);
         Ok(match args.streaming_behavior {
-            Some(StreamingBehavior::Steer) => self.inner.submit(message, mode, QueueKind::Steering),
-            Some(StreamingBehavior::FollowUp) => {
-                self.inner.submit(message, mode, QueueKind::FollowUp)
+            Some(StreamingBehavior::Steer) => {
+                self.inner.submit(vec![message], mode, QueueKind::Steering)
             }
-            None => Some(
-                self.inner
-                    .try_start_prompt(vec![message], mode)
-                    .map_err(|_| {
-                        SdkError::Command(
-                            "agent is streaming: pass streamingBehavior \"steer\" or \"followUp\""
-                                .into(),
-                        )
-                    })?,
-            ),
+            Some(StreamingBehavior::FollowUp) => {
+                self.inner.submit(vec![message], mode, QueueKind::FollowUp)
+            }
+            None => Some(self.inner.try_start_prompt(message, mode).ok_or_else(|| {
+                SdkError::Command(
+                    "agent is streaming: pass streamingBehavior \"steer\" or \"followUp\"".into(),
+                )
+            })?),
         })
     }
 
@@ -420,9 +420,7 @@ impl Session {
 
     /// Resolve once no prompt run is in flight.
     pub async fn wait_idle(&self) {
-        while self.inner.is_running() {
-            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
-        }
+        self.inner.wait_idle().await;
     }
 
     /// A snapshot of model, thinking level, session identity, and tools.
@@ -777,11 +775,7 @@ impl Session {
             Command::Compact {
                 custom_instructions,
             } => {
-                self.ensure_open()?;
-                self.inner
-                    .compact(custom_instructions)
-                    .await
-                    .map_err(SdkError::Command)?;
+                self.compact(custom_instructions).await?;
                 let (used, window) = self.inner.context_usage();
                 Ok(Some(json!({
                     "contextTokens": used,

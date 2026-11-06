@@ -466,9 +466,6 @@ async fn execute_tool_batch(
     let terminate = !finalized.is_empty() && finalized.iter().all(|f| f.result.terminate);
     let mut messages = Vec::new();
     for f in &finalized {
-        if f.tool_call.id.is_empty() {
-            continue;
-        }
         let message = tool_result_message(&f.tool_call, &f.result, f.is_error);
         emit(AgentEvent::MessageStart {
             message: AgentMessage::ToolResult(message.clone()),
@@ -509,10 +506,11 @@ async fn execute_parallel_tools(
                     if cancel.is_cancelled() {
                         cancelled_tool_call(tool_call)
                     } else {
+                        let task_call = tool_call.clone();
                         match tokio::spawn({
                             let task_emit = emit.clone();
                             async move {
-                                run_and_finalize(tool, tool_call, args, &config, cancel, &task_emit)
+                                run_and_finalize(tool, task_call, args, &config, cancel, &task_emit)
                                     .await
                             }
                         })
@@ -521,13 +519,7 @@ async fn execute_parallel_tools(
                             Ok(value) => value,
                             Err(join_error) => FinalizedCall {
                                 // A panicking native tool task must not kill the loop.
-                                tool_call: ToolCall {
-                                    id: String::new(),
-                                    name: String::new(),
-                                    arguments: Value::Null,
-                                    thought_signature: None,
-                                    arguments_error: None,
-                                },
+                                tool_call,
                                 result: ToolResult::text(format!("tool task failed: {join_error}")),
                                 is_error: true,
                             },

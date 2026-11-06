@@ -133,6 +133,7 @@ pub enum QueueKind {
 /// to idle, so a panic or a dropped future cannot leave the session busy.
 struct ActivePhase {
     session: Arc<AgentSession>,
+    cancel: CancellationToken,
     armed: bool,
 }
 
@@ -142,11 +143,11 @@ impl ActivePhase {
     /// Both happen under the phase lock. [`AgentSession::submit`] queues under
     /// the same lock, so a message cannot arrive between the check and idle.
     /// A cancelled run leaves its queue for the caller to reclaim.
-    fn take_queued(&mut self, cancelled: bool) -> Option<(Vec<AgentMessage>, PromptMode)> {
-        let session = self.session.clone();
+    fn take_queued(&mut self) -> Option<(Vec<AgentMessage>, PromptMode)> {
+        let session = &self.session;
         let settings = session.settings();
         let mut phase = session.phase.lock().unwrap();
-        if !cancelled {
+        if !self.cancel.is_cancelled() {
             for (queue, queue_mode) in [
                 (&session.steering, settings.steering_mode),
                 (&session.follow_up, settings.follow_up_mode),
@@ -161,6 +162,7 @@ impl ActivePhase {
             }
         }
         *phase = RunPhase::Idle;
+        session.idle.notify_waiters();
         self.armed = false;
         None
     }
@@ -170,6 +172,7 @@ impl Drop for ActivePhase {
     fn drop(&mut self) {
         if self.armed {
             *self.session.phase.lock().unwrap() = RunPhase::Idle;
+            self.session.idle.notify_waiters();
         }
     }
 }
@@ -236,6 +239,7 @@ pub struct AgentSession {
     cancel: Mutex<CancellationToken>,
     cache_warm_cancel: Mutex<CancellationToken>,
     phase: Mutex<RunPhase>,
+    idle: tokio::sync::Notify,
     totals: Mutex<Usage>,
     context_usage_cache: Mutex<Option<(u64, u64)>>,
     context_file: Mutex<Option<crate::context_file::ContextFile>>,
@@ -364,6 +368,7 @@ impl AgentSession {
             cancel: Mutex::new(CancellationToken::new()),
             cache_warm_cancel: Mutex::new(CancellationToken::new()),
             phase: Mutex::new(RunPhase::Idle),
+            idle: tokio::sync::Notify::new(),
             totals: Mutex::new(totals),
             context_usage_cache: Default::default(),
             context_file: Mutex::new(None),
@@ -429,13 +434,28 @@ impl AgentSession {
         self.run_phase() != RunPhase::Idle
     }
 
+    /// Resolve once no run or manual compaction is active.
+    pub async fn wait_idle(&self) {
+        loop {
+            // This future receives wakeups from here on, so none can be lost
+            // between the check and the wait.
+            let idle = self.idle.notified();
+            if !self.is_running() {
+                return;
+            }
+            idle.await;
+        }
+    }
+
     /// Move an idle session into `phase`. Every run and manual compaction
     /// starts here, so each one gets a live cancel token.
     fn activate(self: &Arc<Self>, current: &mut RunPhase, phase: RunPhase) -> ActivePhase {
         *current = phase;
-        *self.cancel.lock().unwrap() = CancellationToken::new();
+        let cancel = CancellationToken::new();
+        *self.cancel.lock().unwrap() = cancel.clone();
         ActivePhase {
             session: self.clone(),
+            cancel,
             armed: true,
         }
     }
@@ -803,26 +823,18 @@ impl AgentSession {
     }
 
     pub fn queue_steering(&self, message: AgentMessage) {
-        self.queue_steering_with_mode(message, PromptMode::Ordinary);
-    }
-
-    pub fn queue_steering_with_mode(&self, message: AgentMessage, mode: PromptMode) {
-        self.steering
-            .lock()
-            .unwrap()
-            .push_back(QueuedPrompt { message, mode });
+        self.steering.lock().unwrap().push_back(QueuedPrompt {
+            message,
+            mode: PromptMode::Ordinary,
+        });
         self.emit_queues();
     }
 
     pub fn queue_follow_up(&self, message: AgentMessage) {
-        self.queue_follow_up_with_mode(message, PromptMode::Ordinary);
-    }
-
-    pub fn queue_follow_up_with_mode(&self, message: AgentMessage, mode: PromptMode) {
-        self.follow_up
-            .lock()
-            .unwrap()
-            .push_back(QueuedPrompt { message, mode });
+        self.follow_up.lock().unwrap().push_back(QueuedPrompt {
+            message,
+            mode: PromptMode::Ordinary,
+        });
         self.emit_queues();
     }
 
@@ -1135,9 +1147,7 @@ impl AgentSession {
                     };
 
                     if let Some(revision_before) = revision_before {
-                        *session.phase.lock().unwrap() = RunPhase::Compacting;
-                        session.run_compaction(None, true).await;
-                        *session.phase.lock().unwrap() = RunPhase::Streaming;
+                        session.auto_compact().await;
                         let revision_after = session.manager.lock().unwrap().context_revision();
                         context_changed |= revision_after != revision_before;
                     }
@@ -1526,7 +1536,7 @@ impl AgentSession {
         prompts: Vec<AgentMessage>,
         prompt_mode: PromptMode,
     ) -> impl Future<Output = ()> + Send + 'static + use<> {
-        let run = self.start_or_queue(prompts, prompt_mode, QueueKind::Steering);
+        let run = self.submit(prompts, prompt_mode, QueueKind::Steering);
         async move {
             if let Some(run) = run {
                 run.await;
@@ -1534,38 +1544,27 @@ impl AgentSession {
         }
     }
 
-    /// Start a run, or queue the message when the session is busy. The caller
-    /// must drive a returned future to run the prompt.
-    pub fn submit(
+    /// Start a run, or return `None` when the session is busy.
+    pub fn try_start_prompt(
         self: &Arc<Self>,
         message: AgentMessage,
         prompt_mode: PromptMode,
-        kind: QueueKind,
     ) -> Option<BoxFuture<'static, ()>> {
-        self.start_or_queue(vec![message], prompt_mode, kind)
-    }
-
-    /// Start a run, or hand the prompts back when the session is busy.
-    pub fn try_start_prompt(
-        self: &Arc<Self>,
-        prompts: Vec<AgentMessage>,
-        prompt_mode: PromptMode,
-    ) -> Result<BoxFuture<'static, ()>, Vec<AgentMessage>> {
         self.cache_warm_cancel.lock().unwrap().cancel();
         let active = {
             let mut phase = self.phase.lock().unwrap();
-            if *phase != RunPhase::Idle {
-                return Err(prompts);
-            }
-            self.activate(&mut phase, RunPhase::Streaming)
+            (*phase == RunPhase::Idle).then(|| self.activate(&mut phase, RunPhase::Streaming))?
         };
-        Ok(self
-            .clone()
-            .run_prompts(active, prompts, prompt_mode)
-            .boxed())
+        Some(
+            self.clone()
+                .run_prompts(active, vec![message], prompt_mode)
+                .boxed(),
+        )
     }
 
-    fn start_or_queue(
+    /// Start a run, or queue the prompts when the session is busy. The caller
+    /// must drive a returned future to run them.
+    pub fn submit(
         self: &Arc<Self>,
         prompts: Vec<AgentMessage>,
         prompt_mode: PromptMode,
@@ -1604,38 +1603,42 @@ impl AgentSession {
         prompts: Vec<AgentMessage>,
         prompt_mode: PromptMode,
     ) {
-        let cancel = self.cancel.lock().unwrap().clone();
+        let cancel = active.cancel.clone();
         {
             let mut manager = self.manager.lock().unwrap();
-            for p in &prompts {
-                let _ = manager.append_message(p.clone());
+            for prompt in prompts {
+                let _ = manager.append_message(prompt);
             }
         }
         // The prompts were persisted above. Context includes them, so run as a
         // continuation without a second prompt list.
         self.run_turns(None, prompt_mode, &cancel).await;
-        self.run_queued_then_idle(active, &cancel).await;
-        (self.sink)(SessionEvent::PromptEnd {
-            cancelled: cancel.is_cancelled(),
-        });
+        self.run_queued_then_idle(active, true).await;
     }
 
     /// Run whatever arrived after the agent loop last read the queues, then
-    /// leave the active phase. Returns true if any queued prompt ran.
-    async fn run_queued_then_idle(
-        self: &Arc<Self>,
-        mut active: ActivePhase,
-        cancel: &CancellationToken,
-    ) -> bool {
-        let mut ran = false;
-        while let Some((prompts, prompt_mode)) = active.take_queued(cancel.is_cancelled()) {
-            ran = true;
-            self.run_turns(Some(prompts), prompt_mode, cancel).await;
+    /// leave the active phase. Announces the end when any prompt ran.
+    async fn run_queued_then_idle(self: &Arc<Self>, mut active: ActivePhase, mut prompt_ran: bool) {
+        let cancel = active.cancel.clone();
+        while let Some((prompts, prompt_mode)) = active.take_queued() {
+            prompt_ran = true;
+            self.run_turns(Some(prompts), prompt_mode, &cancel).await;
         }
         if self.settings.lock().unwrap().cache_warming == CacheWarmingMode::Streaming {
             self.cache_warm_cancel.lock().unwrap().cancel();
         }
-        ran
+        if prompt_ran {
+            (self.sink)(SessionEvent::PromptEnd {
+                cancelled: cancel.is_cancelled(),
+            });
+        }
+    }
+
+    /// Compact inside an active run.
+    async fn auto_compact(self: &Arc<Self>) {
+        *self.phase.lock().unwrap() = RunPhase::Compacting;
+        self.run_compaction(None, true).await;
+        *self.phase.lock().unwrap() = RunPhase::Streaming;
     }
 
     /// Run the agent loop with retry and automatic compaction. `new_prompts`
@@ -1734,9 +1737,7 @@ impl AgentSession {
                 &self.model(),
                 cancel.is_cancelled(),
             ) {
-                *self.phase.lock().unwrap() = RunPhase::Compacting;
-                self.run_compaction(None, true).await;
-                *self.phase.lock().unwrap() = RunPhase::Streaming;
+                self.auto_compact().await;
             }
             break;
         }
@@ -1908,7 +1909,6 @@ impl AgentSession {
         });
     }
 
-    /// Manual or automatic compaction.
     /// Compact on request. The session refuses during this call when a prompt
     /// or another compaction is active. Prompts that arrive during compaction
     /// run when it ends.
@@ -1931,13 +1931,8 @@ impl AgentSession {
                 });
                 return Err(error);
             };
-            let cancel = session.cancel.lock().unwrap().clone();
             session.run_compaction(custom_instructions, false).await;
-            if session.run_queued_then_idle(active, &cancel).await {
-                (session.sink)(SessionEvent::PromptEnd {
-                    cancelled: cancel.is_cancelled(),
-                });
-            }
+            session.run_queued_then_idle(active, false).await;
             Ok(())
         }
     }
@@ -2654,10 +2649,7 @@ mod ephemeral_tests {
 
     #[tokio::test]
     async fn a_message_added_while_idle_costs_no_extra_model_request() {
-        let session = AgentSession::new(
-            SessionManager::in_memory(Path::new("/test")),
-            Vec::new(),
-            Registry::load(None),
+        let session = settings_test_session(
             Settings {
                 compaction: crate::settings::CompactionSettings {
                     enabled: false,
@@ -2665,11 +2657,7 @@ mod ephemeral_tests {
                 },
                 ..Default::default()
             },
-            "test".into(),
-            openai_model(),
-            ThinkingLevel::Off,
-            None,
-            Arc::new(|_| {}),
+            false,
         );
         let contexts = Arc::new(Mutex::new(Vec::new()));
         let saved_contexts = contexts.clone();
@@ -2698,17 +2686,7 @@ mod ephemeral_tests {
 
     #[test]
     fn a_dropped_prompt_future_returns_the_session_to_idle() {
-        let session = AgentSession::new(
-            SessionManager::in_memory(Path::new("/test")),
-            Vec::new(),
-            Registry::load(None),
-            Settings::default(),
-            "test".into(),
-            openai_model(),
-            ThinkingLevel::Off,
-            None,
-            Arc::new(|_| {}),
-        );
+        let session = settings_test_session(Settings::default(), false);
         let run = session.prompt(vec![AgentMessage::user("first")]);
         assert_eq!(session.run_phase(), RunPhase::Streaming);
         drop(run);

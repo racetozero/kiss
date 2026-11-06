@@ -257,7 +257,7 @@ impl SubagentRuntime {
             drop(permit);
 
             let mut state = record.state.lock().unwrap();
-            if state.turn == turn && state.status == AgentStatus::Running {
+            if state.status == AgentStatus::Running {
                 state.status = outcome.status;
                 state.result = outcome.result;
                 state.error = outcome.error;
@@ -930,18 +930,13 @@ mod tests {
             .followup("review_tests", "second".into())
             .expect("an interrupted agent accepts a follow-up");
 
-        tokio::time::timeout(Duration::from_secs(5), async {
-            loop {
-                let info = runtime.list().remove(0);
-                if info.status == AgentStatus::Completed {
-                    assert_eq!(info.result.as_deref(), Some("second answer"));
-                    return;
-                }
-                tokio::time::sleep(Duration::from_millis(5)).await;
-            }
-        })
-        .await
-        .expect("the follow-up turn completes");
+        let outcome = runtime
+            .wait(&["review_tests".into()], 5_000, CancellationToken::new())
+            .await
+            .unwrap();
+        assert!(!outcome.timed_out);
+        assert_eq!(outcome.agents[0].status, AgentStatus::Completed);
+        assert_eq!(outcome.agents[0].result.as_deref(), Some("second answer"));
         assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 2);
     }
 

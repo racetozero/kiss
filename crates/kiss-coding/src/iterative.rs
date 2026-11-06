@@ -528,11 +528,10 @@ mod tests {
         assert!(!contains_completion_marker("keep going\n[continue]"));
     }
 
-    #[tokio::test]
-    async fn a_pause_that_arrives_before_the_job_starts_is_kept() {
+    fn parent_session() -> Arc<AgentSession> {
         let registry = kiss_ai::Registry::from_builtin();
         let model = registry.all().first().unwrap().clone();
-        let parent = AgentSession::new(
+        AgentSession::new(
             crate::SessionManager::in_memory(std::path::Path::new("/test")),
             Vec::new(),
             registry,
@@ -542,7 +541,12 @@ mod tests {
             kiss_ai::ThinkingLevel::Off,
             None,
             Arc::new(|_| {}),
-        );
+        )
+    }
+
+    #[tokio::test]
+    async fn a_pause_that_arrives_before_the_job_starts_is_kept() {
+        let parent = parent_session();
         let job = parent
             .iterative_jobs()
             .unwrap()
@@ -556,19 +560,7 @@ mod tests {
 
     #[tokio::test]
     async fn one_job_reuses_its_forked_session_and_stops_early() {
-        let registry = kiss_ai::Registry::from_builtin();
-        let model = registry.all().first().unwrap().clone();
-        let parent = AgentSession::new(
-            crate::SessionManager::in_memory(std::path::Path::new("/test")),
-            Vec::new(),
-            registry,
-            crate::Settings::default(),
-            "test".into(),
-            model,
-            kiss_ai::ThinkingLevel::Off,
-            None,
-            Arc::new(|_| {}),
-        );
+        let parent = parent_session();
         parent
             .manager
             .lock()

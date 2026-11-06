@@ -19,6 +19,14 @@ async fn session_with(
     directory: &std::path::Path,
     script: MockScript,
 ) -> (MockProvider, Arc<Session>) {
+    session_with_settings(directory, script, kiss_coding::Settings::default()).await
+}
+
+async fn session_with_settings(
+    directory: &std::path::Path,
+    script: MockScript,
+    settings: kiss_coding::Settings,
+) -> (MockProvider, Arc<Session>) {
     let provider = MockProvider::start(directory, script)
         .await
         .expect("mock provider starts");
@@ -27,7 +35,7 @@ async fn session_with(
         model: Some("mock/mock-1".into()),
         models_file: Some(provider.catalog_path()),
         thinking_level: Some(ThinkingLevel::Off),
-        settings: Some(kiss_coding::Settings::default()),
+        settings: Some(settings),
         tools: Some(
             ["read", "write", "edit", "bash"]
                 .map(str::to_string)
@@ -344,28 +352,15 @@ async fn compaction_works_after_an_abort_and_closing_ends_the_session() {
     let script = MockScript::text("first answer")
         .then(vec![MockTurn::Text("second answer".into())])
         .then(vec![MockTurn::Text("the summary".into())]);
-    let provider = MockProvider::start(directory.path(), script)
-        .await
-        .expect("mock provider starts");
-    let options = SessionOptions {
-        cwd: directory.path().to_path_buf(),
-        model: Some("mock/mock-1".into()),
-        models_file: Some(provider.catalog_path()),
-        thinking_level: Some(ThinkingLevel::Off),
-        settings: Some(kiss_coding::Settings {
-            compaction: kiss_coding::settings::CompactionSettings {
-                enabled: false,
-                keep_recent_tokens: 1,
-                ..Default::default()
-            },
+    let settings = kiss_coding::Settings {
+        compaction: kiss_coding::settings::CompactionSettings {
+            enabled: false,
+            keep_recent_tokens: 1,
             ..Default::default()
-        }),
-        tools: Some(Vec::new()),
-        trust_project_files: false,
-        no_context_files: true,
+        },
         ..Default::default()
     };
-    let session = Session::create(options).await.expect("session builds");
+    let (_provider, session) = session_with_settings(directory.path(), script, settings).await;
     session.prompt("one").await.expect("first prompt");
     session.prompt("two").await.expect("second prompt");
 

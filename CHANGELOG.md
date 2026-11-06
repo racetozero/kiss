@@ -21,6 +21,7 @@
   account, and closing the login picker abandons the account add.
 - A new session no longer shows the status of the previous session.
 - A subagent follow-up after an interrupt waits for the old turn to stop.
+- A panicked tool call now gets a real tool result under its own call ID.
 - SDK `close` now ends event streams and refuses new work. SDK `wait_idle` no
   longer returns before a detached prompt starts.
 
