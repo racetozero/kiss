@@ -311,11 +311,7 @@ async fn run(
                 anyhow::bail!("Cursor message upload ended before the run completed");
             }
             _ = heartbeat.tick() => {
-                send(&request_tx, wire::AgentClientMessage {
-                    message: Some(wire::agent_client_message::Message::ClientHeartbeat(
-                        wire::ClientHeartbeat {},
-                    )),
-                })?;
+                send_heartbeat(&request_tx)?;
                 continue;
             }
             _ = options.cancel.cancelled() => anyhow::bail!("request cancelled"),
@@ -404,6 +400,7 @@ async fn run(
                                 })),
                             })),
                         })?;
+                        send_exec_close(&request_tx, exec.id)?;
                         continue;
                     }
                     let streamed_shell = matches!(&exec.message, Some(wire::exec_server_message::Message::ShellStream(_)));
@@ -450,22 +447,40 @@ async fn run(
                     }
                     let index = current.begin_tool_call(call_id.clone(), tool_name);
                     current.end_tool_call(index, Some(arguments));
-                    let (resume_tx, resume_rx) = oneshot::channel();
+                    let (resume_tx, mut resume_rx) = oneshot::channel();
                     pending()
                         .lock()
                         .unwrap()
                         .insert(resume_key.clone(), resume_tx);
                     builder.take().unwrap().finish(StopReason::ToolUse, model);
-                    let resumed = tokio::select! {
-                        result = resume_rx => result.context("Cursor tool continuation was dropped")?,
-                        result = &mut uploads => {
-                            result?;
-                            anyhow::bail!("Cursor message upload ended before the run completed");
+                    // A tool or approval can outlive the workspace's liveness window.
+                    // Keep both the run and this exec alive until KISS returns its result.
+                    let mut exec_heartbeat = tokio::time::interval(Duration::from_secs(3));
+                    exec_heartbeat.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+                    let resume_deadline = tokio::time::sleep(RESUME_TIMEOUT);
+                    tokio::pin!(resume_deadline);
+                    let resumed = loop {
+                        tokio::select! {
+                            result = &mut resume_rx => break result.context("Cursor tool continuation was dropped")?,
+                            result = &mut uploads => {
+                                result?;
+                                anyhow::bail!("Cursor message upload ended before the run completed");
+                            }
+                            _ = heartbeat.tick() => send_heartbeat(&request_tx)?,
+                            _ = exec_heartbeat.tick() => {
+                                send(&request_tx, wire::AgentClientMessage {
+                                    message: Some(wire::agent_client_message::Message::ExecClientControlMessage(
+                                        wire::ExecClientControlMessage {
+                                            message: Some(wire::exec_client_control_message::Message::Heartbeat(
+                                                wire::ExecClientHeartbeat { id: exec.id },
+                                            )),
+                                        },
+                                    )),
+                                })?;
+                            }
+                            _ = &mut resume_deadline => anyhow::bail!("Cursor tool continuation timed out"),
+                            _ = options.cancel.cancelled() => anyhow::bail!("request cancelled"),
                         }
-                        _ = tokio::time::sleep(RESUME_TIMEOUT) => {
-                            anyhow::bail!("Cursor tool continuation timed out")
-                        }
-                        _ = options.cancel.cancelled() => anyhow::bail!("request cancelled"),
                     };
                     options = resumed.options;
                     builder = Some(new_builder(model, resumed.sink, &response_id));
@@ -478,6 +493,7 @@ async fn run(
                     } else {
                         send_tool_result(&request_tx, exec.id, exec.exec_id, result)?;
                     }
+                    send_exec_close(&request_tx, exec.id)?;
                     text_index = None;
                     thinking_index = None;
                 }
@@ -666,6 +682,17 @@ fn send(sender: &RequestSender, message: wire::AgentClientMessage) -> Result<()>
         .map_err(|_| anyhow::anyhow!("Cursor message upload closed"))
 }
 
+fn send_heartbeat(sender: &RequestSender) -> Result<()> {
+    send(
+        sender,
+        wire::AgentClientMessage {
+            message: Some(wire::agent_client_message::Message::ClientHeartbeat(
+                wire::ClientHeartbeat {},
+            )),
+        },
+    )
+}
+
 fn send_exec_throw(sender: &RequestSender, id: u32, error: &str) -> Result<()> {
     send(
         sender,
@@ -794,23 +821,24 @@ fn send_shell_result(
             )),
         },
     )?;
-    if streamed {
-        send(
-            sender,
-            wire::AgentClientMessage {
-                message: Some(
-                    wire::agent_client_message::Message::ExecClientControlMessage(
-                        wire::ExecClientControlMessage {
-                            message: Some(wire::exec_client_control_message::Message::StreamClose(
-                                wire::ExecClientStreamClose { id },
-                            )),
-                        },
-                    ),
-                ),
-            },
-        )?;
-    }
     Ok(())
+}
+
+fn send_exec_close(sender: &RequestSender, id: u32) -> Result<()> {
+    send(
+        sender,
+        wire::AgentClientMessage {
+            message: Some(
+                wire::agent_client_message::Message::ExecClientControlMessage(
+                    wire::ExecClientControlMessage {
+                        message: Some(wire::exec_client_control_message::Message::StreamClose(
+                            wire::ExecClientStreamClose { id },
+                        )),
+                    },
+                ),
+            ),
+        },
+    )
 }
 
 fn send_tool_result(
@@ -1585,6 +1613,7 @@ mod tests {
         for mode in [
             "context-only",
             "tools",
+            "tool-heartbeats",
             "shell",
             "shell-stream",
             "shell-error",
@@ -1616,7 +1645,7 @@ mod tests {
                 "interaction-unknown" => Some(10),
                 _ => None,
             };
-            tokio::time::timeout(Duration::from_secs(5), async {
+            tokio::time::timeout(Duration::from_secs(12), async {
                 let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
                 let mut model = model();
                 if mode == "context-only" { model.id = "cursor-grok-4.5-high".into(); }
@@ -1642,6 +1671,7 @@ mod tests {
                     }
                 }));
                 let (initial_tx, initial_rx) = oneshot::channel();
+                let (alive_tx, alive_rx) = oneshot::channel();
                 let mut server = AbortOnDropHandle::new(tokio::spawn(async move {
                     let mut run_socket = None;
                     let mut run_id = None;
@@ -1649,9 +1679,14 @@ mod tests {
                     let mut seqno = 0;
                     let mut initial_seen = false;
                     let mut tool_sent = false;
+                    let mut tool_sent_at = None::<tokio::time::Instant>;
                     let mut shell_events = Vec::new();
-                    let mut shell_result_seen = false;
+                    let mut exec_result_seen = false;
+                    let mut context_closed = false;
                     let mut initial_tx = Some(initial_tx);
+                    let mut alive_tx = Some(alive_tx);
+                    let mut connection_alive = false;
+                    let mut exec_alive = false;
                     while let Some((mut socket, headers, body)) = requests_rx.recv().await {
                         assert!(headers.contains("authorization: bearer test-key"));
                         if headers.starts_with("post /agent.v1.agentservice/getusablemodels ") {
@@ -1721,6 +1756,14 @@ mod tests {
                                 run.write_all(b"\r\n").await.unwrap();
                                 continue;
                             }
+                            // Independent upstream tags: client control=5, heartbeat=3, id=1.
+                            let exec_heartbeat = append.data == [0x2a, 0x04, 0x1a, 0x02, 0x08, 9];
+                            if exec_heartbeat {
+                                exec_alive |= tool_sent_at.is_some_and(|at| at.elapsed() >= Duration::from_secs(2));
+                                socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").await.unwrap();
+                                if connection_alive && let Some(alive) = alive_tx.take() { alive.send(()).unwrap(); }
+                                continue;
+                            }
                             let message = wire::AgentClientMessage::decode(append.data.as_slice()).unwrap();
                             let status = if mode == "append-error" { "400 Bad Request" } else { "200 OK" };
                             socket.write_all(format!("HTTP/1.1 {status}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").as_bytes()).await.unwrap();
@@ -1734,7 +1777,12 @@ mod tests {
                                     assert_eq!(run.requested_model.unwrap().model_id, "cursor-grok-4.5-high");
                                     initial_seen = true;
                                 }
-                                wire::agent_client_message::Message::ClientHeartbeat(_) => {}
+                                wire::agent_client_message::Message::ClientHeartbeat(_) => {
+                                    if tool_sent_at.is_some_and(|at| at.elapsed() >= Duration::from_secs(4)) {
+                                        connection_alive = true;
+                                        if exec_alive && let Some(alive) = alive_tx.take() { alive.send(()).unwrap(); }
+                                    }
+                                }
                                 wire::agent_client_message::Message::InteractionResponse(_) => {
                                     // Check upstream wire tags independently of KISS's response schema.
                                     // Request id 0 is omitted by protobuf, but still requires a reply.
@@ -1766,6 +1814,7 @@ mod tests {
                                 }
                                 wire::agent_client_message::Message::ExecClientMessage(reply) => {
                                     assert_eq!(reply.id, 9);
+                                    assert!(context_closed);
                                     assert_eq!(reply.exec_id, "exec-9");
                                     match reply.message.unwrap() {
                                         wire::exec_client_message::Message::ShellStream(stream) => {
@@ -1789,24 +1838,28 @@ mod tests {
                                             assert_eq!(outcome.code, i32::from(mode == "shell-error"));
                                             assert_eq!(outcome.stdout, if mode == "shell-error" { "" } else { "file data" });
                                             assert_eq!(outcome.stderr, if mode == "shell-error" { "file data" } else { "" });
-                                            shell_result_seen = true;
-                                            if mode == "shell-stream" { continue; }
-                                            finished = true;
+                                            exec_result_seen = true;
+                                            continue;
                                         }
                                         wire::exec_client_message::Message::McpResult(result) => {
                                             let Some(wire::mcp_result::Result::Success(success)) = result.result else { panic!("MCP success") };
                                             assert_eq!(success.content[0].content, Some(wire::mcp_tool_result_content_item::Content::Text(wire::McpTextContent { text: "file data".into() })));
-                                            finished = true;
+                                            exec_result_seen = true;
+                                            continue;
                                         }
                                         _ => panic!("unexpected exec result"),
                                     }
                                 }
                                 wire::agent_client_message::Message::ExecClientControlMessage(control) => {
                                     match control.message.unwrap() {
+                                        wire::exec_client_control_message::Message::Heartbeat(_) => panic!("unexpected exec heartbeat encoding"),
                                         wire::exec_client_control_message::Message::StreamClose(close) => {
+                                            if close.id == 8 { context_closed = true; continue; }
                                             assert_eq!(close.id, 9);
-                                            assert!(shell_result_seen);
-                                            assert!(matches!(shell_events.as_slice(), [wire::shell_stream::Event::Start(_), wire::shell_stream::Event::Stdout(_), wire::shell_stream::Event::Exit(_)]));
+                                            assert!(exec_result_seen);
+                                            if mode == "shell-stream" {
+                                                assert!(matches!(shell_events.as_slice(), [wire::shell_stream::Event::Start(_), wire::shell_stream::Event::Stdout(_), wire::shell_stream::Event::Exit(_)]));
+                                            }
                                             finished = true;
                                         }
                                         wire::exec_client_control_message::Message::Throw(error) => {
@@ -1859,7 +1912,7 @@ mod tests {
                                 run.write_all(&frame).await.unwrap();
                                 run.write_all(b"\r\n").await.unwrap();
                             }
-                            if mode == "tools" || mode == "context-only" || shell_mode {
+                            if mode == "tools" || mode == "tool-heartbeats" || mode == "context-only" || shell_mode {
                                 // Upstream ExecServerMessage tag 10 is a context request,
                                 // not a model-requested native tool. id=8, execId=context-8.
                                 let payload = b"\x12\x0f\x08\x08\x7a\x09context-8\x52\x00";
@@ -1870,6 +1923,7 @@ mod tests {
                             }
                             initial_tx.take().unwrap().send(()).unwrap();
                             tool_sent = true;
+                            tool_sent_at = Some(tokio::time::Instant::now());
                         }
                     }
                 }));
@@ -1889,7 +1943,7 @@ mod tests {
                     options.cancel.cancel();
                 }
                 let result = output.result().await;
-                if mode == "tools" || mode == "context-only" || (shell_mode && mode != "shell-disabled") {
+                if mode == "tools" || mode == "tool-heartbeats" || mode == "context-only" || (shell_mode && mode != "shell-disabled") {
                     assert_eq!(result.stop_reason, StopReason::ToolUse);
                     if shell_mode {
                         let call = result.tool_calls().next().unwrap();
@@ -1900,6 +1954,11 @@ mod tests {
                         assert_eq!(serde_json::from_value::<u64>(call.arguments["timeout_ms"].clone()).unwrap(), 60000);
                         assert_eq!(call.arguments["fraction"].as_f64(), Some(1.5));
                         assert_eq!(call.arguments["offset"].as_i64(), Some(-2));
+                    }
+                    if mode == "tool-heartbeats" {
+                        tokio::time::timeout(Duration::from_secs(7), alive_rx).await
+                            .expect("Cursor must receive connection and exec heartbeats while a tool is pending")
+                            .unwrap();
                     }
                     context.messages.push(Message::Assistant(result));
                     context.messages.push(Message::ToolResult(ToolResultMessage {

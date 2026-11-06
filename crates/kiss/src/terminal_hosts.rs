@@ -42,6 +42,7 @@ enum Host {
     Herdr {
         binary: OsString,
         pane: OsString,
+        socket: PathBuf,
     },
     Cmux {
         binary: OsString,
@@ -60,10 +61,15 @@ impl TerminalHosts {
         let mut hosts = Vec::new();
         if std::env::var_os("HERDR_ENV").is_some_and(|value| value == "1")
             && let Some(pane) = std::env::var_os("HERDR_PANE_ID").filter(|v| !v.is_empty())
-            && let Some(binary) = std::env::var_os("HERDR_BIN_PATH").filter(|v| !v.is_empty())
-            && std::env::var_os("HERDR_SOCKET_PATH").is_some_and(|v| !v.is_empty())
+            && let Some(socket) = std::env::var_os("HERDR_SOCKET_PATH").filter(|v| !v.is_empty())
         {
-            hosts.push(Host::Herdr { binary, pane });
+            hosts.push(Host::Herdr {
+                binary: std::env::var_os("HERDR_BIN_PATH")
+                    .filter(|v| !v.is_empty())
+                    .unwrap_or_else(|| "herdr".into()),
+                pane,
+                socket: socket.into(),
+            });
         }
         if let Some(workspace) = std::env::var_os("CMUX_WORKSPACE_ID").filter(|v| !v.is_empty())
             && let Some(surface) = std::env::var_os("CMUX_SURFACE_ID").filter(|v| !v.is_empty())
@@ -274,12 +280,24 @@ impl Host {
         sequence: &mut u64,
     ) -> bool {
         match self {
-            Self::Herdr { pane, .. } => {
+            Self::Herdr { pane, socket, .. } => {
                 if registered.as_ref() != resume && registered.is_some() {
                     if !self.release(registered.as_ref(), sequence).await {
                         return false;
                     }
                     *registered = None;
+                }
+                let seq = next_sequence(sequence);
+                let mut params = serde_json::json!({
+                    "pane_id": pane.to_string_lossy(), "source": "kiss", "agent": "kiss",
+                    "state": label(state), "seq": *sequence,
+                });
+                if let State::Blocked(_, message) = state {
+                    params["message"] = message.into();
+                }
+                if let Some(resume) = resume {
+                    params["agent_session_id"] = resume.id.clone().into();
+                    params["resume_argv"] = serde_json::json!(resume.argv);
                 }
                 let mut command = self.command(&["pane", "report-agent"]);
                 command
@@ -293,7 +311,7 @@ impl Host {
                         label(state),
                         "--seq",
                     ])
-                    .arg(next_sequence(sequence));
+                    .arg(seq);
                 if let State::Blocked(_, message) = state {
                     command.args(["--message", message]);
                 }
@@ -304,7 +322,10 @@ impl Host {
                         .arg("--")
                         .args(&resume.argv);
                 }
-                let sent = execute(&mut command).await;
+                let sent = match herdr_request(socket, "pane.report_agent", params).await {
+                    Some(sent) => sent,
+                    None => execute(&mut command).await,
+                };
                 if sent {
                     *registered = resume.cloned();
                 }
@@ -352,12 +373,18 @@ impl Host {
 
     async fn release(&self, registered: Option<&Resume>, sequence: &mut u64) -> bool {
         match self {
-            Self::Herdr { pane, .. } => {
+            Self::Herdr { pane, socket, .. } => {
+                let seq = next_sequence(sequence);
+                if let Some(sent) = herdr_request(socket, "pane.release_agent", serde_json::json!({
+                    "pane_id": pane.to_string_lossy(), "source": "kiss", "agent": "kiss", "seq": *sequence,
+                })).await {
+                    return sent;
+                }
                 execute(
                     self.command(&["pane", "release-agent"])
                         .arg(pane)
                         .args(["--source", "kiss", "--agent", "kiss", "--seq"])
-                        .arg(next_sequence(sequence)),
+                        .arg(seq),
                 )
                 .await
             }
@@ -386,6 +413,53 @@ impl Host {
             }
         }
     }
+}
+
+// Prefer the same socket API used by Herdr's pi integration. This avoids
+// short-lived reporter processes in the pane's foreground job (notably on WSL).
+// Only an unavailable Unix socket falls back to the CLI; rejection or timeout
+// remains a failed report, retried by the latest-value worker.
+#[cfg(unix)]
+async fn herdr_request(
+    socket: &std::path::Path,
+    method: &str,
+    params: serde_json::Value,
+) -> Option<bool> {
+    use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
+    tokio::time::timeout(COMMAND_TIMEOUT, async {
+        let mut stream = tokio::net::UnixStream::connect(socket).await.ok()?;
+        let request = serde_json::json!({"id": "kiss", "method": method, "params": params});
+        if stream
+            .write_all(format!("{request}\n").as_bytes())
+            .await
+            .is_err()
+        {
+            return Some(false);
+        }
+        let mut response = Vec::new();
+        if BufReader::new(stream.take(64 * 1024))
+            .read_until(b'\n', &mut response)
+            .await
+            .is_err()
+            || response.last() != Some(&b'\n')
+        {
+            return Some(false);
+        }
+        Some(
+            serde_json::from_slice::<serde_json::Value>(&response).is_ok_and(|value| {
+                value["id"] == "kiss"
+                    && value.get("result").is_some()
+                    && value.get("error").is_none()
+            }),
+        )
+    })
+    .await
+    .unwrap_or(Some(false))
+}
+
+#[cfg(not(unix))]
+async fn herdr_request(_: &std::path::Path, _: &str, _: serde_json::Value) -> Option<bool> {
+    None
 }
 
 async fn execute(command: &mut Command) -> bool {

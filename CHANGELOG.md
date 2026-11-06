@@ -4,6 +4,11 @@
 
 ### Fixed
 
+- Cursor keeps connection and per-tool heartbeats running while tools or
+  approvals are pending, and closes completed exec streams.
+- Herdr reporting uses its socket directly on Linux/WSL and macOS, avoiding
+  a short-lived CLI process on each update. Socket reporting no longer
+  requires `HERDR_BIN_PATH`.
 - Esc and Ctrl+C now stop a retry wait and automatic compaction.
 - A message typed after the agent last read its queue now runs when the run
   ends. Before, it waited for the next prompt and the terminal reported work.

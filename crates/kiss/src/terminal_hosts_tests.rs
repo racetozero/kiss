@@ -88,6 +88,7 @@ async fn native_hosts_deliver_state_resume_and_cleanup() {
     let hosts = TerminalHosts::start(vec![
         Host::Herdr {
             binary: herdr.binary.clone().into(),
+            socket: herdr.binary.with_extension("sock"),
             pane: "pane-17".into(),
         },
         Host::Cmux {
@@ -272,6 +273,7 @@ async fn empty_session_registers_resume_only_after_its_first_saved_entry() {
     let log = HostLog::new(directory.path(), "herdr", "");
     let hosts = TerminalHosts::start(vec![Host::Herdr {
         binary: log.binary.clone().into(),
+        socket: log.binary.with_extension("sock"),
         pane: "pane".into(),
     }]);
     let session = session(directory.path());
@@ -308,6 +310,7 @@ async fn herdr_keeps_state_when_resume_arguments_are_not_accepted() {
     let log = HostLog::new(directory.path(), "herdr", "");
     let hosts = TerminalHosts::start(vec![Host::Herdr {
         binary: log.binary.clone().into(),
+        socket: log.binary.with_extension("sock"),
         pane: "pane".into(),
     }]);
     let session = session(directory.path());
@@ -353,6 +356,7 @@ async fn slow_host_drops_old_states_and_does_not_delay_other_hosts() {
     let hosts = TerminalHosts::start(vec![
         Host::Herdr {
             binary: slow.binary.clone().into(),
+            socket: slow.binary.with_extension("sock"),
             pane: "pane".into(),
         },
         Host::Cmux {
@@ -476,6 +480,14 @@ async fn host_detection_requires_complete_inherited_context() {
         (vec![], false),
         (vec![("HERDR_ENV", "1"), ("HERDR_PANE_ID", "pane")], false),
         (
+            vec![
+                ("HERDR_ENV", "1"),
+                ("HERDR_PANE_ID", "pane"),
+                ("HERDR_SOCKET_PATH", "/missing/socket"),
+            ],
+            true,
+        ),
+        (
             vec![("CMUX_WORKSPACE_ID", "workspace"), ("CMUX_SURFACE_ID", "")],
             false,
         ),
@@ -518,4 +530,111 @@ async fn host_detection_requires_complete_inherited_context() {
             String::from_utf8_lossy(&output.stdout)
         );
     }
+}
+
+#[tokio::test]
+async fn herdr_socket_reports_without_launching_cli() {
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+    const NAME: &str = "terminal_hosts::tests::herdr_socket_reports_without_launching_cli";
+    if let Ok(directory) = std::env::var("KISS_TEST_HERDR_SOCKET") {
+        let directory = std::path::Path::new(&directory);
+        let hosts = TerminalHosts::from_env();
+        assert!(hosts.enabled());
+        let session = session(directory);
+        let args = Args::parse_from(["kiss", "--api-key", "private-key", "private-prompt"]);
+        hosts.update(
+            State::Blocked(BlockedKind::Permission, "Approve tool"),
+            &session,
+            &args,
+        );
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while !directory.join("ack").exists() {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("Herdr must receive a report even when its CLI cannot run");
+        hosts.shutdown().await;
+        return;
+    }
+    // Short paths also fit macOS's Unix socket path limit.
+    let directory = tempfile::tempdir_in("/tmp").unwrap();
+    let socket = directory.path().join("herdr.sock");
+    let listener = tokio::net::UnixListener::bind(&socket).unwrap();
+    let mut child = tokio::process::Command::new(std::env::current_exe().unwrap());
+    child
+        .args(["--exact", NAME, "--nocapture"])
+        .env("KISS_TEST_HERDR_SOCKET", directory.path())
+        .env("HERDR_ENV", "1")
+        .env("HERDR_PANE_ID", "w1:p1")
+        .env("HERDR_SOCKET_PATH", &socket)
+        .env_remove("HERDR_BIN_PATH")
+        .env("PATH", "/missing/herdr-bin")
+        .env_remove("CMUX_WORKSPACE_ID")
+        .env_remove("CMUX_SURFACE_ID")
+        .kill_on_drop(true);
+    let server = async {
+        let mut previous_seq = 0;
+        for (attempt, method) in [
+            "pane.report_agent",
+            "pane.report_agent",
+            "pane.release_agent",
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let (stream, _) = listener.accept().await.unwrap();
+            let mut stream = BufReader::new(stream);
+            let mut line = String::new();
+            stream.read_line(&mut line).await.unwrap();
+            assert!(!line.contains("private-"));
+            let request: serde_json::Value = serde_json::from_str(&line).unwrap();
+            assert_eq!(request["method"], method);
+            let params = &request["params"];
+            assert_eq!(params["pane_id"], "w1:p1");
+            assert_eq!(params["agent"], "kiss");
+            assert_eq!(params["source"], "kiss");
+            let seq = params["seq"].as_u64().unwrap();
+            assert!(seq > previous_seq);
+            previous_seq = seq;
+            if method == "pane.report_agent" {
+                assert_eq!(params["state"], "blocked");
+                assert_eq!(params["message"], "Approve tool");
+                assert!(
+                    params["agent_session_id"]
+                        .as_str()
+                        .is_some_and(|id| !id.is_empty())
+                );
+                let argv = params["resume_argv"].as_array().unwrap();
+                assert_eq!(argv[0], "kiss");
+                assert_eq!(argv[1], "--session");
+                assert!(std::path::Path::new(argv[2].as_str().unwrap()).is_file());
+            }
+            let response = if attempt == 0 {
+                serde_json::json!({"id": request["id"], "error": {"code": "temporarily_unavailable"}})
+            } else {
+                serde_json::json!({"id": request["id"], "result": {}})
+            };
+            stream
+                .get_mut()
+                .write_all(format!("{response}\n").as_bytes())
+                .await
+                .unwrap();
+            if attempt == 1 {
+                std::fs::write(directory.path().join("ack"), "").unwrap();
+            }
+        }
+    };
+    tokio::time::timeout(Duration::from_secs(8), async {
+        let ((), output) = tokio::join!(server, child.output());
+        let output = output.unwrap();
+        assert!(
+            output.status.success(),
+            "{}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    })
+    .await
+    .expect("Herdr socket delivery timed out");
 }

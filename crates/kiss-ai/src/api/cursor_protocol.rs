@@ -679,7 +679,7 @@ pub struct McpImageContent {
 
 #[derive(Clone, PartialEq, Message)]
 pub struct ExecClientControlMessage {
-    #[prost(oneof = "exec_client_control_message::Message", tags = "1, 2")]
+    #[prost(oneof = "exec_client_control_message::Message", tags = "1, 2, 3")]
     pub message: Option<exec_client_control_message::Message>,
 }
 
@@ -692,6 +692,8 @@ pub mod exec_client_control_message {
         StreamClose(ExecClientStreamClose),
         #[prost(message, tag = "2")]
         Throw(ExecClientThrow),
+        #[prost(message, tag = "3")]
+        Heartbeat(ExecClientHeartbeat),
     }
 }
 
@@ -707,6 +709,12 @@ pub struct ExecClientThrow {
     pub id: u32,
     #[prost(string, tag = "2")]
     pub error: String,
+}
+
+#[derive(Clone, Copy, PartialEq, Message)]
+pub struct ExecClientHeartbeat {
+    #[prost(uint32, tag = "1")]
+    pub id: u32,
 }
 
 #[derive(Clone, Copy, PartialEq, Message)]
