@@ -104,6 +104,16 @@ struct Runtime {
 }
 
 impl Runtime {
+    /// The one way to end a connection. Returns false when none was open.
+    async fn disconnect_client(&mut self) -> bool {
+        let Some(client) = self.client.take() else {
+            return false;
+        };
+        let _ = client.cancel().await;
+        self.last_used = None;
+        true
+    }
+
     fn new() -> Self {
         Self {
             client: None,
@@ -445,12 +455,7 @@ impl McpManager {
     pub async fn disconnect(&self, server_name: &str) -> Result<bool> {
         let runtime = self.runtime(server_name)?;
         let mut runtime = runtime.lock().await;
-        let Some(client) = runtime.client.take() else {
-            return Ok(false);
-        };
-        let _ = client.cancel().await;
-        runtime.last_used = None;
-        Ok(true)
+        Ok(runtime.disconnect_client().await)
     }
 
     pub async fn disconnect_all(&self) {
@@ -524,13 +529,10 @@ impl McpManager {
         if server.disabled {
             bail!("MCP server `{server_name}` is disabled")
         }
-        if runtime.client.is_some()
-            && runtime.last_used.is_some_and(|last| {
-                last.elapsed() >= Duration::from_secs(server.idle_timeout.unwrap_or(10) * 60)
-            })
-            && let Some(client) = runtime.client.take()
-        {
-            let _ = client.cancel().await;
+        if runtime.last_used.is_some_and(|last| {
+            last.elapsed() >= Duration::from_secs(server.idle_timeout.unwrap_or(10) * 60)
+        }) {
+            runtime.disconnect_client().await;
         }
         if runtime.client.is_some() {
             return Ok(());
@@ -608,10 +610,8 @@ impl McpManager {
             if runtime
                 .last_used
                 .is_some_and(|last_used| last_used.elapsed() >= delay)
-                && let Some(client) = runtime.client.take()
             {
-                let _ = client.cancel().await;
-                runtime.last_used = None;
+                runtime.disconnect_client().await;
             }
         });
     }

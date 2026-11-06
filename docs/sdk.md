@@ -106,6 +106,9 @@ for await (const event of events) {
 session.close()
 ```
 
+`close` stops active work. After it, event streams deliver what is already
+buffered and then end, and calls that start work return an error.
+
 The native addon uses N-API rather than V8-specific APIs, so the same package
 loads in Node, Bun, and Deno's Node compatibility layer. Deno needs `--allow-ffi`
 plus permissions required by enabled tools.

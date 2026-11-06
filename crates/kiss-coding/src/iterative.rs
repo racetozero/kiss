@@ -213,7 +213,18 @@ impl JobRecord {
         }
     }
 
-    fn set_status(&self, status: JobStatus) {
+    /// Leave `Queued`. A pause that was requested first stays in force.
+    fn mark_running(&self) {
+        let mut state = self.state.lock().unwrap();
+        if state.status == JobStatus::Queued {
+            state.status = JobStatus::Running;
+            drop(state);
+            self.signal();
+        }
+    }
+
+    /// Record the outcome of the run task, which is the only caller.
+    fn finish(&self, status: JobStatus) {
         self.state.lock().unwrap().status = status;
         self.signal();
     }
@@ -338,19 +349,19 @@ impl IterativeRuntime {
             permit = self.permits.clone().acquire_owned() => permit.ok(),
         };
         let Some(_permit) = permit else {
-            job.set_status(JobStatus::Stopped);
+            job.finish(JobStatus::Stopped);
             return;
         };
         if !job.wait_until_ready().await {
-            job.set_status(JobStatus::Stopped);
+            job.finish(JobStatus::Stopped);
             return;
         }
-        job.set_status(JobStatus::Running);
+        job.mark_running();
 
         let mut iteration = 1_u32;
         loop {
             if !job.wait_until_ready().await {
-                job.set_status(JobStatus::Stopped);
+                job.finish(JobStatus::Stopped);
                 return;
             }
             job.state.lock().unwrap().iteration = iteration;
@@ -373,11 +384,11 @@ impl IterativeRuntime {
             job.signal();
 
             if job.cancel.is_cancelled() || outcome.status == AgentStatus::Interrupted {
-                job.set_status(JobStatus::Stopped);
+                job.finish(JobStatus::Stopped);
                 return;
             }
             if outcome.status == AgentStatus::Failed {
-                job.set_status(JobStatus::Failed);
+                job.finish(JobStatus::Failed);
                 return;
             }
             if outcome
@@ -385,17 +396,17 @@ impl IterativeRuntime {
                 .as_deref()
                 .is_some_and(contains_completion_marker)
             {
-                job.set_status(JobStatus::Completed);
+                job.finish(JobStatus::Completed);
                 return;
             }
             if job.limit == Some(iteration) {
-                job.set_status(JobStatus::Completed);
+                job.finish(JobStatus::Completed);
                 return;
             }
             if let Some(interval) = job.interval {
                 tokio::select! {
                     _ = job.cancel.cancelled() => {
-                        job.set_status(JobStatus::Stopped);
+                        job.finish(JobStatus::Stopped);
                         return;
                     }
                     _ = tokio::time::sleep(interval) => {}
@@ -515,6 +526,32 @@ mod tests {
     fn completion_marker_is_case_insensitive() {
         assert!(contains_completion_marker("done\n[GOAL-COMPLETE]"));
         assert!(!contains_completion_marker("keep going\n[continue]"));
+    }
+
+    #[tokio::test]
+    async fn a_pause_that_arrives_before_the_job_starts_is_kept() {
+        let registry = kiss_ai::Registry::from_builtin();
+        let model = registry.all().first().unwrap().clone();
+        let parent = AgentSession::new(
+            crate::SessionManager::in_memory(std::path::Path::new("/test")),
+            Vec::new(),
+            registry,
+            crate::Settings::default(),
+            "test".into(),
+            model,
+            kiss_ai::ThinkingLevel::Off,
+            None,
+            Arc::new(|_| {}),
+        );
+        let job = parent
+            .iterative_jobs()
+            .unwrap()
+            .start(JobKind::Loop, "finish it", None, None)
+            .unwrap();
+        job.pause();
+        job.mark_running();
+        assert!(job.is_paused());
+        job.stop();
     }
 
     #[tokio::test]

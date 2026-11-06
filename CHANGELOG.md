@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+### Fixed
+
+- Esc and Ctrl+C now stop a retry wait and automatic compaction.
+- A message typed after the agent last read its queue now runs when the run
+  ends. Before, it waited for the next prompt and the terminal reported work.
+- Parallel tool output stays in the cell of its own call, and a notice during a
+  stream no longer freezes the answer on screen.
+- The Space key works after a voice transcription is cancelled.
+- A saved workflow report on an idle session joins the conversation at once. It
+  no longer costs an extra model turn after the next answer.
+- `/compact` works after an aborted prompt. During an active prompt it reports
+  that the prompt must end first.
+- At most one background command runs at a time, and a second command reports
+  which command blocks it. Esc on a command that is stopping releases the wait.
+- A workflow approval stays visible over `/jobs` and other pickers.
+- `/login` during an account add no longer replaces the credential of the active
+  account, and closing the login picker abandons the account add.
+- A new session no longer shows the status of the previous session.
+- A subagent follow-up after an interrupt waits for the old turn to stop.
+- SDK `close` now ends event streams and refuses new work. SDK `wait_idle` no
+  longer returns before a detached prompt starts.
+
 ## 0.0.36 - 2026-11-02
 
 ### Added

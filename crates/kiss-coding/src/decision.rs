@@ -168,33 +168,26 @@ pub(crate) struct ReasoningSelection {
 }
 
 #[derive(Default)]
-pub(crate) struct ReasoningLease {
-    level: Option<ThinkingLevel>,
-    remaining: u8,
-}
+pub(crate) struct ReasoningLease(Option<(ThinkingLevel, std::num::NonZeroU8)>);
 
 impl ReasoningLease {
     pub fn consume_generation(&mut self) {
-        if self.remaining > 0 {
-            self.remaining -= 1;
-            if self.remaining == 0 {
-                self.level = None;
-            }
-        }
+        self.0 = self.0.and_then(|(level, remaining)| {
+            std::num::NonZeroU8::new(remaining.get() - 1).map(|remaining| (level, remaining))
+        });
     }
 
     pub fn current(&self) -> Option<ThinkingLevel> {
-        self.level
+        self.0.map(|(level, _)| level)
     }
 
     pub fn install(&mut self, selection: &ReasoningSelection) {
-        self.level = Some(selection.level);
-        self.remaining = selection.generations;
+        self.0 = std::num::NonZeroU8::new(selection.generations)
+            .map(|remaining| (selection.level, remaining));
     }
 
     pub fn clear(&mut self) {
-        self.level = None;
-        self.remaining = 0;
+        self.0 = None;
     }
 }
 

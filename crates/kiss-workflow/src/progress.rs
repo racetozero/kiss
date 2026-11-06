@@ -5,7 +5,6 @@
 //! Snapshots are built at most once per change and shared behind an `Arc`.
 
 use crate::runner::AgentId;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tokio::sync::{Notify, watch};
@@ -48,11 +47,16 @@ pub enum AgentStatus {
     Stopped,
     /// Replayed from a previous run rather than started again.
     Reused,
+    /// The user asked for a new attempt, and the active call is stopping.
+    Restarting,
 }
 
 impl AgentStatus {
     pub fn is_finished(self) -> bool {
-        !matches!(self, AgentStatus::Queued | AgentStatus::Running)
+        !matches!(
+            self,
+            AgentStatus::Queued | AgentStatus::Running | AgentStatus::Restarting
+        )
     }
 
     pub fn label(self) -> &'static str {
@@ -63,6 +67,7 @@ impl AgentStatus {
             AgentStatus::Failed => "failed",
             AgentStatus::Stopped => "stopped",
             AgentStatus::Reused => "reused",
+            AgentStatus::Restarting => "restarting",
         }
     }
 }
@@ -142,10 +147,6 @@ struct AgentRecord {
     result: Option<String>,
     error: Option<String>,
     cancel: CancellationToken,
-    /// Set when the user asks the active call to start again. Cancelling alone
-    /// means that the call returns null. This flag tells the interpreter to
-    /// replace the cancellation token and issue the same request again.
-    restart: bool,
 }
 
 struct PhaseRecord {
@@ -169,7 +170,6 @@ pub(crate) struct RunState {
     version: watch::Sender<u64>,
     /// The snapshot for the current version, built on first request.
     cached: Mutex<Option<(u64, Arc<RunSnapshot>)>>,
-    paused: AtomicBool,
     resumed: Notify,
     stop: CancellationToken,
 }
@@ -205,7 +205,6 @@ impl RunState {
             }),
             version,
             cached: Mutex::new(None),
-            paused: AtomicBool::new(false),
             resumed: Notify::new(),
             stop: CancellationToken::new(),
         })
@@ -286,7 +285,6 @@ impl RunState {
                     result: None,
                     error: None,
                     cancel: cancel.clone(),
-                    restart: false,
                 });
             }
         }
@@ -296,7 +294,10 @@ impl RunState {
 
     pub(crate) fn agent_started(&self, id: AgentId) {
         self.with_agent(id, |agent| {
-            agent.status = AgentStatus::Running;
+            // A restart that arrived before the call began must survive it.
+            if agent.status != AgentStatus::Restarting {
+                agent.status = AgentStatus::Running;
+            }
             agent.started = Some(Instant::now());
         });
     }
@@ -345,45 +346,43 @@ impl RunState {
     // ----- user controls ----------------------------------------------------
 
     pub fn pause(&self) {
-        if self.paused.swap(true, Ordering::SeqCst) {
-            return;
-        }
         if let Ok(mut inner) = self.inner.lock()
             && inner.status == RunStatus::Running
         {
             inner.status = RunStatus::Paused;
+            drop(inner);
+            self.changed();
         }
-        self.changed();
     }
 
     pub fn resume(&self) {
-        if !self.paused.swap(false, Ordering::SeqCst) {
-            return;
-        }
         if let Ok(mut inner) = self.inner.lock()
             && inner.status == RunStatus::Paused
         {
             inner.status = RunStatus::Running;
+            drop(inner);
+            self.resumed.notify_waiters();
+            self.changed();
         }
-        self.resumed.notify_waiters();
-        self.changed();
     }
 
     pub fn is_paused(&self) -> bool {
-        self.paused.load(Ordering::SeqCst)
+        self.inner
+            .lock()
+            .is_ok_and(|inner| inner.status == RunStatus::Paused)
     }
 
     /// Wait here while the run is paused. Returns false when the run was
     /// stopped while waiting.
     pub(crate) async fn wait_while_paused(&self) -> bool {
-        while self.paused.load(Ordering::SeqCst) {
+        while self.is_paused() {
             if self.stop.is_cancelled() {
                 return false;
             }
             let resumed = self.resumed.notified();
             // Re-check after arming the wait, so a resume that lands in between
             // is not missed.
-            if !self.paused.load(Ordering::SeqCst) {
+            if !self.is_paused() {
                 break;
             }
             tokio::select! {
@@ -428,7 +427,7 @@ impl RunState {
                 .find(|agent| agent.id == id)
             && matches!(agent.status, AgentStatus::Queued | AgentStatus::Running)
         {
-            agent.restart = true;
+            agent.status = AgentStatus::Restarting;
             agent.cancel.cancel();
         }
         self.changed();
@@ -444,8 +443,7 @@ impl RunState {
             .phases
             .iter_mut()
             .flat_map(|phase| phase.agents.iter_mut())
-            .find(|agent| agent.id == id && agent.restart)?;
-        agent.restart = false;
+            .find(|agent| agent.id == id && agent.status == AgentStatus::Restarting)?;
         agent.status = AgentStatus::Queued;
         agent.started = None;
         agent.elapsed = Duration::ZERO;
@@ -611,6 +609,28 @@ mod tests {
         state.resume();
         assert!(handle.await.unwrap());
         assert_eq!(state.snapshot().status, RunStatus::Running);
+    }
+
+    #[test]
+    fn a_restart_requested_before_the_call_begins_still_restarts_it() {
+        let state = RunState::new(&[]);
+        state.register_agent(0, "agent".into(), "prompt".into());
+        state.restart_agent(0);
+        state.agent_started(0);
+        assert!(state.take_restart(0).is_some());
+        assert_eq!(
+            state.snapshot().phases[0].agents[0].status,
+            AgentStatus::Queued
+        );
+    }
+
+    #[test]
+    fn pausing_a_finished_run_changes_nothing() {
+        let state = RunState::new(&[]);
+        state.finish(RunStatus::Completed, None);
+        state.pause();
+        assert!(!state.is_paused());
+        assert_eq!(state.snapshot().status, RunStatus::Completed);
     }
 
     #[tokio::test]

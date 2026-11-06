@@ -12,7 +12,7 @@ use anyhow::{Context as _, Result};
 use kiss_agent::{AgentEvent, AgentMessage};
 use kiss_ai::{AssistantEvent, ContentBlock, StopReason, ThinkingLevel, Transport};
 use kiss_coding::decision::DecisionModel;
-use kiss_coding::session_runner::{PromptMode, SessionEvent};
+use kiss_coding::session_runner::{PromptMode, QueueKind, RunPhase, SessionEvent};
 use kiss_coding::settings::{CompactionMode, MermaidRendering, QueueMode, ReasoningEffortMode};
 use kiss_coding::workflows::workflow_trigger;
 use kiss_tui::{
@@ -37,6 +37,8 @@ enum Cell {
     AssistantFinal(String),
     Thinking(String),
     ToolCall {
+        /// The tool call this cell shows. Parallel calls finish in any order.
+        id: String,
         title: String,
         output: String,
         is_error: bool,
@@ -70,15 +72,12 @@ struct App {
     cell_render_cache: Vec<Option<CachedCellLines>>,
     editor: Editor,
     voice_mode: VoiceMode,
-    voice_preview: Option<String>,
-    recording: Option<crate::voice::Recording>,
-    voice_busy: bool,
+    voice: VoiceState,
+    /// Identifies the current capture, so late events of a cancelled one drop.
     voice_generation: u64,
     keybindings: Keybindings,
     startup_lines: Vec<String>,
     queue_note: Option<String>,
-    working: bool,
-    compacting: bool,
     spinner_frame: usize,
     session_title: Option<String>,
     terminal_title_dirty: bool,
@@ -92,8 +91,8 @@ struct App {
     file_search_request: Option<u64>,
     file_search_pending: bool,
     secret_prompt: Option<SecretPrompt>,
-    command_status: Option<String>,
-    command_cancel: Option<CancellationToken>,
+    /// The one background command that may run. See `begin_command`.
+    command: Option<BackgroundCommand>,
     ctrl_c_armed: bool,
     escape_armed: bool,
     hide_thinking: bool,
@@ -103,9 +102,8 @@ struct App {
     btw_panel: Option<BtwPanel>,
     btw_request_id: u64,
     recap: Option<String>,
-    recap_loading: bool,
-    recap_automatic: bool,
-    recap_cancel: Option<CancellationToken>,
+    recap_job: Option<RecapJob>,
+    /// Identifies the current request, so a late answer of an old one drops.
     recap_request_id: u64,
     last_user_activity: Instant,
     idle_recap_armed: bool,
@@ -133,6 +131,20 @@ enum VoiceMode {
     Tap,
 }
 
+/// One voice capture. Both active states keep the `Recording`, because
+/// dropping it cancels the capture and its transcription.
+enum VoiceState {
+    Idle,
+    Recording {
+        recording: crate::voice::Recording,
+        preview: String,
+    },
+    Transcribing {
+        _recording: crate::voice::Recording,
+        preview: String,
+    },
+}
+
 impl VoiceMode {
     fn parse(value: &str) -> Option<Self> {
         match value {
@@ -144,12 +156,39 @@ impl VoiceMode {
     }
 }
 
+/// A background task that the footer reports and that blocks other commands.
+///
+/// At most one runs at a time, so a finish event always belongs to the current
+/// command. The slot stays occupied after a cancel until the task reports back.
+struct BackgroundCommand {
+    status: String,
+    control: CommandControl,
+}
+
+enum CommandControl {
+    Cancellable(CancellationToken),
+    Uncancellable,
+    /// The token fired and the task has not reported back. Another cancel
+    /// request releases the slot, in case the task never ends.
+    Stopping,
+}
+
+/// A recap request in flight.
+struct RecapJob {
+    automatic: bool,
+    cancel: CancellationToken,
+}
+
 struct BtwPanel {
     request_id: u64,
     question: String,
-    answer: Option<String>,
-    error: Option<String>,
-    cancel: Option<CancellationToken>,
+    state: BtwState,
+}
+
+enum BtwState {
+    Answering(CancellationToken),
+    Answered(String),
+    Failed(String),
 }
 
 enum PickerKind {
@@ -196,13 +235,22 @@ enum AccountAction {
     Remove,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum McpPanelState {
     Checking,
     Connected,
-    NeedsAuthentication,
-    Failed,
+    NeedsAuthentication(String),
+    Failed(String),
     Disabled,
+}
+
+impl McpPanelState {
+    fn error(&self) -> Option<&str> {
+        match self {
+            Self::NeedsAuthentication(error) | Self::Failed(error) => Some(error),
+            Self::Checking | Self::Connected | Self::Disabled => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -214,7 +262,6 @@ struct McpPanelServer {
     authenticated: bool,
     source: String,
     scope: kiss_mcp::config::ConfigScope,
-    error: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -313,6 +360,8 @@ struct LlamaStatus {
 }
 
 enum CommandEvent {
+    /// A task whose result events are shared with work outside the command slot.
+    CommandFinished,
     DesktopNotificationFinished(std::result::Result<(), String>),
     BrowserLoginUrl {
         url: String,
@@ -509,14 +558,67 @@ enum CommandMenuAction {
     Submit(EditorSubmission),
 }
 
+/// The part of the interface that owns the keyboard and the input area. This
+/// is the only place that orders the layers. A lower layer keeps its contents
+/// and resumes when the layers above it close.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum InputLayer {
+    Btw,
+    SecretPrompt,
+    WorkflowView,
+    JobView,
+    Picker,
+    Editor,
+}
+
 impl App {
+    fn input_layer(&self) -> InputLayer {
+        let blocking_picker = matches!(
+            self.picker.as_ref().map(|picker| &picker.kind),
+            Some(PickerKind::WorkflowApproval(..) | PickerKind::Trust)
+        );
+        if self.btw_panel.is_some() {
+            InputLayer::Btw
+        } else if self.secret_prompt.is_some() {
+            InputLayer::SecretPrompt
+        } else if blocking_picker {
+            InputLayer::Picker
+        } else if self.workflow_view.is_some() {
+            InputLayer::WorkflowView
+        } else if self.job_view.is_some() {
+            InputLayer::JobView
+        } else if self.picker.is_some() {
+            InputLayer::Picker
+        } else {
+            InputLayer::Editor
+        }
+    }
+
+    /// Open a picker unless a workflow approval is waiting. Replacing that
+    /// picker would drop its reply channel and silently cancel the workflow.
+    fn show_picker(&mut self, picker: Picker) {
+        if matches!(
+            self.picker.as_ref().map(|picker| &picker.kind),
+            Some(PickerKind::WorkflowApproval(..))
+        ) {
+            self.cells.push(Cell::Notice(
+                "answer the workflow approval first, then try again".into(),
+            ));
+            return;
+        }
+        self.picker = Some(picker);
+    }
+
     fn render(&mut self, width: usize, session: &Arc<kiss_coding::AgentSession>) -> Vec<Arc<str>> {
         let mut lines: Vec<String> = Vec::new();
         lines.extend(self.startup_lines.iter().cloned());
 
         // The progress view takes the place of the transcript while it is open.
         // It needs the height, and `esc` brings the transcript straight back.
-        if let Some(view) = &mut self.workflow_view {
+        let layer = self.input_layer();
+        if layer == InputLayer::WorkflowView
+            && let Some(view) = &mut self.workflow_view
+        {
             let theme = self.theme.clone();
             lines.push(String::new());
             lines.extend(view.render(width, &theme));
@@ -526,7 +628,9 @@ impl App {
             return lines.into_iter().map(Arc::from).collect();
         }
 
-        if let Some(view) = &mut self.job_view {
+        if layer == InputLayer::JobView
+            && let Some(view) = &mut self.job_view
+        {
             lines.push(String::new());
             lines.extend(view.render(width, &self.theme));
             lines.push(String::new());
@@ -610,6 +714,7 @@ impl App {
                     }
                 }
                 Cell::ToolCall {
+                    id: _,
                     title,
                     output,
                     is_error,
@@ -700,19 +805,30 @@ impl App {
         }
 
         let mut lines = vec![String::new()];
-        if self.working {
+        let activity = match session.run_phase() {
+            RunPhase::Idle => None,
+            RunPhase::Streaming => Some("working"),
+            RunPhase::RetryWait => Some("waiting to retry"),
+            RunPhase::Compacting => Some("compacting"),
+        };
+        if let Some(activity) = activity {
             let spin = SPINNER[self.spinner_frame % SPINNER.len()];
             lines.push(self.theme.fg(
                 "accent",
-                &format!("{spin} working… (esc or ctrl+c to cancel)"),
+                &format!("{spin} {activity}… (esc or ctrl+c to cancel)"),
             ));
         }
-        if let Some(status) = &self.command_status {
+        if let Some(command) = &self.command {
             let spin = SPINNER[self.spinner_frame % SPINNER.len()];
-            lines.push(self.theme.fg(
-                "accent",
-                &format!("{spin} {status} (esc or ctrl+c to cancel)"),
-            ));
+            let hint = match command.control {
+                CommandControl::Cancellable(_) => " (esc or ctrl+c to cancel)",
+                CommandControl::Uncancellable => "",
+                CommandControl::Stopping => " (esc or ctrl+c to stop waiting)",
+            };
+            lines.push(
+                self.theme
+                    .fg("accent", &format!("{spin} {}{hint}", command.status)),
+            );
         }
         if let Some(note) = &self.queue_note {
             lines.push(self.theme.fg("muted", note));
@@ -735,7 +851,7 @@ impl App {
         }
         if let Some(recap) = &self.recap {
             lines.push(self.theme.fg("muted", &format!("※ recap: {recap}")));
-        } else if self.recap_loading {
+        } else if self.recap_job.is_some() {
             let spin = SPINNER[self.spinner_frame % SPINNER.len()];
             lines.push(self.theme.fg("muted", &format!("{spin} creating recap...")));
         }
@@ -745,17 +861,21 @@ impl App {
             for line in kiss_tui::text::wrap_text(&panel.question, width.saturating_sub(2)) {
                 lines.push(self.theme.fg("muted", &format!("  {line}")));
             }
-            if let Some(answer) = &panel.answer {
-                lines.push(String::new());
-                lines.extend(self.md.render(answer, width));
-                lines.push(self.theme.fg("dim", "esc or enter closes"));
-            } else if let Some(error) = &panel.error {
-                lines.push(self.theme.fg("error", &format!("✗ {error}")));
-                lines.push(self.theme.fg("dim", "esc or enter closes"));
-            } else {
-                let spin = SPINNER[self.spinner_frame % SPINNER.len()];
-                lines.push(self.theme.fg("accent", &format!("{spin} answering...")));
-                lines.push(self.theme.fg("dim", "esc cancels"));
+            match &panel.state {
+                BtwState::Answered(answer) => {
+                    lines.push(String::new());
+                    lines.extend(self.md.render(answer, width));
+                    lines.push(self.theme.fg("dim", "esc or enter closes"));
+                }
+                BtwState::Failed(error) => {
+                    lines.push(self.theme.fg("error", &format!("✗ {error}")));
+                    lines.push(self.theme.fg("dim", "esc or enter closes"));
+                }
+                BtwState::Answering(_) => {
+                    let spin = SPINNER[self.spinner_frame % SPINNER.len()];
+                    lines.push(self.theme.fg("accent", &format!("{spin} answering...")));
+                    lines.push(self.theme.fg("dim", "esc cancels"));
+                }
             }
         } else if let Some(prompt) = &self.secret_prompt {
             let title = match &prompt.kind {
@@ -831,7 +951,9 @@ impl App {
             }
         } else {
             lines.extend(self.editor.render(width));
-            if let Some(preview) = &self.voice_preview {
+            if let VoiceState::Recording { preview, .. }
+            | VoiceState::Transcribing { preview, .. } = &self.voice
+            {
                 lines.push(self.theme.fg(
                     "dim",
                     &format!(
@@ -973,6 +1095,7 @@ fn cell_render_key(
             output,
             is_error,
             done,
+            ..
         } => {
             title.hash(&mut hasher);
             output.hash(&mut hasher);
@@ -1054,15 +1177,19 @@ fn mermaid_mode(setting: MermaidRendering) -> MermaidMode {
     }
 }
 
-fn idle_recap_deadline(app: &App, settings: &kiss_coding::Settings) -> Option<Instant> {
+fn idle_recap_deadline(
+    app: &App,
+    session: &kiss_coding::AgentSession,
+    settings: &kiss_coding::Settings,
+) -> Option<Instant> {
     (settings.auto_recap_enabled()
         && app.idle_recap_armed
-        && !app.working
-        && !app.recap_loading
+        && !session.is_running()
+        && app.recap_job.is_none()
         && app.btw_panel.is_none()
         && app.picker.is_none()
         && app.secret_prompt.is_none()
-        && app.command_status.is_none())
+        && app.command.is_none())
     .then(|| app.last_user_activity + AUTO_RECAP_IDLE)
 }
 
@@ -1084,12 +1211,15 @@ fn session_has_conversation(session: &Arc<kiss_coding::AgentSession>) -> bool {
 fn note_user_activity(app: &mut App) {
     app.last_user_activity = Instant::now();
     app.idle_recap_armed = true;
-    if app.recap_loading && app.recap_automatic {
-        if let Some(cancel) = app.recap_cancel.take() {
-            cancel.cancel();
-        }
-        app.recap_loading = false;
-        app.recap_automatic = false;
+    cancel_automatic_recap(app);
+}
+
+/// A recap that the user asked for survives input. An automatic one does not.
+fn cancel_automatic_recap(app: &mut App) {
+    if app.recap_job.as_ref().is_some_and(|job| job.automatic)
+        && let Some(job) = app.recap_job.take()
+    {
+        job.cancel.cancel();
         app.recap_request_id = app.recap_request_id.wrapping_add(1);
     }
 }
@@ -1385,9 +1515,7 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
         md: MarkdownRenderer::new(theme.clone()),
         editor: provisional_editor,
         voice_mode: VoiceMode::Off,
-        voice_preview: None,
-        recording: None,
-        voice_busy: false,
+        voice: VoiceState::Idle,
         voice_generation: 0,
         theme,
         cells: Vec::new(),
@@ -1395,8 +1523,6 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
         keybindings,
         startup_lines,
         queue_note: None,
-        working: false,
-        compacting: false,
         spinner_frame: 0,
         session_title,
         terminal_title_dirty: true,
@@ -1410,8 +1536,7 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
         file_search_request: None,
         file_search_pending: false,
         secret_prompt: None,
-        command_status: None,
-        command_cancel: None,
+        command: None,
         ctrl_c_armed: false,
         escape_armed: false,
         hide_thinking: settings.hide_thinking_block,
@@ -1421,9 +1546,7 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
         btw_panel: None,
         btw_request_id: 0,
         recap: None,
-        recap_loading: false,
-        recap_automatic: false,
-        recap_cancel: None,
+        recap_job: None,
         recap_request_id: 0,
         last_user_activity: Instant::now(),
         idle_recap_armed: true,
@@ -1465,21 +1588,14 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
                 "running this as a dynamic workflow ({trigger}) · /workflows opens the progress view"
             )));
         }
-        let session = session.clone();
-        app.working = true;
         app.cells.push(Cell::User(message.clone()));
-        tokio::spawn(async move {
-            session
-                .prompt_with_mode(vec![AgentMessage::user(message)], prompt_mode)
-                .await;
-        });
+        tokio::spawn(session.prompt_with_mode(vec![AgentMessage::user(message)], prompt_mode));
     }
 
     let mut ticker = tokio::time::interval(std::time::Duration::from_millis(80));
     ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let mut dirty = true;
     let mut next_render_at = Instant::now();
-    let mut running_task: Option<tokio::task::JoinHandle<()>> = None;
     let (file_search_tx, mut file_search_rx) = mpsc::unbounded_channel::<FileSearchResult>();
     let mut file_search = FileSearchService::new(file_search_tx);
     file_search.warm(session.manager.lock().unwrap().cwd().to_path_buf());
@@ -1509,12 +1625,12 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
         let resize_deadline = resize_state
             .next_deadline()
             .unwrap_or_else(|| Instant::now() + Duration::from_secs(86_400));
-        let render_is_active = app.working
-            || app.command_status.is_some()
+        let render_is_active = session.is_running()
+            || app.command.is_some()
             || app.btw_panel.is_some()
-            || app.recap_loading
+            || app.recap_job.is_some()
             || app.title_generation_pending;
-        let recap_deadline = idle_recap_deadline(&app, &resources.settings);
+        let recap_deadline = idle_recap_deadline(&app, &session, &resources.settings);
         let recap_at =
             recap_deadline.unwrap_or_else(|| Instant::now() + Duration::from_secs(86_400));
         if app.terminal_title_dirty {
@@ -1545,16 +1661,6 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
                 if notification_deadline.is_some() => { dirty = true; }
             _ = tokio::time::sleep_until(tokio::time::Instant::from_std(next_render_at)),
                 if dirty && !resize_state.pending() && Instant::now() < next_render_at => {}
-            _ = async {
-                match running_task.as_mut() {
-                    Some(task) => { let _ = task.await; }
-                    None => std::future::pending::<()>().await,
-                }
-            } => {
-                running_task = None;
-                app.working = false;
-                dirty = true;
-            }
             Some(()) = resize_rx.recv() => {
                 let now = Instant::now();
                 resize_state.observe(Terminal::size(), now);
@@ -1616,7 +1722,6 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
                         &event,
                         args,
                         &mut resources,
-                        &mut running_task,
                         &mut file_search,
                         &command_tx,
                     );
@@ -1691,16 +1796,13 @@ fn terminal_host_state(app: &App, session: &kiss_coding::AgentSession) -> Progra
     if let Some((kind, message)) = blocked {
         return ProgramStatus::Blocked(kind, message);
     }
-    let working = app.working
-        || app.compacting
-        || session.is_running()
-        || app.queue_note.is_some()
-        || app.command_status.is_some()
+    let working = session.is_running()
+        || app.command.is_some()
         || app
             .btw_panel
             .as_ref()
-            .is_some_and(|panel| panel.cancel.is_some())
-        || app.recap_loading
+            .is_some_and(|panel| matches!(panel.state, BtwState::Answering(_)))
+        || app.recap_job.is_some()
         || app.title_generation_pending
         || session
             .workflows()
@@ -1715,6 +1817,22 @@ fn terminal_host_state(app: &App, session: &kiss_coding::AgentSession) -> Progra
     }
 }
 
+/// The assistant answer that is still streaming. Notices can follow it, so it
+/// is not always the last cell.
+fn streaming_cell(app: &App) -> Option<usize> {
+    app.cells
+        .iter()
+        .rposition(|cell| matches!(cell, Cell::AssistantStreaming(_)))
+}
+
+/// The unfinished cell of one tool call. A panicked tool task reports an empty
+/// ID, and then the newest unfinished cell receives the failure.
+fn active_tool_cell<'a>(app: &'a mut App, tool_call_id: &str) -> Option<&'a mut Cell> {
+    app.cells.iter_mut().rev().find(|cell| {
+        matches!(cell, Cell::ToolCall { id, done: false, .. } if tool_call_id.is_empty() || id == tool_call_id)
+    })
+}
+
 fn handle_session_event(
     app: &mut App,
     event: SessionEvent,
@@ -1723,6 +1841,10 @@ fn handle_session_event(
 ) {
     match event {
         SessionEvent::PromptEnd { cancelled } => {
+            // A message can arrive between Esc and the end of the run.
+            if cancelled {
+                restore_queued_to_editor(app, session);
+            }
             app.notifications.prompt_finished(
                 cancelled,
                 session.settings().desktop_notifications,
@@ -1730,16 +1852,14 @@ fn handle_session_event(
             );
         }
         SessionEvent::Agent(agent_event) => match *agent_event {
-            AgentEvent::AgentStart => {
-                app.notifications.started();
-                app.working = true;
-            }
+            AgentEvent::AgentStart => app.notifications.started(),
             AgentEvent::AgentEnd { .. } => {
-                app.working = false;
                 // Solidify any streaming cell.
-                if let Some(Cell::AssistantStreaming(text)) = app.cells.last() {
-                    let text = text.clone();
-                    *app.cells.last_mut().unwrap() = Cell::AssistantFinal(text);
+                if let Some(cell) = streaming_cell(app) {
+                    let Cell::AssistantStreaming(text) = &app.cells[cell] else {
+                        unreachable!("streaming_cell finds a streaming cell");
+                    };
+                    app.cells[cell] = Cell::AssistantFinal(text.clone());
                 }
                 for outcome in app.workflow_outcomes.drain(..) {
                     app.cells.push(Cell::Notice(outcome));
@@ -1763,22 +1883,22 @@ fn handle_session_event(
             },
             AgentEvent::MessageUpdate { assistant_event } => match *assistant_event {
                 AssistantEvent::TextDelta { delta, .. } => {
-                    if let Some(Cell::AssistantStreaming(text)) = app.cells.last_mut() {
+                    if let Some(cell) = streaming_cell(app)
+                        && let Cell::AssistantStreaming(text) = &mut app.cells[cell]
+                    {
                         text.push_str(&delta);
                     }
                 }
                 AssistantEvent::TextEnd { content, .. } => {
-                    if let Some(Cell::AssistantStreaming(text)) = app.cells.last_mut()
+                    if let Some(cell) = streaming_cell(app)
+                        && let Cell::AssistantStreaming(text) = &mut app.cells[cell]
                         && text.is_empty()
                     {
                         *text = content;
                     }
                 }
                 AssistantEvent::ThinkingStart { .. } => {
-                    if let Some(position) = app
-                        .cells
-                        .iter()
-                        .rposition(|cell| matches!(cell, Cell::AssistantStreaming(_)))
+                    if let Some(position) = streaming_cell(app)
                         && (position == 0 || !matches!(app.cells[position - 1], Cell::Thinking(_)))
                     {
                         app.cells.insert(position, Cell::Thinking(String::new()));
@@ -1786,11 +1906,7 @@ fn handle_session_event(
                     }
                 }
                 AssistantEvent::ThinkingDelta { delta, .. } => {
-                    if let Some(position) = app
-                        .cells
-                        .iter()
-                        .rposition(|cell| matches!(cell, Cell::AssistantStreaming(_)))
-                    {
+                    if let Some(position) = streaming_cell(app) {
                         if position > 0
                             && let Cell::Thinking(thinking) = &mut app.cells[position - 1]
                         {
@@ -1802,12 +1918,9 @@ fn handle_session_event(
                     }
                 }
                 AssistantEvent::ThinkingEnd { content, .. } => {
-                    if let Some(Cell::Thinking(thinking)) = app
-                        .cells
-                        .iter_mut()
-                        .rev()
-                        .take(2)
-                        .find(|cell| matches!(cell, Cell::Thinking(_)))
+                    if let Some(position) = streaming_cell(app)
+                        && position > 0
+                        && let Cell::Thinking(thinking) = &mut app.cells[position - 1]
                     {
                         *thinking = content;
                     }
@@ -1832,46 +1945,44 @@ fn handle_session_event(
                 if a.stop_reason == StopReason::Aborted {
                     app.cells.push(Cell::Notice("aborted".into()));
                 }
-                if let Some(Cell::AssistantStreaming(_)) = app.cells.last() {
-                    *app.cells.last_mut().unwrap() = Cell::AssistantFinal(a.text());
+                if let Some(cell) = streaming_cell(app) {
+                    app.cells[cell] = Cell::AssistantFinal(a.text());
                 }
             }
             AgentEvent::ToolExecutionStart {
-                tool_name, args, ..
+                tool_call_id,
+                tool_name,
+                args,
             } => {
                 app.cells.push(Cell::ToolCall {
+                    id: tool_call_id,
                     title: tool_title(&tool_name, &args),
                     output: String::new(),
                     is_error: false,
                     done: false,
                 });
             }
-            AgentEvent::ToolExecutionUpdate { partial, .. } => {
-                if let Some(Cell::ToolCall { output, .. }) = app
-                    .cells
-                    .iter_mut()
-                    .rev()
-                    .find(|c| matches!(c, Cell::ToolCall { done: false, .. }))
-                {
+            AgentEvent::ToolExecutionUpdate {
+                tool_call_id,
+                partial,
+                ..
+            } => {
+                if let Some(Cell::ToolCall { output, .. }) = active_tool_cell(app, &tool_call_id) {
                     *output = partial.output_text();
                 }
             }
             AgentEvent::ToolExecutionEnd {
+                tool_call_id,
                 tool_name,
                 result,
                 is_error,
-                ..
             } => {
                 if let Some(Cell::ToolCall {
                     output,
                     is_error: err_slot,
                     done,
                     ..
-                }) = app
-                    .cells
-                    .iter_mut()
-                    .rev()
-                    .find(|c| matches!(c, Cell::ToolCall { done: false, .. }))
+                }) = active_tool_cell(app, &tool_call_id)
                 {
                     *output = result.output_text();
                     *err_slot = is_error;
@@ -1903,7 +2014,6 @@ fn handle_session_event(
             };
         }
         SessionEvent::CompactionStart { auto } => {
-            app.compacting = true;
             app.cells.push(Cell::Notice(if auto {
                 "auto-compacting context…".into()
             } else {
@@ -1914,17 +2024,14 @@ fn handle_session_event(
             tokens_before,
             error,
             ..
-        } => {
-            app.compacting = false;
-            match error {
-                Some(err) => app
-                    .cells
-                    .push(Cell::Error(format!("compaction failed: {err}"))),
-                None => app.cells.push(Cell::Notice(format!(
-                    "compacted {tokens_before} tokens of history"
-                ))),
-            }
-        }
+        } => match error {
+            Some(err) => app
+                .cells
+                .push(Cell::Error(format!("compaction failed: {err}"))),
+            None => app.cells.push(Cell::Notice(format!(
+                "compacted {tokens_before} tokens of history"
+            ))),
+        },
         SessionEvent::Retry {
             attempt,
             max,
@@ -2119,7 +2226,7 @@ fn open_account_providers(app: &mut App, action: AccountAction, filter: Option<&
     if let Some(filter) = filter {
         list.set_filter(filter.to_string());
     }
-    app.picker = Some(Picker {
+    app.show_picker(Picker {
         kind: PickerKind::AccountProviders(providers, action),
         list,
     });
@@ -2162,7 +2269,7 @@ fn open_accounts_picker(app: &mut App, provider: &str, action: AccountAction) {
     };
     let mut list = SelectList::new(title, items, app.theme.clone());
     list.max_visible = 12;
-    app.picker = Some(Picker {
+    app.show_picker(Picker {
         kind: PickerKind::Accounts(provider.into(), action),
         list,
     });
@@ -2187,7 +2294,7 @@ fn open_account_actions(app: &mut App, provider: &str, index: usize) {
         value,
     })
     .collect();
-    app.picker = Some(Picker {
+    app.show_picker(Picker {
         kind: PickerKind::AccountActions(provider.into(), index),
         list: SelectList::new(
             format!("{provider} · {}. {}", index + 1, account.label),
@@ -2198,6 +2305,9 @@ fn open_account_actions(app: &mut App, provider: &str, index: usize) {
 }
 
 fn start_account_add(app: &mut App, provider: &str, label: Option<String>) {
+    if command_blocks(app, "adding an account") {
+        return;
+    }
     if let Err(error) = kiss_ai::auth::accounts::begin_add(provider) {
         app.cells
             .push(Cell::Error(format!("could not add an account: {error:#}")));
@@ -2287,19 +2397,21 @@ fn handle_command_event(
     session: &Arc<kiss_coding::AgentSession>,
 ) {
     match event {
+        CommandEvent::CommandFinished => app.command = None,
         CommandEvent::DesktopNotificationFinished(result) => {
             finish_notification(app, result);
         }
         CommandEvent::VoicePreview { generation, text } => {
-            if generation == app.voice_generation {
-                app.voice_preview = Some(text);
+            if generation == app.voice_generation
+                && let VoiceState::Recording { preview, .. }
+                | VoiceState::Transcribing { preview, .. } = &mut app.voice
+            {
+                *preview = text;
             }
         }
         CommandEvent::VoiceFinished { generation, result } => {
             if generation == app.voice_generation {
-                app.recording = None;
-                app.voice_preview = None;
-                app.voice_busy = false;
+                app.voice = VoiceState::Idle;
                 match result {
                     Ok(text) if !text.is_empty() => {
                         app.editor.insert(&text);
@@ -2320,8 +2432,7 @@ fn handle_command_event(
             app.cells.push(Cell::Notice(message));
         }
         CommandEvent::BrowserLoginFinished { provider, result } => {
-            app.command_status = None;
-            app.command_cancel = None;
+            app.command = None;
             match result {
                 Ok(()) => {
                     if provider == "cursor" {
@@ -2351,40 +2462,33 @@ fn handle_command_event(
             code,
             opened,
         } => {
-            app.command_status = Some(format!("waiting for {provider} device approval"));
+            set_command_status(app, format!("waiting for {provider} device approval"));
             app.cells.push(Cell::Notice(format!(
                 "{} {url} and enter code {code}",
                 if opened { "Use" } else { "Open" }
             )));
         }
-        CommandEvent::ModelCatalog { result, pattern } => {
-            app.command_status = None;
-            app.command_cancel = None;
-            match result {
-                Ok(registry) => {
-                    if let Some((model, thinking)) = pattern
-                        .as_deref()
-                        .filter(|pattern| *pattern != "cursor")
-                        .and_then(|pattern| {
-                            registry.resolve(pattern, Some(&session.model().provider))
-                        })
-                    {
-                        session.set_model(model);
-                        if let Some(thinking) = thinking {
-                            session.set_thinking_level(thinking);
-                            update_thinking_border(app, thinking);
-                        }
-                    } else {
-                        open_model_picker_with_filter(app, &registry, pattern.as_deref());
+        CommandEvent::ModelCatalog { result, pattern } => match result {
+            Ok(registry) => {
+                if let Some((model, thinking)) = pattern
+                    .as_deref()
+                    .filter(|pattern| *pattern != "cursor")
+                    .and_then(|pattern| registry.resolve(pattern, Some(&session.model().provider)))
+                {
+                    session.set_model(model);
+                    if let Some(thinking) = thinking {
+                        session.set_thinking_level(thinking);
+                        update_thinking_border(app, thinking);
                     }
-                    app.model_catalog = Some(registry);
+                } else {
+                    open_model_picker_with_filter(app, &registry, pattern.as_deref());
                 }
-                Err(error) => app.cells.push(Cell::Error(error)),
+                app.model_catalog = Some(registry);
             }
-        }
+            Err(error) => app.cells.push(Cell::Error(error)),
+        },
         CommandEvent::LlamaModels(result) => {
-            app.command_status = None;
-            app.command_cancel = None;
+            app.command = None;
             match result {
                 Ok(models) if models.is_empty() => app
                     .cells
@@ -2394,8 +2498,7 @@ fn handle_command_event(
             }
         }
         CommandEvent::LlamaActionFinished(result) => {
-            app.command_status = None;
-            app.command_cancel = None;
+            app.command = None;
             match result {
                 Ok(message) => app.cells.push(Cell::Notice(message)),
                 Err(error) => app.cells.push(Cell::Error(error)),
@@ -2418,8 +2521,7 @@ fn handle_command_event(
             reset_file_search(app, file_search);
             file_search.refresh_all();
             refresh_git_branch(app, session);
-            app.command_status = None;
-            app.command_cancel = None;
+            app.command = None;
             match result {
                 Ok(result) if result.cancelled => {}
                 Ok(result) if result.exit_code != Some(0) => {
@@ -2438,8 +2540,7 @@ fn handle_command_event(
             }
         }
         CommandEvent::ShareFinished(result) => {
-            app.command_status = None;
-            app.command_cancel = None;
+            app.command = None;
             match result {
                 Ok(url) => app
                     .cells
@@ -2448,7 +2549,7 @@ fn handle_command_event(
             }
         }
         CommandEvent::UpdateFinished(result) => {
-            app.command_status = None;
+            app.command = None;
             match result {
                 Ok(_) => app
                     .cells
@@ -2459,8 +2560,7 @@ fn handle_command_event(
             }
         }
         CommandEvent::TreeNavigationFinished(result) => {
-            app.command_status = None;
-            app.command_cancel = None;
+            app.command = None;
             match result {
                 Ok(outcome) if outcome.cancelled => {}
                 Ok(outcome) => {
@@ -2487,11 +2587,10 @@ fn handle_command_event(
             if panel.request_id != request_id {
                 return;
             }
-            panel.cancel = None;
-            match result {
-                Ok(response) => panel.answer = Some(response.text),
-                Err(error) => panel.error = Some(error),
-            }
+            panel.state = match result {
+                Ok(response) => BtwState::Answered(response.text),
+                Err(error) => BtwState::Failed(error),
+            };
         }
         CommandEvent::RecapFinished {
             request_id,
@@ -2501,9 +2600,7 @@ fn handle_command_event(
             if app.recap_request_id != request_id {
                 return;
             }
-            app.recap_loading = false;
-            app.recap_cancel = None;
-            app.recap_automatic = false;
+            app.recap_job = None;
             match result {
                 Ok(response) => app.recap = Some(normalize_recap(&response.text)),
                 Err(error) if error.to_ascii_lowercase().contains("cancel") => {}
@@ -2531,8 +2628,6 @@ fn handle_command_event(
         }
         CommandEvent::McpServerChecked(server) => {
             let server = *server;
-            app.command_status = None;
-            app.command_cancel = None;
             if let Some(current) = app
                 .mcp_servers
                 .iter_mut()
@@ -2559,8 +2654,7 @@ fn handle_command_event(
             action,
             result,
         } => {
-            app.command_status = None;
-            app.command_cancel = None;
+            app.command = None;
             match result {
                 Ok(message) => app.cells.push(Cell::Notice(message)),
                 Err(error) => app.cells.push(Cell::Error(format!(
@@ -2569,7 +2663,7 @@ fn handle_command_event(
             }
         }
         CommandEvent::WebMcpFinished(result) => {
-            app.command_status = None;
+            app.command = None;
             match result {
                 Ok(WebMcpCommandResult::Connected) => {
                     session.install_session_tool(app.webmcp_manager.agent_tool());
@@ -2610,17 +2704,16 @@ fn handle_command_event(
             open_workflow_approval(app, plan, reply);
         }
         CommandEvent::WorkflowFinished { name, result } => {
-            app.command_status = None;
-            app.command_cancel = None;
+            app.command = None;
             app.workflow_view = None;
             match result {
                 Ok(report) => {
                     app.cells.push(Cell::Notice(format!(
                         "workflow {name} finished\n\n{report}"
                     )));
-                    // The report joins the conversation as a follow-up, so the
-                    // next turn can act on it without the user pasting it back.
-                    session.queue_follow_up(AgentMessage::user(format!(
+                    // The next turn can act on the report without the user
+                    // pasting it back.
+                    session.add_for_next_turn(AgentMessage::user(format!(
                         "The /{name} workflow finished and reported:\n\n{report}"
                     )));
                 }
@@ -2630,12 +2723,11 @@ fn handle_command_event(
             }
         }
         CommandEvent::WorkflowStarted(record) => {
-            app.command_status = Some(format!("running workflow {}", record.name));
+            set_command_status(app, format!("running workflow {}", record.name));
             app.workflow_view = Some(WorkflowView::new(record));
         }
         CommandEvent::WorkflowCancelled => {
-            app.command_status = None;
-            app.command_cancel = None;
+            app.command = None;
         }
     }
 }
@@ -3221,22 +3313,6 @@ fn visible_user_text(stored_text: &str) -> String {
         .unwrap_or_else(|| stored_text.to_string())
 }
 
-fn queue_user_message(
-    session: &Arc<kiss_coding::AgentSession>,
-    display_text: String,
-    model_text: String,
-    follow_up: bool,
-    prompt_mode: PromptMode,
-) {
-    let stored_text = stored_user_text(&display_text, &model_text);
-    let message = AgentMessage::user(stored_text);
-    if follow_up {
-        session.queue_follow_up_with_mode(message, prompt_mode);
-    } else {
-        session.queue_steering_with_mode(message, prompt_mode);
-    }
-}
-
 fn voice_space(event: &InputEvent) -> Option<bool> {
     match event {
         InputEvent::Key(key) if *key == KeyEvent::char(' ') => Some(true),
@@ -3246,11 +3322,22 @@ fn voice_space(event: &InputEvent) -> Option<bool> {
 }
 
 fn stop_voice(app: &mut App) {
-    if let Some(recording) = &app.recording {
+    if let VoiceState::Recording { recording, preview } =
+        std::mem::replace(&mut app.voice, VoiceState::Idle)
+    {
         recording.stop();
-        app.voice_busy = true;
+        app.voice = VoiceState::Transcribing {
+            _recording: recording,
+            preview,
+        };
         app.cells.push(Cell::Notice("transcribing voice…".into()));
     }
+}
+
+/// Drop the current capture and any late events from it.
+fn reset_voice(app: &mut App) {
+    app.voice = VoiceState::Idle;
+    app.voice_generation = app.voice_generation.wrapping_add(1);
 }
 
 fn voice_input(
@@ -3266,75 +3353,68 @@ fn voice_input(
     let Some(pressed) = voice_space(event) else {
         return false;
     };
-    if app.recording.is_none()
-        && (app.picker.is_some()
-            || app.secret_prompt.is_some()
-            || app.btw_panel.is_some()
-            || app.workflow_view.is_some()
-            || app.job_view.is_some())
-    {
-        return false;
-    }
-    if app.voice_busy {
-        return true;
-    }
-    if !pressed {
-        if app.voice_mode == VoiceMode::Hold && app.recording.is_some() {
-            stop_voice(app);
-        }
-        return true;
-    }
-    // Allow /voice off, /config, and other slash commands to be typed normally.
-    if app.recording.is_none() && app.editor.text().starts_with('/') {
-        return false;
-    }
-    if app.recording.is_some() {
-        if app.voice_mode == VoiceMode::Tap {
-            stop_voice(app);
-        }
-    } else if !app.voice_busy {
-        match crate::voice::start(backend, language.to_owned()) {
-            Ok((recording, mut events)) => {
-                let generation = app.voice_generation;
-                let tx = tx.clone();
-                tokio::spawn(async move {
-                    while let Some(event) = events.recv().await {
-                        let command = match event {
-                            crate::voice::Event::Preview(text) => {
-                                CommandEvent::VoicePreview { generation, text }
-                            }
-                            crate::voice::Event::Finished(result) => {
-                                CommandEvent::VoiceFinished { generation, result }
-                            }
-                        };
-                        if tx.send(command).is_err() {
-                            break;
-                        }
-                    }
-                });
-                app.recording = Some(recording);
-                app.voice_preview = Some(String::new());
-                app.cells.push(Cell::Notice(format!(
-                    "recording voice ({})… (Esc cancels)",
-                    backend.name()
-                )));
+    match app.voice {
+        VoiceState::Transcribing { .. } => true,
+        VoiceState::Recording { .. } => {
+            if pressed == (app.voice_mode == VoiceMode::Tap) {
+                stop_voice(app);
             }
-            Err(error) => app
-                .cells
-                .push(Cell::Error(format!("could not record voice: {error:#}"))),
+            true
+        }
+        VoiceState::Idle => {
+            if app.input_layer() != InputLayer::Editor {
+                return false;
+            }
+            if !pressed {
+                return true;
+            }
+            // Allow /voice off, /config, and other slash commands to be typed normally.
+            if app.editor.text().starts_with('/') {
+                return false;
+            }
+            match crate::voice::start(backend, language.to_owned()) {
+                Ok((recording, mut events)) => {
+                    let generation = app.voice_generation;
+                    let tx = tx.clone();
+                    tokio::spawn(async move {
+                        while let Some(event) = events.recv().await {
+                            let command = match event {
+                                crate::voice::Event::Preview(text) => {
+                                    CommandEvent::VoicePreview { generation, text }
+                                }
+                                crate::voice::Event::Finished(result) => {
+                                    CommandEvent::VoiceFinished { generation, result }
+                                }
+                            };
+                            if tx.send(command).is_err() {
+                                break;
+                            }
+                        }
+                    });
+                    app.voice = VoiceState::Recording {
+                        recording,
+                        preview: String::new(),
+                    };
+                    app.cells.push(Cell::Notice(format!(
+                        "recording voice ({})… (Esc cancels)",
+                        backend.name()
+                    )));
+                }
+                Err(error) => app
+                    .cells
+                    .push(Cell::Error(format!("could not record voice: {error:#}"))),
+            }
+            true
         }
     }
-    true
 }
 
-#[allow(clippy::too_many_arguments)]
 fn handle_input(
     app: &mut App,
     session: &Arc<kiss_coding::AgentSession>,
     event: &InputEvent,
     args: &Args,
     resources: &mut InteractiveResources,
-    running_task: &mut Option<tokio::task::JoinHandle<()>>,
     file_search: &mut FileSearchService,
     command_tx: &mpsc::UnboundedSender<CommandEvent>,
 ) -> Flow {
@@ -3344,12 +3424,10 @@ fn handle_input(
     }
     note_user_activity(app);
 
-    if app.recording.is_some()
+    if !matches!(app.voice, VoiceState::Idle)
         && matches!(event, InputEvent::Key(key) if key.key == Key::Escape || *key == KeyEvent::ctrl('c'))
     {
-        app.recording = None;
-        app.voice_preview = None;
-        app.voice_generation = app.voice_generation.wrapping_add(1);
+        reset_voice(app);
         app.cells
             .push(Cell::Notice("voice recording cancelled".into()));
         return Flow::Continue;
@@ -3374,55 +3452,59 @@ fn handle_input(
         return Flow::Continue;
     }
 
-    if app.btw_panel.is_some() {
-        if let InputEvent::Key(key) = event
-            && matches!(key.key, Key::Escape | Key::Enter)
-        {
-            if let Some(panel) = app.btw_panel.take()
-                && let Some(cancel) = panel.cancel
+    match app.input_layer() {
+        InputLayer::Btw => {
+            if let InputEvent::Key(key) = event
+                && matches!(key.key, Key::Escape | Key::Enter)
             {
-                cancel.cancel();
+                if let Some(BtwPanel {
+                    state: BtwState::Answering(cancel),
+                    ..
+                }) = app.btw_panel.take()
+                {
+                    cancel.cancel();
+                }
+                app.btw_request_id = app.btw_request_id.wrapping_add(1);
             }
-            app.btw_request_id = app.btw_request_id.wrapping_add(1);
+            return Flow::Continue;
         }
-        return Flow::Continue;
-    }
-
-    if app.secret_prompt.is_some() {
-        return handle_secret_prompt(app, session, event, command_tx);
-    }
-
-    // The progress view owns the keyboard while it is open, so that `x`, `p`,
-    // and the arrow keys steer the run rather than the editor.
-    if let Some(view) = &mut app.workflow_view {
-        if let InputEvent::Key(key) = event {
-            match view.handle_key(key) {
-                ViewAction::None => {}
-                ViewAction::Close => app.workflow_view = None,
-                ViewAction::Save => {
-                    let run = view.run.id;
-                    open_workflow_save_picker(app, run);
+        InputLayer::SecretPrompt => {
+            return handle_secret_prompt(app, session, event, command_tx);
+        }
+        // The progress view owns the keyboard while it is open, so that `x`,
+        // `p`, and the arrow keys steer the run rather than the editor.
+        InputLayer::WorkflowView => {
+            if let InputEvent::Key(key) = event
+                && let Some(view) = &mut app.workflow_view
+            {
+                match view.handle_key(key) {
+                    ViewAction::None => {}
+                    ViewAction::Close => app.workflow_view = None,
+                    ViewAction::Save => {
+                        let run = view.run.id;
+                        open_workflow_save_picker(app, run);
+                    }
                 }
             }
+            return Flow::Continue;
         }
-        return Flow::Continue;
-    }
-
-    if let Some(view) = &mut app.job_view {
-        if let InputEvent::Key(key) = event
-            && view.handle_key(key) == JobViewAction::Close
-        {
-            app.job_view = None;
+        InputLayer::JobView => {
+            if let InputEvent::Key(key) = event
+                && let Some(view) = &mut app.job_view
+                && view.handle_key(key) == JobViewAction::Close
+            {
+                app.job_view = None;
+            }
+            return Flow::Continue;
         }
-        return Flow::Continue;
-    }
-
-    // Picker input intercepts everything.
-    if app.picker.is_some() {
-        if let InputEvent::Key(key) = event {
-            return handle_picker_key(app, session, key, resources, command_tx);
+        // Picker input intercepts everything.
+        InputLayer::Picker => {
+            if let InputEvent::Key(key) = event {
+                return handle_picker_key(app, session, key, resources, command_tx);
+            }
+            return Flow::Continue;
         }
-        return Flow::Continue;
+        InputLayer::Editor => {}
     }
 
     if let InputEvent::Key(key) = event
@@ -3441,15 +3523,7 @@ fn handle_input(
                 if command.is_empty() {
                     Flow::Continue
                 } else {
-                    run_slash_command(
-                        app,
-                        session,
-                        command,
-                        args,
-                        resources,
-                        running_task,
-                        command_tx,
-                    )
+                    run_slash_command(app, session, command, args, resources, command_tx)
                 }
             }
         };
@@ -3467,13 +3541,10 @@ fn handle_input(
         // Ctrl+C interrupts active work. At idle it clears once and exits on
         // a second press, matching Pi's editor behavior.
         if *key == KeyEvent::ctrl('c') {
-            if let Some(cancel) = app.command_cancel.take() {
-                cancel.cancel();
-                app.command_status = None;
-                app.cells.push(Cell::Notice("command cancelled".into()));
+            if cancel_command(app) {
                 return Flow::Continue;
             }
-            if app.working {
+            if session.is_running() {
                 abort_active(app, session);
                 app.ctrl_c_armed = false;
                 return Flow::Continue;
@@ -3506,13 +3577,10 @@ fn handle_input(
         }
 
         if key.key == Key::Escape {
-            if let Some(cancel) = app.command_cancel.take() {
-                cancel.cancel();
-                app.command_status = None;
-                app.cells.push(Cell::Notice("command cancelled".into()));
+            if cancel_command(app) {
                 return Flow::Continue;
             }
-            if app.working {
+            if session.is_running() {
                 abort_active(app, session);
                 return Flow::Continue;
             }
@@ -3581,24 +3649,15 @@ fn handle_input(
                         }
                     };
                     let display_text = submission.display_text.trim().to_string();
-                    if app.working {
-                        queue_user_message(
-                            session,
-                            display_text,
-                            model_text,
-                            true,
-                            PromptMode::Ordinary,
-                        );
-                    } else {
-                        submit_with_display(
-                            app,
-                            session,
-                            display_text,
-                            model_text,
-                            running_task,
-                            command_tx,
-                        );
-                    }
+                    deliver_prompt(
+                        app,
+                        session,
+                        display_text,
+                        model_text,
+                        PromptMode::Ordinary,
+                        QueueKind::FollowUp,
+                        command_tx,
+                    );
                 }
                 return Flow::Continue;
             }
@@ -3625,24 +3684,15 @@ fn handle_input(
         }
         match prepare_skill_input(&submission, resources) {
             Ok(Some(model_text)) => {
-                if app.working {
-                    queue_user_message(
-                        session,
-                        display_text,
-                        model_text,
-                        false,
-                        PromptMode::Ordinary,
-                    );
-                } else {
-                    submit_with_display(
-                        app,
-                        session,
-                        display_text,
-                        model_text,
-                        running_task,
-                        command_tx,
-                    );
-                }
+                deliver_prompt(
+                    app,
+                    session,
+                    display_text,
+                    model_text,
+                    PromptMode::Ordinary,
+                    QueueKind::Steering,
+                    command_tx,
+                );
                 return Flow::Continue;
             }
             Ok(None) => {}
@@ -3653,23 +3703,19 @@ fn handle_input(
             }
         }
         if let Some(command) = text.strip_prefix('/') {
-            return run_slash_command(
-                app,
-                session,
-                command,
-                args,
-                resources,
-                running_task,
-                command_tx,
-            );
+            return run_slash_command(app, session, command, args, resources, command_tx);
         }
         if let Some(shell) = text.strip_prefix('!') {
             if shell.trim_start_matches('!').trim().is_empty() {
-                if app.working {
-                    queue_user_message(session, display_text, text, false, PromptMode::Ordinary);
-                } else {
-                    submit_with_display(app, session, display_text, text, running_task, command_tx);
-                }
+                deliver_prompt(
+                    app,
+                    session,
+                    display_text,
+                    text,
+                    PromptMode::Ordinary,
+                    QueueKind::Steering,
+                    command_tx,
+                );
             } else {
                 start_shell_passthrough(app, session, shell.to_string(), command_tx);
             }
@@ -3683,19 +3729,15 @@ fn handle_input(
                 "running this as a dynamic workflow ({trigger}) · /workflows opens the progress view"
             )));
         }
-        if app.working {
-            queue_user_message(session, display_text, text, false, prompt_mode);
-        } else {
-            submit_with_display_in_mode(
-                app,
-                session,
-                display_text,
-                text,
-                prompt_mode,
-                running_task,
-                command_tx,
-            );
-        }
+        deliver_prompt(
+            app,
+            session,
+            display_text,
+            text,
+            prompt_mode,
+            QueueKind::Steering,
+            command_tx,
+        );
     } else {
         sync_command_menu(
             app,
@@ -3862,9 +3904,11 @@ fn handle_secret_prompt(
                         }
                         SecretPromptKind::AnthropicManual(pending) => {
                             let input = key.to_string();
-                            let cancel = CancellationToken::new();
-                            app.command_cancel = Some(cancel.clone());
-                            app.command_status = Some("finishing Anthropic login".into());
+                            let Some(cancel) =
+                                begin_command(app, "finishing Anthropic login".into())
+                            else {
+                                return Flow::Continue;
+                            };
                             let tx = command_tx.clone();
                             tokio::spawn(async move {
                                 let result = kiss_ai::auth::anthropic::finish_authorization(
@@ -3886,9 +3930,11 @@ fn handle_secret_prompt(
                         }
                         SecretPromptKind::OpenRouterManual(pending) => {
                             let input = key.to_string();
-                            let cancel = CancellationToken::new();
-                            app.command_cancel = Some(cancel.clone());
-                            app.command_status = Some("finishing OpenRouter login".into());
+                            let Some(cancel) =
+                                begin_command(app, "finishing OpenRouter login".into())
+                            else {
+                                return Flow::Continue;
+                            };
                             let tx = command_tx.clone();
                             tokio::spawn(async move {
                                 let result = kiss_ai::auth::openrouter::finish_authorization(
@@ -4065,7 +4111,12 @@ fn restore_queued_to_editor(app: &mut App, session: &Arc<kiss_coding::AgentSessi
         .collect::<Vec<_>>()
         .join("\n\n");
     if !text.is_empty() {
-        app.editor.set_text(&text);
+        let draft = app.editor.text();
+        if draft.is_empty() {
+            app.editor.set_text(&text);
+        } else {
+            app.editor.set_text(&format!("{draft}\n\n{text}"));
+        }
     }
 }
 
@@ -4155,10 +4206,12 @@ fn set_session_title(app: &mut App, title: Option<String>) {
     }
 }
 
-fn sync_session_title(app: &mut App, session: &Arc<kiss_coding::AgentSession>) {
+/// Reset what belongs to the previous session after the active session changes.
+fn sync_session_state(app: &mut App, session: &Arc<kiss_coding::AgentSession>) {
     let title = session.manager.lock().unwrap().session_name();
     set_session_title(app, title);
     app.title_generation_pending = false;
+    app.idle_status = ProgramStatus::Idle;
 }
 
 fn maybe_generate_session_title(
@@ -4189,73 +4242,93 @@ fn maybe_generate_session_title(
     });
 }
 
-fn submit(
-    app: &mut App,
-    session: &Arc<kiss_coding::AgentSession>,
-    text: String,
-    running_task: &mut Option<tokio::task::JoinHandle<()>>,
-    command_tx: &mpsc::UnboundedSender<CommandEvent>,
-) {
-    submit_with_display(app, session, text.clone(), text, running_task, command_tx);
-}
-
-fn submit_in_mode(
-    app: &mut App,
-    session: &Arc<kiss_coding::AgentSession>,
-    text: String,
-    prompt_mode: PromptMode,
-    running_task: &mut Option<tokio::task::JoinHandle<()>>,
-    command_tx: &mpsc::UnboundedSender<CommandEvent>,
-) {
-    submit_with_display_in_mode(
-        app,
-        session,
-        text.clone(),
-        text,
-        prompt_mode,
-        running_task,
-        command_tx,
+/// Report the running command that blocks `action`, if there is one.
+fn command_blocks(app: &mut App, action: &str) -> bool {
+    let Some(command) = &app.command else {
+        return false;
+    };
+    let notice = format!(
+        "{action} did not start because \"{}\" is still running. Wait for it or press Esc to cancel it, then try again",
+        command.status
     );
+    app.cells.push(Cell::Notice(notice));
+    true
 }
 
-fn submit_with_display(
+/// Claim the command slot for a task that accepts cancellation.
+fn begin_command(app: &mut App, status: String) -> Option<CancellationToken> {
+    if command_blocks(app, &status) {
+        return None;
+    }
+    let cancel = CancellationToken::new();
+    app.command = Some(BackgroundCommand {
+        status,
+        control: CommandControl::Cancellable(cancel.clone()),
+    });
+    Some(cancel)
+}
+
+/// Claim the command slot for a task that cannot stop early.
+fn begin_uncancellable_command(app: &mut App, status: String) -> bool {
+    if command_blocks(app, &status) {
+        return false;
+    }
+    app.command = Some(BackgroundCommand {
+        status,
+        control: CommandControl::Uncancellable,
+    });
+    true
+}
+
+fn set_command_status(app: &mut App, status: String) {
+    if let Some(command) = &mut app.command
+        && !matches!(command.control, CommandControl::Stopping)
+    {
+        command.status = status;
+    }
+}
+
+/// Handle Esc or Ctrl+C for the running command. Returns false when the key
+/// has no effect on it.
+fn cancel_command(app: &mut App) -> bool {
+    let Some(command) = &mut app.command else {
+        return false;
+    };
+    match &command.control {
+        CommandControl::Uncancellable => false,
+        CommandControl::Cancellable(cancel) => {
+            cancel.cancel();
+            command.status = format!("stopping \"{}\"", command.status);
+            command.control = CommandControl::Stopping;
+            app.cells.push(Cell::Notice("command cancelled".into()));
+            true
+        }
+        CommandControl::Stopping => {
+            app.command = None;
+            app.cells
+                .push(Cell::Notice("stopped waiting for the command".into()));
+            true
+        }
+    }
+}
+
+/// Start a prompt, or queue it when the session is busy. A queued prompt gets
+/// its transcript cell when the run delivers it.
+fn deliver_prompt(
     app: &mut App,
     session: &Arc<kiss_coding::AgentSession>,
     display_text: String,
     model_text: String,
-    running_task: &mut Option<tokio::task::JoinHandle<()>>,
-    command_tx: &mpsc::UnboundedSender<CommandEvent>,
-) {
-    submit_with_display_in_mode(
-        app,
-        session,
-        display_text,
-        model_text,
-        PromptMode::Ordinary,
-        running_task,
-        command_tx,
-    );
-}
-
-fn submit_with_display_in_mode(
-    app: &mut App,
-    session: &Arc<kiss_coding::AgentSession>,
-    display_text: String,
-    model_text: String,
     prompt_mode: PromptMode,
-    running_task: &mut Option<tokio::task::JoinHandle<()>>,
+    kind: QueueKind,
     command_tx: &mpsc::UnboundedSender<CommandEvent>,
 ) {
-    maybe_generate_session_title(app, session, &display_text, command_tx);
     let stored_text = stored_user_text(&display_text, &model_text);
-    app.cells.push(Cell::User(display_text));
-    app.working = true;
-    let session = session.clone();
-    *running_task = Some(tokio::spawn(async move {
-        session
-            .prompt_with_mode(vec![AgentMessage::user(stored_text)], prompt_mode)
-            .await;
-    }));
+    if let Some(run) = session.submit(AgentMessage::user(stored_text), prompt_mode, kind) {
+        maybe_generate_session_title(app, session, &display_text, command_tx);
+        app.cells.push(Cell::User(display_text));
+        tokio::spawn(run);
+    }
 }
 
 fn start_shell_passthrough(
@@ -4284,9 +4357,14 @@ fn start_shell_passthrough(
         .filter(|value| !value.trim().is_empty())
         .map(|prefix| format!("{prefix} {command}"))
         .unwrap_or(command);
-    let cancel = CancellationToken::new();
-    app.command_cancel = Some(cancel.clone());
-    app.command_status = Some(format!("running !{command}"));
+    let Some(cancel) = begin_command(app, format!("running !{command}")) else {
+        // Keep what the user typed, so it can run after the other command.
+        if app.editor.is_empty() {
+            let prefix = if exclude { "!!" } else { "!" };
+            app.editor.set_text(&format!("{prefix}{command}"));
+        }
+        return;
+    };
     app.cells.push(Cell::BashExecution {
         command: command.clone(),
         output: String::new(),
@@ -4447,7 +4525,7 @@ fn open_tree_picker(app: &mut App, session: &Arc<kiss_coding::AgentSession>) {
     );
     list.max_visible = 15;
     list.selected = list.items.len().saturating_sub(1);
-    app.picker = Some(Picker {
+    app.show_picker(Picker {
         kind: PickerKind::Tree,
         list,
     });
@@ -4471,7 +4549,7 @@ fn open_tree_summary_picker(app: &mut App, target_id: String) {
             value,
         })
         .collect();
-    app.picker = Some(Picker {
+    app.show_picker(Picker {
         kind: PickerKind::TreeSummary(target_id),
         list: SelectList::new("Summarize branch?", items, app.theme.clone()),
     });
@@ -4485,13 +4563,16 @@ fn start_tree_navigation(
     custom_instructions: Option<String>,
     command_tx: &mpsc::UnboundedSender<CommandEvent>,
 ) {
-    let cancel = CancellationToken::new();
-    app.command_cancel = Some(cancel.clone());
-    app.command_status = Some(if summarize {
-        "summarizing branch".into()
-    } else {
-        "moving in session tree".into()
-    });
+    let Some(cancel) = begin_command(
+        app,
+        if summarize {
+            "summarizing branch".into()
+        } else {
+            "moving in session tree".into()
+        },
+    ) else {
+        return;
+    };
     let session = session.clone();
     let tx = command_tx.clone();
     tokio::spawn(async move {
@@ -4518,9 +4599,9 @@ fn open_model_picker(
         return;
     }
     let mut registry = (*session.registry).clone();
-    let cancel = CancellationToken::new();
-    app.command_cancel = Some(cancel.clone());
-    app.command_status = Some("reading account models".into());
+    let Some(cancel) = begin_command(app, "reading account models".into()) else {
+        return;
+    };
     let tx = command_tx.clone();
     tokio::spawn(async move {
         let result = tokio::select! {
@@ -4531,9 +4612,13 @@ fn open_model_picker(
                     Err(_) => Err("Cursor model discovery timed out. Check your connection, then run /model again".into()),
                 }
             }
-            _ = cancel.cancelled() => return,
+            _ = cancel.cancelled() => {
+                let _ = tx.send(CommandEvent::CommandFinished);
+                return;
+            }
         };
         let _ = tx.send(CommandEvent::ModelCatalog { result, pattern });
+        let _ = tx.send(CommandEvent::CommandFinished);
     });
 }
 
@@ -4577,7 +4662,7 @@ fn open_model_picker_with_filter(
     if let Some(filter) = filter {
         list.set_filter(filter.to_string());
     }
-    app.picker = Some(Picker {
+    app.show_picker(Picker {
         kind: PickerKind::Model(models),
         list,
     });
@@ -4623,7 +4708,7 @@ fn open_thinking_picker(app: &mut App, session: &Arc<kiss_coding::AgentSession>)
         .iter()
         .position(|level| *level == current)
         .unwrap_or(0);
-    app.picker = Some(Picker {
+    app.show_picker(Picker {
         kind: PickerKind::Thinking,
         list,
     });
@@ -4634,7 +4719,7 @@ fn open_scoped_models_picker(
     session: &Arc<kiss_coding::AgentSession>,
     resources: &InteractiveResources,
 ) {
-    app.picker = Some(scoped_models_picker(app, session, resources));
+    app.show_picker(scoped_models_picker(app, session, resources));
 }
 
 fn scoped_models_picker(
@@ -4687,7 +4772,7 @@ fn reopen_scoped_models_picker(
     let mut picker = scoped_models_picker(app, session, resources);
     picker.list.set_filter(filter);
     picker.list.select_value(selected_value);
-    app.picker = Some(picker);
+    app.show_picker(picker);
 }
 
 fn account_allows_model(model: &kiss_ai::Model, copilot_models: Option<&[String]>) -> bool {
@@ -4738,7 +4823,7 @@ fn open_session_picker(app: &mut App, session: &Arc<kiss_coding::AgentSession>, 
             );
             list.max_visible = 5;
             list.detail_below = true;
-            app.picker = Some(Picker {
+            app.show_picker(Picker {
                 kind: PickerKind::Session(listings, global),
                 list,
             });
@@ -4777,7 +4862,7 @@ fn open_fork_picker(app: &mut App, session: &Arc<kiss_coding::AgentSession>) {
     let mut list = SelectList::new("Fork from user message", items, app.theme.clone());
     list.max_visible = 14;
     list.selected = list.items.len().saturating_sub(1);
-    app.picker = Some(Picker {
+    app.show_picker(Picker {
         kind: PickerKind::Fork,
         list,
     });
@@ -4829,7 +4914,7 @@ fn open_login_picker_with_filter(app: &mut App, filter: Option<&str>) {
     if let Some(filter) = filter {
         list.set_filter(filter.to_string());
     }
-    app.picker = Some(Picker {
+    app.show_picker(Picker {
         kind: PickerKind::LoginProviders(providers),
         list,
     });
@@ -4909,7 +4994,7 @@ fn open_login_methods_picker(app: &mut App, provider: &str) {
         app.theme.clone(),
     );
     list.max_visible = 12;
-    app.picker = Some(Picker {
+    app.show_picker(Picker {
         kind: PickerKind::LoginMethods(provider.into(), choices),
         list,
     });
@@ -4932,7 +5017,7 @@ fn open_logout_picker(app: &mut App) {
             value,
         })
         .collect();
-    app.picker = Some(Picker {
+    app.show_picker(Picker {
         kind: PickerKind::Logout(providers),
         list: SelectList::new("Remove provider authentication", items, app.theme.clone()),
     });
@@ -4943,7 +5028,7 @@ fn open_settings_picker(
     session: &Arc<kiss_coding::AgentSession>,
     resources: &InteractiveResources,
 ) {
-    app.picker = Some(settings_picker(app, session, resources));
+    app.show_picker(settings_picker(app, session, resources));
 }
 
 fn decision_model_detail(
@@ -5175,7 +5260,7 @@ fn reopen_settings_picker(
     let mut picker = settings_picker(app, session, resources);
     picker.list.set_filter(filter);
     picker.list.select_value(selected_value);
-    app.picker = Some(picker);
+    app.show_picker(picker);
 }
 
 /// Run a workflow that is already written and saved on disk.
@@ -5225,9 +5310,9 @@ fn start_saved_workflow(
 
     let plan = kiss_coding::workflows::WorkflowPlan::from_script(&script);
     let name = plan.name.clone();
-    let cancel = CancellationToken::new();
-    app.command_cancel = Some(cancel.clone());
-    app.command_status = Some(format!("waiting to run workflow {name}"));
+    let Some(cancel) = begin_command(app, format!("waiting to run workflow {name}")) else {
+        return;
+    };
     let command_tx = command_tx.clone();
     let runtime = runtime.clone();
     tokio::spawn(async move {
@@ -5528,7 +5613,7 @@ fn open_workflow_runs_picker(app: &mut App, session: &Arc<kiss_coding::AgentSess
         })
         .collect();
     let ids = summaries.iter().rev().map(|summary| summary.id).collect();
-    app.picker = Some(Picker {
+    app.show_picker(Picker {
         kind: PickerKind::WorkflowRuns(ids),
         list: SelectList::new("Workflow runs", items, app.theme.clone()),
     });
@@ -5548,7 +5633,7 @@ fn open_workflow_save_picker(app: &mut App, run: kiss_coding::workflows::RunId) 
             value: 1,
         },
     ];
-    app.picker = Some(Picker {
+    app.show_picker(Picker {
         kind: PickerKind::WorkflowSaveLocation(run),
         list: SelectList::new("Save this workflow", items, app.theme.clone()),
     });
@@ -5578,7 +5663,7 @@ fn open_workflow_approval(
         },
     ];
     let title = workflow_ui::plan_summary(&plan);
-    app.picker = Some(Picker {
+    app.show_picker(Picker {
         kind: PickerKind::WorkflowApproval(plan, Some(reply)),
         list: SelectList::new(title, items, app.theme.clone()),
     });
@@ -5628,7 +5713,7 @@ fn open_trust_picker(app: &mut App, session: &Arc<kiss_coding::AgentSession>) {
             value: 1,
         },
     ];
-    app.picker = Some(Picker {
+    app.show_picker(Picker {
         kind: PickerKind::Trust,
         list: SelectList::new(format!("Trust for {cwd}"), items, app.theme.clone()),
     });
@@ -5650,18 +5735,18 @@ fn open_llama_picker(app: &mut App, models: Vec<LlamaModel>) {
         app.theme.clone(),
     );
     list.max_visible = 14;
-    app.picker = Some(Picker {
+    app.show_picker(Picker {
         kind: PickerKind::Llama(models),
         list,
     });
 }
 
-fn mcp_state_label(state: McpPanelState) -> &'static str {
+fn mcp_state_label(state: &McpPanelState) -> &'static str {
     match state {
         McpPanelState::Checking => "◌ checking",
         McpPanelState::Connected => "✔ connected",
-        McpPanelState::NeedsAuthentication => "△ needs authentication",
-        McpPanelState::Failed => "✗ failed",
+        McpPanelState::NeedsAuthentication(_) => "△ needs authentication",
+        McpPanelState::Failed(_) => "✗ failed",
         McpPanelState::Disabled => "◯ disabled",
     }
 }
@@ -5695,7 +5780,7 @@ fn redact_mcp_url(value: &str) -> String {
 
 fn mcp_can_authenticate(server: &McpPanelServer) -> bool {
     server.entry.auth_mode() == Some(kiss_mcp::AuthMode::OAuth)
-        || server.state == McpPanelState::NeedsAuthentication
+        || matches!(server.state, McpPanelState::NeedsAuthentication(_))
 }
 
 fn mcp_server_intro(theme: &Theme, server: &McpPanelServer, width: usize) -> Vec<String> {
@@ -5706,7 +5791,7 @@ fn mcp_server_intro(theme: &Theme, server: &McpPanelServer, width: usize) -> Vec
             width,
         )),
     )];
-    lines.push(format!("Status:  {}", mcp_state_label(server.state)));
+    lines.push(format!("Status:  {}", mcp_state_label(&server.state)));
     if mcp_can_authenticate(server) || server.authenticated {
         lines.push(format!(
             "Auth:    {}",
@@ -5740,7 +5825,7 @@ fn mcp_server_intro(theme: &Theme, server: &McpPanelServer, width: usize) -> Vec
         lines.push("Capabilities: tools".to_string());
         lines.push(format!("Tools:   {} tools", server.tools.len()));
     }
-    if let Some(error) = &server.error {
+    if let Some(error) = server.state.error() {
         lines.push(theme.fg(
             "error",
             &kiss_tui::text::truncate_to_width(&format!("Error:   {error}"), width),
@@ -5756,11 +5841,11 @@ fn mcp_server_items(servers: &[McpPanelServer]) -> Vec<SelectItem> {
         .map(|(value, server)| SelectItem {
             label: server.name.clone(),
             detail: Some(if server.tools.is_empty() {
-                mcp_state_label(server.state).to_string()
+                mcp_state_label(&server.state).to_string()
             } else {
                 format!(
                     "{} · {} tools",
-                    mcp_state_label(server.state),
+                    mcp_state_label(&server.state),
                     server.tools.len()
                 )
             }),
@@ -5780,7 +5865,7 @@ fn show_mcp_server_picker(app: &mut App) {
         app.theme.clone(),
     );
     list.max_visible = 12;
-    app.picker = Some(Picker {
+    app.show_picker(Picker {
         kind: PickerKind::McpServers,
         list,
     });
@@ -5826,20 +5911,18 @@ async fn check_mcp_server(
         Ok(Ok(tools)) => {
             server.state = McpPanelState::Connected;
             server.tools = tools;
-            server.error = None;
         }
         Ok(Err(error)) => {
             let message = format!("{error:#}");
+            let concise = concise_mcp_error(&message, &server.entry);
             server.state = if mcp_error_needs_authentication(&message) {
-                McpPanelState::NeedsAuthentication
+                McpPanelState::NeedsAuthentication(concise)
             } else {
-                McpPanelState::Failed
+                McpPanelState::Failed(concise)
             };
-            server.error = Some(concise_mcp_error(&message, &server.entry));
         }
         Err(_) => {
-            server.state = McpPanelState::Failed;
-            server.error = Some("connection timed out".into());
+            server.state = McpPanelState::Failed("connection timed out".into());
         }
     }
     server
@@ -5928,7 +6011,6 @@ fn open_mcp_picker(
                 } else {
                     kiss_mcp::config::ConfigScope::User
                 },
-                error: None,
             }
         })
         .collect();
@@ -5981,7 +6063,7 @@ fn open_mcp_actions(app: &mut App, name: &str) {
             value,
         })
         .collect();
-    app.picker = Some(Picker {
+    app.show_picker(Picker {
         kind: PickerKind::McpActions(name.to_string(), actions),
         list: SelectList::new("Actions", items, app.theme.clone()),
     });
@@ -6001,7 +6083,7 @@ fn open_mcp_tools(app: &mut App, name: &str) {
             value,
         })
         .collect();
-    app.picker = Some(Picker {
+    app.show_picker(Picker {
         kind: PickerKind::McpTools(name.to_string()),
         list: SelectList::new(format!("{name} tools"), items, app.theme.clone()),
     });
@@ -6017,23 +6099,26 @@ fn start_mcp_reconnect(
             .push(Cell::Error("MCP manager is not open".into()));
         return;
     };
+    if !begin_uncancellable_command(app, format!("reconnecting MCP server {name}")) {
+        return;
+    }
     let Some(server) = app
         .mcp_servers
         .iter_mut()
         .find(|server| server.name == name)
     else {
+        app.command = None;
         return;
     };
     server.state = McpPanelState::Checking;
-    server.error = None;
     let server = server.clone();
     show_mcp_server_picker(app);
-    app.command_status = Some(format!("reconnecting MCP server {name}"));
     let tx = command_tx.clone();
     tokio::spawn(async move {
         let _ = manager.disconnect(&server.name).await;
         let server = check_mcp_server(&manager, server).await;
         let _ = tx.send(CommandEvent::McpServerChecked(Box::new(server)));
+        let _ = tx.send(CommandEvent::CommandFinished);
     });
 }
 
@@ -6058,9 +6143,9 @@ fn start_mcp_authentication(
     }
     let name = server.name.clone();
     let oauth = server.entry.oauth.clone().unwrap_or_default();
-    let cancel = CancellationToken::new();
-    app.command_cancel = Some(cancel.clone());
-    app.command_status = Some(format!("authenticating MCP server {name}"));
+    let Some(cancel) = begin_command(app, format!("authenticating MCP server {name}")) else {
+        return;
+    };
     app.picker = None;
     let tx = command_tx.clone();
     tokio::spawn(async move {
@@ -6111,7 +6196,12 @@ fn start_mcp_logout(
         return;
     };
     let name = server.name;
-    app.command_status = Some(format!("clearing authentication for MCP server {name}"));
+    if !begin_uncancellable_command(
+        app,
+        format!("clearing authentication for MCP server {name}"),
+    ) {
+        return;
+    }
     app.picker = None;
     let tx = command_tx.clone();
     tokio::spawn(async move {
@@ -6225,6 +6315,14 @@ fn handle_picker_key(
     {
         show_mcp_server_picker(app);
         return Flow::Continue;
+    }
+    if (key.key == Key::Escape || *key == KeyEvent::ctrl('c'))
+        && matches!(
+            app.picker.as_ref().map(|picker| &picker.kind),
+            Some(PickerKind::LoginProviders(_) | PickerKind::LoginMethods(..))
+        )
+    {
+        app.pending_account_add = None;
     }
     let Some(picker) = app.picker.as_mut() else {
         return Flow::Continue;
@@ -6482,7 +6580,7 @@ fn apply_picker_selection(
                 match fork {
                     Ok(manager) => {
                         session.replace_manager(manager);
-                        sync_session_title(app, session);
+                        sync_session_state(app, session);
                         app.cells.clear();
                         app.cell_render_cache.clear();
                         app.editor.set_text(&text);
@@ -6862,7 +6960,7 @@ fn switch_session(app: &mut App, session: &Arc<kiss_coding::AgentSession>, recor
     match result {
         Ok(manager) => {
             session.replace_manager(manager);
-            sync_session_title(app, session);
+            sync_session_state(app, session);
             app.cells = session_cells(session);
             app.cell_render_cache.clear();
             app.cells.push(Cell::Notice(format!(
@@ -7037,9 +7135,10 @@ fn start_provider_browser_login(
     command_tx: &mpsc::UnboundedSender<CommandEvent>,
 ) {
     let provider = provider.to_string();
-    let cancel = CancellationToken::new();
-    app.command_cancel = Some(cancel.clone());
-    app.command_status = Some(format!("logging in to {provider}"));
+    let Some(cancel) = begin_command(app, format!("logging in to {provider}")) else {
+        app.pending_account_add = None;
+        return;
+    };
     let tx = command_tx.clone();
     tokio::spawn(async move {
         let url_tx = tx.clone();
@@ -7063,9 +7162,10 @@ fn start_provider_device_login(
     github_domain: Option<String>,
 ) {
     let provider = provider.to_string();
-    let cancel = CancellationToken::new();
-    app.command_cancel = Some(cancel.clone());
-    app.command_status = Some(format!("starting device login for {provider}"));
+    let Some(cancel) = begin_command(app, format!("starting device login for {provider}")) else {
+        app.pending_account_add = None;
+        return;
+    };
     let tx = command_tx.clone();
     tokio::spawn(async move {
         let result: Result<()> = async {
@@ -7222,9 +7322,9 @@ fn start_llama_list(app: &mut App, command_tx: &mpsc::UnboundedSender<CommandEve
             return;
         }
     };
-    let cancel = CancellationToken::new();
-    app.command_cancel = Some(cancel.clone());
-    app.command_status = Some("reading llama.cpp models".into());
+    let Some(cancel) = begin_command(app, "reading llama.cpp models".into()) else {
+        return;
+    };
     let tx = command_tx.clone();
     tokio::spawn(async move {
         let result = llama_request(
@@ -7259,9 +7359,9 @@ fn start_llama_action(
     };
     let unload = matches!(model.status.value.as_str(), "loaded" | "sleeping");
     let action = if unload { "unload" } else { "load" };
-    let cancel = CancellationToken::new();
-    app.command_cancel = Some(cancel.clone());
-    app.command_status = Some(format!("{action}ing {}", model.id));
+    let Some(cancel) = begin_command(app, format!("{action}ing {}", model.id)) else {
+        return;
+    };
     let tx = command_tx.clone();
     tokio::spawn(async move {
         let result = llama_request(
@@ -7391,8 +7491,10 @@ fn start_webmcp(
     let tx = command_tx.clone();
     match command {
         "" | "connect" => {
+            if !begin_uncancellable_command(app, "connecting to Chrome WebMCP".into()) {
+                return;
+            }
             session.remove_session_tool("webmcp");
-            app.command_status = Some("connecting to Chrome WebMCP".into());
             tokio::spawn(async move {
                 let result = manager
                     .connect()
@@ -7403,7 +7505,9 @@ fn start_webmcp(
             });
         }
         "list" => {
-            app.command_status = Some("reading Chrome WebMCP tools".into());
+            if !begin_uncancellable_command(app, "reading Chrome WebMCP tools".into()) {
+                return;
+            }
             tokio::spawn(async move {
                 let result = if manager.is_connected().await {
                     Ok(WebMcpCommandResult::Listed(manager.tools().await))
@@ -7414,8 +7518,10 @@ fn start_webmcp(
             });
         }
         "disconnect" => {
+            if !begin_uncancellable_command(app, "disconnecting Chrome WebMCP".into()) {
+                return;
+            }
             session.remove_session_tool("webmcp");
-            app.command_status = Some("disconnecting Chrome WebMCP".into());
             tokio::spawn(async move {
                 manager.disconnect().await;
                 let _ = tx.send(CommandEvent::WebMcpFinished(Ok(
@@ -7435,7 +7541,6 @@ fn run_slash_command(
     command: &str,
     args: &Args,
     resources: &mut InteractiveResources,
-    running_task: &mut Option<tokio::task::JoinHandle<()>>,
     command_tx: &mpsc::UnboundedSender<CommandEvent>,
 ) -> Flow {
     let mut parts = command.splitn(2, ' ');
@@ -7569,10 +7674,7 @@ fn run_slash_command(
                         .push(Cell::Error(format!("voice unavailable: {error:#}")));
                     return Flow::Continue;
                 }
-                app.recording = None;
-                app.voice_preview = None;
-                app.voice_generation = app.voice_generation.wrapping_add(1);
-                app.voice_busy = false;
+                reset_voice(app);
                 resources.settings.voice_backend = Some(backend.name().into());
                 save_interactive_settings(app, session, resources);
                 if app.voice_mode == VoiceMode::Off {
@@ -7608,10 +7710,7 @@ fn run_slash_command(
                         return Flow::Continue;
                     }
                     if mode == VoiceMode::Off {
-                        app.recording = None;
-                        app.voice_preview = None;
-                        app.voice_generation = app.voice_generation.wrapping_add(1);
-                        app.voice_busy = false;
+                        reset_voice(app);
                     }
                     app.voice_mode = mode;
                     let notice = match mode {
@@ -7682,14 +7781,7 @@ fn run_slash_command(
             "off" => {
                 resources.settings.auto_recap = Some(false);
                 app.idle_recap_armed = false;
-                if app.recap_loading && app.recap_automatic {
-                    if let Some(cancel) = app.recap_cancel.take() {
-                        cancel.cancel();
-                    }
-                    app.recap_loading = false;
-                    app.recap_automatic = false;
-                    app.recap_request_id = app.recap_request_id.wrapping_add(1);
-                }
+                cancel_automatic_recap(app);
                 save_interactive_settings(app, session, resources);
                 app.cells
                     .push(Cell::Notice("automatic recap is off".into()));
@@ -7710,12 +7802,13 @@ fn run_slash_command(
                 app.cells.push(Cell::Notice(
                     "dynamic workflow is active for this turn".into(),
                 ));
-                submit_in_mode(
+                deliver_prompt(
                     app,
                     session,
+                    rest.clone(),
                     rest,
                     PromptMode::Workflow,
-                    running_task,
+                    QueueKind::Steering,
                     command_tx,
                 );
             }
@@ -7743,7 +7836,7 @@ fn run_slash_command(
             match fork {
                 Ok(manager) => {
                     session.replace_manager(manager);
-                    sync_session_title(app, session);
+                    sync_session_state(app, session);
                     app.cells = session_cells(session);
                     app.cell_render_cache.clear();
                     app.cells
@@ -7758,6 +7851,11 @@ fn run_slash_command(
         "trust" => open_trust_picker(app, session),
         "accounts" => run_accounts_command(app, &rest),
         "login" => {
+            // A login in flight may belong to an account add. It must finish
+            // first, or its credential would replace the active account.
+            if command_blocks(app, "login") {
+                return Flow::Continue;
+            }
             app.pending_account_add = None;
             let rest = kiss_ai::registry::canonical_provider_id(&rest);
             if rest.is_empty() {
@@ -7863,12 +7961,9 @@ fn run_slash_command(
             app.cells.push(Cell::Notice(info));
         }
         "compact" => {
-            let session = session.clone();
             let instructions = if rest.is_empty() { None } else { Some(rest) };
-            app.working = true;
-            *running_task = Some(tokio::spawn(async move {
-                session.compact(instructions, false).await;
-            }));
+            // A refusal reaches the transcript as a compaction error event.
+            tokio::spawn(session.compact(instructions));
         }
         "copy" => {
             copy_last_response(app);
@@ -7881,7 +7976,7 @@ fn run_slash_command(
             match manager {
                 Ok(new_manager) => {
                     session.replace_manager(new_manager);
-                    sync_session_title(app, session);
+                    sync_session_state(app, session);
                     app.cells.clear();
                     app.cell_render_cache.clear();
                     app.cells.push(Cell::Notice("started a new session".into()));
@@ -7908,7 +8003,7 @@ fn run_slash_command(
                         value: 1,
                     },
                 ];
-                app.picker = Some(Picker {
+                app.show_picker(Picker {
                     kind: PickerKind::ImportConfirm(path),
                     list: SelectList::new("Confirm session import", items, app.theme.clone()),
                 });
@@ -7959,11 +8054,15 @@ fn run_slash_command(
                 let args = kiss_coding::prompts::parse_args(&rest);
                 let args: Vec<&str> = args.iter().map(String::as_str).collect();
                 let expanded = kiss_coding::prompts::expand(&template.body, &args);
-                if app.working {
-                    session.queue_steering(AgentMessage::user(expanded));
-                } else {
-                    submit(app, session, expanded, running_task, command_tx);
-                }
+                deliver_prompt(
+                    app,
+                    session,
+                    expanded.clone(),
+                    expanded,
+                    PromptMode::Ordinary,
+                    QueueKind::Steering,
+                    command_tx,
+                );
                 return Flow::Continue;
             }
             if let Some(skill_name) = other.strip_prefix("skill:")
@@ -7985,19 +8084,13 @@ fn run_slash_command(
                     text: display_text.clone(),
                 };
                 match prepare_skill_input(&submission, resources) {
-                    Ok(Some(model_text)) if app.working => queue_user_message(
-                        session,
-                        display_text,
-                        model_text,
-                        false,
-                        PromptMode::Ordinary,
-                    ),
-                    Ok(Some(model_text)) => submit_with_display(
+                    Ok(Some(model_text)) => deliver_prompt(
                         app,
                         session,
                         display_text,
                         model_text,
-                        running_task,
+                        PromptMode::Ordinary,
+                        QueueKind::Steering,
                         command_tx,
                     ),
                     Ok(None) => app.cells.push(Cell::Error(format!(
@@ -8023,8 +8116,10 @@ fn start_btw(
     question: String,
     command_tx: &mpsc::UnboundedSender<CommandEvent>,
 ) {
-    if let Some(panel) = app.btw_panel.take()
-        && let Some(cancel) = panel.cancel
+    if let Some(BtwPanel {
+        state: BtwState::Answering(cancel),
+        ..
+    }) = app.btw_panel.take()
     {
         cancel.cancel();
     }
@@ -8034,9 +8129,7 @@ fn start_btw(
     app.btw_panel = Some(BtwPanel {
         request_id,
         question: question.clone(),
-        answer: None,
-        error: None,
-        cancel: Some(cancel.clone()),
+        state: BtwState::Answering(cancel.clone()),
     });
     let session = session.clone();
     let tx = command_tx.clone();
@@ -8055,16 +8148,17 @@ fn start_recap(
     automatic: bool,
     command_tx: &mpsc::UnboundedSender<CommandEvent>,
 ) {
-    if let Some(cancel) = app.recap_cancel.take() {
-        cancel.cancel();
+    if let Some(job) = app.recap_job.take() {
+        job.cancel.cancel();
     }
     app.recap_request_id = app.recap_request_id.wrapping_add(1);
     let request_id = app.recap_request_id;
     let cancel = CancellationToken::new();
     let previous = app.recap.clone();
-    app.recap_loading = true;
-    app.recap_automatic = automatic;
-    app.recap_cancel = Some(cancel.clone());
+    app.recap_job = Some(RecapJob {
+        automatic,
+        cancel: cancel.clone(),
+    });
     if automatic {
         app.idle_recap_armed = false;
     }
@@ -8144,7 +8238,7 @@ fn import_session(
     match kiss_coding::SessionManager::fork_from(source, &cwd, Some(session_dir)) {
         Ok(manager) => {
             session.replace_manager(manager);
-            sync_session_title(app, session);
+            sync_session_state(app, session);
             app.cells = session_cells(session);
             app.cell_render_cache.clear();
             app.cells.push(Cell::Notice(format!(
@@ -8190,9 +8284,9 @@ fn start_share_session(
         }
         (id, jsonl, target)
     };
-    let cancel = CancellationToken::new();
-    app.command_cancel = Some(cancel.clone());
-    app.command_status = Some("sharing session".into());
+    let Some(cancel) = begin_command(app, "sharing session".into()) else {
+        return;
+    };
     let tx = command_tx.clone();
     let destination = session.settings().session_share_destination;
     tokio::spawn(async move {
@@ -8205,7 +8299,9 @@ fn start_share_session(
 }
 
 fn start_update(app: &mut App, command_tx: &mpsc::UnboundedSender<CommandEvent>) {
-    app.command_status = Some("updating KISS".into());
+    if !begin_uncancellable_command(app, "updating KISS".into()) {
+        return;
+    }
     let tx = command_tx.clone();
     tokio::spawn(async move {
         let result = crate::update::run()
@@ -8396,9 +8492,7 @@ mod tests {
             md: MarkdownRenderer::new(theme.clone()),
             editor: Editor::new(theme.clone()),
             voice_mode: VoiceMode::Off,
-            voice_preview: None,
-            recording: None,
-            voice_busy: false,
+            voice: VoiceState::Idle,
             voice_generation: 0,
             theme,
             cells: Vec::new(),
@@ -8406,8 +8500,6 @@ mod tests {
             keybindings: Keybindings::default(),
             startup_lines: Vec::new(),
             queue_note: None,
-            working: false,
-            compacting: false,
             spinner_frame: 0,
             session_title: None,
             terminal_title_dirty: false,
@@ -8421,8 +8513,7 @@ mod tests {
             file_search_request: None,
             file_search_pending: false,
             secret_prompt: None,
-            command_status: None,
-            command_cancel: None,
+            command: None,
             ctrl_c_armed: false,
             escape_armed: false,
             hide_thinking: false,
@@ -8432,9 +8523,7 @@ mod tests {
             btw_panel: None,
             btw_request_id: 0,
             recap: None,
-            recap_loading: false,
-            recap_automatic: false,
-            recap_cancel: None,
+            recap_job: None,
             recap_request_id: 0,
             last_user_activity: Instant::now(),
             idle_recap_armed: true,
@@ -8521,9 +8610,8 @@ mod tests {
         command: &str,
     ) -> Flow {
         let args = Args::parse_from(["kiss"]);
-        let mut task = None;
         let (tx, _rx) = mpsc::unbounded_channel();
-        run_slash_command(app, session, command, &args, resources, &mut task, &tx)
+        run_slash_command(app, session, command, &args, resources, &tx)
     }
 
     fn session_with_cache_usage() -> Arc<kiss_coding::AgentSession> {
@@ -8551,31 +8639,9 @@ mod tests {
         let (tx, _rx) = mpsc::unbounded_channel();
         let mut search = FileSearchService::new(tx);
         assert_eq!(terminal_host_state(&app, &session), State::Idle);
-        handle_session_event(
-            &mut app,
-            SessionEvent::CompactionStart { auto: true },
-            &mut search,
-            &session,
-        );
-        handle_session_event(
-            &mut app,
-            SessionEvent::Agent(Box::new(AgentEvent::AgentEnd {
-                messages: Vec::new(),
-            })),
-            &mut search,
-            &session,
-        );
+        let compaction = session.compact(None);
         assert_eq!(terminal_host_state(&app, &session), State::Working);
-        handle_session_event(
-            &mut app,
-            SessionEvent::CompactionEnd {
-                summary: String::new(),
-                tokens_before: 100,
-                error: None,
-            },
-            &mut search,
-            &session,
-        );
+        drop(compaction);
         assert_eq!(terminal_host_state(&app, &session), State::Idle);
         for (stop_reason, status) in [
             (StopReason::Error, State::Error),
@@ -8593,6 +8659,7 @@ mod tests {
             );
             assert_eq!(terminal_host_state(&app, &session), status);
         }
+        // A message that waits for the next run is not active work.
         handle_session_event(
             &mut app,
             SessionEvent::QueueUpdate {
@@ -8602,7 +8669,7 @@ mod tests {
             &mut search,
             &session,
         );
-        assert_eq!(terminal_host_state(&app, &session), State::Working);
+        assert_eq!(terminal_host_state(&app, &session), State::Done);
         let (reply, _answer) = tokio::sync::oneshot::channel();
         open_workflow_approval(
             &mut app,
@@ -8760,7 +8827,6 @@ mod tests {
         )));
         let args = Args::parse_from(["kiss"]);
         let mut resources = test_resources();
-        let mut running_task = None;
         let (file_tx, _file_rx) = mpsc::unbounded_channel();
         let mut file_search = FileSearchService::new(file_tx);
         let (command_tx, _command_rx) = mpsc::unbounded_channel();
@@ -8771,7 +8837,6 @@ mod tests {
             &InputEvent::Key(KeyEvent::ctrl('w')),
             &args,
             &mut resources,
-            &mut running_task,
             &mut file_search,
             &command_tx,
         );
@@ -8808,6 +8873,7 @@ mod tests {
     fn tool_output_hides_prefixed_control_sequences() {
         let mut app = test_app();
         app.cells.push(Cell::ToolCall {
+            id: "call".into(),
             title: "bash".into(),
             output: "a\x1b[<35;59;1Mb\x1b[>0;276;0cc\x1b[=5ud\x1b=keypad\x1b>numeric".into(),
             is_error: false,
@@ -8829,6 +8895,7 @@ mod tests {
     fn ctrl_r_expands_collapsed_tool_output() {
         let mut app = test_app();
         app.cells.push(Cell::ToolCall {
+            id: "call".into(),
             title: "mcp".into(),
             output: (1..=9)
                 .map(|line| format!("line {line}"))
@@ -8844,7 +8911,6 @@ mod tests {
 
         let args = Args::parse_from(["kiss"]);
         let mut resources = test_resources();
-        let mut running_task = None;
         let (file_tx, _file_rx) = mpsc::unbounded_channel();
         let mut file_search = FileSearchService::new(file_tx);
         let (command_tx, _command_rx) = mpsc::unbounded_channel();
@@ -8854,7 +8920,6 @@ mod tests {
             &InputEvent::Key(KeyEvent::ctrl('r')),
             &args,
             &mut resources,
-            &mut running_task,
             &mut file_search,
             &command_tx,
         );
@@ -8878,21 +8943,24 @@ mod tests {
     #[test]
     fn automatic_recap_requires_five_idle_minutes_and_an_idle_ui() {
         let mut app = test_app();
+        let session = synthetic_session();
         let settings = kiss_coding::Settings::default();
         let now = Instant::now();
         app.last_user_activity = now - AUTO_RECAP_IDLE;
-        assert!(idle_recap_deadline(&app, &settings).is_some_and(|deadline| deadline <= now));
+        assert!(
+            idle_recap_deadline(&app, &session, &settings).is_some_and(|deadline| deadline <= now)
+        );
 
-        app.working = true;
-        assert!(idle_recap_deadline(&app, &settings).is_none());
-        app.working = false;
+        let run = session.prompt(vec![AgentMessage::user("busy")]);
+        assert!(idle_recap_deadline(&app, &session, &settings).is_none());
+        drop(run);
         app.idle_recap_armed = false;
-        assert!(idle_recap_deadline(&app, &settings).is_none());
+        assert!(idle_recap_deadline(&app, &session, &settings).is_none());
 
         app.idle_recap_armed = true;
         let mut disabled = settings;
         disabled.auto_recap = Some(false);
-        assert!(idle_recap_deadline(&app, &disabled).is_none());
+        assert!(idle_recap_deadline(&app, &session, &disabled).is_none());
     }
 
     #[test]
@@ -8931,7 +8999,10 @@ mod tests {
         let (tx, _) = mpsc::unbounded_channel();
         let mut search = FileSearchService::new(tx);
         app.editor.set_text("before ");
-        app.voice_busy = true;
+        app.voice = VoiceState::Transcribing {
+            _recording: crate::voice::Recording::without_worker(),
+            preview: String::new(),
+        };
         handle_command_event(
             &mut app,
             CommandEvent::VoiceFinished {
@@ -8943,7 +9014,7 @@ mod tests {
             &session,
         );
         assert_eq!(app.editor.text(), "before hello");
-        assert!(!app.voice_busy);
+        assert!(matches!(app.voice, VoiceState::Idle));
         app.voice_generation = 1;
         handle_command_event(
             &mut app,
@@ -9028,7 +9099,6 @@ mod tests {
             authenticated: true,
             source: "KISS global".into(),
             scope: kiss_mcp::config::ConfigScope::User,
-            error: None,
         });
         open_mcp_actions(&mut app, "example");
         let picker = app.picker.as_ref().expect("MCP action picker");
@@ -9241,7 +9311,7 @@ mod tests {
                     .try_recv()
                     .expect("cached model list must be ready without waiting for discovery");
                 handle_command_event(&mut app, event, &mut resources, &mut file_search, &session);
-                assert!(app.command_status.is_none());
+                assert!(app.command.is_none());
                 let picker = app.picker.as_ref().unwrap();
                 let PickerKind::Model(models) = &picker.kind else {
                     panic!("model picker")
@@ -9383,7 +9453,6 @@ mod tests {
         let mut app = test_app();
         let mut resources = test_resources();
         let args = Args::parse_from(["kiss"]);
-        let mut task = None;
         let (command_tx, mut command_rx) = mpsc::unbounded_channel();
 
         run_slash_command(
@@ -9392,10 +9461,12 @@ mod tests {
             "update",
             &args,
             &mut resources,
-            &mut task,
             &command_tx,
         );
-        assert_eq!(app.command_status.as_deref(), Some("updating KISS"));
+        assert_eq!(
+            app.command.as_ref().map(|command| command.status.as_str()),
+            Some("updating KISS")
+        );
         let event = command_rx.recv().await.expect("update result");
         assert!(
             matches!(&event, CommandEvent::UpdateFinished(Err(error)) if error.contains("not available in debug builds"))
@@ -9404,7 +9475,7 @@ mod tests {
         let (file_tx, _file_rx) = mpsc::unbounded_channel();
         let mut file_search = FileSearchService::new(file_tx);
         handle_command_event(&mut app, event, &mut resources, &mut file_search, &session);
-        assert!(app.command_status.is_none());
+        assert!(app.command.is_none());
         assert!(
             matches!(app.cells.last(), Some(Cell::Error(error)) if error.starts_with("update failed:"))
         );
@@ -10591,7 +10662,7 @@ mod tests {
             || app.render(100, &session).len(),
         );
 
-        app.working = true;
+        let _active_run = session.prompt(vec![AgentMessage::user("busy")]);
         kiss_bench::measure(
             "app_spinner_full",
             11,
@@ -10703,7 +10774,7 @@ mod tests {
         renderer
             .render_shared_frame(&rows, 100, 40, &mut Sink::default())
             .unwrap();
-        app.working = true;
+        let _active_run = session.prompt(vec![AgentMessage::user("busy")]);
         kiss_bench::measure(
             "spinner_app_renderer",
             15,
@@ -10851,6 +10922,393 @@ mod tests {
             .expect("cancelled shell must stop")
             .unwrap();
         assert!(result.cancelled);
+    }
+
+    fn press(
+        app: &mut App,
+        session: &Arc<kiss_coding::AgentSession>,
+        resources: &mut InteractiveResources,
+        event: InputEvent,
+    ) -> Flow {
+        let args = Args::parse_from(["kiss"]);
+        let (tx, _rx) = mpsc::unbounded_channel();
+        let (search_tx, _search_rx) = mpsc::unbounded_channel();
+        let mut file_search = FileSearchService::new(search_tx);
+        handle_input(
+            app,
+            session,
+            &event,
+            &args,
+            resources,
+            &mut file_search,
+            &tx,
+        )
+    }
+
+    fn apply_event(app: &mut App, session: &Arc<kiss_coding::AgentSession>, event: AgentEvent) {
+        let (search_tx, _search_rx) = mpsc::unbounded_channel();
+        let mut file_search = FileSearchService::new(search_tx);
+        handle_session_event(
+            app,
+            SessionEvent::Agent(Box::new(event)),
+            &mut file_search,
+            session,
+        );
+    }
+
+    fn visible_frame(app: &mut App, session: &Arc<kiss_coding::AgentSession>) -> String {
+        kiss_tui::text::strip_ansi(&app.render(200, session).join("\n"))
+    }
+
+    fn synthetic_session() -> Arc<kiss_coding::AgentSession> {
+        test_session(kiss_coding::SessionManager::in_memory(Path::new(
+            "/synthetic",
+        )))
+    }
+
+    #[test]
+    fn cancelling_a_transcription_returns_the_space_key_to_the_editor() {
+        let mut app = test_app();
+        let session = synthetic_session();
+        let mut resources = test_resources();
+        app.voice_mode = VoiceMode::Tap;
+        app.voice = VoiceState::Recording {
+            recording: crate::voice::Recording::without_worker(),
+            preview: String::new(),
+        };
+        stop_voice(&mut app);
+        press(
+            &mut app,
+            &session,
+            &mut resources,
+            InputEvent::Key(key(Key::Escape)),
+        );
+
+        // A draft that starts with a slash always takes a literal space.
+        app.editor.set_text("/voice");
+        press(
+            &mut app,
+            &session,
+            &mut resources,
+            InputEvent::Key(KeyEvent::char(' ')),
+        );
+        assert_eq!(app.editor.text(), "/voice ");
+    }
+
+    #[tokio::test]
+    async fn escape_stops_a_retry_wait() {
+        let (event_tx, mut event_rx) = mpsc::unbounded_channel();
+        let registry = kiss_ai::Registry::from_builtin();
+        let model = registry.all().first().expect("built-in model").clone();
+        let session = kiss_coding::AgentSession::new(
+            kiss_coding::SessionManager::in_memory(Path::new("/synthetic")),
+            Vec::new(),
+            registry,
+            kiss_coding::Settings {
+                compaction: kiss_coding::settings::CompactionSettings {
+                    enabled: false,
+                    ..Default::default()
+                },
+                retry: kiss_coding::settings::RetrySettings {
+                    base_delay_ms: 60_000,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            "test prompt".into(),
+            model,
+            ThinkingLevel::Off,
+            None,
+            Arc::new(move |event| {
+                let _ = event_tx.send(event);
+            }),
+        );
+        session.set_stream_fn(Some(Arc::new(|_, _, _| {
+            let mut message = kiss_ai::AssistantMessage::empty("test", "test", "test");
+            message.stop_reason = StopReason::Error;
+            message.error_message = Some("HTTP 503".into());
+            let (sink, stream) = kiss_ai::EventStream::channel();
+            sink.error(message);
+            stream
+        })));
+        let run = tokio::spawn({
+            let session = session.clone();
+            async move { session.prompt(vec![AgentMessage::user("hello")]).await }
+        });
+
+        let mut app = test_app();
+        let mut resources = test_resources();
+        let (search_tx, _search_rx) = mpsc::unbounded_channel();
+        let mut file_search = FileSearchService::new(search_tx);
+        loop {
+            let event = tokio::time::timeout(Duration::from_secs(5), event_rx.recv())
+                .await
+                .expect("the session reaches its retry wait")
+                .expect("the session stays open");
+            let retrying = matches!(event, SessionEvent::Retry { .. });
+            handle_session_event(&mut app, event, &mut file_search, &session);
+            if retrying {
+                break;
+            }
+        }
+        press(
+            &mut app,
+            &session,
+            &mut resources,
+            InputEvent::Key(key(Key::Escape)),
+        );
+        tokio::time::timeout(Duration::from_secs(2), run)
+            .await
+            .expect("Esc must stop the retry wait")
+            .unwrap();
+    }
+
+    #[test]
+    fn parallel_tool_output_stays_with_its_own_call() {
+        let mut app = test_app();
+        let session = synthetic_session();
+        for (id, command) in [("first", "ls"), ("second", "pwd")] {
+            apply_event(
+                &mut app,
+                &session,
+                AgentEvent::ToolExecutionStart {
+                    tool_call_id: id.into(),
+                    tool_name: "bash".into(),
+                    args: serde_json::json!({ "command": command }),
+                },
+            );
+        }
+        apply_event(
+            &mut app,
+            &session,
+            AgentEvent::ToolExecutionEnd {
+                tool_call_id: "first".into(),
+                tool_name: "bash".into(),
+                result: kiss_agent::ToolResult::text("output of ls"),
+                is_error: false,
+            },
+        );
+        let Cell::ToolCall { title, output, .. } = &app.cells[0] else {
+            panic!("the first cell is a tool call");
+        };
+        assert!(title.contains("ls"), "{title:?}");
+        assert_eq!(output, "output of ls");
+        let Cell::ToolCall { output, done, .. } = &app.cells[1] else {
+            panic!("the second cell is a tool call");
+        };
+        assert!(output.is_empty(), "{output:?}");
+        assert!(!done);
+    }
+
+    #[test]
+    fn a_notice_during_a_stream_does_not_freeze_the_answer() {
+        let mut app = test_app();
+        let session = synthetic_session();
+        let mut resources = test_resources();
+        let mut message = kiss_ai::AssistantMessage::empty("test", "test", "test");
+        apply_event(
+            &mut app,
+            &session,
+            AgentEvent::MessageStart {
+                message: AgentMessage::Assistant(message.clone()),
+            },
+        );
+        let delta = |delta: &str| AgentEvent::MessageUpdate {
+            assistant_event: Box::new(AssistantEvent::TextDelta {
+                content_index: 0,
+                delta: delta.into(),
+            }),
+        };
+        apply_event(&mut app, &session, delta("hel"));
+        run_command_for_test(&mut app, &session, &mut resources, "help");
+        apply_event(&mut app, &session, delta("lo"));
+        assert!(matches!(&app.cells[0], Cell::AssistantStreaming(text) if text == "hello"));
+
+        message.content = vec![ContentBlock::Text {
+            text: "hello".into(),
+            text_signature: None,
+        }];
+        message.stop_reason = StopReason::Stop;
+        apply_event(
+            &mut app,
+            &session,
+            AgentEvent::MessageEnd {
+                message: AgentMessage::Assistant(message),
+            },
+        );
+        assert!(matches!(&app.cells[0], Cell::AssistantFinal(text) if text == "hello"));
+    }
+
+    #[tokio::test]
+    async fn a_second_background_command_does_not_replace_the_first() {
+        let mut app = test_app();
+        let session = synthetic_session();
+        let (tx, _rx) = mpsc::unbounded_channel();
+        start_shell_passthrough(&mut app, &session, "sleep 30".into(), &tx);
+        start_shell_passthrough(&mut app, &session, "sleep 31".into(), &tx);
+        let frame = visible_frame(&mut app, &session);
+        assert!(frame.contains("running !sleep 30 (esc"), "{frame}");
+        assert!(!frame.contains("running !sleep 31 (esc"), "{frame}");
+        assert_eq!(app.editor.text(), "!sleep 31");
+
+        // A cancelled command keeps the slot until its task reports back, so
+        // its late finish event cannot clear a newer command.
+        let mut resources = test_resources();
+        press(
+            &mut app,
+            &session,
+            &mut resources,
+            InputEvent::Key(key(Key::Escape)),
+        );
+        app.editor.clear();
+        start_shell_passthrough(&mut app, &session, "sleep 32".into(), &tx);
+        let frame = visible_frame(&mut app, &session);
+        assert!(frame.contains("stopping"), "{frame}");
+        assert!(!frame.contains("running !sleep 32 (esc"), "{frame}");
+
+        let (search_tx, _search_rx) = mpsc::unbounded_channel();
+        let mut search = FileSearchService::new(search_tx);
+        handle_command_event(
+            &mut app,
+            CommandEvent::ShellFinished(Err("cancelled".into())),
+            &mut resources,
+            &mut search,
+            &session,
+        );
+        start_shell_passthrough(&mut app, &session, "sleep 32".into(), &tx);
+        assert!(visible_frame(&mut app, &session).contains("running !sleep 32 (esc"));
+    }
+
+    #[test]
+    fn a_workflow_report_on_an_idle_session_joins_the_history_without_a_queue() {
+        let mut app = test_app();
+        let session = synthetic_session();
+        let mut resources = test_resources();
+        let (search_tx, _search_rx) = mpsc::unbounded_channel();
+        let mut search = FileSearchService::new(search_tx);
+        handle_command_event(
+            &mut app,
+            CommandEvent::WorkflowFinished {
+                name: "audit".into(),
+                result: Ok("all clear".into()),
+            },
+            &mut resources,
+            &mut search,
+            &session,
+        );
+        assert!(session.reclaim_queued().is_empty());
+        let context = session.manager.lock().unwrap().build_session_context();
+        assert!(context.messages.iter().any(|message| {
+            matches!(message, AgentMessage::User(user) if user.content.as_text().contains("all clear"))
+        }));
+    }
+
+    #[tokio::test]
+    async fn a_background_mcp_check_does_not_end_a_running_command() {
+        let mut app = test_app();
+        let session = synthetic_session();
+        let mut resources = test_resources();
+        let (tx, _rx) = mpsc::unbounded_channel();
+        start_shell_passthrough(&mut app, &session, "sleep 30".into(), &tx);
+        let (search_tx, _search_rx) = mpsc::unbounded_channel();
+        let mut search = FileSearchService::new(search_tx);
+        handle_command_event(
+            &mut app,
+            CommandEvent::McpServerChecked(Box::new(McpPanelServer {
+                name: "example".into(),
+                entry: Default::default(),
+                state: McpPanelState::Connected,
+                tools: Vec::new(),
+                authenticated: false,
+                source: "KISS global".into(),
+                scope: kiss_mcp::config::ConfigScope::User,
+            })),
+            &mut resources,
+            &mut search,
+            &session,
+        );
+        assert!(visible_frame(&mut app, &session).contains("running !sleep 30 (esc"));
+    }
+
+    #[test]
+    fn a_workflow_approval_is_answered_over_the_job_view() {
+        let mut app = test_app();
+        let session = synthetic_session();
+        let mut resources = test_resources();
+        app.job_view = Some(JobView::new(session.iterative_jobs().unwrap()));
+        let (reply, mut answer) = tokio::sync::oneshot::channel();
+        open_workflow_approval(
+            &mut app,
+            Box::new(kiss_coding::workflows::WorkflowPlan {
+                name: "test".into(),
+                description: "test".into(),
+                phases: Vec::new(),
+                estimated_agents: Some(1),
+                source: "".into(),
+            }),
+            reply,
+        );
+        let frame = visible_frame(&mut app, &session);
+        assert!(frame.contains("Run it"), "{frame}");
+        press(
+            &mut app,
+            &session,
+            &mut resources,
+            InputEvent::Key(key(Key::Enter)),
+        );
+        assert!(answer.try_recv().is_ok());
+    }
+
+    #[test]
+    fn a_new_session_does_not_inherit_the_previous_result() {
+        use crate::terminal_hosts::State;
+        let mut app = test_app();
+        let session = synthetic_session();
+        let mut resources = test_resources();
+        let mut message = kiss_ai::AssistantMessage::empty("test", "test", "test");
+        message.stop_reason = StopReason::Error;
+        apply_event(
+            &mut app,
+            &session,
+            AgentEvent::MessageEnd {
+                message: AgentMessage::Assistant(message),
+            },
+        );
+        assert_eq!(terminal_host_state(&app, &session), State::Error);
+        run_command_for_test(&mut app, &session, &mut resources, "new");
+        assert_eq!(terminal_host_state(&app, &session), State::Idle);
+    }
+
+    #[tokio::test]
+    async fn login_during_a_running_command_keeps_the_account_being_added() {
+        let mut app = test_app();
+        let session = synthetic_session();
+        let mut resources = test_resources();
+        let (tx, _rx) = mpsc::unbounded_channel();
+        start_shell_passthrough(&mut app, &session, "sleep 30".into(), &tx);
+        app.pending_account_add = Some(("anthropic".into(), None));
+        run_command_for_test(&mut app, &session, &mut resources, "login anthropic");
+        assert_eq!(
+            app.pending_account_add,
+            Some(("anthropic".into(), None)),
+            "the login in flight must still finish the account add"
+        );
+    }
+
+    #[test]
+    fn closing_the_login_picker_abandons_the_account_add() {
+        let mut app = test_app();
+        let session = synthetic_session();
+        let mut resources = test_resources();
+        app.pending_account_add = Some(("google-vertex".into(), None));
+        open_login_methods_picker(&mut app, "google-vertex");
+        press(
+            &mut app,
+            &session,
+            &mut resources,
+            InputEvent::Key(key(Key::Escape)),
+        );
+        assert_eq!(app.pending_account_add, None);
     }
 }
 #[test]

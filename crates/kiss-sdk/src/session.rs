@@ -8,13 +8,13 @@
 use crate::events::{agent_settled, bash_execution_update, event_lag, session_event_json};
 use crate::options::SessionOptions;
 use crate::protocol::{Command, Event, ImageInput, QueueMode, Response, StreamingBehavior};
+use futures::future::BoxFuture;
 use kiss_agent::{AgentMessage, BashExecutionMessage};
 use kiss_ai::{ContentBlock, Model, ThinkingLevel, UserContent, UserMessage};
-use kiss_coding::session_runner::{AgentSession, SessionEvent};
+use kiss_coding::session_runner::{AgentSession, QueueKind, SessionEvent};
 use kiss_coding::settings::QueueMode as SettingsQueueMode;
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tokio::sync::broadcast;
 use tokio_util::sync::CancellationToken;
@@ -39,12 +39,19 @@ pub enum SdkError {
 /// assume you saw everything.
 pub struct EventStream {
     receiver: broadcast::Receiver<Event>,
+    closed: CancellationToken,
 }
 
 impl EventStream {
     /// Wait for the next event. Returns `None` once the session is closed.
     pub async fn recv(&mut self) -> Option<Event> {
-        match self.receiver.recv().await {
+        // Biased, so a closed session still delivers what is already buffered.
+        let received = tokio::select! {
+            biased;
+            received = self.receiver.recv() => received,
+            _ = self.closed.cancelled() => return None,
+        };
+        match received {
             Ok(event) => Some(event),
             // Report the gap rather than hide it. The next `recv` resumes.
             Err(broadcast::error::RecvError::Lagged(skipped)) => Some(Event(event_lag(skipped))),
@@ -120,12 +127,9 @@ pub struct SessionState {
 pub struct Session {
     inner: Arc<AgentSession>,
     events: broadcast::Sender<Event>,
-    running: Arc<AtomicBool>,
-    /// Serializes prompt runs so `wait_idle` has something to wait on.
-    run_lock: Arc<tokio::sync::Mutex<()>>,
     bash_cancel: Mutex<Option<CancellationToken>>,
     cwd: PathBuf,
-    closed: AtomicBool,
+    closed: CancellationToken,
 }
 
 /// Fluent construction of a [`Session`].
@@ -281,11 +285,9 @@ impl Session {
         Ok(Arc::new(Session {
             inner: built.session,
             events: sender,
-            running: Arc::new(AtomicBool::new(false)),
-            run_lock: Arc::new(tokio::sync::Mutex::new(())),
             bash_cancel: Mutex::new(None),
             cwd: options.cwd.clone(),
-            closed: AtomicBool::new(false),
+            closed: CancellationToken::new(),
         }))
     }
 
@@ -294,6 +296,7 @@ impl Session {
     pub fn events(&self) -> EventStream {
         EventStream {
             receiver: self.events.subscribe(),
+            closed: self.closed.clone(),
         }
     }
 
@@ -320,11 +323,10 @@ impl Session {
     /// the run to finish. When the message was queued rather than started, this
     /// returns as soon as it was queued.
     pub async fn prompt_with(self: &Arc<Self>, args: PromptArgs) -> Result<(), SdkError> {
-        let queued = self.accept_prompt(&args)?;
-        if queued {
-            return Ok(());
+        if let Some(run) = self.accept_prompt(&args)? {
+            run.await;
+            self.emit(agent_settled());
         }
-        self.clone().run_prompt(args).await;
         Ok(())
     }
 
@@ -332,57 +334,63 @@ impl Session {
     /// run continues in the background. Wait for the `agent_settled` event or
     /// call [`Session::wait_idle`].
     pub fn prompt_detached(self: &Arc<Self>, args: PromptArgs) -> Result<(), SdkError> {
-        let queued = self.accept_prompt(&args)?;
-        if queued {
-            return Ok(());
+        if let Some(run) = self.accept_prompt(&args)? {
+            self.spawn_run(run);
         }
-        let session = self.clone();
-        tokio::spawn(async move { session.clone().run_prompt(args).await });
         Ok(())
     }
 
     /// Decide whether a prompt starts a run or joins a queue.
     ///
-    /// Returns `Ok(true)` when the message was queued and no run should start.
-    fn accept_prompt(self: &Arc<Self>, args: &PromptArgs) -> Result<bool, SdkError> {
+    /// Returns the run to drive, or `None` when the message joined a queue.
+    fn accept_prompt(
+        self: &Arc<Self>,
+        args: &PromptArgs,
+    ) -> Result<Option<BoxFuture<'static, ()>>, SdkError> {
+        self.ensure_open()?;
         if args.message.trim().is_empty() && args.images.is_empty() {
             return Err(SdkError::Command("prompt message is empty".into()));
         }
-        let busy = self.inner.is_running()
-            || self
-                .running
-                .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-                .is_err();
-        if busy {
-            return match args.streaming_behavior {
-                Some(StreamingBehavior::Steer) => {
-                    self.inner.queue_steering(user_message(args));
-                    Ok(true)
-                }
-                Some(StreamingBehavior::FollowUp) => {
-                    self.inner.queue_follow_up(user_message(args));
-                    Ok(true)
-                }
-                None => Err(SdkError::Command(
-                    "agent is streaming: pass streamingBehavior \"steer\" or \"followUp\"".into(),
-                )),
-            };
-        }
-        Ok(false)
+        let message = user_message(args);
+        let mode = self.inner.prompt_mode_for(&args.message);
+        Ok(match args.streaming_behavior {
+            Some(StreamingBehavior::Steer) => self.inner.submit(message, mode, QueueKind::Steering),
+            Some(StreamingBehavior::FollowUp) => {
+                self.inner.submit(message, mode, QueueKind::FollowUp)
+            }
+            None => Some(
+                self.inner
+                    .try_start_prompt(vec![message], mode)
+                    .map_err(|_| {
+                        SdkError::Command(
+                            "agent is streaming: pass streamingBehavior \"steer\" or \"followUp\""
+                                .into(),
+                        )
+                    })?,
+            ),
+        })
     }
 
-    async fn run_prompt(self: Arc<Self>, args: PromptArgs) {
-        let guard = self.run_lock.clone().lock_owned().await;
-        let message = user_message(&args);
-        let mode = self.inner.prompt_mode_for(&args.message);
-        self.inner.prompt_with_mode(vec![message], mode).await;
-        self.running.store(false, Ordering::SeqCst);
-        drop(guard);
-        self.emit(agent_settled());
+    fn spawn_run(self: &Arc<Self>, run: BoxFuture<'static, ()>) {
+        let session = self.clone();
+        tokio::spawn(async move {
+            run.await;
+            session.emit(agent_settled());
+        });
+    }
+
+    fn ensure_open(&self) -> Result<(), SdkError> {
+        if self.closed.is_cancelled() {
+            return Err(SdkError::Command(
+                "this session is closed and cannot accept work. Create a new session".into(),
+            ));
+        }
+        Ok(())
     }
 
     /// Queue a message for delivery after the current turn's tool calls.
     pub fn steer(&self, message: impl Into<String>) -> Result<(), SdkError> {
+        self.ensure_open()?;
         let text = message.into();
         if text.trim().is_empty() {
             return Err(SdkError::Command("steering message is empty".into()));
@@ -393,6 +401,7 @@ impl Session {
 
     /// Queue a message for delivery once the agent stops.
     pub fn follow_up(&self, message: impl Into<String>) -> Result<(), SdkError> {
+        self.ensure_open()?;
         let text = message.into();
         if text.trim().is_empty() {
             return Err(SdkError::Command("follow-up message is empty".into()));
@@ -411,7 +420,6 @@ impl Session {
 
     /// Resolve once no prompt run is in flight.
     pub async fn wait_idle(&self) {
-        let _guard = self.run_lock.lock().await;
         while self.inner.is_running() {
             tokio::time::sleep(std::time::Duration::from_millis(5)).await;
         }
@@ -423,7 +431,7 @@ impl Session {
         SessionState {
             model: Some(self.inner.model()),
             thinking_level: self.inner.thinking_level(),
-            is_streaming: self.inner.is_running() || self.running.load(Ordering::SeqCst),
+            is_streaming: self.inner.is_running(),
             session_file: manager.session_file().map(Path::to_path_buf),
             session_id: manager.session_id().to_string(),
             session_name: manager.session_name(),
@@ -447,8 +455,11 @@ impl Session {
         self: &Arc<Self>,
         custom_instructions: Option<String>,
     ) -> Result<(), SdkError> {
-        self.inner.compact(custom_instructions, false).await;
-        Ok(())
+        self.ensure_open()?;
+        self.inner
+            .compact(custom_instructions)
+            .await
+            .map_err(SdkError::Command)
     }
 
     /// Choose a model by provider and identifier.
@@ -491,6 +502,7 @@ impl Session {
         command: &str,
         request_id: Option<String>,
     ) -> Result<BashResult, SdkError> {
+        self.ensure_open()?;
         let cancel = CancellationToken::new();
         *self.bash_cancel.lock().unwrap() = Some(cancel.clone());
         let settings = self.inner.settings();
@@ -507,9 +519,9 @@ impl Session {
             cancel.clone(),
             on_update,
         )
-        .await
-        .map_err(|error| SdkError::Command(format!("{error:#}")))?;
+        .await;
         *self.bash_cancel.lock().unwrap() = None;
+        let result = result.map_err(|error| SdkError::Command(format!("{error:#}")))?;
 
         let message = AgentMessage::BashExecution(BashExecutionMessage {
             command: command.to_string(),
@@ -532,9 +544,10 @@ impl Session {
         }
     }
 
-    /// Release the event channel. Subscribers see their streams end.
+    /// Stop active work and refuse new work. Subscribers receive what is already
+    /// buffered, and then their streams end.
     pub fn close(&self) {
-        self.closed.store(true, Ordering::SeqCst);
+        self.closed.cancel();
         self.abort();
     }
 
@@ -593,14 +606,14 @@ impl Session {
                     images,
                     streaming_behavior,
                 };
-                let queued = self.accept_prompt(&args)?;
-                if !queued {
-                    let session = self.clone();
-                    tokio::spawn(async move { session.run_prompt(args).await });
-                }
-                Ok(Some(
-                    json!({"disposition": if queued { "queued" } else { "started" }}),
-                ))
+                let disposition = match self.accept_prompt(&args)? {
+                    Some(run) => {
+                        self.spawn_run(run);
+                        "started"
+                    }
+                    None => "queued",
+                };
+                Ok(Some(json!({"disposition": disposition})))
             }
             Command::Steer { message, images } => {
                 let args = PromptArgs {
@@ -608,6 +621,7 @@ impl Session {
                     images,
                     streaming_behavior: None,
                 };
+                self.ensure_open()?;
                 self.inner.queue_steering(user_message(&args));
                 Ok(Some(json!({"disposition": "queued"})))
             }
@@ -617,6 +631,7 @@ impl Session {
                     images,
                     streaming_behavior: None,
                 };
+                self.ensure_open()?;
                 self.inner.queue_follow_up(user_message(&args));
                 Ok(Some(json!({"disposition": "queued"})))
             }
@@ -762,7 +777,11 @@ impl Session {
             Command::Compact {
                 custom_instructions,
             } => {
-                self.inner.compact(custom_instructions, false).await;
+                self.ensure_open()?;
+                self.inner
+                    .compact(custom_instructions)
+                    .await
+                    .map_err(SdkError::Command)?;
                 let (used, window) = self.inner.context_usage();
                 Ok(Some(json!({
                     "contextTokens": used,

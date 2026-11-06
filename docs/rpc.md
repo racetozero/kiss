@@ -93,7 +93,7 @@ An image is `{"type":"image","data":"<base64>","mimeType":"image/png"}`.
 ### Queue, retry, and compaction
 
 - `set_steering_mode` / `set_follow_up_mode` with `mode` `all` or `one-at-a-time`.
-- `compact`, optional `customInstructions`.
+- `compact`, optional `customInstructions`. This fails while a prompt or another compaction runs. Wait for it to finish or send `abort`, then retry.
 - `set_auto_compaction` / `set_auto_retry` with boolean `enabled`.
 
 ### Tools and shell

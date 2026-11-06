@@ -27,7 +27,6 @@ use kiss_sdk::{SessionOptions, SessionSource};
 use serde_json::Value;
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
 
@@ -45,8 +44,53 @@ struct ActiveSession {
     cwd: PathBuf,
     events: tokio::sync::Mutex<mpsc::UnboundedReceiver<AcpEvent>>,
     prompt: tokio::sync::Mutex<()>,
-    cancelled: AtomicBool,
-    closed: AtomicBool,
+    lifecycle: std::sync::Mutex<AcpLifecycle>,
+}
+
+/// What the next waiting prompt must do. Prompts wait on `prompt` one at a
+/// time, so a cancel or a close can arrive before a prompt begins to run.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AcpLifecycle {
+    Open,
+    CancelRequested,
+    Closed,
+}
+
+impl ActiveSession {
+    fn lifecycle(&self) -> std::sync::MutexGuard<'_, AcpLifecycle> {
+        self.lifecycle
+            .lock()
+            .expect("ACP session lifecycle poisoned")
+    }
+
+    fn close(&self) {
+        *self.lifecycle() = AcpLifecycle::Closed;
+    }
+
+    fn request_cancel(&self) {
+        let mut lifecycle = self.lifecycle();
+        if *lifecycle == AcpLifecycle::Open {
+            *lifecycle = AcpLifecycle::CancelRequested;
+        }
+    }
+
+    /// A new prompt request is not covered by an earlier cancel.
+    fn accept_prompt(&self) {
+        let mut lifecycle = self.lifecycle();
+        if *lifecycle == AcpLifecycle::CancelRequested {
+            *lifecycle = AcpLifecycle::Open;
+        }
+    }
+
+    /// Read the state when a prompt reaches the front, and consume a cancel.
+    fn begin_prompt(&self) -> AcpLifecycle {
+        let mut lifecycle = self.lifecycle();
+        let current = *lifecycle;
+        if current == AcpLifecycle::CancelRequested {
+            *lifecycle = AcpLifecycle::Open;
+        }
+        current
+    }
 }
 
 impl Drop for ActiveSession {
@@ -131,8 +175,7 @@ impl KissAcpAgent {
             cwd,
             events: tokio::sync::Mutex::new(receiver),
             prompt: tokio::sync::Mutex::new(()),
-            cancelled: AtomicBool::new(false),
-            closed: AtomicBool::new(false),
+            lifecycle: std::sync::Mutex::new(AcpLifecycle::Open),
         });
         self.sessions
             .lock()
@@ -270,7 +313,7 @@ impl KissAcpAgent {
             }
             let session = sessions.remove(id);
             if let Some(session) = &session {
-                session.closed.store(true, Ordering::Release);
+                session.close();
             }
             session
         };
@@ -396,16 +439,21 @@ impl KissAcpAgent {
             Err(error) => return responder.respond_with_error(error),
         };
         let session_id = request.session_id;
-        session.cancelled.store(false, Ordering::Release);
+        session.accept_prompt();
         connection.clone().spawn(async move {
             let _guard = session.prompt.lock().await;
-            if session.closed.load(Ordering::Acquire) {
-                return responder.respond_with_error(
-                    agent_client_protocol::Error::resource_not_found(Some(session_id.to_string())),
-                );
-            }
-            if session.cancelled.swap(false, Ordering::AcqRel) {
-                return responder.respond(PromptResponse::new(StopReason::Cancelled));
+            match session.begin_prompt() {
+                AcpLifecycle::Closed => {
+                    return responder.respond_with_error(
+                        agent_client_protocol::Error::resource_not_found(Some(
+                            session_id.to_string(),
+                        )),
+                    );
+                }
+                AcpLifecycle::CancelRequested => {
+                    return responder.respond(PromptResponse::new(StopReason::Cancelled));
+                }
+                AcpLifecycle::Open => {}
             }
             let mut receiver = session.events.lock().await;
             while receiver.try_recv().is_ok() {}
@@ -579,7 +627,7 @@ impl ConnectTo<Client> for KissAcpAgent {
                             .expect("ACP session map poisoned")
                             .remove(&request.session_id)
                         {
-                            session.closed.store(true, Ordering::Release);
+                            session.close();
                             session.agent.abort();
                         }
                         responder.respond(CloseSessionResponse::new())
@@ -601,7 +649,7 @@ impl ConnectTo<Client> for KissAcpAgent {
                     let agent = self;
                     async move |notification: CancelNotification, _connection| {
                         if let Ok(session) = agent.session(&notification.session_id) {
-                            session.cancelled.store(true, Ordering::Release);
+                            session.request_cancel();
                             session.agent.abort();
                         }
                         Ok(())

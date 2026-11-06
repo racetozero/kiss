@@ -42,19 +42,32 @@ struct AgentState {
     tool_names: HashSet<String>,
     steering: Arc<Mutex<Vec<AgentMessage>>>,
     follow_up: Arc<Mutex<Vec<AgentMessage>>>,
-    active: Option<CancellationToken>,
-    closed: bool,
+    lifecycle: Lifecycle,
+}
+
+enum Lifecycle {
+    Idle,
+    Running(CancellationToken),
+    Closed,
 }
 
 impl AgentState {
+    fn is_running(&self) -> bool {
+        matches!(self.lifecycle, Lifecycle::Running(_))
+    }
+
+    fn is_closed(&self) -> bool {
+        matches!(self.lifecycle, Lifecycle::Closed)
+    }
+
     fn view(&self) -> AgentStateView {
         let mut tools = self.tool_names.iter().cloned().collect::<Vec<_>>();
         tools.sort();
         AgentStateView {
             model: self.model.clone(),
             thinking_level: self.thinking_level,
-            is_streaming: self.active.is_some(),
-            closed: self.closed,
+            is_streaming: self.is_running(),
+            closed: self.is_closed(),
             message_count: self.messages.len(),
             steering_count: self.steering.lock().map_or(0, |queue| queue.len()),
             follow_up_count: self.follow_up.lock().map_or(0, |queue| queue.len()),
@@ -110,8 +123,7 @@ impl KissAgent {
                 tool_names: HashSet::new(),
                 steering: Arc::new(Mutex::new(Vec::new())),
                 follow_up: Arc::new(Mutex::new(Vec::new())),
-                active: None,
-                closed: false,
+                lifecycle: Lifecycle::Idle,
             })),
             model_callback_id,
             model_registered: Cell::new(true),
@@ -126,10 +138,10 @@ impl KissAgent {
         validate_tool(&definition).map_err(js_error)?;
 
         let mut state = self.inner.borrow_mut();
-        if state.closed {
+        if state.is_closed() {
             return Err(js_error("KISS_CLOSED: agent is closed"));
         }
-        if state.active.is_some() {
+        if state.is_running() {
             return Err(js_error("KISS_BUSY: tools cannot change during a prompt"));
         }
         if state.tools.len() >= MAX_TOOL_COUNT {
@@ -210,13 +222,13 @@ impl KissAgent {
         let cancel = CancellationToken::new();
         let snapshot = {
             let mut state = self.inner.borrow_mut();
-            if state.closed {
+            if state.is_closed() {
                 return Promise::reject(&js_error("KISS_CLOSED: agent is closed"));
             }
-            if state.active.is_some() {
+            if state.is_running() {
                 return Promise::reject(&js_error("KISS_BUSY: a prompt is already running"));
             }
-            state.active = Some(cancel.clone());
+            state.lifecycle = Lifecycle::Running(cancel.clone());
             (
                 state.model.clone(),
                 state.system_prompt.clone(),
@@ -312,14 +324,16 @@ impl KissAgent {
 
             let state_view = {
                 let mut state = inner.borrow_mut();
-                state.active = None;
+                if state.is_running() {
+                    state.lifecycle = Lifecycle::Idle;
+                }
                 if let Ok(mut queue) = state.steering.lock() {
                     queue.clear();
                 }
                 if let Ok(mut queue) = state.follow_up.lock() {
                     queue.clear();
                 }
-                if !state.closed {
+                if !state.is_closed() {
                     state.messages.extend(new_messages.iter().cloned());
                     state.messages = trim_history(
                         std::mem::take(&mut state.messages),
@@ -342,7 +356,7 @@ impl KissAgent {
     /// Abort the active model/tool callback and agent loop.
     pub fn abort(&self) {
         let state = self.inner.borrow();
-        if let Some(cancel) = state.active.clone() {
+        if let Lifecycle::Running(cancel) = &state.lifecycle {
             cancel.cancel();
         }
         if let Ok(mut queue) = state.steering.lock() {
@@ -361,7 +375,7 @@ impl KissAgent {
     /// Serialize bounded, versioned conversation history.
     pub fn checkpoint(&self) -> Result<Uint8Array, JsValue> {
         let state = self.inner.borrow();
-        if state.active.is_some() {
+        if state.is_running() {
             return Err(js_error("KISS_BUSY: checkpoint requires an idle agent"));
         }
         let bytes = serde_json::to_vec(&Checkpoint {
@@ -380,11 +394,12 @@ impl KissAgent {
     /// Idempotently abort and release every host capability.
     pub fn close(&self) {
         let mut state = self.inner.borrow_mut();
-        if state.closed {
+        if state.is_closed() {
             return;
         }
-        state.closed = true;
-        if let Some(cancel) = state.active.take() {
+        if let Lifecycle::Running(cancel) =
+            std::mem::replace(&mut state.lifecycle, Lifecycle::Closed)
+        {
             cancel.cancel();
         }
         state.tools.clear();
@@ -404,10 +419,10 @@ impl KissAgent {
     fn queue_message(&self, input: JsValue, steering: bool) -> Result<(), JsValue> {
         let content = parse_prompt(input)?;
         let state = self.inner.borrow();
-        if state.closed {
+        if state.is_closed() {
             return Err(js_error("KISS_CLOSED: agent is closed"));
         }
-        if state.active.is_none() {
+        if !state.is_running() {
             return Err(js_error(
                 "KISS_IDLE: messages can only be queued during a prompt",
             ));
@@ -442,10 +457,11 @@ impl KissAgent {
 impl Drop for KissAgent {
     fn drop(&mut self) {
         if let Ok(mut state) = self.inner.try_borrow_mut() {
-            if let Some(cancel) = state.active.take() {
+            if let Lifecycle::Running(cancel) =
+                std::mem::replace(&mut state.lifecycle, Lifecycle::Closed)
+            {
                 cancel.cancel();
             }
-            state.closed = true;
             state.tools.clear();
             state.tool_names.clear();
         }
@@ -454,9 +470,9 @@ impl Drop for KissAgent {
 }
 
 fn ensure_mutable(state: &AgentState) -> Result<(), JsValue> {
-    if state.closed {
+    if state.is_closed() {
         Err(js_error("KISS_CLOSED: agent is closed"))
-    } else if state.active.is_some() {
+    } else if state.is_running() {
         Err(js_error(
             "KISS_BUSY: agent configuration cannot change during a prompt",
         ))

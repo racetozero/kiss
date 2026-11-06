@@ -77,6 +77,9 @@ impl ForkTurns {
 }
 
 struct AgentState {
+    /// Identifies the current turn. A turn writes its outcome only while it is
+    /// still the current one.
+    turn: u64,
     status: AgentStatus,
     result: Option<String>,
     error: Option<String>,
@@ -88,6 +91,9 @@ struct AgentRecord {
     canonical_path: String,
     session: Arc<AgentSession>,
     state: Mutex<AgentState>,
+    /// A turn holds this for its whole life. An interrupted turn can still be
+    /// stopping when the next one is requested, and they share one session.
+    turn_lock: tokio::sync::Mutex<()>,
 }
 
 impl AgentRecord {
@@ -208,10 +214,12 @@ impl SubagentRuntime {
             canonical_path: canonical_path.clone(),
             session: child,
             state: Mutex::new(AgentState {
+                turn: 0,
                 status: AgentStatus::Queued,
                 result: None,
                 error: None,
             }),
+            turn_lock: tokio::sync::Mutex::new(()),
         });
         self.records.lock().unwrap().push(record.clone());
         let mut targets = self.targets.lock().unwrap();
@@ -222,20 +230,21 @@ impl SubagentRuntime {
 
         let info = record.snapshot();
         self.signal_activity();
-        self.start_turn(record, prompt);
+        self.start_turn(record, 0, prompt);
         Ok(info)
     }
 
-    fn start_turn(self: &Arc<Self>, record: Arc<AgentRecord>, prompt: String) {
+    fn start_turn(self: &Arc<Self>, record: Arc<AgentRecord>, turn: u64, prompt: String) {
         let runtime = self.clone();
         tokio::spawn(async move {
+            let _turn_lock = record.turn_lock.lock().await;
             let permit = match runtime.permits.clone().acquire_owned().await {
                 Ok(permit) => permit,
                 Err(_) => return,
             };
             {
                 let mut state = record.state.lock().unwrap();
-                if state.status == AgentStatus::Interrupted {
+                if state.turn != turn || state.status != AgentStatus::Queued {
                     return;
                 }
                 state.status = AgentStatus::Running;
@@ -247,13 +256,13 @@ impl SubagentRuntime {
                     .await;
             drop(permit);
 
-            let interrupted = record.state.lock().unwrap().status == AgentStatus::Interrupted;
-            if !interrupted {
-                let mut state = record.state.lock().unwrap();
+            let mut state = record.state.lock().unwrap();
+            if state.turn == turn && state.status == AgentStatus::Running {
                 state.status = outcome.status;
                 state.result = outcome.result;
                 state.error = outcome.error;
             }
+            drop(state);
             runtime.signal_activity();
         });
     }
@@ -281,19 +290,21 @@ impl SubagentRuntime {
             anyhow::bail!("prompt must not be empty");
         }
         let record = self.resolve(target)?;
-        {
+        let turn = {
             let mut state = record.state.lock().unwrap();
             if !state.status.is_terminal() {
                 anyhow::bail!("subagent '{}' is still busy", record.task_name);
             }
+            state.turn += 1;
             state.status = AgentStatus::Queued;
             state.result = None;
             state.error = None;
-        }
+            state.turn
+        };
         let _ = record.session.reclaim_queued();
         let info = record.snapshot();
         self.signal_activity();
-        self.start_turn(record, prompt);
+        self.start_turn(record, turn, prompt);
         Ok(info)
     }
 
@@ -866,6 +877,72 @@ mod tests {
                 .len(),
             2
         );
+    }
+
+    #[tokio::test]
+    async fn a_followup_after_an_interrupt_waits_for_the_old_turn_to_stop() {
+        let parent = parent_session();
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let observed_calls = calls.clone();
+        // The first turn stops slowly after the abort, as a real tool can.
+        parent.set_stream_fn(Some(Arc::new(move |_, _, options| {
+            let step = observed_calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let mut message = kiss_ai::AssistantMessage::empty("test", "test", "test");
+            let (sink, stream) = kiss_ai::EventStream::channel();
+            if step == 0 {
+                let cancel = options.cancel.clone();
+                tokio::spawn(async move {
+                    cancel.cancelled().await;
+                    tokio::time::sleep(Duration::from_millis(50)).await;
+                    message.stop_reason = StopReason::Aborted;
+                    sink.error(message);
+                });
+            } else {
+                message.content = vec![kiss_ai::ContentBlock::Text {
+                    text: "second answer".into(),
+                    text_signature: None,
+                }];
+                message.stop_reason = StopReason::Stop;
+                sink.done(message);
+            }
+            stream
+        })));
+        let runtime = SubagentRuntime::with_permits(Arc::downgrade(&parent), 2);
+        runtime
+            .spawn(
+                "review_tests".into(),
+                "first".into(),
+                ForkTurns::None,
+                None,
+                None,
+            )
+            .unwrap();
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while calls.load(std::sync::atomic::Ordering::SeqCst) == 0 {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("the first turn reaches the model");
+
+        runtime.interrupt("review_tests").unwrap();
+        runtime
+            .followup("review_tests", "second".into())
+            .expect("an interrupted agent accepts a follow-up");
+
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                let info = runtime.list().remove(0);
+                if info.status == AgentStatus::Completed {
+                    assert_eq!(info.result.as_deref(), Some("second answer"));
+                    return;
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .expect("the follow-up turn completes");
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 2);
     }
 
     #[tokio::test]

@@ -61,6 +61,12 @@ pub struct Recording {
 }
 
 impl Recording {
+    /// A recording with no capture process, for state tests.
+    #[cfg(test)]
+    pub(crate) fn without_worker() -> Self {
+        Self { control: None }
+    }
+
     pub fn stop(&self) {
         if let Some(tx) = &self.control {
             let _ = tx.send(Control::Stop);

@@ -463,13 +463,9 @@ async fn run(
                             anyhow::bail!("Cursor message upload ended before the run completed");
                         }
                         _ = tokio::time::sleep(RESUME_TIMEOUT) => {
-                            pending().lock().unwrap().remove(&resume_key);
                             anyhow::bail!("Cursor tool continuation timed out")
                         }
-                        _ = options.cancel.cancelled() => {
-                            pending().lock().unwrap().remove(&resume_key);
-                            anyhow::bail!("request cancelled")
-                        }
+                        _ = options.cancel.cancelled() => anyhow::bail!("request cancelled"),
                     };
                     options = resumed.options;
                     builder = Some(new_builder(model, resumed.sink, &response_id));

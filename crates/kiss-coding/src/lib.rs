@@ -23,7 +23,7 @@ pub mod workflows;
 pub use session::entry::{SessionEntry, SessionHeader};
 pub use session::manager::{SessionListing, SessionManager, default_session_dir};
 pub use session_runner::{
-    AgentSession, EphemeralResponse, PromptMode, SessionEvent, SessionEventSink,
-    TreeNavigationOutcome, WorkflowTurnStatus,
+    AgentSession, EphemeralResponse, PromptMode, QueueKind, RunPhase, SessionEvent,
+    SessionEventSink, TreeNavigationOutcome, WorkflowTurnStatus,
 };
 pub use settings::Settings;

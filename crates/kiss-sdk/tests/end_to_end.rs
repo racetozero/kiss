@@ -337,3 +337,57 @@ async fn an_unknown_entry_cursor_is_reported_rather_than_ignored() {
     assert!(!response.success);
     assert!(response.error.unwrap().contains("does-not-exist"));
 }
+
+#[tokio::test]
+async fn compaction_works_after_an_abort_and_closing_ends_the_session() {
+    let directory = tempfile::tempdir().expect("temp dir");
+    let script = MockScript::text("first answer")
+        .then(vec![MockTurn::Text("second answer".into())])
+        .then(vec![MockTurn::Text("the summary".into())]);
+    let provider = MockProvider::start(directory.path(), script)
+        .await
+        .expect("mock provider starts");
+    let options = SessionOptions {
+        cwd: directory.path().to_path_buf(),
+        model: Some("mock/mock-1".into()),
+        models_file: Some(provider.catalog_path()),
+        thinking_level: Some(ThinkingLevel::Off),
+        settings: Some(kiss_coding::Settings {
+            compaction: kiss_coding::settings::CompactionSettings {
+                enabled: false,
+                keep_recent_tokens: 1,
+                ..Default::default()
+            },
+            ..Default::default()
+        }),
+        tools: Some(Vec::new()),
+        trust_project_files: false,
+        no_context_files: true,
+        ..Default::default()
+    };
+    let session = Session::create(options).await.expect("session builds");
+    session.prompt("one").await.expect("first prompt");
+    session.prompt("two").await.expect("second prompt");
+
+    // An abort with no active run must not poison the next piece of work.
+    session.abort();
+    session.compact(None).await.expect("compaction starts");
+    assert!(
+        session
+            .messages()
+            .iter()
+            .any(|message| matches!(message, kiss_agent::AgentMessage::CompactionSummary(_))),
+        "the compaction must produce a summary"
+    );
+
+    let mut events = session.events();
+    session.close();
+    assert!(
+        tokio::time::timeout(Duration::from_secs(1), events.recv())
+            .await
+            .expect("a closed session ends its event streams")
+            .is_none()
+    );
+    let refused = session.prompt("three").await;
+    assert!(refused.is_err(), "{refused:?}");
+}

@@ -12,12 +12,15 @@ use crate::settings::{CacheWarmingMode, QueueMode, Settings};
 use crate::subagents::{ForkTurns, SUBAGENT_SYSTEM_PROMPT, SubagentRuntime, fork_messages};
 use crate::workflows::{WorkflowApprover, WorkflowRuntime};
 use anyhow::Context as _;
+use futures::FutureExt as _;
+use futures::future::BoxFuture;
 use kiss_agent::{
     AgentContext, AgentEvent, AgentLoopConfig, AgentMessage, DynTool, EventSink, StreamFn,
     TurnUpdate,
 };
 use kiss_ai::{Model, Registry, StopReason, ThinkingLevel, Usage};
 use std::collections::VecDeque;
+use std::future::Future;
 use std::sync::{Arc, Mutex, OnceLock};
 use tokio_util::sync::CancellationToken;
 
@@ -105,6 +108,72 @@ pub enum WorkflowTurnStatus {
     Stopped,
 }
 
+/// What a session is doing now. This is the only record of an active run.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RunPhase {
+    Idle,
+    /// A run is requesting the model or executing tools.
+    Streaming,
+    /// A run waits before it retries a transient error.
+    RetryWait,
+    /// A run or a manual request is compacting the conversation.
+    Compacting,
+}
+
+/// The queue that receives a message when the session is busy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum QueueKind {
+    /// Deliver between the turns of the active run.
+    Steering,
+    /// Deliver when the active run would otherwise stop.
+    FollowUp,
+}
+
+/// Holds a session out of [`RunPhase::Idle`]. Dropping it returns the session
+/// to idle, so a panic or a dropped future cannot leave the session busy.
+struct ActivePhase {
+    session: Arc<AgentSession>,
+    armed: bool,
+}
+
+impl ActivePhase {
+    /// Take the next queued prompts, or return the session to idle.
+    ///
+    /// Both happen under the phase lock. [`AgentSession::submit`] queues under
+    /// the same lock, so a message cannot arrive between the check and idle.
+    /// A cancelled run leaves its queue for the caller to reclaim.
+    fn take_queued(&mut self, cancelled: bool) -> Option<(Vec<AgentMessage>, PromptMode)> {
+        let session = self.session.clone();
+        let settings = session.settings();
+        let mut phase = session.phase.lock().unwrap();
+        if !cancelled {
+            for (queue, queue_mode) in [
+                (&session.steering, settings.steering_mode),
+                (&session.follow_up, settings.follow_up_mode),
+            ] {
+                if let Some(prompt_mode) = queued_mode(queue, queue_mode) {
+                    let prompts = drain_queue(queue, queue_mode);
+                    *phase = RunPhase::Streaming;
+                    drop(phase);
+                    session.emit_queues();
+                    return Some((prompts, prompt_mode));
+                }
+            }
+        }
+        *phase = RunPhase::Idle;
+        self.armed = false;
+        None
+    }
+}
+
+impl Drop for ActivePhase {
+    fn drop(&mut self) {
+        if self.armed {
+            *self.session.phase.lock().unwrap() = RunPhase::Idle;
+        }
+    }
+}
+
 #[derive(Clone)]
 struct QueuedPrompt {
     message: AgentMessage,
@@ -166,7 +235,7 @@ pub struct AgentSession {
     follow_up: Arc<Mutex<VecDeque<QueuedPrompt>>>,
     cancel: Mutex<CancellationToken>,
     cache_warm_cancel: Mutex<CancellationToken>,
-    running: Mutex<bool>,
+    phase: Mutex<RunPhase>,
     totals: Mutex<Usage>,
     context_usage_cache: Mutex<Option<(u64, u64)>>,
     context_file: Mutex<Option<crate::context_file::ContextFile>>,
@@ -294,7 +363,7 @@ impl AgentSession {
             follow_up: Default::default(),
             cancel: Mutex::new(CancellationToken::new()),
             cache_warm_cancel: Mutex::new(CancellationToken::new()),
-            running: Mutex::new(false),
+            phase: Mutex::new(RunPhase::Idle),
             totals: Mutex::new(totals),
             context_usage_cache: Default::default(),
             context_file: Mutex::new(None),
@@ -352,8 +421,23 @@ impl AgentSession {
         self.totals.lock().unwrap().add(&usage);
     }
 
+    pub fn run_phase(&self) -> RunPhase {
+        *self.phase.lock().unwrap()
+    }
+
     pub fn is_running(&self) -> bool {
-        *self.running.lock().unwrap()
+        self.run_phase() != RunPhase::Idle
+    }
+
+    /// Move an idle session into `phase`. Every run and manual compaction
+    /// starts here, so each one gets a live cancel token.
+    fn activate(self: &Arc<Self>, current: &mut RunPhase, phase: RunPhase) -> ActivePhase {
+        *current = phase;
+        *self.cancel.lock().unwrap() = CancellationToken::new();
+        ActivePhase {
+            session: self.clone(),
+            armed: true,
+        }
     }
 
     pub fn settings(&self) -> Settings {
@@ -742,6 +826,26 @@ impl AgentSession {
         self.emit_queues();
     }
 
+    /// Give the next model request a message without starting one. A busy
+    /// session delivers it as a follow-up. An idle session adds it to history,
+    /// so that a later prompt sees it without an extra model turn.
+    pub fn add_for_next_turn(&self, message: AgentMessage) {
+        let phase = self.phase.lock().unwrap();
+        if *phase != RunPhase::Idle {
+            self.follow_up.lock().unwrap().push_back(QueuedPrompt {
+                message,
+                mode: PromptMode::Ordinary,
+            });
+            drop(phase);
+            self.emit_queues();
+            return;
+        }
+        // Other code holds the manager lock while it reads the phase, so this
+        // must not hold the phase lock while it takes the manager lock.
+        drop(phase);
+        let _ = self.manager.lock().unwrap().append_message(message);
+    }
+
     /// Drain both queues back to the caller (Escape restores to editor).
     pub fn reclaim_queued(&self) -> Vec<AgentMessage> {
         let mut out: Vec<AgentMessage> = self
@@ -1031,7 +1135,9 @@ impl AgentSession {
                     };
 
                     if let Some(revision_before) = revision_before {
-                        session.compact(None, true).await;
+                        *session.phase.lock().unwrap() = RunPhase::Compacting;
+                        session.run_compaction(None, true).await;
+                        *session.phase.lock().unwrap() = RunPhase::Streaming;
                         let revision_after = session.manager.lock().unwrap().context_revision();
                         context_changed |= revision_after != revision_before;
                     }
@@ -1404,43 +1510,142 @@ impl AgentSession {
     }
 
     /// Run one prompt to completion, including retry and auto-compaction.
-    pub async fn prompt(self: &Arc<Self>, prompts: Vec<AgentMessage>) {
-        self.prompt_with_mode(prompts, PromptMode::Ordinary).await;
+    ///
+    /// The session decides during this call whether the prompt starts or joins
+    /// the steering queue, before the returned future is first polled.
+    pub fn prompt(
+        self: &Arc<Self>,
+        prompts: Vec<AgentMessage>,
+    ) -> impl Future<Output = ()> + Send + 'static + use<> {
+        self.prompt_with_mode(prompts, PromptMode::Ordinary)
     }
 
     /// Run one prompt with tools and instructions selected for this turn.
-    pub async fn prompt_with_mode(
+    pub fn prompt_with_mode(
         self: &Arc<Self>,
         prompts: Vec<AgentMessage>,
         prompt_mode: PromptMode,
-    ) {
-        self.cache_warm_cancel.lock().unwrap().cancel();
-        {
-            let mut running = self.running.lock().unwrap();
-            if *running {
-                // Already running: enqueue as steering instead.
-                drop(running);
-                for p in prompts {
-                    self.queue_steering_with_mode(p, prompt_mode);
-                }
-                return;
+    ) -> impl Future<Output = ()> + Send + 'static + use<> {
+        let run = self.start_or_queue(prompts, prompt_mode, QueueKind::Steering);
+        async move {
+            if let Some(run) = run {
+                run.await;
             }
-            *running = true;
         }
-        let cancel = {
-            let mut guard = self.cancel.lock().unwrap();
-            *guard = CancellationToken::new();
-            guard.clone()
-        };
+    }
 
-        // Persist prompts and run.
+    /// Start a run, or queue the message when the session is busy. The caller
+    /// must drive a returned future to run the prompt.
+    pub fn submit(
+        self: &Arc<Self>,
+        message: AgentMessage,
+        prompt_mode: PromptMode,
+        kind: QueueKind,
+    ) -> Option<BoxFuture<'static, ()>> {
+        self.start_or_queue(vec![message], prompt_mode, kind)
+    }
+
+    /// Start a run, or hand the prompts back when the session is busy.
+    pub fn try_start_prompt(
+        self: &Arc<Self>,
+        prompts: Vec<AgentMessage>,
+        prompt_mode: PromptMode,
+    ) -> Result<BoxFuture<'static, ()>, Vec<AgentMessage>> {
+        self.cache_warm_cancel.lock().unwrap().cancel();
+        let active = {
+            let mut phase = self.phase.lock().unwrap();
+            if *phase != RunPhase::Idle {
+                return Err(prompts);
+            }
+            self.activate(&mut phase, RunPhase::Streaming)
+        };
+        Ok(self
+            .clone()
+            .run_prompts(active, prompts, prompt_mode)
+            .boxed())
+    }
+
+    fn start_or_queue(
+        self: &Arc<Self>,
+        prompts: Vec<AgentMessage>,
+        prompt_mode: PromptMode,
+        kind: QueueKind,
+    ) -> Option<BoxFuture<'static, ()>> {
+        self.cache_warm_cancel.lock().unwrap().cancel();
+        let mut phase = self.phase.lock().unwrap();
+        if *phase != RunPhase::Idle {
+            let queue = match kind {
+                QueueKind::Steering => &self.steering,
+                QueueKind::FollowUp => &self.follow_up,
+            };
+            queue
+                .lock()
+                .unwrap()
+                .extend(prompts.into_iter().map(|message| QueuedPrompt {
+                    message,
+                    mode: prompt_mode,
+                }));
+            drop(phase);
+            self.emit_queues();
+            return None;
+        }
+        let active = self.activate(&mut phase, RunPhase::Streaming);
+        drop(phase);
+        Some(
+            self.clone()
+                .run_prompts(active, prompts, prompt_mode)
+                .boxed(),
+        )
+    }
+
+    async fn run_prompts(
+        self: Arc<Self>,
+        active: ActivePhase,
+        prompts: Vec<AgentMessage>,
+        prompt_mode: PromptMode,
+    ) {
+        let cancel = self.cancel.lock().unwrap().clone();
         {
             let mut manager = self.manager.lock().unwrap();
             for p in &prompts {
                 let _ = manager.append_message(p.clone());
             }
         }
+        // The prompts were persisted above. Context includes them, so run as a
+        // continuation without a second prompt list.
+        self.run_turns(None, prompt_mode, &cancel).await;
+        self.run_queued_then_idle(active, &cancel).await;
+        (self.sink)(SessionEvent::PromptEnd {
+            cancelled: cancel.is_cancelled(),
+        });
+    }
 
+    /// Run whatever arrived after the agent loop last read the queues, then
+    /// leave the active phase. Returns true if any queued prompt ran.
+    async fn run_queued_then_idle(
+        self: &Arc<Self>,
+        mut active: ActivePhase,
+        cancel: &CancellationToken,
+    ) -> bool {
+        let mut ran = false;
+        while let Some((prompts, prompt_mode)) = active.take_queued(cancel.is_cancelled()) {
+            ran = true;
+            self.run_turns(Some(prompts), prompt_mode, cancel).await;
+        }
+        if self.settings.lock().unwrap().cache_warming == CacheWarmingMode::Streaming {
+            self.cache_warm_cancel.lock().unwrap().cancel();
+        }
+        ran
+    }
+
+    /// Run the agent loop with retry and automatic compaction. `new_prompts`
+    /// are messages that the loop must announce and persist itself.
+    async fn run_turns(
+        self: &Arc<Self>,
+        mut new_prompts: Option<Vec<AgentMessage>>,
+        prompt_mode: PromptMode,
+        cancel: &CancellationToken,
+    ) {
         let session = self.clone();
         let sink: EventSink = Arc::new(move |event: AgentEvent| {
             session.on_agent_event(&event);
@@ -1450,18 +1655,30 @@ impl AgentSession {
         let active_prompt_mode = Arc::new(Mutex::new(prompt_mode));
         let mut config = self.loop_config(self, active_prompt_mode.clone());
         let mut context = self.build_context_for(prompt_mode);
-        // The prompts were already persisted. Context includes them, so run
-        // as a continuation without a second prompt list.
 
         let mut attempt: u32 = 0;
         loop {
-            let messages = kiss_agent::run_agent_loop_continue(
-                context,
-                config.clone(),
-                cancel.clone(),
-                sink.clone(),
-            )
-            .await;
+            let messages = match new_prompts.take() {
+                Some(prompts) => {
+                    kiss_agent::run_agent_loop(
+                        prompts,
+                        context,
+                        config.clone(),
+                        cancel.clone(),
+                        sink.clone(),
+                    )
+                    .await
+                }
+                None => {
+                    kiss_agent::run_agent_loop_continue(
+                        context,
+                        config.clone(),
+                        cancel.clone(),
+                        sink.clone(),
+                    )
+                    .await
+                }
+            };
 
             // Retry on transient error stops.
             let last_error = messages.iter().rev().find_map(|m| match m {
@@ -1483,6 +1700,7 @@ impl AgentSession {
                     .base_delay_ms
                     .saturating_mul(1u64.checked_shl(attempt - 1).unwrap_or(u64::MAX))
                     .min(retry.max_agent_delay_ms);
+                *self.phase.lock().unwrap() = RunPhase::RetryWait;
                 (self.sink)(SessionEvent::Retry {
                     attempt,
                     max: retry.max_retries,
@@ -1493,6 +1711,7 @@ impl AgentSession {
                     _ = tokio::time::sleep(std::time::Duration::from_millis(delay)) => {}
                     _ = cancel.cancelled() => break,
                 }
+                *self.phase.lock().unwrap() = RunPhase::Streaming;
                 context = self.build_context_for(*active_prompt_mode.lock().unwrap());
                 // Drop the trailing error assistant message from context.
                 while matches!(
@@ -1515,18 +1734,12 @@ impl AgentSession {
                 &self.model(),
                 cancel.is_cancelled(),
             ) {
-                self.compact(None, true).await;
+                *self.phase.lock().unwrap() = RunPhase::Compacting;
+                self.run_compaction(None, true).await;
+                *self.phase.lock().unwrap() = RunPhase::Streaming;
             }
             break;
         }
-
-        *self.running.lock().unwrap() = false;
-        if self.settings.lock().unwrap().cache_warming == CacheWarmingMode::Streaming {
-            self.cache_warm_cancel.lock().unwrap().cancel();
-        }
-        (self.sink)(SessionEvent::PromptEnd {
-            cancelled: cancel.is_cancelled(),
-        });
     }
 
     fn on_agent_event(self: &Arc<Self>, event: &AgentEvent) {
@@ -1696,7 +1909,40 @@ impl AgentSession {
     }
 
     /// Manual or automatic compaction.
-    pub async fn compact(self: &Arc<Self>, custom_instructions: Option<String>, auto: bool) {
+    /// Compact on request. The session refuses during this call when a prompt
+    /// or another compaction is active. Prompts that arrive during compaction
+    /// run when it ends.
+    pub fn compact(
+        self: &Arc<Self>,
+        custom_instructions: Option<String>,
+    ) -> impl Future<Output = Result<(), String>> + Send + 'static + use<> {
+        let session = self.clone();
+        let active = {
+            let mut phase = self.phase.lock().unwrap();
+            (*phase == RunPhase::Idle).then(|| self.activate(&mut phase, RunPhase::Compacting))
+        };
+        async move {
+            let Some(active) = active else {
+                let error = "cannot compact while a prompt or another compaction is running. Wait for it to finish or abort it, then compact again".to_string();
+                (session.sink)(SessionEvent::CompactionEnd {
+                    summary: String::new(),
+                    tokens_before: 0,
+                    error: Some(error.clone()),
+                });
+                return Err(error);
+            };
+            let cancel = session.cancel.lock().unwrap().clone();
+            session.run_compaction(custom_instructions, false).await;
+            if session.run_queued_then_idle(active, &cancel).await {
+                (session.sink)(SessionEvent::PromptEnd {
+                    cancelled: cancel.is_cancelled(),
+                });
+            }
+            Ok(())
+        }
+    }
+
+    async fn run_compaction(self: &Arc<Self>, custom_instructions: Option<String>, auto: bool) {
         (self.sink)(SessionEvent::CompactionStart { auto });
         let ctx = self.manager.lock().unwrap().build_session_context();
         let previous_summary = ctx.messages.iter().rev().find_map(|m| match m {
@@ -2283,6 +2529,190 @@ mod ephemeral_tests {
             );
             assert!(!session.is_running());
         }
+    }
+
+    /// A session whose first model request waits until `release` fires and then
+    /// fails with a permanent error. Later requests succeed at once.
+    fn session_with_blocked_failure(
+        release: Arc<tokio::sync::Notify>,
+    ) -> (
+        Arc<AgentSession>,
+        Arc<std::sync::atomic::AtomicUsize>,
+        Arc<Mutex<Vec<SessionEvent>>>,
+    ) {
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let saved_events = events.clone();
+        let session = AgentSession::new(
+            SessionManager::in_memory(Path::new("/test")),
+            Vec::new(),
+            Registry::load(None),
+            Settings {
+                compaction: crate::settings::CompactionSettings {
+                    enabled: false,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            "test".into(),
+            openai_model(),
+            ThinkingLevel::Off,
+            None,
+            Arc::new(move |event| saved_events.lock().unwrap().push(event)),
+        );
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let observed_calls = calls.clone();
+        session.set_stream_fn(Some(Arc::new(move |_, _, _| {
+            let step = observed_calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let mut message =
+                kiss_ai::AssistantMessage::empty("openai-responses", "openai", "gpt-test");
+            let (sink, stream) = kiss_ai::EventStream::channel();
+            if step == 0 {
+                let release = release.clone();
+                tokio::spawn(async move {
+                    release.notified().await;
+                    message.stop_reason = StopReason::Error;
+                    message.error_message = Some("HTTP 400 bad request".into());
+                    sink.error(message);
+                });
+            } else {
+                message.stop_reason = StopReason::Stop;
+                sink.done(message);
+            }
+            stream
+        })));
+        (session, calls, events)
+    }
+
+    async fn wait_for_first_request(calls: &std::sync::atomic::AtomicUsize) {
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            while calls.load(std::sync::atomic::Ordering::SeqCst) == 0 {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("the first model request starts");
+    }
+
+    #[tokio::test]
+    async fn a_message_queued_during_a_failed_turn_runs_after_it() {
+        let release = Arc::new(tokio::sync::Notify::new());
+        let (session, calls, _events) = session_with_blocked_failure(release.clone());
+        let task_session = session.clone();
+        let task = tokio::spawn(async move {
+            task_session.prompt(vec![AgentMessage::user("first")]).await;
+        });
+        wait_for_first_request(&calls).await;
+
+        session.queue_steering(AgentMessage::user("second"));
+        release.notify_one();
+        tokio::time::timeout(std::time::Duration::from_secs(5), task)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 2);
+        assert!(session.reclaim_queued().is_empty());
+        let context = session.manager.lock().unwrap().build_session_context();
+        assert!(context.messages.iter().any(
+            |message| matches!(message, AgentMessage::User(user) if user.content.as_text() == "second")
+        ));
+    }
+
+    #[tokio::test]
+    async fn manual_compaction_is_refused_during_a_prompt() {
+        let release = Arc::new(tokio::sync::Notify::new());
+        let (session, calls, events) = session_with_blocked_failure(release.clone());
+        let task_session = session.clone();
+        let task = tokio::spawn(async move {
+            task_session.prompt(vec![AgentMessage::user("first")]).await;
+        });
+        wait_for_first_request(&calls).await;
+
+        let refused = session.compact(None).await.unwrap_err();
+        assert!(refused.contains("cannot compact"), "{refused}");
+        assert!(
+            !events
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|event| { matches!(event, SessionEvent::CompactionStart { .. }) })
+        );
+        release.notify_one();
+        task.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_message_queued_before_a_compaction_runs_when_it_ends() {
+        let release = Arc::new(tokio::sync::Notify::new());
+        release.notify_one();
+        let (session, calls, _events) = session_with_blocked_failure(release);
+        session.queue_steering(AgentMessage::user("queued"));
+        session.compact(None).await.unwrap();
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert!(!session.is_running());
+    }
+
+    #[tokio::test]
+    async fn a_message_added_while_idle_costs_no_extra_model_request() {
+        let session = AgentSession::new(
+            SessionManager::in_memory(Path::new("/test")),
+            Vec::new(),
+            Registry::load(None),
+            Settings {
+                compaction: crate::settings::CompactionSettings {
+                    enabled: false,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            "test".into(),
+            openai_model(),
+            ThinkingLevel::Off,
+            None,
+            Arc::new(|_| {}),
+        );
+        let contexts = Arc::new(Mutex::new(Vec::new()));
+        let saved_contexts = contexts.clone();
+        session.set_stream_fn(Some(Arc::new(move |_, context, _| {
+            saved_contexts
+                .lock()
+                .unwrap()
+                .push(format!("{:?}", context.messages));
+            let mut message =
+                kiss_ai::AssistantMessage::empty("openai-responses", "openai", "gpt-test");
+            message.stop_reason = StopReason::Stop;
+            let (sink, stream) = kiss_ai::EventStream::channel();
+            sink.done(message);
+            stream
+        })));
+
+        session.add_for_next_turn(AgentMessage::user("the workflow report"));
+        session.compact(None).await.unwrap();
+        assert!(contexts.lock().unwrap().is_empty());
+
+        session.prompt(vec![AgentMessage::user("next")]).await;
+        let contexts = contexts.lock().unwrap();
+        assert_eq!(contexts.len(), 1);
+        assert!(contexts[0].contains("the workflow report"));
+    }
+
+    #[test]
+    fn a_dropped_prompt_future_returns_the_session_to_idle() {
+        let session = AgentSession::new(
+            SessionManager::in_memory(Path::new("/test")),
+            Vec::new(),
+            Registry::load(None),
+            Settings::default(),
+            "test".into(),
+            openai_model(),
+            ThinkingLevel::Off,
+            None,
+            Arc::new(|_| {}),
+        );
+        let run = session.prompt(vec![AgentMessage::user("first")]);
+        assert_eq!(session.run_phase(), RunPhase::Streaming);
+        drop(run);
+        assert_eq!(session.run_phase(), RunPhase::Idle);
     }
 
     #[tokio::test]
