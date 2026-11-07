@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.0.37 - 2026-11-07
+
 ### Fixed
 
 - Cursor keeps connection and per-tool heartbeats running while tools or
