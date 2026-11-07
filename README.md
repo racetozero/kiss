@@ -6,7 +6,7 @@
 [![npm WASM downloads](https://img.shields.io/npm/dm/kiss-agent-sdk-wasm?label=npm%20WASM%20downloads)](https://www.npmjs.com/package/kiss-agent-sdk-wasm)
 [![crates.io SDK downloads](https://img.shields.io/crates/d/kiss-agent-sdk?label=crates.io%20SDK%20downloads)](https://crates.io/crates/kiss-agent-sdk)
 
-<img width="867" height="634" alt="image" src="https://github.com/user-attachments/assets/d31f6e30-2f8f-42b3-911c-338f7f2c549b" />
+<img width="737" height="294" alt="image" src="https://github.com/user-attachments/assets/725ad3b8-9711-4700-bbf0-23e969b9dc77" />
 
 A [ridiculously fast](#performance) terminal coding agent that keeps the interface simple and gives you
 control of the model, tools, sessions, and automation.
