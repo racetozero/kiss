@@ -6,7 +6,7 @@
 [![npm WASM downloads](https://img.shields.io/npm/dm/kiss-agent-sdk-wasm?label=npm%20WASM%20downloads)](https://www.npmjs.com/package/kiss-agent-sdk-wasm)
 [![crates.io SDK downloads](https://img.shields.io/crates/d/kiss-agent-sdk?label=crates.io%20SDK%20downloads)](https://crates.io/crates/kiss-agent-sdk)
 
-<img width="766" height="244" alt="image" src="https://github.com/user-attachments/assets/08e96d6e-7409-419b-b9db-0149f2465083" />
+<img width="867" height="634" alt="image" src="https://github.com/user-attachments/assets/d31f6e30-2f8f-42b3-911c-338f7f2c549b" />
 
 A [ridiculously fast](#performance) terminal coding agent that keeps the interface simple and gives you
 control of the model, tools, sessions, and automation.
@@ -1258,6 +1258,8 @@ the skill at the next session start. Without the skill, ask KISS to run
 to install the skill.
 
 ### Herdr and cmux
+
+<img width="856" height="634" alt="image" src="https://github.com/user-attachments/assets/d695eda7-6fad-437f-bfc6-aebe9f8ab53f" />
 
 Run `kiss` in a Herdr or cmux pane to enable native support. No hook script
 is required. KISS reports when it is working, idle, or waiting for a workflow
