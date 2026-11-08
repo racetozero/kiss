@@ -147,86 +147,94 @@ async fn run_command(args: &Args, command: &Command) -> anyhow::Result<i32> {
         } => {
             if *add_account {
                 kiss_ai::auth::accounts::begin_add(provider)?;
-            }
-            if *entra_id && provider != "azure" {
-                anyhow::bail!(
-                    "--entra-id works only with the azure provider, but you gave {provider}. Run kiss login azure --entra-id"
-                );
-            }
-            if *entra_id {
-                kiss_ai::auth::store_azure_entra_id()?;
-                println!("Saved Microsoft Entra ID credentials for {provider}.");
-                return Ok(0);
-            }
-            let gateway_provider = matches!(
-                provider.as_str(),
-                "databricks-unity-gateway" | "snowflake-cortex"
-            );
-            if base_url.is_some() && !gateway_provider {
-                anyhow::bail!(
-                    "provider '{provider}' does not accept --base-url. Omit it and use the provider's normal login command"
-                );
-            }
-            if api_key.is_none()
-                && login_methods(provider).iter().any(|method| {
-                    matches!(
-                        method,
-                        LoginMethod::BrowserOAuth
-                            | LoginMethod::DeviceOAuth
-                            | LoginMethod::ManualOAuth
-                    )
-                })
-            {
-                run_oauth_login(provider, *device_auth).await?;
-                println!("Saved OAuth credentials for {provider}.");
             } else {
-                let key = match api_key {
-                    Some(key) => key.clone(),
-                    None => rpassword::prompt_password(format!("API key for {provider}: "))?,
-                };
-                if key.trim().is_empty() {
+                kiss_ai::auth::accounts::cancel_add(provider)?;
+            }
+            let result = async {
+                if *entra_id && provider != "azure" {
                     anyhow::bail!(
-                        "the credential for provider '{provider}' is empty. Enter a non-empty API key or bearer token and retry login"
+                        "--entra-id works only with the azure provider, but you gave {provider}. Run kiss login azure --entra-id"
                     );
                 }
-                if gateway_provider {
-                    let gateway_url = match base_url.as_deref() {
-                        Some(url) => url.to_string(),
-                        None if std::io::stdin().is_terminal() => {
-                            let label = if provider == "databricks-unity-gateway" {
-                                "Databricks workspace URL"
-                            } else {
-                                "Snowflake account, Cortex, or AI Gateway URL"
-                            };
-                            print!("{label}: ");
-                            std::io::stdout().flush()?;
-                            let mut value = String::new();
-                            std::io::stdin().read_line(&mut value)?;
-                            value.trim().to_string()
-                        }
-                        None => anyhow::bail!(
-                            "provider '{provider}' needs an account URL. Pass --base-url with an HTTP or HTTPS workspace, Cortex, or AI Gateway URL"
-                        ),
-                    };
-                    kiss_ai::auth::store_gateway_credential(provider, key.trim(), &gateway_url)?;
-                    println!("Saved bearer token and base URL for {provider}.");
+                if *entra_id {
+                    kiss_ai::auth::store_azure_entra_id()?;
+                    println!("Saved Microsoft Entra ID credentials for {provider}.");
                 } else {
-                    kiss_ai::auth::store_api_key(provider, key.trim())?;
-                    println!("Saved API key for {provider}.");
-                }
-            }
-            if *add_account {
-                match kiss_ai::auth::accounts::finish_add(provider, account_label.as_deref())? {
-                    Some(added) => {
-                        println!(
-                            "{}",
-                            kiss_ai::auth::accounts::added_message(provider, &added)
-                        )
+                    let gateway_provider = matches!(
+                        provider.as_str(),
+                        "databricks-unity-gateway" | "snowflake-cortex"
+                    );
+                    if base_url.is_some() && !gateway_provider {
+                        anyhow::bail!(
+                            "provider '{provider}' does not accept --base-url. Omit it and use the provider's normal login command"
+                        );
                     }
-                    None => println!("That {provider} account is already in the pool."),
+                    if api_key.is_none()
+                        && login_methods(provider).iter().any(|method| {
+                            matches!(
+                                method,
+                                LoginMethod::BrowserOAuth
+                                    | LoginMethod::DeviceOAuth
+                                    | LoginMethod::ManualOAuth
+                            )
+                        })
+                    {
+                        run_oauth_login(provider, *device_auth).await?;
+                        println!("Saved OAuth credentials for {provider}.");
+                    } else {
+                        let key = match api_key {
+                            Some(key) => key.clone(),
+                            None => rpassword::prompt_password(format!("API key for {provider}: "))?,
+                        };
+                        if key.trim().is_empty() {
+                            anyhow::bail!(
+                                "the credential for provider '{provider}' is empty. Enter a non-empty API key or bearer token and retry login"
+                            );
+                        }
+                        if gateway_provider {
+                            let gateway_url = match base_url.as_deref() {
+                                Some(url) => url.to_string(),
+                                None if std::io::stdin().is_terminal() => {
+                                    let label = if provider == "databricks-unity-gateway" {
+                                        "Databricks workspace URL"
+                                    } else {
+                                        "Snowflake account, Cortex, or AI Gateway URL"
+                                    };
+                                    print!("{label}: ");
+                                    std::io::stdout().flush()?;
+                                    let mut value = String::new();
+                                    std::io::stdin().read_line(&mut value)?;
+                                    value.trim().to_string()
+                                }
+                                None => anyhow::bail!(
+                                    "provider '{provider}' needs an account URL. Pass --base-url with an HTTP or HTTPS workspace, Cortex, or AI Gateway URL"
+                                ),
+                            };
+                            kiss_ai::auth::store_gateway_credential(provider, key.trim(), &gateway_url)?;
+                            println!("Saved bearer token and base URL for {provider}.");
+                        } else {
+                            kiss_ai::auth::store_api_key(provider, key.trim())?;
+                            println!("Saved API key for {provider}.");
+                        }
+                    }
                 }
+                if *add_account {
+                    match kiss_ai::auth::accounts::finish_add(provider, account_label.as_deref())? {
+                        Some(added) => {
+                            println!(
+                                "{}",
+                                kiss_ai::auth::accounts::added_message(provider, &added)
+                            )
+                        }
+                        None => println!("That {provider} account is already in the pool."),
+                    }
+                }
+                Ok(0)
+            }.await;
+            if result.is_err() && *add_account {
+                kiss_ai::auth::accounts::cancel_add(provider)?;
             }
-            Ok(0)
+            result
         }
         Command::Logout { provider } => {
             if kiss_ai::auth::remove_api_key(provider)? {

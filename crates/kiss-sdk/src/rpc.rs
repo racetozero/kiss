@@ -30,6 +30,8 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt as _, AsyncRead, AsyncWrite, AsyncWriteExt as _, BufReader};
 use tokio::sync::mpsc;
+use tokio::task::JoinSet;
+use tokio_util::sync::CancellationToken;
 
 /// Serve one session on this process's standard input and output.
 pub async fn serve_stdio(session: Arc<Session>) -> anyhow::Result<()> {
@@ -43,9 +45,13 @@ where
     W: AsyncWrite + Unpin + Send + 'static,
 {
     let (lines_tx, mut lines_rx) = mpsc::unbounded_channel::<String>();
+    let mut tasks = JoinSet::new();
+    let writer_closed = CancellationToken::new();
+    let writer_guard = writer_closed.clone().drop_guard();
 
     // One writer owns the sink so lines are never interleaved.
-    let writer = tokio::spawn(async move {
+    tasks.spawn(async move {
+        let _guard = writer_guard;
         let mut output = output;
         while let Some(line) = lines_rx.recv().await {
             if output.write_all(line.as_bytes()).await.is_err() {
@@ -62,7 +68,7 @@ where
 
     let events_tx = lines_tx.clone();
     let mut events = session.events();
-    let event_pump = tokio::spawn(async move {
+    let event_pump = tasks.spawn(async move {
         while let Some(event) = events.recv().await {
             if events_tx.send(event.to_line()).is_err() {
                 break;
@@ -75,7 +81,11 @@ where
     let mut line = String::new();
     loop {
         line.clear();
-        match reader.read_line(&mut line).await {
+        let read = tokio::select! {
+            _ = writer_closed.cancelled() => break,
+            read = reader.read_line(&mut line) => read,
+        };
+        match read {
             Ok(0) => break,
             Ok(_) => {}
             Err(error) => {
@@ -92,7 +102,7 @@ where
 
     drop(lines_tx);
     event_pump.abort();
-    let _ = writer.await;
+    while tasks.join_next().await.is_some() {}
     Ok(())
 }
 
@@ -127,8 +137,12 @@ async fn serve_websocket_connection(
     let websocket = tokio_tungstenite::accept_async(stream).await?;
     let (mut sink, mut source) = websocket.split();
     let (lines_tx, mut lines_rx) = mpsc::unbounded_channel::<String>();
+    let mut tasks = JoinSet::new();
+    let writer_closed = CancellationToken::new();
+    let writer_guard = writer_closed.clone().drop_guard();
 
-    let writer = tokio::spawn(async move {
+    tasks.spawn(async move {
+        let _guard = writer_guard;
         while let Some(line) = lines_rx.recv().await {
             if sink.send(Message::Text(line.into())).await.is_err() {
                 break;
@@ -139,7 +153,7 @@ async fn serve_websocket_connection(
 
     let events_tx = lines_tx.clone();
     let mut events = session.events();
-    let event_pump = tokio::spawn(async move {
+    let event_pump = tasks.spawn(async move {
         while let Some(event) = events.recv().await {
             if events_tx.send(event.to_line()).is_err() {
                 break;
@@ -147,7 +161,12 @@ async fn serve_websocket_connection(
         }
     });
 
-    while let Some(message) = source.next().await {
+    loop {
+        let message = tokio::select! {
+            _ = writer_closed.cancelled() => break,
+            message = source.next() => message,
+        };
+        let Some(message) = message else { break };
         match message? {
             Message::Text(text) => {
                 // A client may pack several commands into one message.
@@ -172,7 +191,7 @@ async fn serve_websocket_connection(
 
     drop(lines_tx);
     event_pump.abort();
-    let _ = writer.await;
+    while tasks.join_next().await.is_some() {}
     Ok(())
 }
 

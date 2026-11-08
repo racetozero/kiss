@@ -8,14 +8,55 @@
 //! survive rotation. Both files are written under the shared auth lock.
 
 use super::{AuthEntry, AuthFile, read_auth_file_at, with_auth_lock, write_auth_file_at};
-use anyhow::{Result, bail};
+use anyhow::{Context as _, Result, bail};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest as _, Sha256};
 use std::collections::BTreeMap;
+use std::fs::File;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
 /// Cooldown for a limited account whose provider reported no reset time.
 pub const DEFAULT_COOLDOWN: Duration = Duration::from_secs(15 * 60);
+
+type AddLocks = BTreeMap<(PathBuf, String), File>;
+static ADD_LOCKS: OnceLock<Mutex<AddLocks>> = OnceLock::new();
+
+/// The file lock survives every await in a login, and the OS releases it if
+/// the process ends. A later process can then recover the persisted intent.
+fn lock_add_at(auth_path: &Path, provider: &str, starting: bool) -> Result<File> {
+    let locks = ADD_LOCKS.get_or_init(Default::default).lock().unwrap();
+    if let Some(lock) = locks.get(&(auth_path.to_path_buf(), provider.to_string())) {
+        if starting {
+            bail!(
+                "An account login for {provider} is already in progress. Finish or cancel it before you add another account."
+            );
+        }
+        return Ok(lock.try_clone()?);
+    }
+    let parent = auth_path.parent().context("The credential path has no parent directory. Use a credential file inside an existing directory.")?;
+    std::fs::create_dir_all(parent).with_context(|| format!("Could not create credential directory {}. Use a writable directory and retry the account login.", parent.display()))?;
+    let path = parent.join(format!(
+        ".account-add-{:x}.lock",
+        Sha256::digest(provider.as_bytes())
+    ));
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true).write(true).create(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt as _;
+        options.mode(0o600);
+    }
+    let lock = options.open(&path).with_context(|| format!("Could not open the account login lock at {}. Restore read and write access to this file, then retry the login.", path.display()))?;
+    if let Err(error) = fs2::FileExt::try_lock_exclusive(&lock) {
+        if error.kind() == std::io::ErrorKind::WouldBlock {
+            return Err(error).with_context(|| format!("An account login for {provider} is already in progress. Finish or cancel it before you try again."));
+        }
+        return Err(error).context("The account login lock could not be acquired. Use a filesystem with file lock support and retry the login.");
+    }
+    Ok(lock)
+}
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct AccountsFile {
@@ -27,6 +68,28 @@ struct AccountsFile {
 struct Pool {
     active: usize,
     accounts: Vec<Account>,
+    #[serde(default)]
+    add_state: AddState,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+enum AddState {
+    #[default]
+    Ready,
+    Adding {
+        owner: u32,
+    },
+    Added {
+        owner: u32,
+        index: Option<usize>,
+    },
+}
+
+#[derive(Serialize, Deserialize)]
+struct AccountsTransaction {
+    auth: AuthFile,
+    accounts: AccountsFile,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -116,9 +179,90 @@ fn read_accounts_at(path: &Path) -> AccountsFile {
         .unwrap_or_default()
 }
 
+/// Called with the shared auth lock held. A prepared write is replayed before
+/// any later writer can read a partially updated pair of credential files.
+pub(super) fn recover_at(auth_path: &Path) -> Result<()> {
+    let path = auth_path.with_file_name(".accounts-transaction.json");
+    let text = match std::fs::read_to_string(&path) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error).context("Could not read the pending account update. Restore access to the credential directory and retry the account operation."),
+    };
+    let transaction: AccountsTransaction = serde_json::from_str(&text)
+        .context("The pending account update is not valid JSON. Restore it from a valid backup before you change accounts.")?;
+    super::write_json_at(&accounts_path(auth_path), &transaction.accounts)?;
+    write_auth_file_at(auth_path, &transaction.auth)?;
+    std::fs::remove_file(path)?;
+    Ok(())
+}
+
+fn commit_at(auth_path: &Path, auth: AuthFile, accounts: AccountsFile) -> Result<()> {
+    let path = auth_path.with_file_name(".accounts-transaction.json");
+    super::write_json_at(&path, &AccountsTransaction { auth, accounts })?;
+    recover_at(auth_path)
+}
+
+/// Capture a completed login before sync can mistake it for an active-account
+/// refresh. The receipt remains until finish_add supplies the user's label.
+fn capture_add(provider: &str, auth: &mut AuthFile, pool: &mut Pool) -> bool {
+    let AddState::Adding { owner } = pool.add_state else {
+        return false;
+    };
+    let Some(entry) = auth.entries.get(provider).cloned() else {
+        return false;
+    };
+    pool.active = pool.active.min(pool.accounts.len().saturating_sub(1));
+    if pool
+        .accounts
+        .get(pool.active)
+        .is_some_and(|account| account.credential.access_token() == entry.access_token())
+    {
+        return false;
+    }
+    let index = if pool
+        .accounts
+        .iter()
+        .any(|account| account.credential.access_token() == entry.access_token())
+    {
+        None
+    } else {
+        let index = pool.accounts.len();
+        pool.accounts.push(Account {
+            label: format!("account {}", index + 1),
+            credential: entry,
+            limited_until: None,
+            added_at: now_ms(),
+        });
+        Some(index)
+    };
+    if let Some(active) = pool.accounts.get(pool.active) {
+        auth.entries
+            .insert(provider.to_string(), active.credential.clone());
+    }
+    pool.add_state = AddState::Added { owner, index };
+    true
+}
+
+/// Called under the auth lock before an unrelated credential write.
+pub(super) fn recover_add_at(auth_path: &Path) -> Result<()> {
+    let mut auth = read_auth_file_at(auth_path);
+    let mut file = read_accounts_at(&accounts_path(auth_path));
+    let mut changed = false;
+    for (provider, pool) in &mut file.pools {
+        changed |= capture_add(provider, &mut auth, pool);
+    }
+    if changed {
+        commit_at(auth_path, auth, file)?;
+    }
+    Ok(())
+}
+
 /// Copy each provider's live `auth.json` credential into its active slot.
 fn sync(auth: &AuthFile, file: &mut AccountsFile) {
     for (provider, pool) in &mut file.pools {
+        if matches!(pool.add_state, AddState::Adding { .. }) {
+            continue;
+        }
         pool.active = pool.active.min(pool.accounts.len().saturating_sub(1));
         if let (Some(entry), Some(account)) = (
             auth.entries.get(provider),
@@ -127,7 +271,9 @@ fn sync(auth: &AuthFile, file: &mut AccountsFile) {
             account.credential = entry.clone();
         }
     }
-    file.pools.retain(|_, pool| !pool.accounts.is_empty());
+    file.pools.retain(|_, pool| {
+        !pool.accounts.is_empty() || matches!(pool.add_state, AddState::Adding { .. })
+    });
 }
 
 /// Lock, read and sync both files, apply `f`, then write them back.
@@ -137,14 +283,13 @@ fn update_at<T>(
 ) -> Result<T> {
     let path = accounts_path(auth_path);
     with_auth_lock(auth_path, || {
+        recover_at(auth_path)?;
+        recover_add_at(auth_path)?;
         let mut auth = read_auth_file_at(auth_path);
         let mut file = read_accounts_at(&path);
         sync(&auth, &mut file);
         let result = f(&mut auth, &mut file)?;
-        write_auth_file_at(auth_path, &auth)?;
-        if path.exists() || !file.pools.is_empty() {
-            super::write_json_at(&path, &file)?;
-        }
+        commit_at(auth_path, auth, file)?;
         Ok(result)
     })
 }
@@ -189,25 +334,32 @@ pub fn pools() -> Vec<PoolInfo> {
 }
 
 fn begin_add_at(auth_path: &Path, provider: &str) -> Result<()> {
-    update_at(auth_path, |auth, file| {
-        if !file.pools.contains_key(provider)
+    let lock = lock_add_at(auth_path, provider, true)?;
+    let result = update_at(auth_path, |auth, file| {
+        let pool = file.pools.entry(provider.to_string()).or_default();
+        if pool.accounts.is_empty()
             && let Some(entry) = auth.entries.get(provider)
         {
-            file.pools.insert(
-                provider.to_string(),
-                Pool {
-                    active: 0,
-                    accounts: vec![Account {
-                        label: "account 1".into(),
-                        credential: entry.clone(),
-                        limited_until: None,
-                        added_at: now_ms(),
-                    }],
-                },
-            );
+            pool.accounts.push(Account {
+                label: "account 1".into(),
+                credential: entry.clone(),
+                limited_until: None,
+                added_at: now_ms(),
+            });
         }
+        pool.add_state = AddState::Adding {
+            owner: std::process::id(),
+        };
         Ok(())
-    })
+    });
+    if result.is_ok() {
+        ADD_LOCKS
+            .get_or_init(Default::default)
+            .lock()
+            .unwrap()
+            .insert((auth_path.to_path_buf(), provider.to_string()), lock);
+    }
+    result
 }
 
 /// Prepare to add an account: adopt an existing saved credential as
@@ -221,50 +373,41 @@ fn finish_add_at(
     provider: &str,
     label: Option<&str>,
 ) -> Result<Option<AccountInfo>> {
+    let _add_lock = lock_add_at(auth_path, provider, false)?;
     let path = accounts_path(auth_path);
-    with_auth_lock(auth_path, || {
-        // Do not sync first: the login just replaced auth.json, and the
-        // active slot still holds the previous account's latest credential.
+    let result = with_auth_lock(auth_path, || {
+        recover_at(auth_path)?;
         let mut auth = read_auth_file_at(auth_path);
         let mut file = read_accounts_at(&path);
-        let Some(new_entry) = auth.entries.get(provider).cloned() else {
-            return Ok(None);
-        };
         let pool = file.pools.entry(provider.to_string()).or_default();
-        if pool
-            .accounts
-            .iter()
-            .any(|account| account.credential.access_token() == new_entry.access_token())
-        {
-            return Ok(None);
+        if matches!(pool.add_state, AddState::Ready) {
+            // Keep finish_add compatible with callers and files from before
+            // account-add intent was persisted.
+            pool.add_state = AddState::Adding {
+                owner: std::process::id(),
+            };
         }
-        let number = pool.accounts.len() + 1;
-        pool.accounts.push(Account {
-            label: label
-                .map(str::trim)
-                .filter(|label| !label.is_empty())
-                .map(str::to_string)
-                .unwrap_or_else(|| format!("account {number}")),
-            credential: new_entry,
-            limited_until: None,
-            added_at: now_ms(),
-        });
-        let index = pool.accounts.len() - 1;
-        if index > 0 {
-            // Keep the previously active account in use.
-            pool.active = pool.active.min(index - 1);
-            auth.entries.insert(
-                provider.to_string(),
-                pool.accounts[pool.active].credential.clone(),
-            );
-            write_auth_file_at(auth_path, &auth)?;
-        } else {
-            pool.active = 0;
-        }
-        let added = info(provider, pool).accounts[index].clone();
-        super::write_json_at(&path, &file)?;
-        Ok(Some(added))
-    })
+        capture_add(provider, &mut auth, pool);
+        let added = match std::mem::replace(&mut pool.add_state, AddState::Ready) {
+            AddState::Added {
+                index: Some(index), ..
+            } if index < pool.accounts.len() => {
+                if let Some(label) = label.map(str::trim).filter(|label| !label.is_empty()) {
+                    pool.accounts[index].label = label.to_string();
+                }
+                Some(info(provider, pool).accounts[index].clone())
+            }
+            _ => None,
+        };
+        commit_at(auth_path, auth, file)?;
+        Ok(added)
+    });
+    ADD_LOCKS
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap()
+        .remove(&(auth_path.to_path_buf(), provider.to_string()));
+    result
 }
 
 /// Record the credential the login just saved as a new pool account and
@@ -272,6 +415,56 @@ fn finish_add_at(
 /// saved a credential that is already in the pool.
 pub fn finish_add(provider: &str, label: Option<&str>) -> Result<Option<AccountInfo>> {
     finish_add_at(&auth_path()?, provider, label)
+}
+
+fn cancel_add_at(auth_path: &Path, provider: &str, owner: Option<u32>) -> Result<()> {
+    let _add_lock = match lock_add_at(auth_path, provider, false) {
+        Ok(lock) => lock,
+        Err(error)
+            if owner.is_some()
+                && error
+                    .downcast_ref::<std::io::Error>()
+                    .is_some_and(|error| error.kind() == std::io::ErrorKind::WouldBlock) =>
+        {
+            return Ok(());
+        }
+        Err(error) => return Err(error),
+    };
+    let result = with_auth_lock(auth_path, || {
+        recover_at(auth_path)?;
+        let mut auth = read_auth_file_at(auth_path);
+        let mut file = read_accounts_at(&accounts_path(auth_path));
+        if let Some(pool) = file.pools.get_mut(provider)
+            && !matches!(pool.add_state, AddState::Ready)
+            && owner.is_none_or(|expected| match pool.add_state {
+                AddState::Adding { owner } | AddState::Added { owner, .. } => owner == expected,
+                AddState::Ready => false,
+            })
+        {
+            capture_add(provider, &mut auth, pool);
+            pool.add_state = AddState::Ready;
+            commit_at(auth_path, auth, file)?;
+        }
+        Ok(())
+    });
+    ADD_LOCKS
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap()
+        .remove(&(auth_path.to_path_buf(), provider.to_string()));
+    result
+}
+
+/// End an account add that did not complete. Preserve a credential already
+/// written by the login, and restore the account that was active before it.
+pub fn cancel_add(provider: &str) -> Result<()> {
+    cancel_add_at(&auth_path()?, provider, None)
+}
+
+/// Cancel only an add started by this process. A stale UI must not cancel
+/// another process's pending login.
+pub fn cancel_owned_add(provider: &str) -> Result<()> {
+    cancel_add_at(&auth_path()?, provider, Some(std::process::id()))
 }
 
 fn checked_index<'a>(
@@ -314,6 +507,7 @@ fn remove_at(auth_path: &Path, provider: &str, index: usize) -> Result<AccountIn
     update_at(auth_path, |auth, file| {
         let pool = checked_index(provider, file.pools.get_mut(provider), index)?;
         let removed = info(provider, pool).accounts[index].clone();
+        pool.add_state = AddState::Ready;
         pool.accounts.remove(index);
         if pool.accounts.is_empty() {
             file.pools.remove(provider);
@@ -539,6 +733,95 @@ mod tests {
             None
         );
         assert_eq!(pooled(&auth_path, "openai-codex").accounts.len(), 3);
+        assert_eq!(active_secret(&auth_path, "openai-codex"), "one");
+    }
+
+    #[test]
+    fn an_interrupted_add_preserves_both_credentials_on_the_next_update() {
+        let (_directory, auth_path) = three_accounts();
+        begin_add_at(&auth_path, "openai-codex").unwrap();
+        login(&auth_path, "openai-codex", "four");
+        // The next process reads both files, without the original UI's state.
+        activate_at(&auth_path, "openai-codex", 0).unwrap();
+        assert_eq!(active_secret(&auth_path, "openai-codex"), "one");
+        activate_at(&auth_path, "openai-codex", 3).unwrap();
+        assert_eq!(active_secret(&auth_path, "openai-codex"), "four");
+        cancel_add_at(&auth_path, "openai-codex", None).unwrap();
+    }
+
+    #[test]
+    fn a_prepared_account_write_is_recovered_before_another_auth_write() {
+        let (_directory, auth_path) = three_accounts();
+        let mut auth = read_auth_file_at(&auth_path);
+        let mut file = read_accounts_at(&accounts_path(&auth_path));
+        file.pools.get_mut("openai-codex").unwrap().active = 1;
+        auth.entries.insert("openai-codex".into(), oauth("two"));
+        let journal = auth_path.with_file_name(".accounts-transaction.json");
+        super::super::write_json_at(
+            &journal,
+            &AccountsTransaction {
+                auth,
+                accounts: file,
+            },
+        )
+        .unwrap();
+        // Only the first file of the pair was replaced before the process ended.
+        let transaction: AccountsTransaction =
+            serde_json::from_slice(&std::fs::read(&journal).unwrap()).unwrap();
+        super::super::write_json_at(&accounts_path(&auth_path), &transaction.accounts).unwrap();
+        login(&auth_path, "anthropic", "unrelated");
+        assert_eq!(active_secret(&auth_path, "openai-codex"), "two");
+        activate_at(&auth_path, "openai-codex", 0).unwrap();
+        assert_eq!(active_secret(&auth_path, "openai-codex"), "one");
+        assert!(!journal.exists());
+    }
+
+    #[test]
+    fn cancelling_an_add_keeps_normal_login_and_refresh_behavior() {
+        let (_directory, auth_path) = three_accounts();
+        begin_add_at(&auth_path, "openai-codex").unwrap();
+        cancel_add_at(&auth_path, "openai-codex", None).unwrap();
+        login(&auth_path, "openai-codex", "one-refreshed");
+        activate_at(&auth_path, "openai-codex", 1).unwrap();
+        activate_at(&auth_path, "openai-codex", 0).unwrap();
+        assert_eq!(active_secret(&auth_path, "openai-codex"), "one-refreshed");
+        assert_eq!(pooled(&auth_path, "openai-codex").accounts.len(), 3);
+    }
+
+    #[test]
+    fn competing_account_adds_are_rejected_until_the_current_login_ends() {
+        let directory = tempfile::tempdir().unwrap();
+        let auth_path = directory.path().join("auth.json");
+        // A separately opened file represents a lock held outside this registry.
+        let other = lock_add_at(&auth_path, "openai-codex", false).unwrap();
+        assert!(begin_add_at(&auth_path, "openai-codex").is_err());
+        assert!(cancel_add_at(&auth_path, "openai-codex", None).is_err());
+        drop(other);
+        begin_add_at(&auth_path, "openai-codex").unwrap();
+        assert!(begin_add_at(&auth_path, "openai-codex").is_err());
+        login(&auth_path, "openai-codex", "one");
+        assert!(
+            finish_add_at(&auth_path, "openai-codex", None)
+                .unwrap()
+                .is_some()
+        );
+        begin_add_at(&auth_path, "openai-codex").unwrap();
+        cancel_add_at(&auth_path, "openai-codex", None).unwrap();
+    }
+
+    #[test]
+    fn an_invalid_prepared_write_cannot_replace_saved_credentials() {
+        let (_directory, auth_path) = three_accounts();
+        let before = std::fs::read(&auth_path).unwrap();
+        let journal = auth_path.with_file_name(".accounts-transaction.json");
+        std::fs::write(&journal, "{").unwrap();
+        let result = super::super::update_auth_file_at(&auth_path, |auth| {
+            auth.entries.insert("anthropic".into(), oauth("unrelated"));
+            Ok(())
+        });
+        assert!(result.is_err());
+        assert_eq!(std::fs::read(auth_path).unwrap(), before);
+        assert_eq!(std::fs::read_to_string(journal).unwrap(), "{");
     }
 
     #[test]

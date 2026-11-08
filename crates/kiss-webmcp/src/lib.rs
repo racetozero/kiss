@@ -73,11 +73,68 @@ struct ToolRecord {
 
 struct Inner {
     config: WebMcpConfig,
-    client: RwLock<Option<CdpClient>>,
+    connection: Mutex<ConnectionState>,
+}
+
+enum ConnectionState {
+    Disconnected,
+    Connecting(Arc<ConnectionAttempt>),
+    Connected(Arc<Connection>),
+}
+
+impl ConnectionState {
+    fn stop(self) {
+        match self {
+            Self::Disconnected => {}
+            Self::Connecting(attempt) => attempt.stop(),
+            Self::Connected(connection) => connection.stop(),
+        }
+    }
+}
+
+struct Connecting {
+    owner: Arc<Inner>,
+    attempt: Arc<ConnectionAttempt>,
+}
+
+struct ConnectionAttempt {
+    cancel: CancellationToken,
+    prepared: Mutex<Option<Arc<Connection>>>,
+}
+
+impl ConnectionAttempt {
+    fn stop(&self) {
+        self.cancel.cancel();
+        if let Some(connection) = self.prepared.lock().unwrap().take() {
+            connection.stop();
+        }
+    }
+}
+
+impl Drop for Connecting {
+    fn drop(&mut self) {
+        self.attempt.stop();
+        let mut state = self.owner.connection.lock().unwrap();
+        if matches!(&*state, ConnectionState::Connecting(attempt) if Arc::ptr_eq(attempt, &self.attempt))
+        {
+            *state = ConnectionState::Disconnected;
+        }
+    }
+}
+
+struct Connection {
+    config: WebMcpConfig,
+    client: CdpClient,
     targets: RwLock<HashMap<String, TargetInfo>>,
     attached_targets: Mutex<HashSet<String>>,
     tools: RwLock<HashMap<String, ToolRecord>>,
     event_task: Mutex<Option<JoinHandle<()>>>,
+}
+
+impl Drop for Connection {
+    fn drop(&mut self) {
+        self.stop();
+    }
 }
 
 #[derive(Clone)]
@@ -90,96 +147,101 @@ impl WebMcpManager {
         Self {
             inner: Arc::new(Inner {
                 config,
-                client: RwLock::new(None),
-                targets: RwLock::new(HashMap::new()),
-                attached_targets: Mutex::new(HashSet::new()),
-                tools: RwLock::new(HashMap::new()),
-                event_task: Mutex::new(None),
+                connection: Mutex::new(ConnectionState::Disconnected),
             }),
         }
     }
 
     pub async fn connect(&self) -> Result<WebMcpSummary> {
-        self.disconnect().await;
-        let endpoint = resolve_cdp_url(self.inner.config.cdp.as_ref()).await?;
-        let client = CdpClient::connect(endpoint.as_str()).await?;
-        let events = client.subscribe();
-        *self.inner.client.write().await = Some(client.clone());
-
-        let weak = Arc::downgrade(&self.inner);
-        let task = tokio::spawn(run_events(weak, events));
-        *self.inner.event_task.lock().unwrap() = Some(task);
-
-        let setup = async {
-            client
-                .send("Target.setDiscoverTargets", json!({"discover": true}), None)
-                .await?;
-            let result = client.send("Target.getTargets", json!({}), None).await?;
-            let targets = result
-                .get("targetInfos")
-                .and_then(Value::as_array)
-                .cloned()
-                .unwrap_or_default();
-            let mut page_count = 0;
-            let mut enabled_count = 0;
-            for value in targets {
-                let Ok(target) = serde_json::from_value::<TargetInfo>(value) else {
-                    continue;
-                };
-                if is_page_target(&target) {
-                    page_count += 1;
-                    if self.attach_target(target).await.is_ok() {
-                        enabled_count += 1;
+        let attempt = Arc::new(ConnectionAttempt {
+            cancel: CancellationToken::new(),
+            prepared: Mutex::new(None),
+        });
+        let previous = std::mem::replace(
+            &mut *self.inner.connection.lock().unwrap(),
+            ConnectionState::Connecting(attempt.clone()),
+        );
+        previous.stop();
+        let _connecting = Connecting {
+            owner: self.inner.clone(),
+            attempt: attempt.clone(),
+        };
+        let connection = tokio::select! {
+            biased;
+            _ = attempt.cancel.cancelled() => bail!("Chrome connection setup was cancelled. Run /webmcp to connect again."),
+            result = async {
+                let endpoint = resolve_cdp_url(self.inner.config.cdp.as_ref()).await?;
+                let client = CdpClient::connect(endpoint.as_str()).await?;
+                let events = client.subscribe();
+                let closed = client.closed();
+                let connection = Arc::new(Connection {
+                    config: self.inner.config.clone(),
+                    client,
+                    targets: RwLock::new(HashMap::new()),
+                    attached_targets: Mutex::new(HashSet::new()),
+                    tools: RwLock::new(HashMap::new()),
+                    event_task: Mutex::new(None),
+                });
+                {
+                    let mut prepared = attempt.prepared.lock().unwrap();
+                    if attempt.cancel.is_cancelled() {
+                        bail!("Chrome connection setup was cancelled. Run /webmcp to connect again.");
                     }
+                    *prepared = Some(connection.clone());
                 }
-            }
-            if page_count > 0 && enabled_count == 0 {
-                bail!(
-                    "Chrome has page tabs, but WebMCP could not be enabled. Check the WebMCP Chrome flags"
-                );
-            }
-            tokio::task::yield_now().await;
-            Ok(self.summary().await)
+                let task = tokio::spawn(run_events(Arc::downgrade(&connection), Arc::downgrade(&self.inner), events, closed));
+                *connection.event_task.lock().unwrap() = Some(task);
+                connection.setup().await?;
+                Ok::<_, anyhow::Error>(connection)
+            } => result?,
+        };
+        let summary = connection.summary().await;
+        let mut state = self.inner.connection.lock().unwrap();
+        if !matches!(&*state, ConnectionState::Connecting(current) if Arc::ptr_eq(current, &attempt))
+            || attempt.cancel.is_cancelled()
+            || connection.client.closed().is_cancelled()
+        {
+            bail!(
+                "Chrome connection setup ended before it could be used. Run /webmcp to connect again."
+            );
         }
-        .await;
-
-        if setup.is_err() {
-            self.disconnect().await;
-        }
-        setup
+        *state = ConnectionState::Connected(connection);
+        attempt.prepared.lock().unwrap().take();
+        Ok(summary)
     }
 
     pub async fn disconnect(&self) {
-        if let Some(task) = self.inner.event_task.lock().unwrap().take() {
-            task.abort();
-        }
-        if let Some(client) = self.inner.client.write().await.take() {
-            client.close().await;
-        }
-        self.inner.targets.write().await.clear();
-        self.inner.attached_targets.lock().unwrap().clear();
-        self.inner.tools.write().await.clear();
+        let previous = std::mem::replace(
+            &mut *self.inner.connection.lock().unwrap(),
+            ConnectionState::Disconnected,
+        );
+        previous.stop();
     }
 
     pub async fn is_connected(&self) -> bool {
-        self.inner.client.read().await.is_some()
+        self.connected().is_ok()
+    }
+
+    fn connected(&self) -> Result<Arc<Connection>> {
+        match &*self.inner.connection.lock().unwrap() {
+            ConnectionState::Connected(connection)
+                if !connection.client.closed().is_cancelled() =>
+            {
+                Ok(connection.clone())
+            }
+            _ => bail!("WebMCP is not connected. Run /webmcp before you use page tools."),
+        }
     }
 
     pub async fn tools(&self) -> Vec<WebMcpToolInfo> {
-        let mut tools = self
-            .inner
-            .tools
-            .read()
-            .await
-            .values()
-            .map(|record| record.info.clone())
-            .collect::<Vec<_>>();
-        tools.sort_by(|left, right| (&left.origin, &left.name).cmp(&(&right.origin, &right.name)));
-        tools
+        match self.connected() {
+            Ok(connection) => connection.tools().await,
+            Err(_) => Vec::new(),
+        }
     }
 
     pub async fn describe(&self, origin: &str, name: &str) -> Result<WebMcpToolInfo> {
-        Ok(self.resolve(origin, name).await?.info)
+        Ok(self.connected()?.resolve(origin, name).await?.info)
     }
 
     pub async fn call(
@@ -195,14 +257,10 @@ impl WebMcpManager {
         if cancel.is_cancelled() {
             bail!("WebMCP call cancelled");
         }
-        let tool = self.resolve(origin, name).await?;
-        let client = self
-            .inner
-            .client
-            .read()
-            .await
-            .clone()
-            .context("WebMCP is not connected. Ask the user to run /webmcp")?;
+        let connection = self.connected()?;
+        let tool = connection.resolve(origin, name).await?;
+        let client = connection.client.clone();
+        let closed = client.closed();
         let mut events = client.subscribe();
         let result = client
             .send(
@@ -222,6 +280,7 @@ impl WebMcpManager {
             .to_string();
 
         let response = tokio::select! {
+            _ = closed.cancelled() => bail!("Chrome disconnected during the WebMCP call. Connect to Chrome again before you retry."),
             _ = cancel.cancelled() => {
                 cancel_invocation(&client, &tool.session_id, &invocation_id);
                 bail!("WebMCP call cancelled")
@@ -268,6 +327,62 @@ impl WebMcpManager {
             manager: self.clone(),
         })
     }
+}
+
+impl Connection {
+    fn stop(&self) {
+        self.client.close();
+        if let Some(task) = self.event_task.lock().unwrap().take() {
+            task.abort();
+        }
+    }
+
+    async fn setup(&self) -> Result<()> {
+        self.client
+            .send("Target.setDiscoverTargets", json!({"discover": true}), None)
+            .await?;
+        let result = self
+            .client
+            .send("Target.getTargets", json!({}), None)
+            .await?;
+        let targets = result
+            .get("targetInfos")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        let mut page_count = 0;
+        let mut enabled_count = 0;
+        for value in targets {
+            let Ok(target) = serde_json::from_value::<TargetInfo>(value) else {
+                continue;
+            };
+            if is_page_target(&target) {
+                page_count += 1;
+                if self.attach_target(target).await.is_ok() {
+                    enabled_count += 1;
+                }
+            }
+        }
+        if page_count > 0 && enabled_count == 0 {
+            bail!(
+                "Chrome has page tabs, but WebMCP could not be enabled. Check the WebMCP Chrome flags"
+            );
+        }
+        tokio::task::yield_now().await;
+        Ok(())
+    }
+
+    async fn tools(&self) -> Vec<WebMcpToolInfo> {
+        let mut tools = self
+            .tools
+            .read()
+            .await
+            .values()
+            .map(|record| record.info.clone())
+            .collect::<Vec<_>>();
+        tools.sort_by(|left, right| (&left.origin, &left.name).cmp(&(&right.origin, &right.name)));
+        tools
+    }
 
     async fn summary(&self) -> WebMcpSummary {
         let tools = self.tools().await;
@@ -283,7 +398,6 @@ impl WebMcpManager {
 
     async fn resolve(&self, origin: &str, name: &str) -> Result<ToolRecord> {
         let matches = self
-            .inner
             .tools
             .read()
             .await
@@ -303,18 +417,12 @@ impl WebMcpManager {
             return Ok(());
         }
         {
-            let mut attached = self.inner.attached_targets.lock().unwrap();
+            let mut attached = self.attached_targets.lock().unwrap();
             if !attached.insert(target.target_id.clone()) {
                 return Ok(());
             }
         }
-        let client = self
-            .inner
-            .client
-            .read()
-            .await
-            .clone()
-            .context("WebMCP is not connected")?;
+        let client = self.client.clone();
         let result = client
             .send(
                 "Target.attachToTarget",
@@ -325,21 +433,24 @@ impl WebMcpManager {
         let result = match result {
             Ok(result) => result,
             Err(error) => {
-                self.inner
-                    .attached_targets
+                self.attached_targets
                     .lock()
                     .unwrap()
                     .remove(&target.target_id);
                 return Err(error);
             }
         };
-        let session_id = result
-            .get("sessionId")
-            .and_then(Value::as_str)
-            .context("Chrome did not return a target session id")?
-            .to_string();
-        self.inner
-            .targets
+        let Some(session_id) = result.get("sessionId").and_then(Value::as_str) else {
+            self.attached_targets
+                .lock()
+                .unwrap()
+                .remove(&target.target_id);
+            bail!(
+                "Chrome did not return a target session id. Reload the page and connect its tools again."
+            );
+        };
+        let session_id = session_id.to_string();
+        self.targets
             .write()
             .await
             .insert(session_id.clone(), target.clone());
@@ -361,20 +472,20 @@ impl WebMcpManager {
     }
 
     async fn add_tools(&self, session_id: &str, params: &Value) {
-        let Some(target) = self.inner.targets.read().await.get(session_id).cloned() else {
+        let Some(target) = self.targets.read().await.get(session_id).cloned() else {
             return;
         };
         let Ok(page_url) = Url::parse(&target.url) else {
             return;
         };
-        if !origin_allowed(&self.inner.config, &page_url) {
+        if !origin_allowed(&self.config, &page_url) {
             return;
         }
         let origin = page_url.origin().ascii_serialization();
         let Some(tools) = params.get("tools").and_then(Value::as_array) else {
             return;
         };
-        let mut registry = self.inner.tools.write().await;
+        let mut registry = self.tools.write().await;
         for tool in tools {
             let Some(name) = tool.get("name").and_then(Value::as_str) else {
                 continue;
@@ -410,7 +521,7 @@ impl WebMcpManager {
         let Some(tools) = params.get("tools").and_then(Value::as_array) else {
             return;
         };
-        let mut registry = self.inner.tools.write().await;
+        let mut registry = self.tools.write().await;
         for tool in tools {
             let Some(name) = tool.get("name").and_then(Value::as_str) else {
                 continue;
@@ -423,8 +534,7 @@ impl WebMcpManager {
     }
 
     async fn clear_session(&self, session_id: &str) {
-        self.inner
-            .tools
+        self.tools
             .write()
             .await
             .retain(|_, tool| tool.session_id != session_id);
@@ -432,9 +542,8 @@ impl WebMcpManager {
 
     async fn remove_session(&self, session_id: &str) {
         self.clear_session(session_id).await;
-        if let Some(target) = self.inner.targets.write().await.remove(session_id) {
-            self.inner
-                .attached_targets
+        if let Some(target) = self.targets.write().await.remove(session_id) {
+            self.attached_targets
                 .lock()
                 .unwrap()
                 .remove(&target.target_id);
@@ -457,17 +566,26 @@ fn cancel_invocation(client: &CdpClient, session_id: &str, invocation_id: &str) 
     });
 }
 
-async fn run_events(inner: Weak<Inner>, mut events: tokio::sync::broadcast::Receiver<CdpEvent>) {
+async fn run_events(
+    connection: Weak<Connection>,
+    owner: Weak<Inner>,
+    mut events: tokio::sync::broadcast::Receiver<CdpEvent>,
+    closed: CancellationToken,
+) {
     loop {
-        let event = match events.recv().await {
+        let received = tokio::select! {
+            biased;
+            _ = closed.cancelled() => break,
+            received = events.recv() => received,
+        };
+        let event = match received {
             Ok(event) => event,
             Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
             Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
         };
-        let Some(inner) = inner.upgrade() else {
+        let Some(manager) = connection.upgrade() else {
             break;
         };
-        let manager = WebMcpManager { inner };
         match event.method.as_str() {
             "Target.targetCreated" | "Target.targetInfoChanged" => {
                 if let Some(value) = event.params.get("targetInfo")
@@ -489,11 +607,10 @@ async fn run_events(inner: Weak<Inner>, mut events: tokio::sync::broadcast::Rece
                     && let Some(session_id) = event.session_id.as_deref()
                 {
                     manager.clear_session(session_id).await;
-                    if let Some(client) = manager.inner.client.read().await.clone() {
-                        let _ = client
-                            .send("WebMCP.enable", json!({}), Some(session_id))
-                            .await;
-                    }
+                    let _ = manager
+                        .client
+                        .send("WebMCP.enable", json!({}), Some(session_id))
+                        .await;
                 }
             }
             "WebMCP.toolsAdded" => {
@@ -507,6 +624,13 @@ async fn run_events(inner: Weak<Inner>, mut events: tokio::sync::broadcast::Rece
                 }
             }
             _ => {}
+        }
+    }
+    if let (Some(owner), Some(connection)) = (owner.upgrade(), connection.upgrade()) {
+        let mut state = owner.connection.lock().unwrap();
+        if matches!(&*state, ConnectionState::Connected(current) if Arc::ptr_eq(current, &connection))
+        {
+            *state = ConnectionState::Disconnected;
         }
     }
 }
@@ -817,6 +941,82 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn disconnect_cancels_connection_setup_before_the_handshake() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let manager = WebMcpManager::new(WebMcpConfig {
+            cdp: Some(Value::String(format!("ws://{address}"))),
+            ..Default::default()
+        });
+        let connecting_manager = manager.clone();
+        let connecting = tokio::spawn(async move { connecting_manager.connect().await });
+        let (stream, _) = listener.accept().await.unwrap();
+        manager.disconnect().await;
+        let fixture = tokio::spawn(async move {
+            let Ok(mut socket) = tokio_tungstenite::accept_async(stream).await else {
+                return;
+            };
+            while let Some(Ok(Message::Text(text))) = socket.next().await {
+                let request: Value = serde_json::from_str(&text).unwrap();
+                let result = if request["method"] == "Target.getTargets" {
+                    json!({"targetInfos": []})
+                } else {
+                    json!({})
+                };
+                if socket
+                    .send(Message::Text(
+                        json!({"id": request["id"], "result": result})
+                            .to_string()
+                            .into(),
+                    ))
+                    .await
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        });
+        let result = tokio::time::timeout(Duration::from_secs(2), connecting)
+            .await
+            .unwrap()
+            .unwrap();
+        let connected = manager.is_connected().await;
+        manager.disconnect().await;
+        fixture.abort();
+        assert!(result.is_err(), "disconnect must cancel setup");
+        assert!(!connected, "late setup must not reconnect the manager");
+    }
+
+    #[tokio::test]
+    async fn dropping_connection_setup_closes_its_prepared_transport() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+        let fixture = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let mut socket = tokio_tungstenite::accept_async(stream).await.unwrap();
+            assert!(socket.next().await.is_some());
+            started_tx.send(()).unwrap();
+            while socket.next().await.is_some() {}
+        });
+        let manager = WebMcpManager::new(WebMcpConfig {
+            cdp: Some(Value::String(format!("ws://{address}"))),
+            ..Default::default()
+        });
+        let connecting_manager = manager.clone();
+        let connecting = tokio::spawn(async move { connecting_manager.connect().await });
+        started_rx.await.unwrap();
+        connecting.abort();
+        assert!(connecting.await.unwrap_err().is_cancelled());
+        tokio::time::timeout(Duration::from_secs(1), fixture)
+            .await
+            .expect("dropping setup must close its transport")
+            .unwrap();
+        assert!(!manager.is_connected().await);
+        manager.disconnect().await;
+    }
+
+    #[tokio::test]
     async fn discovers_describes_and_calls_a_page_tool() {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
@@ -983,7 +1183,15 @@ mod tests {
         cancel_seen_rx.await.unwrap();
 
         wait_for_tool_count(&manager, 0).await;
-        manager.disconnect().await;
         fixture.abort();
+        tokio::time::timeout(Duration::from_secs(1), async {
+            while manager.is_connected().await {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("a remote close must end the connected state");
+        assert!(manager.tools().await.is_empty());
+        manager.disconnect().await;
     }
 }

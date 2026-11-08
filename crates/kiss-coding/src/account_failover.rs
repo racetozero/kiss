@@ -13,6 +13,11 @@ use std::sync::Arc;
 
 pub(crate) type SwitchFn = Arc<dyn Fn(AccountSwitch) + Send + Sync>;
 
+enum AttemptState {
+    WaitingForOutput(Vec<AssistantEvent>),
+    Streaming,
+}
+
 /// Wrap `inner` so pooled providers fail over on account rate limits.
 pub(crate) fn wrap(inner: StreamFn, registry: Arc<Registry>, on_switch: SwitchFn) -> StreamFn {
     Arc::new(move |model, context, options| {
@@ -28,17 +33,18 @@ pub(crate) fn wrap(inner: StreamFn, registry: Arc<Registry>, on_switch: SwitchFn
         tokio::spawn(async move {
             for attempt in 0..attempts {
                 let mut upstream = inner(&model, &context, &options);
-                let mut held = Vec::new();
-                let mut output_started = false;
+                let mut state = AttemptState::WaitingForOutput(Vec::new());
                 let mut next_account = None;
                 while let Some(event) = upstream.next().await {
-                    if output_started {
+                    if matches!(state, AttemptState::Streaming) {
                         sink.send(event);
                         continue;
                     }
                     match &event {
                         AssistantEvent::Start { .. } => {
-                            held.push(event);
+                            if let AttemptState::WaitingForOutput(held) = &mut state {
+                                held.push(event);
+                            }
                             continue;
                         }
                         AssistantEvent::Error { message, .. }
@@ -66,17 +72,22 @@ pub(crate) fn wrap(inner: StreamFn, registry: Arc<Registry>, on_switch: SwitchFn
                         }
                         _ => {}
                     }
-                    output_started = true;
-                    for held in held.drain(..) {
-                        sink.send(held);
+                    if let AttemptState::WaitingForOutput(held) =
+                        std::mem::replace(&mut state, AttemptState::Streaming)
+                    {
+                        for held in held {
+                            sink.send(held);
+                        }
                     }
                     sink.send(event);
                 }
                 let Some((switch, credential)) = next_account else {
                     // A stream that ends without a terminal event still
                     // releases its held Start.
-                    for held in held {
-                        sink.send(held);
+                    if let AttemptState::WaitingForOutput(held) = state {
+                        for held in held {
+                            sink.send(held);
+                        }
                     }
                     return;
                 };

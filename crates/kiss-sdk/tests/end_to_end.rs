@@ -382,6 +382,25 @@ async fn completing_one_shell_command_keeps_other_commands_cancellable() {
 }
 
 #[tokio::test]
+async fn a_session_cannot_be_replaced_during_an_active_prompt() {
+    let directory = tempfile::tempdir().unwrap();
+    let (_provider, session) = session_with(directory.path(), MockScript::text("hi")).await;
+    let original = session.state().session_id;
+    let run = session
+        .agent_session()
+        .prompt(vec![kiss_sdk::AgentMessage::user("first")]);
+    let response = session.execute(Command::NewSession {}).await;
+    assert!(
+        !response.success,
+        "a session replacement must wait for the prompt to stop"
+    );
+    assert_eq!(session.state().session_id, original);
+    drop(run);
+    assert!(session.execute(Command::NewSession {}).await.success);
+    assert_ne!(session.state().session_id, original);
+}
+
+#[tokio::test]
 async fn export_html_writes_an_escaped_transcript() {
     let directory = tempfile::tempdir().expect("temp dir");
     let (_provider, session) = session_with(directory.path(), MockScript::text("A < B & C")).await;

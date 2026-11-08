@@ -39,33 +39,55 @@ pub enum SdkError {
 /// `event_lag` event naming how many you missed. Re-read state rather than
 /// assume you saw everything.
 pub struct EventStream {
-    receiver: broadcast::Receiver<Event>,
-    closed: CancellationToken,
+    state: SubscriptionState,
+}
+
+enum SubscriptionState {
+    Receiving {
+        receiver: broadcast::Receiver<Event>,
+        closed: CancellationToken,
+    },
+    Ended,
 }
 
 impl EventStream {
     /// Wait for the next event. Returns `None` once the session is closed.
     pub async fn recv(&mut self) -> Option<Event> {
+        let SubscriptionState::Receiving { receiver, closed } = &mut self.state else {
+            return None;
+        };
         // Biased, so a closed session still delivers what is already buffered.
         let received = tokio::select! {
             biased;
-            received = self.receiver.recv() => received,
-            _ = self.closed.cancelled() => return None,
+            received = receiver.recv() => Some(received),
+            _ = closed.cancelled() => None,
         };
         match received {
-            Ok(event) => Some(event),
+            Some(Ok(event)) => Some(event),
             // Report the gap rather than hide it. The next `recv` resumes.
-            Err(broadcast::error::RecvError::Lagged(skipped)) => Some(Event(event_lag(skipped))),
-            Err(broadcast::error::RecvError::Closed) => None,
+            Some(Err(broadcast::error::RecvError::Lagged(skipped))) => {
+                Some(Event(event_lag(skipped)))
+            }
+            Some(Err(broadcast::error::RecvError::Closed)) | None => {
+                self.state = SubscriptionState::Ended;
+                None
+            }
         }
     }
 
     /// Take the next event if one is already buffered.
     pub fn try_recv(&mut self) -> Option<Event> {
-        match self.receiver.try_recv() {
+        let SubscriptionState::Receiving { receiver, closed } = &mut self.state else {
+            return None;
+        };
+        match receiver.try_recv() {
             Ok(event) => Some(event),
             Err(broadcast::error::TryRecvError::Lagged(skipped)) => Some(Event(event_lag(skipped))),
-            Err(_) => None,
+            Err(broadcast::error::TryRecvError::Empty) if !closed.is_cancelled() => None,
+            Err(_) => {
+                self.state = SubscriptionState::Ended;
+                None
+            }
         }
     }
 }
@@ -340,8 +362,10 @@ impl Session {
     /// after it subscribed.
     pub fn events(&self) -> EventStream {
         EventStream {
-            receiver: self.events.subscribe(),
-            closed: self.closed.clone(),
+            state: SubscriptionState::Receiving {
+                receiver: self.events.subscribe(),
+                closed: self.closed.clone(),
+            },
         }
     }
 
@@ -616,6 +640,17 @@ impl Session {
         self.inner.abort();
     }
 
+    fn replace_manager(&self, manager: kiss_coding::SessionManager) -> Result<(), SdkErrorText> {
+        // Use the same admission lock as accept_prompt. A new SDK prompt
+        // cannot start between the idle check and the manager change.
+        let _lifecycle = self.ensure_open()?;
+        if self.inner.is_running() {
+            return Err(SdkErrorText("The session has an active prompt. Abort it or wait for it to finish before you replace the session.".into()));
+        }
+        self.inner.replace_manager(manager);
+        Ok(())
+    }
+
     // ----------------------------------------------------------------
     // The dispatcher.
     // ----------------------------------------------------------------
@@ -718,7 +753,7 @@ impl Session {
             }
             Command::NewSession {} => {
                 let manager = kiss_coding::SessionManager::in_memory(&self.cwd);
-                self.inner.replace_manager(manager);
+                self.replace_manager(manager)?;
                 Ok(Some(json!({"cancelled": false})))
             }
             Command::GetState {} => {
@@ -894,10 +929,11 @@ impl Session {
                 let manager =
                     kiss_coding::SessionManager::open(std::path::Path::new(&session_path))
                         .map_err(|error| SdkErrorText(format!("{error:#}")))?;
-                self.inner.replace_manager(manager);
+                self.replace_manager(manager)?;
                 Ok(Some(json!({"cancelled": false})))
             }
             Command::Fork { entry_id } => {
+                drop(self.ensure_open()?);
                 let outcome = self
                     .inner
                     .navigate_tree(&entry_id, false, None, CancellationToken::new())
@@ -1102,6 +1138,28 @@ fn build_tree(manager: &kiss_coding::SessionManager, parent: Option<&str>) -> Ve
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn a_closed_subscription_cannot_resume_after_it_reports_the_end() {
+        let (sender, receiver) = broadcast::channel(4);
+        let closed = CancellationToken::new();
+        let mut events = EventStream {
+            state: SubscriptionState::Receiving {
+                receiver,
+                closed: closed.clone(),
+            },
+        };
+        sender.send(Event(json!({"type": "before_close"}))).unwrap();
+        closed.cancel();
+        assert_eq!(events.recv().await.unwrap().event_type(), "before_close");
+        assert!(events.recv().await.is_none());
+        let _ = sender.send(Event(json!({"type": "late_completion"})));
+        assert!(
+            events.recv().await.is_none(),
+            "an ended subscription must stay ended"
+        );
+        assert!(events.try_recv().is_none());
+    }
 
     #[test]
     fn queue_mode_names_match_the_settings_file() {

@@ -377,6 +377,8 @@ fn update_auth_file_at<T>(
     update: impl FnOnce(&mut AuthFile) -> Result<T>,
 ) -> Result<T> {
     with_auth_lock(path, || {
+        accounts::recover_at(path)?;
+        accounts::recover_add_at(path)?;
         let mut auth = read_auth_file_at(path);
         let result = update(&mut auth)?;
         write_auth_file_at(path, &auth)?;

@@ -19,6 +19,8 @@ struct Harness {
     _directory: tempfile::TempDir,
     input: tokio::io::DuplexStream,
     output: BufReader<tokio::io::DuplexStream>,
+    server: tokio::task::JoinHandle<()>,
+    session: Arc<Session>,
 }
 
 impl Harness {
@@ -40,8 +42,9 @@ impl Harness {
         // `client_write` -> server input, server output -> `client_read`.
         let (client_write, server_read) = tokio::io::duplex(64 * 1024);
         let (server_write, client_read) = tokio::io::duplex(1024 * 1024);
-        tokio::spawn(async move {
-            let _ = kiss_sdk::rpc::serve_streams(session, server_read, server_write).await;
+        let serving_session = session.clone();
+        let server = tokio::spawn(async move {
+            let _ = kiss_sdk::rpc::serve_streams(serving_session, server_read, server_write).await;
         });
 
         Harness {
@@ -49,6 +52,8 @@ impl Harness {
             _directory: directory,
             input: client_write,
             output: BufReader::new(client_read),
+            server,
+            session,
         }
     }
 
@@ -85,6 +90,53 @@ impl Harness {
             }
         }
     }
+}
+
+impl Drop for Harness {
+    fn drop(&mut self) {
+        self.server.abort();
+    }
+}
+
+#[tokio::test]
+async fn a_cancelled_transport_closes_its_output() {
+    let mut harness = Harness::start(MockScript::text("hi")).await;
+    harness.send(json!({"id": "ping", "type": "ping"})).await;
+    assert_eq!(harness.next_line().await["id"], "ping");
+    harness.server.abort();
+    let mut line = String::new();
+    let read = tokio::time::timeout(Duration::from_secs(1), harness.output.read_line(&mut line))
+        .await
+        .expect("cancelling a transport must close its writer")
+        .unwrap();
+    assert_eq!(read, 0);
+    assert!(
+        harness
+            .session
+            .execute(kiss_sdk::Command::Ping {})
+            .await
+            .success
+    );
+}
+
+#[tokio::test]
+async fn a_transport_with_a_failed_writer_stops_reading_commands() {
+    let mut harness = Harness::start(MockScript::text("hi")).await;
+    let (unused, _) = tokio::io::duplex(1);
+    let output = std::mem::replace(&mut harness.output, BufReader::new(unused));
+    drop(output);
+    harness.send(json!({"id": "ping", "type": "ping"})).await;
+    tokio::time::timeout(Duration::from_secs(1), &mut harness.server)
+        .await
+        .expect("a transport without a writer must stop")
+        .unwrap();
+    assert!(
+        harness
+            .session
+            .execute(kiss_sdk::Command::Ping {})
+            .await
+            .success
+    );
 }
 
 #[tokio::test]

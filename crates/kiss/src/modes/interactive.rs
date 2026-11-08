@@ -93,6 +93,7 @@ struct App {
     secret_prompt: Option<SecretPrompt>,
     /// The one background command that may run. See `begin_command`.
     command: Option<BackgroundCommand>,
+    next_command_id: u64,
     ctrl_c_armed: bool,
     escape_armed: bool,
     hide_thinking: bool,
@@ -158,20 +159,50 @@ impl VoiceMode {
 
 /// A background task that the footer reports and that blocks other commands.
 ///
-/// At most one runs at a time, so a finish event belongs to the current command.
-/// The slot stays occupied after a cancel until the task reports back, or until
-/// a second cancel request gives up on the task.
+/// Results carry this task's ID. A second cancel can release the slot while
+/// the task stops, without letting its late results change a newer command.
 struct BackgroundCommand {
+    id: u64,
     status: String,
     control: CommandControl,
 }
 
+#[derive(Clone)]
+struct CommandTask {
+    id: u64,
+    sender: mpsc::UnboundedSender<CommandEvent>,
+}
+
+impl CommandTask {
+    fn new(app: &App, sender: &mpsc::UnboundedSender<CommandEvent>) -> Self {
+        Self {
+            id: app
+                .command
+                .as_ref()
+                .expect("command admission precedes task creation")
+                .id,
+            sender: sender.clone(),
+        }
+    }
+
+    fn send(&self, event: CommandEvent) -> std::result::Result<(), ()> {
+        self.sender
+            .send(CommandEvent::ForCommand {
+                id: self.id,
+                event: Box::new(event),
+            })
+            .map_err(|_| ())
+    }
+}
+
 enum CommandControl {
     Cancellable(CancellationToken),
+    LoggingIn(CancellationToken),
     Uncancellable,
     /// The token fired and the task has not reported back. Another cancel
     /// request releases the slot, in case the task never ends.
     Stopping,
+    StoppingLogin,
 }
 
 /// A recap request in flight.
@@ -352,6 +383,10 @@ struct LlamaStatus {
 }
 
 enum CommandEvent {
+    ForCommand {
+        id: u64,
+        event: Box<CommandEvent>,
+    },
     /// A task with no result event of its own to end the command.
     CommandFinished,
     DesktopNotificationFinished(std::result::Result<(), String>),
@@ -812,8 +847,10 @@ impl App {
         if let Some(command) = &self.command {
             let spin = SPINNER[self.spinner_frame % SPINNER.len()];
             let hint = match command.control {
-                CommandControl::Cancellable(_) => " (esc or ctrl+c to cancel)",
-                CommandControl::Uncancellable => "",
+                CommandControl::Cancellable(_) | CommandControl::LoggingIn(_) => {
+                    " (esc or ctrl+c to cancel)"
+                }
+                CommandControl::Uncancellable | CommandControl::StoppingLogin => "",
                 CommandControl::Stopping => " (esc or ctrl+c to stop waiting)",
             };
             lines.push(
@@ -1526,6 +1563,7 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
         file_search_pending: false,
         secret_prompt: None,
         command: None,
+        next_command_id: 0,
         ctrl_c_armed: false,
         escape_armed: false,
         hide_thinking: settings.hide_thinking_block,
@@ -2346,10 +2384,11 @@ fn complete_account_add(app: &mut App, provider: &str, succeeded: bool) {
     {
         return;
     }
-    let (_, label) = app.pending_account_add.take().unwrap();
     if !succeeded {
+        cancel_account_add(app);
         return;
     }
+    let (_, label) = app.pending_account_add.take().unwrap();
     match kiss_ai::auth::accounts::finish_add(provider, label.as_deref()) {
         Ok(Some(added)) => app
             .cells
@@ -2362,6 +2401,16 @@ fn complete_account_add(app: &mut App, provider: &str, succeeded: bool) {
         Err(error) => app.cells.push(Cell::Error(format!(
             "could not add the {provider} account: {error:#}"
         ))),
+    }
+}
+
+fn cancel_account_add(app: &mut App) {
+    if let Some((provider, _)) = app.pending_account_add.take()
+        && let Err(error) = kiss_ai::auth::accounts::cancel_owned_add(&provider)
+    {
+        app.cells.push(Cell::Error(format!(
+            "could not cancel the {provider} account add: {error:#}"
+        )));
     }
 }
 
@@ -2385,6 +2434,11 @@ fn handle_command_event(
     session: &Arc<kiss_coding::AgentSession>,
 ) {
     match event {
+        CommandEvent::ForCommand { id, event } => {
+            if app.command.as_ref().is_some_and(|command| command.id == id) {
+                handle_command_event(app, *event, resources, file_search, session);
+            }
+        }
         CommandEvent::CommandFinished => app.command = None,
         CommandEvent::DesktopNotificationFinished(result) => {
             finish_notification(app, result);
@@ -2687,6 +2741,9 @@ fn handle_command_event(
             }
         }
         CommandEvent::WorkflowApproval { plan, reply } => {
+            if reply.is_closed() {
+                return;
+            }
             // The progress view would hide the question, so close it first.
             app.workflow_view = None;
             open_workflow_approval(app, plan, reply);
@@ -3768,7 +3825,7 @@ fn handle_secret_prompt(
                 });
                 app.secret_prompt = None;
                 if login {
-                    app.pending_account_add = None;
+                    cancel_account_add(app);
                 }
                 app.cells.push(Cell::Notice(if login {
                     "login cancelled".into()
@@ -3888,12 +3945,11 @@ fn handle_secret_prompt(
                         }
                         SecretPromptKind::AnthropicManual(pending) => {
                             let input = key.to_string();
-                            let Some(cancel) =
-                                begin_command(app, "finishing Anthropic login".into())
+                            let Some(cancel) = begin_login(app, "finishing Anthropic login".into())
                             else {
                                 return Flow::Continue;
                             };
-                            let tx = command_tx.clone();
+                            let tx = CommandTask::new(app, command_tx);
                             tokio::spawn(async move {
                                 let result = kiss_ai::auth::anthropic::finish_authorization(
                                     &Default::default(),
@@ -3915,11 +3971,11 @@ fn handle_secret_prompt(
                         SecretPromptKind::OpenRouterManual(pending) => {
                             let input = key.to_string();
                             let Some(cancel) =
-                                begin_command(app, "finishing OpenRouter login".into())
+                                begin_login(app, "finishing OpenRouter login".into())
                             else {
                                 return Flow::Continue;
                             };
-                            let tx = command_tx.clone();
+                            let tx = CommandTask::new(app, command_tx);
                             tokio::spawn(async move {
                                 let result = kiss_ai::auth::openrouter::finish_authorization(
                                     &Default::default(),
@@ -4190,6 +4246,15 @@ fn set_session_title(app: &mut App, title: Option<String>) {
     }
 }
 
+fn session_switch_allowed(app: &mut App, session: &kiss_coding::AgentSession) -> bool {
+    if session.is_running() {
+        app.cells.push(Cell::Error("The session has an active prompt. Abort it or wait for it to finish before you replace the session.".into()));
+        false
+    } else {
+        true
+    }
+}
+
 /// Reset what belongs to the previous session after the active session changes.
 fn sync_session_state(app: &mut App, session: &Arc<kiss_coding::AgentSession>) {
     let title = session.manager.lock().unwrap().session_name();
@@ -4245,10 +4310,20 @@ fn begin_command(app: &mut App, status: String) -> Option<CancellationToken> {
         return None;
     }
     let cancel = CancellationToken::new();
+    app.next_command_id = app.next_command_id.wrapping_add(1);
     app.command = Some(BackgroundCommand {
+        id: app.next_command_id,
         status,
         control: CommandControl::Cancellable(cancel.clone()),
     });
+    Some(cancel)
+}
+
+/// A login keeps its slot until credential storage has finished, even after
+/// cancellation. A second login must not race the first credential write.
+fn begin_login(app: &mut App, status: String) -> Option<CancellationToken> {
+    let cancel = begin_command(app, status)?;
+    app.command.as_mut()?.control = CommandControl::LoggingIn(cancel.clone());
     Some(cancel)
 }
 
@@ -4257,7 +4332,9 @@ fn begin_uncancellable_command(app: &mut App, status: String) -> bool {
     if command_blocks(app, &status) {
         return false;
     }
+    app.next_command_id = app.next_command_id.wrapping_add(1);
     app.command = Some(BackgroundCommand {
+        id: app.next_command_id,
         status,
         control: CommandControl::Uncancellable,
     });
@@ -4266,7 +4343,10 @@ fn begin_uncancellable_command(app: &mut App, status: String) -> bool {
 
 fn set_command_status(app: &mut App, status: String) {
     if let Some(command) = &mut app.command
-        && !matches!(command.control, CommandControl::Stopping)
+        && !matches!(
+            command.control,
+            CommandControl::Stopping | CommandControl::StoppingLogin
+        )
     {
         command.status = status;
     }
@@ -4280,10 +4360,14 @@ fn cancel_command(app: &mut App) -> bool {
     };
     match &command.control {
         CommandControl::Uncancellable => false,
-        CommandControl::Cancellable(cancel) => {
+        CommandControl::Cancellable(cancel) | CommandControl::LoggingIn(cancel) => {
             cancel.cancel();
             command.status = format!("stopping \"{}\"", command.status);
-            command.control = CommandControl::Stopping;
+            command.control = if matches!(command.control, CommandControl::LoggingIn(_)) {
+                CommandControl::StoppingLogin
+            } else {
+                CommandControl::Stopping
+            };
             app.cells.push(Cell::Notice("command cancelled".into()));
             true
         }
@@ -4291,6 +4375,12 @@ fn cancel_command(app: &mut App) -> bool {
             app.command = None;
             app.cells
                 .push(Cell::Notice("stopped waiting for the command".into()));
+            true
+        }
+        CommandControl::StoppingLogin => {
+            app.cells.push(Cell::Notice(
+                "login is stopping. Wait for it to finish before you start another command".into(),
+            ));
             true
         }
     }
@@ -4326,7 +4416,13 @@ fn start_shell_passthrough(
         Some(rest) => (rest.trim().to_string(), true),
         None => (command.trim().to_string(), false),
     };
-    let cwd = session.manager.lock().unwrap().cwd().to_path_buf();
+    let (cwd, session_id) = {
+        let manager = session.manager.lock().unwrap();
+        (
+            manager.cwd().to_path_buf(),
+            manager.session_id().to_string(),
+        )
+    };
     let settings = session.settings();
     let shell = settings
         .shell_path
@@ -4354,7 +4450,7 @@ fn start_shell_passthrough(
         output: String::new(),
         exclude_from_context: exclude,
     });
-    let tx = command_tx.clone();
+    let tx = CommandTask::new(app, command_tx);
     let session = session.clone();
     tokio::spawn(async move {
         let result =
@@ -4370,7 +4466,10 @@ fn start_shell_passthrough(
                 exclude_from_context: result.exclude_from_context,
                 timestamp: kiss_ai::now_ms(),
             });
-            let _ = session.manager.lock().unwrap().append_message(message);
+            let mut manager = session.manager.lock().unwrap();
+            if manager.session_id() == session_id {
+                let _ = manager.append_message(message);
+            }
         }
         let _ = tx.send(CommandEvent::ShellFinished(result));
     });
@@ -4382,7 +4481,7 @@ async fn run_shell_command(
     cwd: &std::path::Path,
     exclude_from_context: bool,
     cancel: &CancellationToken,
-    tx: &mpsc::UnboundedSender<CommandEvent>,
+    tx: &CommandTask,
 ) -> std::result::Result<ShellRunResult, String> {
     let mut process = kiss_agent::tools::shell::command(shell, command, None);
     let shell = process
@@ -4452,11 +4551,7 @@ async fn run_shell_command(
     })
 }
 
-fn append_shell_output(
-    output: &mut String,
-    bytes: &[u8],
-    tx: &mpsc::UnboundedSender<CommandEvent>,
-) {
+fn append_shell_output(output: &mut String, bytes: &[u8], tx: &CommandTask) {
     let chunk = String::from_utf8_lossy(bytes).into_owned();
     if output.len() < 50_001 {
         output.push_str(&chunk);
@@ -4558,7 +4653,7 @@ fn start_tree_navigation(
         return;
     };
     let session = session.clone();
-    let tx = command_tx.clone();
+    let tx = CommandTask::new(app, command_tx);
     tokio::spawn(async move {
         let result = session
             .navigate_tree(&target_id, summarize, custom_instructions, cancel)
@@ -4586,7 +4681,7 @@ fn open_model_picker(
     let Some(cancel) = begin_command(app, "reading account models".into()) else {
         return;
     };
-    let tx = command_tx.clone();
+    let tx = CommandTask::new(app, command_tx);
     tokio::spawn(async move {
         let result = tokio::select! {
             result = tokio::time::timeout(Duration::from_secs(30), registry.refresh_cursor()) => {
@@ -4910,6 +5005,17 @@ fn open_login_methods_picker(app: &mut App, provider: &str) {
             kind: SecretPromptKind::Llama,
             value: "http://127.0.0.1:8080".into(),
         });
+        return;
+    }
+    if app
+        .pending_account_add
+        .as_ref()
+        .is_none_or(|(pending, _)| pending != provider)
+        && let Err(error) = kiss_ai::auth::accounts::cancel_add(provider)
+    {
+        app.cells.push(Cell::Error(format!(
+            "could not start login for {provider}: {error:#}"
+        )));
         return;
     }
     // Ambient identities (Entra ID, gcloud ADC, AWS profiles) are not
@@ -5297,10 +5403,15 @@ fn start_saved_workflow(
     let Some(cancel) = begin_command(app, format!("waiting to run workflow {name}")) else {
         return;
     };
-    let command_tx = command_tx.clone();
+    let command_tx = CommandTask::new(app, command_tx);
     let runtime = runtime.clone();
     tokio::spawn(async move {
-        if runtime.approve(plan).await == kiss_coding::workflows::ApprovalDecision::Cancel {
+        let decision = tokio::select! {
+            biased;
+            _ = cancel.cancelled() => kiss_coding::workflows::ApprovalDecision::Cancel,
+            decision = runtime.approve(plan) => decision,
+        };
+        if decision == kiss_coding::workflows::ApprovalDecision::Cancel {
             let _ = command_tx.send(CommandEvent::CommandFinished);
             return;
         }
@@ -6098,7 +6209,7 @@ fn start_mcp_reconnect(
     server.state = McpPanelState::Checking;
     let server = server.clone();
     show_mcp_server_picker(app);
-    let tx = command_tx.clone();
+    let tx = CommandTask::new(app, command_tx);
     tokio::spawn(async move {
         let _ = manager.disconnect(&server.name).await;
         let server = check_mcp_server(&manager, server).await;
@@ -6132,7 +6243,7 @@ fn start_mcp_authentication(
         return;
     };
     app.picker = None;
-    let tx = command_tx.clone();
+    let tx = CommandTask::new(app, command_tx);
     tokio::spawn(async move {
         let result: Result<String> = async {
             if oauth.grant_type == kiss_mcp::OAuthGrantType::ClientCredentials {
@@ -6188,7 +6299,7 @@ fn start_mcp_logout(
         return;
     }
     app.picker = None;
-    let tx = command_tx.clone();
+    let tx = CommandTask::new(app, command_tx);
     tokio::spawn(async move {
         let result = kiss_mcp::logout(&name, &url)
             .await
@@ -6307,7 +6418,7 @@ fn handle_picker_key(
             Some(PickerKind::LoginProviders(_) | PickerKind::LoginMethods(..))
         )
     {
-        app.pending_account_add = None;
+        cancel_account_add(app);
     }
     let Some(picker) = app.picker.as_mut() else {
         return Flow::Continue;
@@ -6564,6 +6675,9 @@ fn apply_picker_selection(
                     .fork_active_branch(selected_id.as_deref(), false);
                 match fork {
                     Ok(manager) => {
+                        if !session_switch_allowed(app, session) {
+                            return;
+                        }
                         session.replace_manager(manager);
                         sync_session_state(app, session);
                         app.cells.clear();
@@ -6944,6 +7058,9 @@ fn switch_session(app: &mut App, session: &Arc<kiss_coding::AgentSession>, recor
     };
     match result {
         Ok(manager) => {
+            if !session_switch_allowed(app, session) {
+                return;
+            }
             session.replace_manager(manager);
             sync_session_state(app, session);
             app.cells = session_cells(session);
@@ -7120,11 +7237,11 @@ fn start_provider_browser_login(
     command_tx: &mpsc::UnboundedSender<CommandEvent>,
 ) {
     let provider = provider.to_string();
-    let Some(cancel) = begin_command(app, format!("logging in to {provider}")) else {
-        app.pending_account_add = None;
+    let Some(cancel) = begin_login(app, format!("logging in to {provider}")) else {
+        cancel_account_add(app);
         return;
     };
-    let tx = command_tx.clone();
+    let tx = CommandTask::new(app, command_tx);
     tokio::spawn(async move {
         let url_tx = tx.clone();
         let result = crate::auth_flow::login_browser(&provider, &cancel, move |url| {
@@ -7147,11 +7264,11 @@ fn start_provider_device_login(
     github_domain: Option<String>,
 ) {
     let provider = provider.to_string();
-    let Some(cancel) = begin_command(app, format!("starting device login for {provider}")) else {
-        app.pending_account_add = None;
+    let Some(cancel) = begin_login(app, format!("starting device login for {provider}")) else {
+        cancel_account_add(app);
         return;
     };
-    let tx = command_tx.clone();
+    let tx = CommandTask::new(app, command_tx);
     tokio::spawn(async move {
         let result: Result<()> = async {
             match provider.as_str() {
@@ -7310,7 +7427,7 @@ fn start_llama_list(app: &mut App, command_tx: &mpsc::UnboundedSender<CommandEve
     let Some(cancel) = begin_command(app, "reading llama.cpp models".into()) else {
         return;
     };
-    let tx = command_tx.clone();
+    let tx = CommandTask::new(app, command_tx);
     tokio::spawn(async move {
         let result = llama_request(
             &url,
@@ -7347,7 +7464,7 @@ fn start_llama_action(
     let Some(cancel) = begin_command(app, format!("{action}ing {}", model.id)) else {
         return;
     };
-    let tx = command_tx.clone();
+    let tx = CommandTask::new(app, command_tx);
     tokio::spawn(async move {
         let result = llama_request(
             &url,
@@ -7473,12 +7590,12 @@ fn start_webmcp(
     command_tx: &mpsc::UnboundedSender<CommandEvent>,
 ) {
     let manager = app.webmcp_manager.clone();
-    let tx = command_tx.clone();
     match command {
         "" | "connect" => {
             if !begin_uncancellable_command(app, "connecting to Chrome WebMCP".into()) {
                 return;
             }
+            let tx = CommandTask::new(app, command_tx);
             session.remove_session_tool("webmcp");
             tokio::spawn(async move {
                 let result = manager
@@ -7493,6 +7610,7 @@ fn start_webmcp(
             if !begin_uncancellable_command(app, "reading Chrome WebMCP tools".into()) {
                 return;
             }
+            let tx = CommandTask::new(app, command_tx);
             tokio::spawn(async move {
                 let result = if manager.is_connected().await {
                     Ok(WebMcpCommandResult::Listed(manager.tools().await))
@@ -7506,6 +7624,7 @@ fn start_webmcp(
             if !begin_uncancellable_command(app, "disconnecting Chrome WebMCP".into()) {
                 return;
             }
+            let tx = CommandTask::new(app, command_tx);
             session.remove_session_tool("webmcp");
             tokio::spawn(async move {
                 manager.disconnect().await;
@@ -7820,6 +7939,9 @@ fn run_slash_command(
             };
             match fork {
                 Ok(manager) => {
+                    if !session_switch_allowed(app, session) {
+                        return Flow::Continue;
+                    }
                     session.replace_manager(manager);
                     sync_session_state(app, session);
                     app.cells = session_cells(session);
@@ -7841,7 +7963,7 @@ fn run_slash_command(
             if command_blocks(app, "login") {
                 return Flow::Continue;
             }
-            app.pending_account_add = None;
+            cancel_account_add(app);
             let rest = kiss_ai::registry::canonical_provider_id(&rest);
             if rest.is_empty() {
                 open_login_picker(app);
@@ -7957,9 +8079,15 @@ fn run_slash_command(
             include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../CHANGELOG.md")).into(),
         )),
         "new" => {
+            if !session_switch_allowed(app, session) {
+                return Flow::Continue;
+            }
             let manager = session.manager.lock().unwrap().create_sibling();
             match manager {
                 Ok(new_manager) => {
+                    if !session_switch_allowed(app, session) {
+                        return Flow::Continue;
+                    }
                     session.replace_manager(new_manager);
                     sync_session_state(app, session);
                     app.cells.clear();
@@ -8222,6 +8350,9 @@ fn import_session(
     });
     match kiss_coding::SessionManager::fork_from(source, &cwd, Some(session_dir)) {
         Ok(manager) => {
+            if !session_switch_allowed(app, session) {
+                return;
+            }
             session.replace_manager(manager);
             sync_session_state(app, session);
             app.cells = session_cells(session);
@@ -8272,7 +8403,7 @@ fn start_share_session(
     let Some(cancel) = begin_command(app, "sharing session".into()) else {
         return;
     };
-    let tx = command_tx.clone();
+    let tx = CommandTask::new(app, command_tx);
     let destination = session.settings().session_share_destination;
     tokio::spawn(async move {
         let result = share_session_async(&id, &jsonl, &target, destination, &cancel)
@@ -8287,7 +8418,7 @@ fn start_update(app: &mut App, command_tx: &mpsc::UnboundedSender<CommandEvent>)
     if !begin_uncancellable_command(app, "updating KISS".into()) {
         return;
     }
-    let tx = command_tx.clone();
+    let tx = CommandTask::new(app, command_tx);
     tokio::spawn(async move {
         let result = crate::update::run()
             .await
@@ -8499,6 +8630,7 @@ mod tests {
             file_search_pending: false,
             secret_prompt: None,
             command: None,
+            next_command_id: 0,
             ctrl_c_armed: false,
             escape_armed: false,
             hide_thinking: false,
@@ -8620,13 +8752,17 @@ mod tests {
         let text = format!("{}éEND", "a".repeat(49_999));
         std::fs::write(directory.path().join("output.txt"), text).unwrap();
         let (tx, _rx) = mpsc::unbounded_channel();
+        let task = CommandTask {
+            id: 0,
+            sender: tx.clone(),
+        };
         let result = run_shell_command(
             Some("bash"),
             "cat output.txt",
             directory.path(),
             false,
             &CancellationToken::new(),
-            &tx,
+            &task,
         )
         .await
         .unwrap();
@@ -9465,16 +9601,13 @@ mod tests {
             Some("updating KISS")
         );
         let event = command_rx.recv().await.expect("update result");
-        assert!(
-            matches!(&event, CommandEvent::UpdateFinished(Err(error)) if error.contains("not available in debug builds"))
-        );
 
         let (file_tx, _file_rx) = mpsc::unbounded_channel();
         let mut file_search = FileSearchService::new(file_tx);
         handle_command_event(&mut app, event, &mut resources, &mut file_search, &session);
         assert!(app.command.is_none());
         assert!(
-            matches!(app.cells.last(), Some(Cell::Error(error)) if error.starts_with("update failed:"))
+            matches!(app.cells.last(), Some(Cell::Error(error)) if error.starts_with("update failed:") && error.contains("not available in debug builds"))
         );
     }
 
@@ -10815,13 +10948,17 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let cancel = CancellationToken::new();
         let (tx, _rx) = mpsc::unbounded_channel();
+        let task = CommandTask {
+            id: 0,
+            sender: tx.clone(),
+        };
         let result = run_shell_command(
             Some("sh"),
             "printf stdout; printf stderr >&2; exit 7",
             temp.path(),
             true,
             &cancel,
-            &tx,
+            &task,
         )
         .await
         .unwrap();
@@ -10875,13 +11012,17 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let cancel = CancellationToken::new();
         let (tx, _rx) = mpsc::unbounded_channel();
+        let task = CommandTask {
+            id: 0,
+            sender: tx.clone(),
+        };
         let future = run_shell_command(
             Some("sh"),
             "printf started; sleep 30",
             temp.path(),
             false,
             &cancel,
-            &tx,
+            &task,
         );
         tokio::pin!(future);
         tokio::select! {
@@ -11150,6 +11291,98 @@ mod tests {
         );
         start_shell_passthrough(&mut app, &session, "sleep 32".into(), &tx);
         assert!(visible_frame(&mut app, &session).contains("running !sleep 32 (esc"));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn an_abandoned_command_cannot_finish_a_newer_command() {
+        let mut app = test_app();
+        let directory = tempfile::tempdir().unwrap();
+        let session = test_session(kiss_coding::SessionManager::in_memory(directory.path()));
+        let mut resources = test_resources();
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        start_shell_passthrough(&mut app, &session, "sleep 30".into(), &tx);
+        assert!(cancel_command(&mut app));
+        assert!(cancel_command(&mut app));
+        start_shell_passthrough(&mut app, &session, "sleep 31".into(), &tx);
+        let event = tokio::time::timeout(Duration::from_secs(2), rx.recv())
+            .await
+            .expect("the cancelled command must report completion")
+            .unwrap();
+        apply_command_event(&mut app, &session, &mut resources, event);
+        let frame = visible_frame(&mut app, &session);
+        assert!(frame.contains("running !sleep 31 (esc"), "{frame}");
+        cancel_command(&mut app);
+    }
+
+    #[test]
+    fn a_new_session_request_keeps_an_active_prompt_in_its_original_session() {
+        let directory = tempfile::tempdir().unwrap();
+        let session = test_session(
+            kiss_coding::SessionManager::create(
+                directory.path(),
+                Some(directory.path().join("sessions")),
+            )
+            .unwrap(),
+        );
+        let original = session.manager.lock().unwrap().session_id().to_string();
+        let run = session.prompt(vec![AgentMessage::user("first")]);
+        let mut app = test_app();
+        let mut resources = test_resources();
+        run_command_for_test(&mut app, &session, &mut resources, "new");
+        assert_eq!(session.manager.lock().unwrap().session_id(), original);
+        assert!(
+            matches!(app.cells.last(), Some(Cell::Error(error)) if error.contains("active prompt"))
+        );
+        drop(run);
+        run_command_for_test(&mut app, &session, &mut resources, "new");
+        assert_ne!(session.manager.lock().unwrap().session_id(), original);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn shell_completion_does_not_write_into_a_replacement_session() {
+        let directory = tempfile::tempdir().unwrap();
+        let session = test_session(
+            kiss_coding::SessionManager::create(
+                directory.path(),
+                Some(directory.path().join("sessions")),
+            )
+            .unwrap(),
+        );
+        let mut app = test_app();
+        let mut resources = test_resources();
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        start_shell_passthrough(
+            &mut app,
+            &session,
+            "printf started; while [ ! -e release-shell ]; do sleep 0.01; done".into(),
+            &tx,
+        );
+        let started = tokio::time::timeout(Duration::from_secs(2), rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        apply_command_event(&mut app, &session, &mut resources, started);
+        run_command_for_test(&mut app, &session, &mut resources, "new");
+        std::fs::write(directory.path().join("release-shell"), "").unwrap();
+        let finished = tokio::time::timeout(Duration::from_secs(2), rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        apply_command_event(&mut app, &session, &mut resources, finished);
+        let messages = session
+            .manager
+            .lock()
+            .unwrap()
+            .build_session_context()
+            .messages;
+        assert!(
+            !messages
+                .iter()
+                .any(|message| matches!(message, AgentMessage::BashExecution(_))),
+            "a shell result belongs to the session that started it"
+        );
     }
 
     #[test]
