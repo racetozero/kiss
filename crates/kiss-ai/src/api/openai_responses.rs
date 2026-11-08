@@ -11,7 +11,7 @@ use futures::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use sha2::{Digest as _, Sha256};
 use std::collections::HashMap;
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex as StdMutex, OnceLock};
 use std::time::{Duration, Instant};
 use tokio::sync::{Mutex, OwnedMutexGuard};
 use tokio_tungstenite::WebSocketStream;
@@ -64,7 +64,12 @@ struct Continuation {
 
 struct CachedSocket {
     socket: ResponsesSocket,
-    continuation: Option<Continuation>,
+    response: CachedResponse,
+}
+
+enum CachedResponse {
+    Ready(Option<Continuation>),
+    InFlight,
 }
 
 struct SocketCacheEntry {
@@ -75,9 +80,9 @@ struct SocketCacheEntry {
 
 type SocketCache = HashMap<SocketCacheKey, SocketCacheEntry>;
 
-fn socket_cache() -> &'static Mutex<SocketCache> {
-    static CACHE: OnceLock<Mutex<SocketCache>> = OnceLock::new();
-    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+fn socket_cache() -> &'static StdMutex<SocketCache> {
+    static CACHE: OnceLock<StdMutex<SocketCache>> = OnceLock::new();
+    CACHE.get_or_init(|| StdMutex::new(HashMap::new()))
 }
 
 fn websocket_fallback_sessions() -> &'static Mutex<std::collections::HashSet<SocketCacheKey>> {
@@ -392,6 +397,23 @@ struct SocketLease {
     guard: OwnedMutexGuard<CachedSocket>,
     shared: Arc<Mutex<CachedSocket>>,
     cache_key: Option<SocketCacheKey>,
+    continuation: Option<Continuation>,
+}
+
+impl Drop for SocketLease {
+    fn drop(&mut self) {
+        if matches!(self.guard.response, CachedResponse::InFlight)
+            && let Some(key) = &self.cache_key
+        {
+            let mut cache = socket_cache().lock().unwrap();
+            if cache
+                .get(key)
+                .is_some_and(|entry| Arc::ptr_eq(&entry.socket, &self.shared))
+            {
+                cache.remove(key);
+            }
+        }
+    }
 }
 
 fn websocket_url(model: &Model, response_url: &str) -> anyhow::Result<String> {
@@ -571,7 +593,7 @@ async fn acquire_socket(
 
     if let Some(key) = cache_key.as_ref() {
         let now = Instant::now();
-        let mut cache = socket_cache().lock().await;
+        let mut cache = socket_cache().lock().unwrap();
         let expired = cache.get(key).is_some_and(|entry| {
             now.duration_since(entry.last_used) >= WEBSOCKET_IDLE_TTL
                 || now.duration_since(entry.created_at) >= WEBSOCKET_MAX_AGE
@@ -581,14 +603,23 @@ async fn acquire_socket(
         }
         if let Some(entry) = cache.get(key) {
             let shared = Arc::clone(&entry.socket);
-            if let Ok(guard) = Arc::clone(&shared).try_lock_owned() {
-                return Ok(SocketLease {
-                    guard,
-                    shared,
-                    cache_key: Some(key.clone()),
-                });
+            if let Ok(mut guard) = Arc::clone(&shared).try_lock_owned() {
+                if let CachedResponse::Ready(continuation) =
+                    std::mem::replace(&mut guard.response, CachedResponse::InFlight)
+                {
+                    return Ok(SocketLease {
+                        guard,
+                        shared,
+                        cache_key: Some(key.clone()),
+                        continuation,
+                    });
+                }
+                // The lock is free but the last response did not finish.
+                // Dropping that request must not expose its unread frames.
+                cache.remove(key);
+            } else {
+                cache_new_connection = false;
             }
-            cache_new_connection = false;
         }
     }
 
@@ -607,13 +638,13 @@ async fn acquire_socket(
     .await?;
     let shared = Arc::new(Mutex::new(CachedSocket {
         socket,
-        continuation: None,
+        response: CachedResponse::InFlight,
     }));
     let guard = Arc::clone(&shared).lock_owned().await;
     let cache_key = if cache_new_connection {
         if let Some(key) = cache_key {
             let now = Instant::now();
-            socket_cache().lock().await.insert(
+            socket_cache().lock().unwrap().insert(
                 key.clone(),
                 SocketCacheEntry {
                     socket: Arc::clone(&shared),
@@ -632,6 +663,7 @@ async fn acquire_socket(
         guard,
         shared,
         cache_key,
+        continuation: None,
     })
 }
 
@@ -643,7 +675,7 @@ async fn release_socket(mut lease: SocketLease, keep: bool) {
 
     if !keep {
         let _ = lease.guard.socket.close(None).await;
-        let mut cache = socket_cache().lock().await;
+        let mut cache = socket_cache().lock().unwrap();
         if cache
             .get(&key)
             .is_some_and(|entry| Arc::ptr_eq(&entry.socket, &lease.shared))
@@ -655,19 +687,23 @@ async fn release_socket(mut lease: SocketLease, keep: bool) {
 
     let released_at = Instant::now();
     {
-        let mut cache = socket_cache().lock().await;
+        let mut cache = socket_cache().lock().unwrap();
         if let Some(entry) = cache.get_mut(&key)
             && Arc::ptr_eq(&entry.socket, &lease.shared)
         {
             entry.last_used = released_at;
+            lease.guard.response = CachedResponse::Ready(lease.continuation.take());
         }
     }
-    let shared = Arc::clone(&lease.shared);
+    let shared = Arc::downgrade(&lease.shared);
     drop(lease);
     tokio::spawn(async move {
         tokio::time::sleep(WEBSOCKET_IDLE_TTL).await;
+        let Some(shared) = shared.upgrade() else {
+            return;
+        };
         let removed = {
-            let mut cache = socket_cache().lock().await;
+            let mut cache = socket_cache().lock().unwrap();
             let can_remove = cache.get(&key).is_some_and(|entry| {
                 Arc::ptr_eq(&entry.socket, &shared) && entry.last_used <= released_at
             });
@@ -809,12 +845,11 @@ async fn stream_websocket(
     loop {
         let request_body = if use_continuation {
             lease
-                .guard
                 .continuation
                 .as_ref()
                 .and_then(|continuation| cached_request_body(full_body, continuation))
                 .unwrap_or_else(|| {
-                    lease.guard.continuation = None;
+                    lease.continuation = None;
                     full_body.clone()
                 })
         } else {
@@ -868,7 +903,7 @@ async fn stream_websocket(
                     && !retried_missing_continuation
                 {
                     retried_missing_continuation = true;
-                    lease.guard.continuation = None;
+                    lease.continuation = None;
                     *state = DecodeState::default();
                     break;
                 }
@@ -891,7 +926,7 @@ async fn stream_websocket(
                     if use_continuation
                         && let Some(response_id) = builder.message.response_id.clone()
                     {
-                        lease.guard.continuation = Some(Continuation {
+                        lease.continuation = Some(Continuation {
                             last_request: full_body.clone(),
                             last_response_id: response_id,
                             last_response_items: state.response_items.clone(),
@@ -2002,6 +2037,89 @@ mod request_tests {
         assert_eq!(
             requests[2]["input"][4]["content"][0]["text"],
             "full context"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_dropped_websocket_request_cannot_supply_the_next_response() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let (started_tx, started_rx) = oneshot::channel();
+        let (resume_tx, resume_rx) = oneshot::channel();
+        let server = tokio::spawn(async move {
+            let (socket, _) = listener.accept().await.unwrap();
+            let mut socket = tokio_tungstenite::accept_async(socket).await.unwrap();
+            assert!(matches!(
+                socket.next().await,
+                Some(Ok(WebSocketMessage::Text(_)))
+            ));
+            send_websocket_response(&mut socket, 1).await;
+            assert!(matches!(
+                socket.next().await,
+                Some(Ok(WebSocketMessage::Text(_)))
+            ));
+            started_tx.send(()).unwrap();
+            resume_rx.await.unwrap();
+            let next_socket = tokio::select! {
+                accepted = listener.accept() => accepted.unwrap().0,
+                message = socket.next() => {
+                    if matches!(message, Some(Ok(WebSocketMessage::Text(_)))) {
+                        // The first response is still pending on this connection.
+                        send_websocket_response(&mut socket, 1).await;
+                        return;
+                    }
+                    listener.accept().await.unwrap().0
+                }
+            };
+            let closed = tokio::time::timeout(Duration::from_secs(1), socket.next())
+                .await
+                .expect("dropping a reused request must close its abandoned socket");
+            assert!(!matches!(closed, Some(Ok(WebSocketMessage::Text(_)))));
+            let mut socket = tokio_tungstenite::accept_async(next_socket).await.unwrap();
+            assert!(matches!(
+                socket.next().await,
+                Some(Ok(WebSocketMessage::Text(_)))
+            ));
+            send_websocket_response(&mut socket, 2).await;
+        });
+        let mut model = model("openai-responses", &format!("http://{address}/v1"));
+        model.provider = "openai".into();
+        let options = StreamOptions {
+            credential: Some(crate::ResolvedCredential::api_key("local-test")),
+            session_id: Some("dropped-websocket-request".into()),
+            transport: Transport::WebSocket,
+            ..Default::default()
+        };
+        let context = Context::default();
+        let warm = crate::stream_simple(&model, &context, &options)
+            .result()
+            .await;
+        assert_eq!(warm.text(), "hello");
+        let (sink, _events) = crate::EventStream::channel();
+        let first = tokio::spawn({
+            let model = model.clone();
+            let options = options.clone();
+            let context = context.clone();
+            async move { stream(&model, &context, &options, sink).await }
+        });
+        tokio::time::timeout(Duration::from_secs(2), started_rx)
+            .await
+            .unwrap()
+            .unwrap();
+        first.abort();
+        assert!(first.await.unwrap_err().is_cancelled());
+        resume_tx.send(()).unwrap();
+        let response = tokio::time::timeout(
+            Duration::from_secs(2),
+            crate::stream_simple(&model, &context, &options).result(),
+        )
+        .await
+        .unwrap();
+        server.await.unwrap();
+        assert_eq!(
+            response.text(),
+            "again",
+            "the next request must not receive the abandoned response"
         );
     }
 

@@ -231,6 +231,9 @@ impl JobRecord {
 
     async fn wait_until_ready(&self) -> bool {
         loop {
+            // Register before the state check so a concurrent resume cannot
+            // notify between that check and creation of the waiting future.
+            let resumed = self.wake.notified();
             if self.cancel.is_cancelled() {
                 return false;
             }
@@ -239,7 +242,7 @@ impl JobRecord {
             }
             tokio::select! {
                 _ = self.cancel.cancelled() => return false,
-                _ = self.wake.notified() => {}
+                _ = resumed => {}
             }
         }
     }
@@ -556,6 +559,28 @@ mod tests {
         job.mark_running();
         assert!(job.is_paused());
         job.stop();
+    }
+
+    #[tokio::test]
+    async fn a_paused_waiter_resumes_and_a_stopped_job_refuses_work() {
+        let parent = parent_session();
+        let job = parent
+            .iterative_jobs()
+            .unwrap()
+            .start(JobKind::Loop, "finish it", None, None)
+            .unwrap();
+        job.pause();
+        let ready = job.wait_until_ready();
+        tokio::pin!(ready);
+        assert!(futures::poll!(&mut ready).is_pending());
+        job.resume();
+        assert!(
+            tokio::time::timeout(Duration::from_secs(1), ready)
+                .await
+                .unwrap()
+        );
+        job.stop();
+        assert!(!job.wait_until_ready().await);
     }
 
     #[tokio::test]
