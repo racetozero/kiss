@@ -655,7 +655,27 @@ impl AgentSession {
     }
 
     /// Switch the active session without appending synthetic history.
-    pub fn replace_manager(&self, manager: SessionManager) {
+    /// Refuse replacement while a prompt or compaction is active.
+    pub fn replace_manager(&self, manager: SessionManager) -> anyhow::Result<()> {
+        self.replace_manager_with(|| Ok(manager))
+    }
+
+    /// Start a sibling session after admission, preserving the storage mode.
+    pub fn new_session(&self) -> anyhow::Result<()> {
+        self.replace_manager_with(|| self.manager.lock().unwrap().create_sibling())
+    }
+
+    fn replace_manager_with(
+        &self,
+        create: impl FnOnce() -> anyhow::Result<SessionManager>,
+    ) -> anyhow::Result<()> {
+        let _phase = self.phase.lock().unwrap();
+        if *_phase != RunPhase::Idle {
+            anyhow::bail!(
+                "The session has an active prompt. Abort it or wait for it to finish before you replace the session."
+            );
+        }
+        let manager = create()?;
         self.cache_warm_cancel.lock().unwrap().cancel();
         *self.context_file.lock().unwrap() = None;
         if let Some(runtime) = self.subagents.get() {
@@ -680,6 +700,7 @@ impl AgentSession {
         *self.manager.lock().unwrap() = manager;
         *self.context_usage_cache.lock().unwrap() = None;
         *self.totals.lock().unwrap() = totals;
+        Ok(())
     }
 
     pub fn set_model(&self, model: Model) {
@@ -2686,6 +2707,57 @@ mod ephemeral_tests {
     }
 
     #[test]
+    fn session_replacement_refuses_active_work() {
+        let session = settings_test_session(Settings::default(), false);
+        let original = session.manager.lock().unwrap().session_id().to_string();
+        let run = session.prompt(vec![AgentMessage::user("first")]);
+        session
+            .replace_manager(SessionManager::in_memory(Path::new("/other")))
+            .unwrap_err();
+        assert_eq!(session.manager.lock().unwrap().session_id(), original);
+        drop(run);
+        session
+            .replace_manager(SessionManager::in_memory(Path::new("/other")))
+            .unwrap();
+        assert_ne!(session.manager.lock().unwrap().session_id(), original);
+    }
+
+    #[test]
+    fn a_refused_new_session_does_not_create_a_file() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut manager =
+            SessionManager::create(directory.path(), Some(directory.path().join("sessions")))
+                .unwrap();
+        manager.append_message(AgentMessage::user("saved")).unwrap();
+        let files = manager
+            .session_file()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .to_path_buf();
+        let original = manager.session_id().to_string();
+        let session = settings_test_session(Settings::default(), false);
+        session.replace_manager(manager).unwrap();
+        let before = std::fs::read_dir(&files).unwrap().count();
+        let run = session.prompt(vec![AgentMessage::user("first")]);
+        session.new_session().unwrap_err();
+        assert_eq!(std::fs::read_dir(&files).unwrap().count(), before);
+        assert_eq!(session.manager.lock().unwrap().session_id(), original);
+        drop(run);
+        session.new_session().unwrap();
+        // A saved session writes its file only when its first entry is added.
+        assert_eq!(std::fs::read_dir(&files).unwrap().count(), before);
+        session
+            .manager
+            .lock()
+            .unwrap()
+            .append_message(AgentMessage::user("new saved entry"))
+            .unwrap();
+        assert_eq!(std::fs::read_dir(&files).unwrap().count(), before + 1);
+        assert_ne!(session.manager.lock().unwrap().session_id(), original);
+    }
+
+    #[test]
     fn a_dropped_prompt_future_returns_the_session_to_idle() {
         let session = settings_test_session(Settings::default(), false);
         let run = session.prompt(vec![AgentMessage::user("first")]);
@@ -2893,7 +2965,9 @@ mod ephemeral_tests {
             .to_path_buf();
         assert_ne!(path, child_path);
         assert!(child_path.is_file());
-        session.replace_manager(SessionManager::in_memory(Path::new("/other")));
+        session
+            .replace_manager(SessionManager::in_memory(Path::new("/other")))
+            .unwrap();
         assert!(!path.exists());
         assert!(session.context_file.lock().unwrap().is_none());
         session.sync_context_file();

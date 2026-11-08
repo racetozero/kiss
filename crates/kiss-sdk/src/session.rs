@@ -634,14 +634,10 @@ impl Session {
     }
 
     fn replace_manager(&self, manager: kiss_coding::SessionManager) -> Result<(), SdkErrorText> {
-        // Use the same admission lock as accept_prompt. A new SDK prompt
-        // cannot start between the idle check and the manager change.
         let _lifecycle = self.ensure_open()?;
-        if self.inner.is_running() {
-            return Err(SdkErrorText("The session has an active prompt. Abort it or wait for it to finish before you replace the session.".into()));
-        }
-        self.inner.replace_manager(manager);
-        Ok(())
+        self.inner
+            .replace_manager(manager)
+            .map_err(|error| SdkErrorText(format!("{error:#}")))
     }
 
     // ----------------------------------------------------------------

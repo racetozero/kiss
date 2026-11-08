@@ -4246,15 +4246,6 @@ fn set_session_title(app: &mut App, title: Option<String>) {
     }
 }
 
-fn session_switch_allowed(app: &mut App, session: &kiss_coding::AgentSession) -> bool {
-    if session.is_running() {
-        app.cells.push(Cell::Error("The session has an active prompt. Abort it or wait for it to finish before you replace the session.".into()));
-        false
-    } else {
-        true
-    }
-}
-
 /// Reset what belongs to the previous session after the active session changes.
 fn sync_session_state(app: &mut App, session: &Arc<kiss_coding::AgentSession>) {
     let title = session.manager.lock().unwrap().session_name();
@@ -6673,12 +6664,8 @@ fn apply_picker_selection(
                     .lock()
                     .unwrap()
                     .fork_active_branch(selected_id.as_deref(), false);
-                match fork {
-                    Ok(manager) => {
-                        if !session_switch_allowed(app, session) {
-                            return;
-                        }
-                        session.replace_manager(manager);
+                match fork.and_then(|manager| session.replace_manager(manager)) {
+                    Ok(()) => {
                         sync_session_state(app, session);
                         app.cells.clear();
                         app.cell_render_cache.clear();
@@ -7056,12 +7043,8 @@ fn switch_session(app: &mut App, session: &Arc<kiss_coding::AgentSession>, recor
             Ok(manager)
         }),
     };
-    match result {
-        Ok(manager) => {
-            if !session_switch_allowed(app, session) {
-                return;
-            }
-            session.replace_manager(manager);
+    match result.and_then(|manager| session.replace_manager(manager)) {
+        Ok(()) => {
             sync_session_state(app, session);
             app.cells = session_cells(session);
             app.cell_render_cache.clear();
@@ -7937,12 +7920,8 @@ fn run_slash_command(
                 let manager = session.manager.lock().unwrap();
                 manager.fork_active_branch(manager.leaf_id(), true)
             };
-            match fork {
-                Ok(manager) => {
-                    if !session_switch_allowed(app, session) {
-                        return Flow::Continue;
-                    }
-                    session.replace_manager(manager);
+            match fork.and_then(|manager| session.replace_manager(manager)) {
+                Ok(()) => {
                     sync_session_state(app, session);
                     app.cells = session_cells(session);
                     app.cell_render_cache.clear();
@@ -8078,28 +8057,18 @@ fn run_slash_command(
         "changelog" => app.cells.push(Cell::Notice(
             include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../CHANGELOG.md")).into(),
         )),
-        "new" => {
-            if !session_switch_allowed(app, session) {
-                return Flow::Continue;
+        "new" => match session.new_session() {
+            Ok(()) => {
+                sync_session_state(app, session);
+                app.cells.clear();
+                app.cell_render_cache.clear();
+                app.cells.push(Cell::Notice("started a new session".into()));
+                refresh_git_branch(app, session);
             }
-            let manager = session.manager.lock().unwrap().create_sibling();
-            match manager {
-                Ok(new_manager) => {
-                    if !session_switch_allowed(app, session) {
-                        return Flow::Continue;
-                    }
-                    session.replace_manager(new_manager);
-                    sync_session_state(app, session);
-                    app.cells.clear();
-                    app.cell_render_cache.clear();
-                    app.cells.push(Cell::Notice("started a new session".into()));
-                    refresh_git_branch(app, session);
-                }
-                Err(e) => app
-                    .cells
-                    .push(Cell::Error(format!("could not create session: {e:#}"))),
-            }
-        }
+            Err(error) => app
+                .cells
+                .push(Cell::Error(format!("could not create session: {error:#}"))),
+        },
         "resume" => open_session_picker(app, session, false),
         "import" => {
             if let Some(path) = parse_path_argument(&rest) {
@@ -8348,12 +8317,10 @@ fn import_session(
         ));
         fallback_cwd
     });
-    match kiss_coding::SessionManager::fork_from(source, &cwd, Some(session_dir)) {
-        Ok(manager) => {
-            if !session_switch_allowed(app, session) {
-                return;
-            }
-            session.replace_manager(manager);
+    match kiss_coding::SessionManager::fork_from(source, &cwd, Some(session_dir))
+        .and_then(|manager| session.replace_manager(manager))
+    {
+        Ok(()) => {
             sync_session_state(app, session);
             app.cells = session_cells(session);
             app.cell_render_cache.clear();
@@ -10698,7 +10665,7 @@ mod tests {
         assert!(exported.is_file());
 
         let replacement = session.manager.lock().unwrap().create_sibling().unwrap();
-        session.replace_manager(replacement);
+        session.replace_manager(replacement).unwrap();
         assert_ne!(session.manager.lock().unwrap().session_id(), expected_id);
         run_command_for_test(
             &mut app,

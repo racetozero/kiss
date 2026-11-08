@@ -208,14 +208,16 @@ async fn native_hosts_deliver_state_resume_and_cleanup() {
         .append_message(kiss_agent::AgentMessage::user("second conversation"))
         .unwrap();
     let second_id = replacement.session_id().to_string();
-    session.replace_manager(replacement);
+    session.replace_manager(replacement).unwrap();
     hosts.update(State::Idle, &session, &args);
     herdr
         .wait(|calls| calls.iter().any(|call| call.contains(&second_id)))
         .await;
     cmux.wait(|calls| calls.iter().any(|call| call.contains(&second_id)))
         .await;
-    session.replace_manager(kiss_coding::SessionManager::in_memory(directory.path()));
+    session
+        .replace_manager(kiss_coding::SessionManager::in_memory(directory.path()))
+        .unwrap();
     hosts.update(State::Idle, &session, &args);
     herdr
         .wait(|calls| {
@@ -277,13 +279,15 @@ async fn empty_session_registers_resume_only_after_its_first_saved_entry() {
         pane: "pane".into(),
     }]);
     let session = session(directory.path());
-    session.replace_manager(
-        kiss_coding::SessionManager::create(
-            directory.path(),
-            Some(directory.path().join("sessions")),
+    session
+        .replace_manager(
+            kiss_coding::SessionManager::create(
+                directory.path(),
+                Some(directory.path().join("sessions")),
+            )
+            .unwrap(),
         )
-        .unwrap(),
-    );
+        .unwrap();
     let args = Args::parse_from(["kiss"]);
     hosts.update(State::Idle, &session, &args);
     let calls = log.wait(|calls| !calls.is_empty()).await;
