@@ -156,10 +156,12 @@ fn install_message_handler(socket: &WebSocket, inner: Rc<Inner>) {
         let Some(line) = event.data().as_string() else {
             return;
         };
-        match inner.protocol.borrow().decode(&line) {
+        let incoming = inner.protocol.borrow().decode(&line);
+        match incoming {
             Ok(Incoming::Response(response)) => handle_response(&inner, response),
             Ok(Incoming::Event(event)) => {
-                if let Some(callback) = inner.on_event.borrow().as_ref()
+                let callback = inner.on_event.borrow().clone();
+                if let Some(callback) = callback
                     && let Ok(value) = to_js_object(&event.0)
                 {
                     let _ = callback.call1(&JsValue::NULL, &value);

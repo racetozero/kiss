@@ -63,16 +63,17 @@ impl LineBuffer {
     pub fn push(&mut self, chunk: &str) -> Vec<String> {
         self.buffer.push_str(chunk);
         let mut lines = Vec::new();
-        while let Some(index) = self.buffer.find('\n') {
-            let mut line = self.buffer[..index].to_string();
-            self.buffer.drain(..index + 1);
-            if line.ends_with('\r') {
-                line.pop();
-            }
+        let mut consumed = 0;
+        while let Some(index) = self.buffer[consumed..].find('\n') {
+            let end = consumed + index;
+            let line = &self.buffer[consumed..end];
+            let line = line.strip_suffix('\r').unwrap_or(line);
             if !line.trim().is_empty() {
-                lines.push(line);
+                lines.push(line.to_string());
             }
+            consumed = end + 1;
         }
+        self.buffer.drain(..consumed);
         lines
     }
 
@@ -122,5 +123,8 @@ mod tests {
         let lines = buffer.push("\r\n{\"b\":1}\n");
         assert_eq!(lines, ["{\"a\":\"x\u{2028}y\"}", "{\"b\":1}"]);
         assert_eq!(buffer.finish(), None);
+        assert_eq!(buffer.push("one\n\r\n二\npar"), ["one", "二"]);
+        assert_eq!(buffer.push("tial\nlast\r"), ["partial"]);
+        assert_eq!(buffer.finish().as_deref(), Some("last"));
     }
 }

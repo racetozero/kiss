@@ -203,6 +203,19 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn string_indices_must_be_nonnegative_whole_numbers() {
+        let result = run_script(&script(
+            "const text = 'éx'; return [text[0], text[1], text[0.5], text[-1], text[0 / 0], text[1 / 0]]",
+        ))
+        .await
+        .unwrap();
+        assert_eq!(
+            result,
+            serde_json::json!(["é", "x", null, null, null, null])
+        );
+    }
+
+    #[tokio::test]
     async fn an_agent_answer_flows_into_the_script() {
         let result = run_script(&script("const a = await agent('read the file')\nreturn a"))
             .await

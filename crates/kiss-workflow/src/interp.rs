@@ -590,7 +590,7 @@ impl Interp {
                 let Some(position) = index.as_number() else {
                     return Err(RunError::at(pos, "a string index must be a number"));
                 };
-                if position < 0.0 {
+                if position < 0.0 || position.fract() != 0.0 {
                     return Ok(Value::Null);
                 }
                 Ok(text

@@ -282,7 +282,11 @@ impl Value {
 /// agent's prompt or a saved result should read as `2` rather than `2.0`, so a
 /// whole number is written as an integer.
 fn number_to_json(value: f64) -> Json {
-    if value.is_finite() && value == value.trunc() && value.abs() <= i64::MAX as f64 {
+    if value.is_finite()
+        && value == value.trunc()
+        && value >= i64::MIN as f64
+        && value < -(i64::MIN as f64)
+    {
         return Json::Number(Number::from(value as i64));
     }
     Number::from_f64(value).map_or(Json::Null, Json::Number)
@@ -298,7 +302,11 @@ pub(crate) fn format_number(value: f64) -> String {
         return if value > 0.0 { "Infinity" } else { "-Infinity" }.into();
     }
     if value == value.trunc() && value.abs() < 1e21 {
-        return format!("{}", value as i64);
+        return if value == 0.0 {
+            "0".into()
+        } else {
+            format!("{value:.0}")
+        };
     }
     let mut text = format!("{value}");
     if text.ends_with(".0") {
@@ -316,6 +324,8 @@ mod tests {
         assert_eq!(format_number(3.0), "3");
         assert_eq!(format_number(-0.0), "0");
         assert_eq!(format_number(3.5), "3.5");
+        assert_eq!(format_number(1e20), "100000000000000000000");
+        assert_eq!(format_number(-1e20), "-100000000000000000000");
         assert_eq!(format_number(f64::NAN), "NaN");
         assert_eq!(format_number(f64::INFINITY), "Infinity");
     }
@@ -354,6 +364,10 @@ mod tests {
         // A count in a result or a prompt must read as `2`, not `2.0`.
         assert_eq!(Value::Number(2.0).to_json(), serde_json::json!(2));
         assert_eq!(Value::Number(2.5).to_json(), serde_json::json!(2.5));
+        for number in [i64::MIN as f64, -(i64::MIN as f64), 1e20, -1e20] {
+            assert_eq!(Value::Number(number).to_json().as_f64(), Some(number));
+        }
+        assert!(Value::Number(-(i64::MIN as f64)).to_json().is_f64());
         assert_eq!(Value::Number(f64::NAN).to_json(), serde_json::Value::Null);
         assert_eq!(
             Value::Number(f64::INFINITY).to_json(),

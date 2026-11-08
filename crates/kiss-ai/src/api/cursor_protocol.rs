@@ -31,22 +31,28 @@ impl FrameDecoder {
     pub fn push(&mut self, bytes: &[u8]) -> anyhow::Result<Vec<(u8, Vec<u8>)>> {
         self.pending.extend_from_slice(bytes);
         let mut frames = Vec::new();
+        let mut consumed = 0;
         loop {
-            if self.pending.len() < 5 {
+            let pending = &self.pending[consumed..];
+            if pending.len() < 5 {
                 break;
             }
-            let length = u32::from_be_bytes(self.pending[1..5].try_into().unwrap()) as usize;
+            let length = u32::from_be_bytes(pending[1..5].try_into().unwrap()) as usize;
             if length > MAX_FRAME_BYTES {
-                anyhow::bail!("Cursor frame is too large: {length} bytes");
+                self.pending.drain(..consumed);
+                anyhow::bail!(
+                    "Cursor sent a frame of {length} bytes. Frames must be at most {MAX_FRAME_BYTES} bytes. Reduce the response size and try again."
+                );
             }
-            if self.pending.len() < length + 5 {
+            if pending.len() < length + 5 {
                 break;
             }
-            let flags = self.pending[0];
-            let payload = self.pending[5..length + 5].to_vec();
-            self.pending.drain(..length + 5);
+            let flags = pending[0];
+            let payload = pending[5..length + 5].to_vec();
+            consumed += length + 5;
             frames.push((flags, payload));
         }
+        self.pending.drain(..consumed);
         Ok(frames)
     }
 }
@@ -846,6 +852,17 @@ mod tests {
                 .unwrap()
                 .text,
             "two"
+        );
+        let third = frame(&TextDeltaUpdate { text: "三".into() });
+        let joined = [joined, third[..6].to_vec()].concat();
+        assert_eq!(decoder.push(&joined).unwrap().len(), 2);
+        let frames = decoder.push(&third[6..]).unwrap();
+        assert_eq!(frames.len(), 1);
+        assert_eq!(
+            TextDeltaUpdate::decode(frames[0].1.as_slice())
+                .unwrap()
+                .text,
+            "三"
         );
     }
 

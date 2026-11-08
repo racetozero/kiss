@@ -2501,7 +2501,7 @@ fn handle_command_event(
             {
                 output.push_str(&chunk);
                 if output.len() > 50_000 {
-                    output.truncate(50_000);
+                    output.truncate(output.floor_char_boundary(50_000));
                 }
             }
         }
@@ -4440,7 +4440,7 @@ async fn run_shell_command(
     let status = child.wait().await.map_err(|error| error.to_string())?;
     let truncated = output.len() > 50_000;
     if truncated {
-        output.truncate(50_000);
+        output.truncate(output.floor_char_boundary(50_000));
     }
     Ok(ShellRunResult {
         command: command.to_string(),
@@ -8611,6 +8611,50 @@ mod tests {
         let args = Args::parse_from(["kiss"]);
         let (tx, _rx) = mpsc::unbounded_channel();
         run_slash_command(app, session, command, &args, resources, &tx)
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn shell_output_limit_preserves_utf8() {
+        let directory = tempfile::tempdir().unwrap();
+        let text = format!("{}éEND", "a".repeat(49_999));
+        std::fs::write(directory.path().join("output.txt"), text).unwrap();
+        let (tx, _rx) = mpsc::unbounded_channel();
+        let result = run_shell_command(
+            Some("bash"),
+            "cat output.txt",
+            directory.path(),
+            false,
+            &CancellationToken::new(),
+            &tx,
+        )
+        .await
+        .unwrap();
+        assert!(result.truncated);
+        assert_eq!(result.output, "a".repeat(49_999));
+        assert_eq!(result.exit_code, Some(0));
+
+        let mut app = test_app();
+        app.cells.push(Cell::BashExecution {
+            command: "cat output.txt".into(),
+            output: "a".repeat(49_999),
+            exclude_from_context: false,
+        });
+        let session = synthetic_session();
+        let mut resources = test_resources();
+        let (tx, _rx) = mpsc::unbounded_channel();
+        let mut search = FileSearchService::new(tx);
+        handle_command_event(
+            &mut app,
+            CommandEvent::ShellOutput("éEND".into()),
+            &mut resources,
+            &mut search,
+            &session,
+        );
+        let Some(Cell::BashExecution { output, .. }) = app.cells.last() else {
+            panic!("shell output cell is missing");
+        };
+        assert_eq!(output, &"a".repeat(49_999));
     }
 
     fn session_with_cache_usage() -> Arc<kiss_coding::AgentSession> {

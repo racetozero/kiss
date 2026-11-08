@@ -8,6 +8,7 @@
 //! therefore a small, separate runner rather than a wrapper around that tool.
 
 use anyhow::{Context as _, Result};
+use std::io::{BufWriter, Write as _};
 use std::path::Path;
 use std::process::Stdio;
 use std::sync::Arc;
@@ -49,53 +50,56 @@ pub async fn run(
     let mut stdout = child.stdout.take().expect("piped stdout");
     let mut stderr = child.stderr.take().expect("piped stderr");
     let mut collected: Vec<u8> = Vec::new();
+    let mut spill_file = None;
     let mut stdout_buffer = [0u8; 8192];
     let mut stderr_buffer = [0u8; 8192];
     let mut stdout_open = true;
     let mut stderr_open = true;
     let mut cancelled = false;
 
-    loop {
-        tokio::select! {
+    while stdout_open || stderr_open {
+        let bytes = tokio::select! {
             read = stdout.read(&mut stdout_buffer), if stdout_open => match read {
-                Ok(0) | Err(_) => stdout_open = false,
-                Ok(n) => {
-                    collected.extend_from_slice(&stdout_buffer[..n]);
-                    on_update(String::from_utf8_lossy(&stdout_buffer[..n]).into_owned());
-                }
+                Ok(0) => { stdout_open = false; continue; }
+                Ok(n) => &stdout_buffer[..n],
+                Err(error) => return Err(error).context("Could not read shell output. Run the command again with standard output connected to a readable pipe."),
             },
             read = stderr.read(&mut stderr_buffer), if stderr_open => match read {
-                Ok(0) | Err(_) => stderr_open = false,
-                Ok(n) => {
-                    collected.extend_from_slice(&stderr_buffer[..n]);
-                    on_update(String::from_utf8_lossy(&stderr_buffer[..n]).into_owned());
-                }
+                Ok(0) => { stderr_open = false; continue; }
+                Ok(n) => &stderr_buffer[..n],
+                Err(error) => return Err(error).context("Could not read shell errors. Run the command again with standard error connected to a readable pipe."),
             },
             _ = cancel.cancelled() => {
                 cancelled = true;
                 let _ = child.start_kill();
                 break;
             }
-            else => break,
+        };
+        if spill_file.is_none() && collected.len() + bytes.len() > MAX_INLINE_BYTES {
+            spill_file = Some(spill(&collected)?);
         }
-        if !stdout_open && !stderr_open {
-            break;
+        if let Some((file, _)) = &mut spill_file {
+            file.write_all(bytes).context(OUTPUT_FILE_ERROR)?;
         }
+        collected.extend_from_slice(bytes);
+        // Keep up to three preceding bytes so a split UTF-8 character can be
+        // decoded before the final text tail is selected.
+        let discard = collected.len().saturating_sub(MAX_INLINE_BYTES + 3);
+        collected.drain(..discard);
+        on_update(String::from_utf8_lossy(bytes).into_owned());
     }
 
     let status = child.wait().await.ok();
     let exit_code = status.and_then(|status| status.code());
 
     let text = String::from_utf8_lossy(&collected).into_owned();
-    let (output, truncated, full_output_path) = if collected.len() > MAX_INLINE_BYTES {
-        let path = spill(&collected);
+    let (output, truncated, full_output_path) = if let Some((mut file, path)) = spill_file {
+        file.flush().context(OUTPUT_FILE_ERROR)?;
         let start = text.ceil_char_boundary(text.len().saturating_sub(MAX_INLINE_BYTES));
         let tail = text[start..].to_string();
-        let notice = match &path {
-            Some(path) => format!("\n\n[output truncated. Full output: {path}]"),
-            None => "\n\n[output truncated]".to_string(),
-        };
-        (format!("{tail}{notice}"), true, path)
+        let path = path.display().to_string();
+        let notice = format!("\n\n[output truncated. Full output: {path}]");
+        (format!("{tail}{notice}"), true, Some(path))
     } else {
         (text, false, None)
     };
@@ -109,10 +113,49 @@ pub async fn run(
     })
 }
 
-fn spill(bytes: &[u8]) -> Option<String> {
+const OUTPUT_FILE_ERROR: &str = "The command output could not be saved. Use a writable temporary directory with free disk space. Correct the temporary directory permissions or free disk space, then run the command again.";
+
+fn spill(bytes: &[u8]) -> Result<(BufWriter<std::fs::File>, std::path::PathBuf)> {
     let directory = std::env::temp_dir().join("kiss-sdk-bash");
-    std::fs::create_dir_all(&directory).ok()?;
+    std::fs::create_dir_all(&directory).context(OUTPUT_FILE_ERROR)?;
     let path = directory.join(format!("{}.log", uuid::Uuid::new_v4()));
-    std::fs::write(&path, bytes).ok()?;
-    Some(path.display().to_string())
+    let file = std::fs::File::create_new(&path).context(OUTPUT_FILE_ERROR)?;
+    let mut file = BufWriter::new(file);
+    file.write_all(bytes).context(OUTPUT_FILE_ERROR)?;
+    Ok((file, path))
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn large_shell_output_keeps_a_tail_and_saves_all_bytes() {
+        let directory = tempfile::tempdir().unwrap();
+        let text = "é日🙂".repeat(32_768);
+        std::fs::write(directory.path().join("output.txt"), &text).unwrap();
+        let result = run(
+            "cat output.txt",
+            directory.path(),
+            Some("bash"),
+            None,
+            CancellationToken::new(),
+            Arc::new(|_| {}),
+        )
+        .await
+        .unwrap();
+        assert_eq!(result.exit_code, Some(0));
+        assert!(result.truncated);
+        let path = result.full_output_path.unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), text.as_bytes());
+        let start = text.ceil_char_boundary(text.len() - MAX_INLINE_BYTES);
+        assert_eq!(
+            result.output,
+            format!(
+                "{}\n\n[output truncated. Full output: {path}]",
+                &text[start..]
+            )
+        );
+        std::fs::remove_file(path).unwrap();
+    }
 }

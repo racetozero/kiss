@@ -46,7 +46,13 @@ Deno.test("the generated WASM client correlates responses and publishes events",
     const address = server.addr as Deno.NetAddr
     const client = await KissClient.connect(`ws://127.0.0.1:${address.port}`)
     const events: Array<Record<string, unknown>> = []
-    client.onEvent((event: Record<string, unknown>) => events.push(event))
+    let callbackCompleted = false
+    client.onEvent((event: Record<string, unknown>) => {
+      events.push(event)
+      void client.execute({ type: "ping" })
+      client.clearEventHandler()
+      callbackCompleted = true
+    })
     const response = await client.execute({ type: "ping" })
     assert(response.success === true, "ping should succeed")
     assert(response.command === "ping", "the command should correlate")
@@ -59,6 +65,8 @@ Deno.test("the generated WASM client correlates responses and publishes events",
       events.some((event) => event.type === "agent_settled"),
       "event callback should run",
     )
+    assert(callbackCompleted, "event callbacks must be able to call client methods")
+    assert(events.length === 1, "a callback must be able to remove itself")
     client.close()
   } finally {
     await server.shutdown()

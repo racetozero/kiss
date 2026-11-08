@@ -105,13 +105,17 @@ impl Theme {
         let resolve_value =
             |v: &serde_json::Value, vars: &BTreeMap<String, serde_json::Value>| -> Option<Color> {
                 match v {
-                    serde_json::Value::Number(n) => n.as_u64().map(|i| Color::Indexed(i as u8)),
+                    serde_json::Value::Number(n) => n
+                        .as_u64()
+                        .and_then(|i| u8::try_from(i).ok())
+                        .map(Color::Indexed),
                     serde_json::Value::String(s) => {
                         if let Some(var) = vars.get(s) {
                             match var {
-                                serde_json::Value::Number(n) => {
-                                    n.as_u64().map(|i| Color::Indexed(i as u8))
-                                }
+                                serde_json::Value::Number(n) => n
+                                    .as_u64()
+                                    .and_then(|i| u8::try_from(i).ok())
+                                    .map(Color::Indexed),
                                 serde_json::Value::String(vs) => Color::parse(vs),
                                 _ => None,
                             }
@@ -221,8 +225,8 @@ mod tests {
     fn parse_custom_theme_with_vars() {
         let json = r##"{
             "name": "my-theme",
-            "vars": {"primary": "#00aaff", "secondary": 242},
-            "colors": {"accent": "primary", "muted": "secondary", "error": "#ff0000", "text": "", "short":"#3af", "invalid":"#a😃b"}
+            "vars": {"primary": "#00aaff", "secondary": 242, "overflow": 256},
+            "colors": {"accent": "primary", "muted": "secondary", "error": "#ff0000", "text": "", "short":"#3af", "invalid":"#a😃b", "max":255, "overflow":256, "overflowVar":"overflow"}
         }"##;
         let theme = Theme::parse(json).unwrap();
         assert_eq!(theme.color("accent"), Color::Rgb(0, 0xaa, 0xff));
@@ -231,6 +235,9 @@ mod tests {
         assert_eq!(theme.color("text"), Color::Default);
         assert_eq!(theme.color("short"), Color::Rgb(0x33, 0xaa, 0xff));
         assert_eq!(theme.color("invalid"), Color::Default);
+        assert_eq!(theme.color("max"), Color::Indexed(255));
+        assert_eq!(theme.color("overflow"), Color::Default);
+        assert_eq!(theme.color("overflowVar"), Color::Default);
     }
 
     #[test]
