@@ -12,11 +12,6 @@ pub enum PollResult<T> {
     Failed(String),
 }
 
-enum PollPhase {
-    Waiting,
-    Requesting,
-}
-
 pub async fn poll<T, F, Fut>(
     interval: Duration,
     expires_in: Duration,
@@ -30,41 +25,27 @@ where
 {
     let deadline = tokio::time::Instant::now() + expires_in;
     let mut delay = interval.max(Duration::from_secs(1));
-    let mut phase = if wait_before_first_poll {
-        PollPhase::Waiting
-    } else {
-        PollPhase::Requesting
-    };
-    loop {
-        // The owner bounds both the delay and the complete token request,
-        // including response-body reads performed by provider callbacks.
-        tokio::select! {
-            biased;
-            _ = cancel.cancelled() => anyhow::bail!("Device login was cancelled. Start login again to use a new authorization code."),
-            _ = tokio::time::sleep_until(deadline) => anyhow::bail!("The device authorization code expired during login. Start login again and use the new code before it expires."),
-            result = async {
-                match phase {
-                    PollPhase::Waiting => {
-                        tokio::time::sleep(delay).await;
-                        None
-                    }
-                    PollPhase::Requesting => Some(request().await),
-                }
-            } => match result {
-                None => phase = PollPhase::Requesting,
-                Some(result) => {
-                    match result? {
-                        PollResult::Complete(value) => return Ok(value),
-                        PollResult::Pending => {}
-                        PollResult::SlowDown(next) => {
-                            delay = next.unwrap_or(delay + Duration::from_secs(5));
-                        }
-                        PollResult::Failed(message) => anyhow::bail!(message),
-                    }
-                    phase = PollPhase::Waiting;
-                }
+    // Bound the entire operation, including delays and response-body reads.
+    tokio::select! {
+        biased;
+        _ = cancel.cancelled() => anyhow::bail!("Device login was cancelled. Start login again to use a new authorization code."),
+        _ = tokio::time::sleep_until(deadline) => anyhow::bail!("The device authorization code expired during login. Start login again and use the new code before it expires."),
+        result = async {
+            if wait_before_first_poll {
+                tokio::time::sleep(delay).await;
             }
-        }
+            loop {
+                match request().await? {
+                    PollResult::Complete(value) => return Ok(value),
+                    PollResult::Pending => {}
+                    PollResult::SlowDown(next) => {
+                        delay = next.unwrap_or(delay + Duration::from_secs(5));
+                    }
+                    PollResult::Failed(message) => anyhow::bail!(message),
+                }
+                tokio::time::sleep(delay).await;
+            }
+        } => result,
     }
 }
 

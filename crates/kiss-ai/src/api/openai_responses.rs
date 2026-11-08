@@ -675,13 +675,6 @@ async fn release_socket(mut lease: SocketLease, keep: bool) {
 
     if !keep {
         let _ = lease.guard.socket.close(None).await;
-        let mut cache = socket_cache().lock().unwrap();
-        if cache
-            .get(&key)
-            .is_some_and(|entry| Arc::ptr_eq(&entry.socket, &lease.shared))
-        {
-            cache.remove(&key);
-        }
         return;
     }
 
