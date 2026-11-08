@@ -171,6 +171,7 @@ impl ActivePhase {
 impl Drop for ActivePhase {
     fn drop(&mut self) {
         if self.armed {
+            self.cancel.cancel();
             *self.session.phase.lock().unwrap() = RunPhase::Idle;
             self.session.idle.notify_waiters();
         }
@@ -2688,9 +2689,14 @@ mod ephemeral_tests {
     fn a_dropped_prompt_future_returns_the_session_to_idle() {
         let session = settings_test_session(Settings::default(), false);
         let run = session.prompt(vec![AgentMessage::user("first")]);
+        let cancel = session.cancel.lock().unwrap().clone();
         assert_eq!(session.run_phase(), RunPhase::Streaming);
         drop(run);
         assert_eq!(session.run_phase(), RunPhase::Idle);
+        assert!(
+            cancel.is_cancelled(),
+            "dropping a run must cancel its provider work"
+        );
     }
 
     #[tokio::test]

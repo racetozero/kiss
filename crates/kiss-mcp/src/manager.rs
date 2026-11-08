@@ -97,28 +97,46 @@ struct ServerCache {
     prompts: Vec<CachedPrompt>,
 }
 
-struct Runtime {
-    client: Option<Client>,
-    last_used: Option<Instant>,
-    error: Option<String>,
+enum Runtime {
+    Disconnected,
+    Connected { client: Client, last_used: Instant },
+    Failed(String),
 }
 
 impl Runtime {
     /// The one way to end a connection. Returns false when none was open.
     async fn disconnect_client(&mut self) -> bool {
-        let Some(client) = self.client.take() else {
+        if !matches!(self, Self::Connected { .. }) {
             return false;
+        }
+        let Self::Connected { client, .. } = std::mem::replace(self, Self::Disconnected) else {
+            unreachable!("the connection was checked while exclusively borrowed");
         };
         let _ = client.cancel().await;
-        self.last_used = None;
         true
     }
 
     fn new() -> Self {
-        Self {
-            client: None,
-            last_used: None,
-            error: None,
+        Self::Disconnected
+    }
+
+    fn client(&self) -> Result<&Client> {
+        match self {
+            Self::Connected { client, .. } => Ok(client),
+            _ => bail!("MCP client is not connected"),
+        }
+    }
+
+    fn last_used(&self) -> Option<Instant> {
+        match self {
+            Self::Connected { last_used, .. } => Some(*last_used),
+            _ => None,
+        }
+    }
+
+    fn mark_used(&mut self) {
+        if let Self::Connected { last_used, .. } = self {
+            *last_used = Instant::now();
         }
     }
 }
@@ -186,9 +204,9 @@ impl McpManager {
             let cached = cache.servers.get(name);
             let state = if server.disabled {
                 ServerState::Disabled
-            } else if runtime.client.is_some() {
+            } else if matches!(*runtime, Runtime::Connected { .. }) {
                 ServerState::Connected
-            } else if runtime.error.is_some() {
+            } else if matches!(*runtime, Runtime::Failed(_)) {
                 ServerState::Failed
             } else if cached.is_some() {
                 ServerState::Cached
@@ -202,7 +220,10 @@ impl McpManager {
                 tools: cached.map_or(0, |item| item.tools.len()),
                 resources: cached.map_or(0, |item| item.resources.len()),
                 prompts: cached.map_or(0, |item| item.prompts.len()),
-                error: runtime.error.clone(),
+                error: match &*runtime {
+                    Runtime::Failed(error) => Some(error.clone()),
+                    _ => None,
+                },
             });
         }
         statuses
@@ -301,16 +322,13 @@ impl McpManager {
         let runtime = self.runtime(server_name)?;
         let mut runtime = runtime.lock().await;
         self.ensure_connected(server_name, &mut runtime).await?;
-        let client = runtime
-            .client
-            .as_ref()
-            .context("MCP client is not connected")?;
+        let client = runtime.client()?;
         let request = client
             .peer()
             .call_tool(CallToolRequestParams::new(tool_name.to_string()).with_arguments(arguments));
         let result =
             wait_request(request, self.timeout(server_name), cancel, "MCP tool call").await?;
-        runtime.last_used = Some(Instant::now());
+        runtime.mark_used();
         drop(runtime);
         self.schedule_idle_disconnect(server_name);
         Ok(result)
@@ -324,10 +342,7 @@ impl McpManager {
         let runtime = self.runtime(server_name)?;
         let mut runtime = runtime.lock().await;
         self.ensure_connected(server_name, &mut runtime).await?;
-        let client = runtime
-            .client
-            .as_ref()
-            .context("MCP client is not connected")?;
+        let client = runtime.client()?;
         let listed = wait_request(
             client.peer().list_all_resources(),
             self.timeout(server_name),
@@ -345,7 +360,7 @@ impl McpManager {
                 mime_type: resource.mime_type,
             })
             .collect::<Vec<_>>();
-        runtime.last_used = Some(Instant::now());
+        runtime.mark_used();
         drop(runtime);
         self.update_cache(server_name, |cache| cache.resources = resources.clone())
             .await;
@@ -362,10 +377,7 @@ impl McpManager {
         let runtime = self.runtime(server_name)?;
         let mut runtime = runtime.lock().await;
         self.ensure_connected(server_name, &mut runtime).await?;
-        let client = runtime
-            .client
-            .as_ref()
-            .context("MCP client is not connected")?;
+        let client = runtime.client()?;
         let result = wait_request(
             client
                 .peer()
@@ -375,7 +387,7 @@ impl McpManager {
             "MCP resource read",
         )
         .await?;
-        runtime.last_used = Some(Instant::now());
+        runtime.mark_used();
         drop(runtime);
         self.schedule_idle_disconnect(server_name);
         Ok(serde_json::to_value(result)?)
@@ -389,10 +401,7 @@ impl McpManager {
         let runtime = self.runtime(server_name)?;
         let mut runtime = runtime.lock().await;
         self.ensure_connected(server_name, &mut runtime).await?;
-        let client = runtime
-            .client
-            .as_ref()
-            .context("MCP client is not connected")?;
+        let client = runtime.client()?;
         let listed = wait_request(
             client.peer().list_all_prompts(),
             self.timeout(server_name),
@@ -410,7 +419,7 @@ impl McpManager {
                 arguments: serde_json::to_value(prompt.arguments).unwrap_or(Value::Null),
             })
             .collect::<Vec<_>>();
-        runtime.last_used = Some(Instant::now());
+        runtime.mark_used();
         drop(runtime);
         self.update_cache(server_name, |cache| cache.prompts = prompts.clone())
             .await;
@@ -433,10 +442,7 @@ impl McpManager {
         let runtime = self.runtime(server_name)?;
         let mut runtime = runtime.lock().await;
         self.ensure_connected(server_name, &mut runtime).await?;
-        let client = runtime
-            .client
-            .as_ref()
-            .context("MCP client is not connected")?;
+        let client = runtime.client()?;
         let result = wait_request(
             client
                 .peer()
@@ -446,7 +452,7 @@ impl McpManager {
             "MCP prompt request",
         )
         .await?;
-        runtime.last_used = Some(Instant::now());
+        runtime.mark_used();
         drop(runtime);
         self.schedule_idle_disconnect(server_name);
         Ok(serde_json::to_value(result)?)
@@ -472,10 +478,7 @@ impl McpManager {
         let runtime = self.runtime(server_name)?;
         let mut runtime = runtime.lock().await;
         self.ensure_connected(server_name, &mut runtime).await?;
-        let client = runtime
-            .client
-            .as_ref()
-            .context("MCP client is not connected")?;
+        let client = runtime.client()?;
         let listed = wait_request(
             client.peer().list_all_tools(),
             self.timeout(server_name),
@@ -495,7 +498,7 @@ impl McpManager {
                 input_schema: Value::Object((*tool.input_schema).clone()),
             })
             .collect::<Vec<_>>();
-        runtime.last_used = Some(Instant::now());
+        runtime.mark_used();
         drop(runtime);
         self.update_cache(server_name, |cache| cache.tools = tools.clone())
             .await;
@@ -529,24 +532,27 @@ impl McpManager {
         if server.disabled {
             bail!("MCP server `{server_name}` is disabled")
         }
-        if runtime.last_used.is_some_and(|last| {
-            last.elapsed() >= Duration::from_secs(server.idle_timeout.unwrap_or(10) * 60)
+        if runtime.last_used().is_some_and(|last| {
+            last.elapsed()
+                >= Duration::from_secs(server.idle_timeout.unwrap_or(10).saturating_mul(60))
         }) {
             runtime.disconnect_client().await;
         }
-        if runtime.client.is_some() {
+        if matches!(runtime, Runtime::Connected { .. }) {
             return Ok(());
         }
         let result = connect(server_name, server, self.inner.credential_path.clone()).await;
         match result {
             Ok(client) => {
-                runtime.client = Some(client);
-                runtime.last_used = Some(Instant::now());
-                runtime.error = None;
+                *runtime = Runtime::Connected {
+                    client,
+                    last_used: Instant::now(),
+                };
+                self.schedule_idle_disconnect(server_name);
                 Ok(())
             }
             Err(error) => {
-                runtime.error = Some(error.to_string());
+                *runtime = Runtime::Failed(error.to_string());
                 Err(error)
             }
         }
@@ -608,7 +614,7 @@ impl McpManager {
             };
             let mut runtime = runtime.lock().await;
             if runtime
-                .last_used
+                .last_used()
                 .is_some_and(|last_used| last_used.elapsed() >= delay)
             {
                 runtime.disconnect_client().await;

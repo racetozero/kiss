@@ -26,30 +26,29 @@ pub(crate) async fn run_child_turn(
     cancel: Option<CancellationToken>,
     timeout_ms: Option<u64>,
 ) -> ChildTurnOutcome {
-    let guard = if cancel.is_some() || timeout_ms.is_some() {
-        let guard_child = child.clone();
-        Some(tokio::spawn(async move {
-            match (cancel, timeout_ms) {
-                (Some(cancel), Some(ms)) => {
-                    tokio::select! {
-                        _ = cancel.cancelled() => {}
-                        _ = tokio::time::sleep(Duration::from_millis(ms)) => {}
-                    }
+    let stopped = async {
+        match (cancel, timeout_ms) {
+            (Some(cancel), Some(ms)) => {
+                tokio::select! {
+                    _ = cancel.cancelled() => {}
+                    _ = tokio::time::sleep(Duration::from_millis(ms)) => {}
                 }
-                (Some(cancel), None) => cancel.cancelled().await,
-                (None, Some(ms)) => tokio::time::sleep(Duration::from_millis(ms)).await,
-                (None, None) => return,
             }
-            guard_child.abort();
-        }))
-    } else {
-        None
+            (Some(cancel), None) => cancel.cancelled().await,
+            (None, Some(ms)) => tokio::time::sleep(Duration::from_millis(ms)).await,
+            (None, None) => std::future::pending().await,
+        }
     };
 
     let usage_before = child.totals();
-    child.prompt(vec![AgentMessage::user(prompt)]).await;
-    if let Some(guard) = guard {
-        guard.abort();
+    let run = child.prompt(vec![AgentMessage::user(prompt)]);
+    tokio::pin!(run);
+    tokio::select! {
+        _ = &mut run => {}
+        _ = stopped => {
+            child.abort();
+            run.await;
+        }
     }
     let usage = usage_delta(child.totals(), usage_before);
     if let Some(parent) = parent.upgrade() {

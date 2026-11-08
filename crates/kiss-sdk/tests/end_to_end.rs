@@ -316,6 +316,71 @@ async fn session_statistics_count_the_conversation() {
     assert!(stats["contextUsage"]["contextWindow"].as_u64().unwrap() > 0);
 }
 
+#[cfg(unix)]
+#[tokio::test]
+async fn completing_one_shell_command_keeps_other_commands_cancellable() {
+    let directory = tempfile::tempdir().unwrap();
+    let (_provider, session) = session_with(directory.path(), MockScript::text("hi")).await;
+    let mut events = session.events();
+    let first_session = session.clone();
+    let first = tokio::spawn(async move {
+        first_session
+            .execute_with_id(
+                Command::Bash {
+                    command: "printf first; while [ ! -e release-first ]; do sleep 0.01; done"
+                        .into(),
+                },
+                Some("first".into()),
+            )
+            .await
+    });
+    tokio::time::timeout(Duration::from_secs(2), async {
+        while let Some(event) = events.recv().await {
+            if event.0["id"] == "first" && event.0["delta"] == "first" {
+                return;
+            }
+        }
+        panic!("shell event stream closed before the command started");
+    })
+    .await
+    .unwrap();
+    let second_session = session.clone();
+    let second = tokio::spawn(async move {
+        second_session
+            .execute_with_id(
+                Command::Bash {
+                    command: "printf second; sleep 5".into(),
+                },
+                Some("second".into()),
+            )
+            .await
+    });
+    tokio::time::timeout(Duration::from_secs(2), async {
+        while let Some(event) = events.recv().await {
+            if event.0["id"] == "second" && event.0["delta"] == "second" {
+                return;
+            }
+        }
+        panic!("shell event stream closed before the second command started");
+    })
+    .await
+    .unwrap();
+    std::fs::write(directory.path().join("release-first"), "").unwrap();
+    assert!(first.await.unwrap().success);
+    assert!(session.execute(Command::NewSession {}).await.success);
+    session.abort_bash();
+    let response = tokio::time::timeout(Duration::from_secs(1), second)
+        .await
+        .expect("the second shell command must still receive cancellation")
+        .unwrap();
+    assert!(response.success, "{response:?}");
+    assert_eq!(response.data.unwrap()["cancelled"], true);
+    assert!(
+        session.messages().is_empty(),
+        "old shell output must not enter a new session"
+    );
+}
+
 #[tokio::test]
 async fn export_html_writes_an_escaped_transcript() {
     let directory = tempfile::tempdir().expect("temp dir");

@@ -122,10 +122,36 @@ struct RootIndex {
     scan_cancel: CancellationToken,
 }
 
-struct RootIndexState {
-    index: Option<Arc<FileIndex>>,
-    indexed_at: Option<Instant>,
-    loading: bool,
+enum RootIndexState {
+    Loading(Option<CachedIndex>),
+    Ready(CachedIndex),
+    Cancelled,
+}
+
+struct CachedIndex {
+    index: Arc<FileIndex>,
+    indexed_at: Instant,
+}
+
+impl RootIndexState {
+    fn cached(&self) -> Option<&CachedIndex> {
+        match self {
+            Self::Loading(cached) => cached.as_ref(),
+            Self::Ready(cached) => Some(cached),
+            Self::Cancelled => None,
+        }
+    }
+
+    fn refresh(&mut self) -> bool {
+        if matches!(self, Self::Loading(_) | Self::Cancelled) {
+            return false;
+        }
+        let Self::Ready(cached) = std::mem::replace(self, Self::Loading(None)) else {
+            unreachable!("only a ready index can start a refresh");
+        };
+        *self = Self::Loading(Some(cached));
+        true
+    }
 }
 
 pub(crate) struct FileIndex {
@@ -388,12 +414,7 @@ impl FileSearchService {
         for root in roots {
             let start = {
                 let mut state = root.state.lock().unwrap();
-                if state.loading {
-                    false
-                } else {
-                    state.loading = true;
-                    true
-                }
+                state.refresh()
             };
             if start {
                 start_index_scan(root);
@@ -409,23 +430,16 @@ fn ensure_root(shared: &Arc<SharedState>, root: PathBuf) -> (Arc<RootIndex>, boo
             touch_root(&mut cache.lru, &root);
             let mut state = entry.state.lock().unwrap();
             let expired = state
-                .indexed_at
-                .is_some_and(|time| time.elapsed() >= INDEX_TTL);
-            let start_scan = expired && !state.loading;
-            if start_scan {
-                state.loading = true;
-            }
-            let indexing = state.index.is_none();
+                .cached()
+                .is_some_and(|cached| cached.indexed_at.elapsed() >= INDEX_TTL);
+            let start_scan = expired && state.refresh();
+            let indexing = state.cached().is_none();
             drop(state);
             (entry, start_scan, indexing)
         } else {
             let entry = Arc::new(RootIndex {
                 root: root.clone(),
-                state: Mutex::new(RootIndexState {
-                    index: None,
-                    indexed_at: None,
-                    loading: true,
-                }),
+                state: Mutex::new(RootIndexState::Loading(None)),
                 ready: Notify::new(),
                 scan_cancel: CancellationToken::new(),
             });
@@ -459,9 +473,13 @@ fn start_index_scan(root_index: Arc<RootIndex>) {
     tokio::task::spawn_blocking(move || {
         let index = build_index(&root_index.root, Some(&root_index.scan_cancel)).map(Arc::new);
         let mut state = root_index.state.lock().unwrap();
-        state.index = index;
-        state.indexed_at = state.index.as_ref().map(|_| Instant::now());
-        state.loading = false;
+        *state = match index {
+            Some(index) => RootIndexState::Ready(CachedIndex {
+                index,
+                indexed_at: Instant::now(),
+            }),
+            None => RootIndexState::Cancelled,
+        };
         drop(state);
         root_index.ready.notify_waiters();
     });
@@ -473,8 +491,14 @@ async fn wait_for_index(
 ) -> Option<Arc<FileIndex>> {
     loop {
         let notified = root_index.ready.notified();
-        if let Some(index) = root_index.state.lock().unwrap().index.clone() {
-            return Some(index);
+        {
+            let state = root_index.state.lock().unwrap();
+            if let Some(cached) = state.cached() {
+                return Some(cached.index.clone());
+            }
+            if matches!(*state, RootIndexState::Cancelled) {
+                return None;
+            }
         }
         tokio::select! {
             _ = notified => {}
@@ -711,6 +735,27 @@ fn lexical_normalize(path: PathBuf) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn a_cancelled_index_scan_releases_waiters() {
+        let directory = tempfile::tempdir().unwrap();
+        let scan_cancel = CancellationToken::new();
+        scan_cancel.cancel();
+        let root = Arc::new(RootIndex {
+            root: directory.path().into(),
+            state: Mutex::new(RootIndexState::Loading(None)),
+            ready: Notify::new(),
+            scan_cancel,
+        });
+        start_index_scan(root.clone());
+        let result = tokio::time::timeout(
+            Duration::from_secs(1),
+            wait_for_index(&root, &CancellationToken::new()),
+        )
+        .await
+        .expect("a cancelled scan must release its waiters");
+        assert!(result.is_none());
+    }
 
     fn query(root: &Path, prefix: &str, query: &str) -> FileSearchQuery {
         FileSearchQuery {

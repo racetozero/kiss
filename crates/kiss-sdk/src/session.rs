@@ -14,6 +14,7 @@ use kiss_ai::{ContentBlock, Model, ThinkingLevel, UserContent, UserMessage};
 use kiss_coding::session_runner::{AgentSession, QueueKind, SessionEvent};
 use kiss_coding::settings::QueueMode as SettingsQueueMode;
 use serde_json::{Value, json};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tokio::sync::broadcast;
@@ -127,9 +128,50 @@ pub struct SessionState {
 pub struct Session {
     inner: Arc<AgentSession>,
     events: broadcast::Sender<Event>,
-    bash_cancel: Mutex<Option<CancellationToken>>,
+    lifecycle: Mutex<SessionLifecycle>,
     cwd: PathBuf,
     closed: CancellationToken,
+}
+
+enum SessionLifecycle {
+    Open {
+        next_bash_id: u64,
+        bash_runs: HashMap<u64, BashRun>,
+    },
+    Closed,
+}
+
+enum BashRun {
+    Running(CancellationToken),
+    Stopping,
+}
+
+impl SessionLifecycle {
+    fn cancel_bash(&mut self) {
+        if let Self::Open { bash_runs, .. } = self {
+            for run in bash_runs.values_mut() {
+                if let BashRun::Running(cancel) = std::mem::replace(run, BashRun::Stopping) {
+                    cancel.cancel();
+                }
+            }
+        }
+    }
+}
+
+struct ActiveBash {
+    session: Arc<Session>,
+    id: u64,
+}
+
+impl Drop for ActiveBash {
+    fn drop(&mut self) {
+        if let SessionLifecycle::Open { bash_runs, .. } =
+            &mut *self.session.lifecycle.lock().unwrap()
+            && let Some(BashRun::Running(cancel)) = bash_runs.remove(&self.id)
+        {
+            cancel.cancel();
+        }
+    }
 }
 
 /// Fluent construction of a [`Session`].
@@ -285,7 +327,10 @@ impl Session {
         Ok(Arc::new(Session {
             inner: built.session,
             events: sender,
-            bash_cancel: Mutex::new(None),
+            lifecycle: Mutex::new(SessionLifecycle::Open {
+                next_bash_id: 0,
+                bash_runs: HashMap::new(),
+            }),
             cwd: options.cwd.clone(),
             closed: CancellationToken::new(),
         }))
@@ -350,7 +395,7 @@ impl Session {
         self: &Arc<Self>,
         args: &PromptArgs,
     ) -> Result<Option<BoxFuture<'static, ()>>, SdkError> {
-        self.ensure_open()?;
+        let _lifecycle = self.ensure_open()?;
         if args.message.trim().is_empty() && args.images.is_empty() {
             return Err(SdkError::Command("prompt message is empty".into()));
         }
@@ -379,19 +424,20 @@ impl Session {
         });
     }
 
-    fn ensure_open(&self) -> Result<(), SdkError> {
-        if self.closed.is_cancelled() {
+    fn ensure_open(&self) -> Result<std::sync::MutexGuard<'_, SessionLifecycle>, SdkError> {
+        let lifecycle = self.lifecycle.lock().unwrap();
+        if matches!(*lifecycle, SessionLifecycle::Closed) {
             return Err(SdkError::Command(
                 "this session is closed and cannot accept work. Create a new session".into(),
             ));
         }
-        Ok(())
+        Ok(lifecycle)
     }
 
     /// Queue a message for delivery after the current turn's tool calls.
     pub fn steer(&self, message: impl Into<String>) -> Result<(), SdkError> {
-        self.ensure_open()?;
         let text = message.into();
+        let _lifecycle = self.ensure_open()?;
         if text.trim().is_empty() {
             return Err(SdkError::Command("steering message is empty".into()));
         }
@@ -401,8 +447,8 @@ impl Session {
 
     /// Queue a message for delivery once the agent stops.
     pub fn follow_up(&self, message: impl Into<String>) -> Result<(), SdkError> {
-        self.ensure_open()?;
         let text = message.into();
+        let _lifecycle = self.ensure_open()?;
         if text.trim().is_empty() {
             return Err(SdkError::Command("follow-up message is empty".into()));
         }
@@ -413,9 +459,7 @@ impl Session {
     /// Cancel the current run and any running direct shell command.
     pub fn abort(&self) {
         self.inner.abort();
-        if let Some(cancel) = self.bash_cancel.lock().unwrap().take() {
-            cancel.cancel();
-        }
+        self.abort_bash();
     }
 
     /// Resolve once no prompt run is in flight.
@@ -453,11 +497,11 @@ impl Session {
         self: &Arc<Self>,
         custom_instructions: Option<String>,
     ) -> Result<(), SdkError> {
-        self.ensure_open()?;
-        self.inner
-            .compact(custom_instructions)
-            .await
-            .map_err(SdkError::Command)
+        let run = {
+            let _lifecycle = self.ensure_open()?;
+            self.inner.compact(custom_instructions)
+        };
+        run.await.map_err(SdkError::Command)
     }
 
     /// Choose a model by provider and identifier.
@@ -500,9 +544,27 @@ impl Session {
         command: &str,
         request_id: Option<String>,
     ) -> Result<BashResult, SdkError> {
-        self.ensure_open()?;
-        let cancel = CancellationToken::new();
-        *self.bash_cancel.lock().unwrap() = Some(cancel.clone());
+        let (_active, cancel, session_id) = {
+            let mut lifecycle = self.ensure_open()?;
+            let SessionLifecycle::Open {
+                next_bash_id,
+                bash_runs,
+            } = &mut *lifecycle
+            else {
+                unreachable!("ensure_open holds an open session");
+            };
+            *next_bash_id = next_bash_id.checked_add(1).ok_or_else(|| SdkError::Command(
+                "This session has used all shell command IDs. Create a new session before you run another shell command.".into(),
+            ))?;
+            let cancel = CancellationToken::new();
+            bash_runs.insert(*next_bash_id, BashRun::Running(cancel.clone()));
+            let active = ActiveBash {
+                session: self.clone(),
+                id: *next_bash_id,
+            };
+            let session_id = self.inner.manager.lock().unwrap().session_id().to_string();
+            (active, cancel, session_id)
+        };
         let settings = self.inner.settings();
         let session = self.clone();
         let id_for_updates = request_id.clone();
@@ -518,7 +580,6 @@ impl Session {
             on_update,
         )
         .await;
-        *self.bash_cancel.lock().unwrap() = None;
         let result = result.map_err(|error| SdkError::Command(format!("{error:#}")))?;
 
         let message = AgentMessage::BashExecution(BashExecutionMessage {
@@ -531,22 +592,28 @@ impl Session {
             exclude_from_context: false,
             timestamp: kiss_ai::now_ms(),
         });
-        let _ = self.inner.manager.lock().unwrap().append_message(message);
+        let mut manager = self.inner.manager.lock().unwrap();
+        if manager.session_id() == session_id {
+            let _ = manager.append_message(message);
+        }
         Ok(result)
     }
 
     /// Stop a running direct shell command.
     pub fn abort_bash(&self) {
-        if let Some(cancel) = self.bash_cancel.lock().unwrap().take() {
-            cancel.cancel();
-        }
+        self.lifecycle.lock().unwrap().cancel_bash();
     }
 
     /// Stop active work and refuse new work. Subscribers receive what is already
     /// buffered, and then their streams end.
     pub fn close(&self) {
-        self.closed.cancel();
-        self.abort();
+        {
+            let mut lifecycle = self.lifecycle.lock().unwrap();
+            lifecycle.cancel_bash();
+            *lifecycle = SessionLifecycle::Closed;
+            self.closed.cancel();
+        }
+        self.inner.abort();
     }
 
     // ----------------------------------------------------------------
@@ -619,7 +686,7 @@ impl Session {
                     images,
                     streaming_behavior: None,
                 };
-                self.ensure_open()?;
+                let _lifecycle = self.ensure_open()?;
                 self.inner.queue_steering(user_message(&args));
                 Ok(Some(json!({"disposition": "queued"})))
             }
@@ -629,7 +696,7 @@ impl Session {
                     images,
                     streaming_behavior: None,
                 };
-                self.ensure_open()?;
+                let _lifecycle = self.ensure_open()?;
                 self.inner.queue_follow_up(user_message(&args));
                 Ok(Some(json!({"disposition": "queued"})))
             }
