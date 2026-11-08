@@ -158,23 +158,16 @@ pub struct Session {
 enum SessionLifecycle {
     Open {
         next_bash_id: u64,
-        bash_runs: HashMap<u64, BashRun>,
+        bash_runs: HashMap<u64, CancellationToken>,
     },
     Closed,
 }
 
-enum BashRun {
-    Running(CancellationToken),
-    Stopping,
-}
-
 impl SessionLifecycle {
-    fn cancel_bash(&mut self) {
+    fn cancel_bash(&self) {
         if let Self::Open { bash_runs, .. } = self {
-            for run in bash_runs.values_mut() {
-                if let BashRun::Running(cancel) = std::mem::replace(run, BashRun::Stopping) {
-                    cancel.cancel();
-                }
+            for cancel in bash_runs.values() {
+                cancel.cancel();
             }
         }
     }
@@ -189,7 +182,7 @@ impl Drop for ActiveBash {
     fn drop(&mut self) {
         if let SessionLifecycle::Open { bash_runs, .. } =
             &mut *self.session.lifecycle.lock().unwrap()
-            && let Some(BashRun::Running(cancel)) = bash_runs.remove(&self.id)
+            && let Some(cancel) = bash_runs.remove(&self.id)
         {
             cancel.cancel();
         }
@@ -581,7 +574,7 @@ impl Session {
                 "This session has used all shell command IDs. Create a new session before you run another shell command.".into(),
             ))?;
             let cancel = CancellationToken::new();
-            bash_runs.insert(*next_bash_id, BashRun::Running(cancel.clone()));
+            bash_runs.insert(*next_bash_id, cancel.clone());
             let active = ActiveBash {
                 session: self.clone(),
                 id: *next_bash_id,
