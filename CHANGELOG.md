@@ -2,6 +2,41 @@
 
 ## Unreleased
 
+## 0.0.38 - 2026-11-08
+
+### Fixed
+
+- Session replacement is refused while a prompt or compaction is active.
+  Shell output from an old session no longer enters its replacement.
+- SDK shell commands keep separate cancellation handles. Dropping a prompt
+  cancels its provider work, and dropped child turns leave no timeout task.
+- Late results from abandoned terminal commands no longer finish a newer
+  command. Workflow approval waits now stop on cancellation.
+- Interrupted account adds preserve both credentials. Pending account writes
+  are recovered before another update, and overlapping account adds are refused.
+- Device login stops on cancellation or code expiry while a token request
+  or response body is pending.
+- Dropped provider requests discard their cached WebSocket, so a later request
+  cannot receive the abandoned response.
+- SDK event streams stay ended after close. RPC transport tasks stop when
+  their owner or writer ends. Browser clients close sockets and reject pending
+  requests when freed or disconnected.
+- Chrome WebMCP setup cannot reconnect after cancellation. Page attachments
+  belong to their connection, and requests fail at once after disconnect.
+- MCP connections receive idle cleanup even after an initial request fails.
+  Cancelled file scans release callers that are waiting for an index.
+- Paused jobs no longer miss a concurrent resume notification.
+- Large shell output stays bounded, preserves complete UTF-8 characters,
+  and reports errors when its full output cannot be saved.
+- Workflow numbers outside the signed 64-bit range no longer overflow during
+  JSON conversion or display.
+
+### Changed
+
+- Rust `AgentSession::replace_manager` returns `Result<()>`. The session module
+  now owns admission and replacement. `AgentSession::new_session` starts a
+  sibling session and preserves the current storage mode.
+
 ## 0.0.37 - 2026-11-07
 
 ### Fixed
