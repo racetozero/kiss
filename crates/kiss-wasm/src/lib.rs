@@ -13,7 +13,7 @@ use kiss_sdk::protocol::{Command, Incoming, Response};
 use serde::Serialize;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 use wasm_bindgen::JsCast as _;
 use wasm_bindgen::prelude::*;
 use web_sys::{CloseEvent, ErrorEvent, Event, MessageEvent, WebSocket};
@@ -21,16 +21,65 @@ use web_sys::{CloseEvent, ErrorEvent, Event, MessageEvent, WebSocket};
 type PromiseCallbacks = (Function, Function);
 
 struct Inner {
+    socket: WebSocket,
+    connection: RefCell<ConnectionState>,
     protocol: RefCell<Client>,
     pending: RefCell<HashMap<String, PromiseCallbacks>>,
     on_event: RefCell<Option<Function>>,
+    connecting: RefCell<Option<Rc<Inner>>>,
+    handlers: RefCell<Option<SocketHandlers>>,
+}
+
+enum ConnectionState {
+    Connecting { resolve: Function, reject: Function },
+    Open,
+    Closed,
+}
+
+struct SocketHandlers {
+    _open: Closure<dyn FnMut(Event)>,
+    _error: Closure<dyn FnMut(ErrorEvent)>,
+    _message: Closure<dyn FnMut(MessageEvent)>,
+    _close: Closure<dyn FnMut(CloseEvent)>,
+}
+
+impl Inner {
+    fn close(&self, reason: &str) {
+        let previous = self.connection.replace(ConnectionState::Closed);
+        let pending = std::mem::take(&mut *self.pending.borrow_mut());
+        *self.on_event.borrow_mut() = None;
+        self.connecting.borrow_mut().take();
+        let error = js_sys::Error::new(reason);
+        if let ConnectionState::Connecting { reject, .. } = previous {
+            let _ = reject.call1(&JsValue::NULL, &error);
+        }
+        for (_, (_, reject)) in pending {
+            let _ = reject.call1(&JsValue::NULL, &error);
+        }
+    }
+}
+
+impl Drop for Inner {
+    fn drop(&mut self) {
+        self.socket.set_onopen(None);
+        self.socket.set_onerror(None);
+        self.socket.set_onmessage(None);
+        self.socket.set_onclose(None);
+        let _ = self.socket.close();
+    }
 }
 
 /// A connection to one native KISS RPC session.
 #[wasm_bindgen]
 pub struct KissClient {
-    socket: WebSocket,
     inner: Rc<Inner>,
+}
+
+impl Drop for KissClient {
+    fn drop(&mut self) {
+        self.inner
+            .close("The client was freed. Connect to KISS again before you send a command.");
+    }
 }
 
 #[wasm_bindgen]
@@ -51,35 +100,62 @@ impl KissClient {
             };
             socket.set_binary_type(web_sys::BinaryType::Arraybuffer);
             let inner = Rc::new(Inner {
+                socket,
+                connection: RefCell::new(ConnectionState::Connecting { resolve, reject }),
                 protocol: RefCell::new(Client::new()),
                 pending: RefCell::new(HashMap::new()),
                 on_event: RefCell::new(None),
+                connecting: RefCell::new(None),
+                handlers: RefCell::new(None),
             });
-            install_message_handler(&socket, inner.clone());
-            install_close_handler(&socket, inner.clone());
-
-            let open_socket = socket.clone();
-            let open_inner = inner.clone();
-            let on_open = Closure::<dyn FnMut(Event)>::once(move |_event: Event| {
-                let client = KissClient {
-                    socket: open_socket,
-                    inner: open_inner,
+            // Keep setup alive until it settles. Installed handlers hold weak
+            // references, so an open or closed client has no ownership cycle.
+            *inner.connecting.borrow_mut() = Some(inner.clone());
+            let open_inner = Rc::downgrade(&inner);
+            let on_open = Closure::<dyn FnMut(Event)>::new(move |_event: Event| {
+                let Some(inner) = open_inner.upgrade() else {
+                    return;
                 };
+                let resolve = {
+                    let mut state = inner.connection.borrow_mut();
+                    if !matches!(*state, ConnectionState::Connecting { .. }) {
+                        return;
+                    }
+                    let ConnectionState::Connecting { resolve, .. } =
+                        std::mem::replace(&mut *state, ConnectionState::Open)
+                    else {
+                        unreachable!("only a connecting client can open");
+                    };
+                    resolve
+                };
+                inner.connecting.borrow_mut().take();
+                let client = KissClient { inner };
                 let _ = resolve.call1(&JsValue::NULL, &JsValue::from(client));
             });
-            socket.set_onopen(Some(on_open.as_ref().unchecked_ref()));
-            on_open.forget();
-
-            let on_error = Closure::<dyn FnMut(ErrorEvent)>::once(move |event: ErrorEvent| {
+            inner
+                .socket
+                .set_onopen(Some(on_open.as_ref().unchecked_ref()));
+            let error_inner = Rc::downgrade(&inner);
+            let on_error = Closure::<dyn FnMut(ErrorEvent)>::new(move |event: ErrorEvent| {
+                let Some(inner) = error_inner.upgrade() else {
+                    return;
+                };
                 let message = if event.message().is_empty() {
                     "WebSocket connection failed".to_string()
                 } else {
                     event.message()
                 };
-                let _ = reject.call1(&JsValue::NULL, &js_sys::Error::new(&message));
+                inner.close(&message);
             });
-            socket.set_onerror(Some(on_error.as_ref().unchecked_ref()));
-            on_error.forget();
+            inner
+                .socket
+                .set_onerror(Some(on_error.as_ref().unchecked_ref()));
+            *inner.handlers.borrow_mut() = Some(SocketHandlers {
+                _open: on_open,
+                _error: on_error,
+                _message: install_message_handler(&inner.socket, Rc::downgrade(&inner)),
+                _close: install_close_handler(&inner.socket, Rc::downgrade(&inner)),
+            });
         })
     }
 
@@ -90,15 +166,24 @@ impl KissClient {
             Ok(command) => command,
             Err(error) => return Promise::reject(&js_sys::Error::new(&error.to_string())),
         };
+        if !matches!(*self.inner.connection.borrow(), ConnectionState::Open)
+            || self.inner.socket.ready_state() != WebSocket::OPEN
+        {
+            self.inner.close(
+                "The connection is closed. Connect to KISS again before you send a command.",
+            );
+            return Promise::reject(&js_sys::Error::new(
+                "The connection is closed. Connect to KISS again before you send a command.",
+            ));
+        }
         let (id, line) = self.inner.protocol.borrow_mut().encode(command);
-        let socket = self.socket.clone();
         let inner = self.inner.clone();
         Promise::new(&mut move |resolve: Function, reject: Function| {
             inner
                 .pending
                 .borrow_mut()
                 .insert(id.clone(), (resolve, reject.clone()));
-            if let Err(error) = socket.send_with_str(&line) {
+            if let Err(error) = inner.socket.send_with_str(&line) {
                 inner.pending.borrow_mut().remove(&id);
                 let _ = reject.call1(&JsValue::NULL, &error);
             }
@@ -136,7 +221,9 @@ impl KissClient {
     /// for command responses.
     #[wasm_bindgen(js_name = onEvent)]
     pub fn on_event(&self, callback: Function) {
-        *self.inner.on_event.borrow_mut() = Some(callback);
+        if matches!(*self.inner.connection.borrow(), ConnectionState::Open) {
+            *self.inner.on_event.borrow_mut() = Some(callback);
+        }
     }
 
     /// Stop delivering events to the current callback.
@@ -147,12 +234,21 @@ impl KissClient {
 
     /// Close the WebSocket. Every pending command promise rejects.
     pub fn close(&self) {
-        let _ = self.socket.close();
+        self.inner
+            .close("The connection was closed. Connect to KISS again before you send a command.");
+        let _ = self.inner.socket.close();
     }
 }
 
-fn install_message_handler(socket: &WebSocket, inner: Rc<Inner>) {
+fn install_message_handler(
+    socket: &WebSocket,
+    inner: Weak<Inner>,
+) -> Closure<dyn FnMut(MessageEvent)> {
     let on_message = Closure::<dyn FnMut(MessageEvent)>::new(move |event: MessageEvent| {
+        let Some(inner) = inner.upgrade() else { return };
+        if !matches!(*inner.connection.borrow(), ConnectionState::Open) {
+            return;
+        }
         let Some(line) = event.data().as_string() else {
             return;
         };
@@ -173,7 +269,7 @@ fn install_message_handler(socket: &WebSocket, inner: Rc<Inner>) {
         }
     });
     socket.set_onmessage(Some(on_message.as_ref().unchecked_ref()));
-    on_message.forget();
+    on_message
 }
 
 fn handle_response(inner: &Rc<Inner>, response: Response) {
@@ -207,18 +303,16 @@ fn to_js_object<T: Serialize>(value: &T) -> Result<JsValue, serde_wasm_bindgen::
     value.serialize(&serde_wasm_bindgen::Serializer::json_compatible())
 }
 
-fn install_close_handler(socket: &WebSocket, inner: Rc<Inner>) {
+fn install_close_handler(socket: &WebSocket, inner: Weak<Inner>) -> Closure<dyn FnMut(CloseEvent)> {
     let on_close = Closure::<dyn FnMut(CloseEvent)>::new(move |event: CloseEvent| {
+        let Some(inner) = inner.upgrade() else { return };
         let reason = if event.reason().is_empty() {
             format!("KISS WebSocket closed with code {}", event.code())
         } else {
             event.reason()
         };
-        for (_, (_, reject)) in inner.pending.borrow_mut().drain() {
-            let _ = reject.call1(&JsValue::NULL, &js_sys::Error::new(&reason));
-        }
-        *inner.on_event.borrow_mut() = None;
+        inner.close(&reason);
     });
     socket.set_onclose(Some(on_close.as_ref().unchecked_ref()));
-    on_close.forget();
+    on_close
 }

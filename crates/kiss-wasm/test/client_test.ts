@@ -72,3 +72,67 @@ Deno.test("the generated WASM client correlates responses and publishes events",
     await server.shutdown()
   }
 })
+
+Deno.test("a closed client rejects new commands", async () => {
+  let closed!: () => void
+  const closeSeen = new Promise<void>((resolve) => { closed = resolve })
+  const server = Deno.serve({ hostname: "127.0.0.1", port: 0, onListen: () => {} }, (request) => {
+    const { socket, response } = Deno.upgradeWebSocket(request)
+    socket.onclose = closed
+    return response
+  })
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    await init()
+    const address = server.addr as Deno.NetAddr
+    const client = await KissClient.connect(`ws://127.0.0.1:${address.port}`)
+    client.close()
+    await closeSeen
+    const result = await Promise.race([
+      client.execute({ type: "ping" }).then(() => "resolved", () => "rejected"),
+      new Promise<string>((resolve) => { timer = setTimeout(() => resolve("pending"), 200) }),
+    ])
+    assert(result === "rejected", `a command after close must reject, got ${result}`)
+    client.close()
+    client.free()
+  } finally {
+    clearTimeout(timer)
+    await server.shutdown()
+  }
+})
+
+Deno.test("freeing a client closes its owned connection", async () => {
+  let closed!: () => void
+  let peer: WebSocket | undefined
+  const closeSeen = new Promise<string>((resolve) => { closed = () => resolve("closed") })
+  const server = Deno.serve({ hostname: "127.0.0.1", port: 0, onListen: () => {} }, (request) => {
+    if (new URL(request.url).pathname === "/reject") return new Response("rejected", { status: 400 })
+    const { socket, response } = Deno.upgradeWebSocket(request)
+    peer = socket
+    socket.onclose = closed
+    return response
+  })
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    await init()
+    const address = server.addr as Deno.NetAddr
+    const failed = await KissClient.connect(`ws://127.0.0.1:${address.port}/reject`)
+      .then(() => false, () => true)
+    assert(failed, "failed connection setup must reject")
+    const client = await KissClient.connect(`ws://127.0.0.1:${address.port}`)
+    const command = client.execute({ type: "ping" }).then(() => "resolved", () => "rejected")
+    client.free()
+    const result = await Promise.race([
+      Promise.all([closeSeen, command]),
+      new Promise<string>((resolve) => { timer = setTimeout(() => resolve("open"), 200) }),
+    ])
+    assert(
+      Array.isArray(result) && result[0] === "closed" && result[1] === "rejected",
+      `free must close the connection and reject pending commands, got ${result}`,
+    )
+  } finally {
+    clearTimeout(timer)
+    peer?.close()
+    await server.shutdown()
+  }
+})
