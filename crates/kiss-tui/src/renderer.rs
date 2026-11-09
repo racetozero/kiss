@@ -40,8 +40,6 @@ pub struct DiffRenderer {
     cursor_row: usize,
     /// Logical row that contains the real terminal cursor.
     hardware_cursor_row: usize,
-    /// Greatest frame height since the last clear.
-    max_lines_rendered: usize,
     /// Logical row shown at the top of the previous visible viewport.
     previous_viewport_top: usize,
     cursor_position: Option<CursorPosition>,
@@ -63,7 +61,6 @@ impl DiffRenderer {
             height: 0,
             cursor_row: 0,
             hardware_cursor_row: 0,
-            max_lines_rendered: 0,
             previous_viewport_top: 0,
             cursor_position: None,
             invalidated: false,
@@ -152,11 +149,10 @@ impl DiffRenderer {
             self.full_render(prepared, width, height, self.invalidated, out)?;
             return Ok(());
         }
-        if self.invalidated
-            || width_changed
-            || height_changed
-            || prepared.lines.len() < self.max_lines_rendered
-        {
+        // A shorter frame does not need a full redraw. Clearing the screen
+        // and scrollback to drop a few rows at the bottom replays the whole
+        // transcript, which flickers while a completion menu changes height.
+        if self.invalidated || width_changed || height_changed || prepared.lines.is_empty() {
             self.full_render(prepared, width, height, true, out)?;
             return Ok(());
         }
@@ -170,14 +166,20 @@ impl DiffRenderer {
         };
         let last_changed = last_changed.expect("a first changed row has a last changed row");
 
+        let new_len = prepared.lines.len();
+        let shrank = new_len < self.previous.len();
+        // When only rows were dropped, rewrite the last kept row so the
+        // cursor ends on it and `\x1b[J` can clear everything below.
+        let first_changed = first_changed.min(new_len - 1);
+
         // A differential write cannot change a row that has left the visible
         // viewport. Rebuild the frame so the logical-to-screen map is valid.
-        if first_changed < self.previous_viewport_top || first_changed >= prepared.lines.len() {
+        if first_changed < self.previous_viewport_top {
             self.full_render(prepared, width, height, true, out)?;
             return Ok(());
         }
 
-        let appended = prepared.lines.len() > self.previous.len();
+        let appended = new_len > self.previous.len();
         let append_start = appended && first_changed == self.previous.len() && first_changed > 0;
         let mut previous_viewport_top = self.previous_viewport_top;
         let mut viewport_top = previous_viewport_top;
@@ -189,7 +191,7 @@ impl DiffRenderer {
             first_changed
         };
 
-        let render_end = last_changed.min(prepared.lines.len() - 1);
+        let render_end = last_changed.min(new_len - 1);
         let mut buffer = BufWriter::with_capacity(64 * 1024, &mut *out);
         let result = (|| -> std::io::Result<()> {
             buffer.write_all(b"\x1b[?2026h")?;
@@ -230,6 +232,9 @@ impl DiffRenderer {
                 buffer.write_all(b"\x1b[2K")?;
                 buffer.write_all(line.as_bytes())?;
             }
+            if shrank {
+                buffer.write_all(b"\x1b[J")?;
+            }
             buffer.write_all(b"\x1b[?2026l")?;
             buffer.flush()
         })();
@@ -241,9 +246,8 @@ impl DiffRenderer {
         result?;
 
         let final_cursor_row = render_end;
-        self.cursor_row = prepared.lines.len().saturating_sub(1);
+        self.cursor_row = new_len - 1;
         self.hardware_cursor_row = final_cursor_row;
-        self.max_lines_rendered = self.max_lines_rendered.max(prepared.lines.len());
         self.previous_viewport_top =
             previous_viewport_top.max(final_cursor_row.saturating_sub(height - 1));
         self.previous = prepared.lines;
@@ -292,7 +296,6 @@ impl DiffRenderer {
 
         self.cursor_row = prepared.lines.len().saturating_sub(1);
         self.hardware_cursor_row = self.cursor_row;
-        self.max_lines_rendered = prepared.lines.len();
         let buffer_length = height.max(prepared.lines.len());
         self.previous_viewport_top = buffer_length.saturating_sub(height);
         self.previous = prepared.lines;
@@ -571,6 +574,14 @@ mod tests {
                     self.row = self.viewport_top;
                     self.col = 0;
                 }
+                'J' if params.is_empty() => {
+                    self.ensure_row(self.row);
+                    self.lines[self.row].truncate(self.col);
+                    for row in self.row + 1..self.viewport_top + self.height {
+                        self.ensure_row(row);
+                        self.lines[row].clear();
+                    }
+                }
                 'J' if params == "2" => {
                     for row in self.viewport_top..self.viewport_top + self.height {
                         self.ensure_row(row);
@@ -775,6 +786,46 @@ mod tests {
         assert_eq!(terminal.viewport(), vec!["only", "", "", "", ""]);
         terminal.feed(&render(&mut renderer, &["new-0", "new-1"], 20, 5));
         assert_eq!(terminal.viewport(), vec!["new-0", "new-1", "", "", ""]);
+    }
+
+    #[test]
+    fn shrinking_a_tall_frame_keeps_scrollback_and_repaints_only_the_tail() {
+        let rows: Vec<String> = (0..10).map(|index| format!("row {index}")).collect();
+        let tall: Vec<&str> = rows
+            .iter()
+            .map(String::as_str)
+            .chain(["menu a", "menu b", "footer"])
+            .collect();
+        let short: Vec<&str> = rows.iter().map(String::as_str).chain(["footer"]).collect();
+        let mut renderer = DiffRenderer::new();
+        let mut terminal = VirtualTerminal::new(20, 5);
+        terminal.feed(&render(&mut renderer, &tall, 20, 5));
+
+        let output = render(&mut renderer, &short, 20, 5);
+        assert!(!output.contains("\x1b[2J") && !output.contains("\x1b[3J"));
+        assert!(!output.contains("row 8"), "unchanged rows must not repaint");
+        terminal.feed(&output);
+        assert_eq!(terminal.viewport(), ["row 8", "row 9", "footer", "", ""]);
+        assert!(rows.iter().all(|row| terminal.history().contains(row)));
+
+        let mut terminal = VirtualTerminal::new(20, 5);
+        let mut renderer = DiffRenderer::new();
+        terminal.feed(&render(&mut renderer, &tall, 20, 5));
+        terminal.feed(&render(&mut renderer, &short, 20, 5));
+        terminal.feed(&render(&mut renderer, &tall, 20, 5));
+        assert_eq!(
+            terminal.viewport(),
+            ["row 8", "row 9", "menu a", "menu b", "footer"]
+        );
+        assert_eq!(
+            terminal
+                .history()
+                .iter()
+                .filter(|row| *row == "row 8")
+                .count(),
+            1,
+            "growing again must not duplicate rows"
+        );
     }
 
     #[test]

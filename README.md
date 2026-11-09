@@ -208,8 +208,10 @@ KISS uses summary compaction or your saved reasoning effort.
 ## Continue work from another agent
 
 Run `/resume` to continue a KISS, Pi, Claude Code, or OpenAI Codex session.
-The picker starts with sessions from the current working directory. Press
-`Ctrl+G` to switch between project and global results.
+The picker starts with sessions from the current working directory. Type to
+search titles and folders. Press `Tab` (or `Ctrl+G`) to switch between project
+and global results, and `Ctrl+R` to rename a KISS session in place. `Esc`
+clears the search first, then closes the picker.
 
 If KISS fails, run `/bug` to open the GitHub issue form. In a headless
 environment, KISS prints

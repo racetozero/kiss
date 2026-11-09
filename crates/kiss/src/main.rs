@@ -15,6 +15,7 @@ mod modes {
 mod mcp_cli;
 mod notifications;
 mod provider_cli;
+mod session_picker;
 mod session_sources;
 mod setup;
 mod slash_commands;

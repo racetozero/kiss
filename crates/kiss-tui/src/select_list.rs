@@ -115,7 +115,7 @@ impl SelectList {
         // Use the available row width for long primary labels. File
         // completion puts the base name here and the full path in detail.
         let primary_width = (widest + 2).max(12).min(width.max(1));
-        let mut lines = Vec::with_capacity(visible + 1);
+        let mut lines = Vec::with_capacity(visible);
 
         for (row, &item_idx) in indices[start..start + visible].iter().enumerate() {
             let absolute = start + row;
@@ -150,13 +150,14 @@ impl SelectList {
                 lines.push(line);
             }
         }
-        if indices.len() > visible {
-            lines.push(theme.fg(
-                "dim",
-                &format!("  ({}/{})", self.selected + 1, indices.len()),
-            ));
-        }
         lines
+    }
+
+    /// "(selected/total)" when the compact rows do not show every match.
+    /// Callers put it on their own status row so the menu height is stable.
+    pub fn position_label(&mut self) -> Option<String> {
+        let count = self.filtered_indices().len();
+        (count > self.max_visible).then(|| format!("({}/{count})", self.selected + 1))
     }
 }
 
@@ -230,8 +231,8 @@ impl Component for SelectList {
                 }
             }
         }
-        if indices.len() > visible {
-            lines.push(theme.fg("dim", &format!("({}/{})", self.selected + 1, indices.len())));
+        if let Some(position) = self.position_label() {
+            lines.push(theme.fg("dim", &position));
         }
         lines
     }

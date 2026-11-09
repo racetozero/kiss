@@ -4,6 +4,7 @@
 use crate::args::Args;
 use crate::file_search::{FileSearchMatch, FileSearchQuery, FileSearchResult, FileSearchService};
 use crate::job_ui::{self, JobView, JobViewAction};
+use crate::session_picker::{SessionPicker, SessionPickerAction};
 use crate::session_sources::{self, SessionRecord, SessionSource};
 use crate::setup::{Startup, build_startup, reload_runtime};
 use crate::slash_commands;
@@ -90,6 +91,8 @@ struct App {
     file_menu: Option<FileCompletion>,
     file_search_request: Option<u64>,
     file_search_pending: bool,
+    /// The `/resume` browser. It owns the keyboard while it is open.
+    session_picker: Option<SessionPicker>,
     secret_prompt: Option<SecretPrompt>,
     /// The one background command that may run. See `begin_command`.
     command: Option<BackgroundCommand>,
@@ -227,7 +230,6 @@ enum PickerKind {
     Model(Vec<kiss_ai::Model>),
     Thinking,
     ScopedModels,
-    Session(Vec<SessionRecord>, bool),
     Tree,
     TreeSummary(String),
     Fork,
@@ -330,6 +332,7 @@ struct FileCompletion {
     prefix: String,
     list: SelectList,
     values: Vec<FileSearchMatch>,
+    index_limited: bool,
 }
 
 struct SecretPrompt {
@@ -348,7 +351,6 @@ enum SecretPromptKind {
     AwsProfile,
     TreeLabel(String),
     BranchSummary(String),
-    SessionRename(PathBuf),
     /// Name to save a workflow run's script under.
     WorkflowName(
         kiss_coding::workflows::RunId,
@@ -593,6 +595,7 @@ enum InputLayer {
     SecretPrompt,
     WorkflowView,
     JobView,
+    SessionPicker,
     Picker,
     Editor,
 }
@@ -613,6 +616,8 @@ impl App {
             InputLayer::WorkflowView
         } else if self.job_view.is_some() {
             InputLayer::JobView
+        } else if self.session_picker.is_some() {
+            InputLayer::SessionPicker
         } else if self.picker.is_some() {
             InputLayer::Picker
         } else {
@@ -932,7 +937,6 @@ impl App {
                 SecretPromptKind::AwsProfile => "AWS PROFILE|REGION".into(),
                 SecretPromptKind::TreeLabel(_) => "Label for the selected tree entry".into(),
                 SecretPromptKind::BranchSummary(_) => "Custom branch summary instructions".into(),
-                SecretPromptKind::SessionRename(_) => "New session name".into(),
                 SecretPromptKind::WorkflowName(_, location) => format!(
                     "Save the workflow as (lower-case, dashes): {}",
                     match location {
@@ -956,6 +960,10 @@ impl App {
                 lines.push(prompt.value.clone());
             }
             lines.push(self.theme.fg("dim", "enter save · esc cancel"));
+        } else if layer == InputLayer::SessionPicker
+            && let Some(picker) = &mut self.session_picker
+        {
+            lines.extend(picker.render(width, &self.theme));
         } else if let Some(picker) = &mut self.picker {
             if let PickerKind::McpActions(name, _) = &picker.kind
                 && let Some(server) = self.mcp_servers.iter().find(|server| &server.name == name)
@@ -992,13 +1000,40 @@ impl App {
             }
             if let Some(menu) = &mut self.command_menu {
                 lines.extend(menu.list.render_compact(width, ""));
-            } else if let Some(menu) = &mut self.file_menu {
-                lines.extend(menu.list.render_compact(width, ""));
-                if self.file_search_pending {
-                    lines.push(self.theme.fg("dim", "  Searching files..."));
+                if let Some(position) = menu.list.position_label() {
+                    lines.push(self.theme.fg("dim", &format!("  {position}")));
                 }
-            } else if self.file_search_pending {
-                lines.push(self.theme.fg("dim", "  Indexing files..."));
+            } else if self.file_menu.is_some() || self.file_search_pending {
+                let mut rows = self
+                    .file_menu
+                    .as_mut()
+                    .filter(|menu| !menu.values.is_empty())
+                    .map(|menu| menu.list.render_compact(width, ""))
+                    .unwrap_or_default();
+                rows.resize(FILE_MENU_ROWS, String::new());
+                lines.extend(rows);
+                let status = match &mut self.file_menu {
+                    Some(menu) if !self.file_search_pending && menu.values.is_empty() => {
+                        "No matching files".to_string()
+                    }
+                    Some(menu) if !self.file_search_pending => format!(
+                        "{}↑↓ select · tab insert · esc close{}",
+                        menu.list
+                            .position_label()
+                            .map(|position| format!("{position} · "))
+                            .unwrap_or_default(),
+                        if menu.index_limited {
+                            " · 500000-entry index limit"
+                        } else {
+                            ""
+                        }
+                    ),
+                    _ => "Searching files…".to_string(),
+                };
+                lines.push(self.theme.fg(
+                    "dim",
+                    &kiss_tui::text::truncate_to_width(&format!("  {status}"), width),
+                ));
             }
             lines.extend(self.footer(width, session));
         }
@@ -1153,7 +1188,7 @@ fn format_tokens(tokens: u64) -> String {
     }
 }
 
-fn shorten_path(path: &str) -> String {
+pub(crate) fn shorten_path(path: &str) -> String {
     if let Some(home) = dirs::home_dir() {
         let path_value = Path::new(path);
         if let Ok(rest) = path_value.strip_prefix(&home) {
@@ -1216,6 +1251,7 @@ fn idle_recap_deadline(
         && app.recap_job.is_none()
         && app.btw_panel.is_none()
         && app.picker.is_none()
+        && app.session_picker.is_none()
         && app.secret_prompt.is_none()
         && app.command.is_none())
     .then(|| app.last_user_activity + AUTO_RECAP_IDLE)
@@ -1561,6 +1597,7 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
         file_menu: None,
         file_search_request: None,
         file_search_pending: false,
+        session_picker: None,
         secret_prompt: None,
         command: None,
         next_command_id: 0,
@@ -3045,7 +3082,7 @@ fn sync_command_menu(
     } else {
         app.command_menu = None;
     }
-    app.file_menu = None;
+    // `sync_file_menu` runs next and owns the file menu.
 }
 
 fn path_token_boundary(character: char) -> bool {
@@ -3093,6 +3130,10 @@ fn file_completion_label(path: &str) -> String {
     path.rsplit('/').next().unwrap_or(path).to_string()
 }
 
+/// The file menu always draws this many result rows, so the rows below it
+/// do not move while the user types and the results change.
+const FILE_MENU_ROWS: usize = 8;
+
 fn reset_file_search(app: &mut App, file_search: &mut FileSearchService) {
     file_search.cancel();
     app.file_menu = None;
@@ -3132,10 +3173,8 @@ fn apply_file_search_result(app: &mut App, result: FileSearchResult) {
     }
     app.file_search_request = None;
     app.file_search_pending = false;
-    if result.values.is_empty() {
-        app.file_menu = None;
-        return;
-    }
+    // An empty result keeps the menu open with a "No matching files" row, so
+    // the menu does not close and open again while the user types a name.
     let items = result
         .values
         .iter()
@@ -3150,17 +3189,13 @@ fn apply_file_search_result(app: &mut App, result: FileSearchResult) {
             value,
         })
         .collect();
-    let title = if result.index_limited {
-        "Files (500000-entry index limit)"
-    } else {
-        "Files"
-    };
-    let mut list = SelectList::new(title, items, app.theme.clone());
-    list.max_visible = 8;
+    let mut list = SelectList::new("", items, app.theme.clone());
+    list.max_visible = FILE_MENU_ROWS;
     app.file_menu = Some(FileCompletion {
         prefix: result.prefix,
         list,
         values: result.values,
+        index_limited: result.index_limited,
     });
 }
 
@@ -3173,6 +3208,11 @@ fn handle_file_menu_key(
     let Some(menu) = app.file_menu.as_mut() else {
         return false;
     };
+    // With no matches, only Escape belongs to the menu. Enter still submits
+    // and the arrows still move through the prompt history.
+    if menu.values.is_empty() && key.key != Key::Escape {
+        return false;
+    }
     match key.key {
         Key::Escape => {
             reset_file_search(app, file_search);
@@ -3538,6 +3578,12 @@ fn handle_input(
             }
             return Flow::Continue;
         }
+        InputLayer::SessionPicker => {
+            if let InputEvent::Key(key) = event {
+                handle_session_picker_key(app, session, key);
+            }
+            return Flow::Continue;
+        }
         // Picker input intercepts everything.
         InputLayer::Picker => {
             if let InputEvent::Key(key) = event {
@@ -3851,7 +3897,6 @@ fn handle_secret_prompt(
                         SecretPromptKind::BranchSummary(_) => {
                             "summary instructions cannot be empty"
                         }
-                        SecretPromptKind::SessionRename(_) => "session name cannot be empty",
                         SecretPromptKind::WorkflowName(..) => "workflow name cannot be empty",
                         _ => "authentication input cannot be empty",
                     };
@@ -4085,38 +4130,6 @@ fn handle_secret_prompt(
                                 Some(key.to_string()),
                                 command_tx,
                             );
-                        }
-                        SecretPromptKind::SessionRename(path) => {
-                            let current = session
-                                .manager
-                                .lock()
-                                .unwrap()
-                                .session_file()
-                                .is_some_and(|current| current == path);
-                            let renamed = if current {
-                                session
-                                    .manager
-                                    .lock()
-                                    .unwrap()
-                                    .append_session_info(key)
-                                    .map(|_| ())
-                            } else {
-                                kiss_coding::SessionManager::open(&path).and_then(|mut manager| {
-                                    manager.append_session_info(key).map(|_| ())
-                                })
-                            };
-                            match renamed {
-                                Ok(()) => {
-                                    if current {
-                                        set_session_title(app, Some(key.to_string()));
-                                    }
-                                    app.cells
-                                        .push(Cell::Notice(format!("renamed session to {key}")));
-                                }
-                                Err(error) => app.cells.push(Cell::Error(format!(
-                                    "could not rename session: {error:#}"
-                                ))),
-                            }
                         }
                         SecretPromptKind::WorkflowName(run, location) => {
                             save_workflow_run(app, session, run, location, key);
@@ -4850,58 +4863,73 @@ fn account_allows_model(model: &kiss_ai::Model, copilot_models: Option<&[String]
         || copilot_models.is_none_or(|ids| ids.iter().any(|id| id == &model.id))
 }
 
-fn open_session_picker(app: &mut App, session: &Arc<kiss_coding::AgentSession>, global: bool) {
+fn open_session_picker(
+    app: &mut App,
+    session: &Arc<kiss_coding::AgentSession>,
+    global: bool,
+    query: String,
+) {
     let manager = session.manager.lock().unwrap();
     let listings = session_sources::discover(manager.cwd(), manager.session_dir(), global);
     let current = manager.session_file().map(PathBuf::from);
     drop(manager);
     match listings {
-        Ok(listings) if !listings.is_empty() => {
-            let items = listings
-                .iter()
-                .enumerate()
-                .map(|(value, listing)| SelectItem {
-                    label: listing.title.clone(),
-                    detail: Some(format!(
-                        "{} · {}{}{}",
-                        listing.source.name(),
-                        listing
-                            .entry_count
-                            .map(|count| format!("{count} entries · "))
-                            .unwrap_or_default(),
-                        shorten_path(&listing.cwd.display().to_string()),
-                        if listing
-                            .source
-                            .kiss_path()
-                            .is_some_and(|path| current.as_deref() == Some(path))
-                        {
-                            " · current"
-                        } else {
-                            ""
-                        }
-                    )),
-                    value,
-                })
-                .collect();
-            let mut list = SelectList::new(
-                format!(
-                    "Resume {} sessions (ctrl+g scope · ctrl+r rename)",
-                    if global { "all" } else { "project" }
-                ),
-                items,
-                app.theme.clone(),
-            );
-            list.max_visible = 5;
-            list.detail_below = true;
-            app.show_picker(Picker {
-                kind: PickerKind::Session(listings, global),
-                list,
-            });
+        // An empty project list still opens, so tab can show all projects.
+        Ok(listings) => {
+            app.session_picker = Some(SessionPicker::new(listings, global, current, query));
         }
-        Ok(_) => app.cells.push(Cell::Notice("no saved sessions".into())),
-        Err(error) => app
-            .cells
-            .push(Cell::Error(format!("could not list sessions: {error:#}"))),
+        Err(error) => app.cells.push(Cell::Error(format!(
+            "could not list sessions: {error:#}. Check that the session folders are readable, then run /resume again"
+        ))),
+    }
+}
+
+fn handle_session_picker_key(
+    app: &mut App,
+    session: &Arc<kiss_coding::AgentSession>,
+    key: &KeyEvent,
+) {
+    let Some(picker) = app.session_picker.as_mut() else {
+        return;
+    };
+    match picker.handle_key(key) {
+        SessionPickerAction::None => {}
+        SessionPickerAction::Close => app.session_picker = None,
+        SessionPickerAction::ToggleScope => {
+            let (global, query) = (!picker.global, std::mem::take(&mut picker.query));
+            open_session_picker(app, session, global, query);
+        }
+        SessionPickerAction::Resume(record) => {
+            app.session_picker = None;
+            switch_session(app, session, &record);
+        }
+        SessionPickerAction::Rename { path, name } => {
+            let (is_current, renamed) = {
+                let mut manager = session.manager.lock().unwrap();
+                if manager
+                    .session_file()
+                    .is_some_and(|current| current == path)
+                {
+                    (true, manager.append_session_info(&name).map(|_| ()))
+                } else {
+                    drop(manager);
+                    let renamed = kiss_coding::SessionManager::open(&path)
+                        .and_then(|mut manager| manager.append_session_info(&name).map(|_| ()));
+                    (false, renamed)
+                }
+            };
+            if is_current && renamed.is_ok() {
+                set_session_title(app, Some(name.clone()));
+            }
+            if let Some(picker) = app.session_picker.as_mut() {
+                match renamed {
+                    Ok(()) => picker.renamed(&path, &name),
+                    Err(error) => {
+                        picker.notice = Some(format!("Could not rename the session: {error:#}"))
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -6471,34 +6499,6 @@ fn handle_picker_key(
         }
         return Flow::Continue;
     }
-    if *key == KeyEvent::ctrl('g')
-        && let PickerKind::Session(_, global) = &picker.kind
-    {
-        let next = !*global;
-        open_session_picker(app, session, next);
-        return Flow::Continue;
-    }
-    if *key == KeyEvent::ctrl('r')
-        && let PickerKind::Session(records, _) = &picker.kind
-    {
-        let path = picker
-            .list
-            .current()
-            .and_then(|item| records.get(item.value))
-            .and_then(|record| record.source.kiss_path())
-            .map(Path::to_path_buf);
-        if let Some(path) = path {
-            app.picker = None;
-            app.secret_prompt = Some(SecretPrompt {
-                kind: SecretPromptKind::SessionRename(path),
-                value: String::new(),
-            });
-        } else {
-            app.cells
-                .push(Cell::Notice("only KISS sessions can be renamed".into()));
-        }
-        return Flow::Continue;
-    }
     let activates_settings = matches!(&picker.kind, PickerKind::Settings)
         && picker.list.filter.is_empty()
         && key.key == Key::Char(' ')
@@ -6639,11 +6639,6 @@ fn apply_picker_selection(
             }
             _ => {}
         },
-        PickerKind::Session(records, _) => {
-            if let Some(record) = records.get(value) {
-                switch_session(app, session, record);
-            }
-        }
         PickerKind::Fork => {
             let selected = session
                 .manager
@@ -8069,7 +8064,7 @@ fn run_slash_command(
                 .cells
                 .push(Cell::Error(format!("could not create session: {error:#}"))),
         },
-        "resume" => open_session_picker(app, session, false),
+        "resume" => open_session_picker(app, session, false, String::new()),
         "import" => {
             if let Some(path) = parse_path_argument(&rest) {
                 let path = expand_user_path(&path);
@@ -8595,6 +8590,7 @@ mod tests {
             file_menu: None,
             file_search_request: None,
             file_search_pending: false,
+            session_picker: None,
             secret_prompt: None,
             command: None,
             next_command_id: 0,
@@ -10026,6 +10022,50 @@ mod tests {
                 .values
                 .iter()
                 .any(|value| value.path == "beta.rs")
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn file_menu_height_is_stable_while_the_user_types() {
+        let temp = tempfile::tempdir().unwrap();
+        for name in ["foo.py", "foobar.py", "food.rs", "fool.md"] {
+            std::fs::write(temp.path().join(name), name).unwrap();
+        }
+        let session = test_session(kiss_coding::SessionManager::in_memory(temp.path()));
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let mut file_search = FileSearchService::new(tx);
+        let mut app = test_app();
+        let mut heights = Vec::new();
+
+        for text in [
+            "read @foo",
+            "read @foob",
+            "read @foobar.py",
+            "read @foobar.pyz",
+        ] {
+            app.editor.set_text(text);
+            sync_command_menu(&mut app, &session, &[], &[], &[]);
+            sync_file_menu(&mut app, &session, &mut file_search);
+            heights.push(app.render(80, &session).len());
+            apply_file_search_result(
+                &mut app,
+                tokio::time::timeout(Duration::from_secs(2), rx.recv())
+                    .await
+                    .unwrap()
+                    .unwrap(),
+            );
+            heights.push(app.render(80, &session).len());
+        }
+
+        assert!(
+            heights.windows(2).all(|pair| pair[0] == pair[1]),
+            "{heights:?}"
+        );
+        let rendered = kiss_tui::text::strip_ansi(&app.render(80, &session).join("\n"));
+        assert!(rendered.contains("No matching files"));
+        assert!(
+            !handle_file_menu_key(&mut app, &session, &mut file_search, &key(Key::Enter)),
+            "enter must submit when no file matches"
         );
     }
 
