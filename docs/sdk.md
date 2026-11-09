@@ -11,7 +11,7 @@ Add the workspace crate (or its published version) and Tokio:
 
 ```toml
 [dependencies]
-kiss-agent-sdk = "0.0.38"
+kiss-agent-sdk = "0.0.39"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 

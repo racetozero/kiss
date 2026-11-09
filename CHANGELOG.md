@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+## 0.0.39 - 2026-11-09
+
+### Fixed
+
+- Typing an `@file` mention no longer makes the screen flicker or jump. A
+  shorter frame now clears only its stale bottom rows. It no longer clears
+  the screen and scrollback and draws the whole transcript again.
+- The file menu keeps its results while a new search runs, and it keeps one
+  height while it is open. When no file matches, it shows "No matching files"
+  and Enter still submits the prompt.
+
+### Changed
+
+- `/resume` opens a framed session browser. Type to search titles and
+  folders. Matches are highlighted, and each session shows its source, entry
+  count, and age. Press `Tab` (or `Ctrl+G`) to switch between this project and
+  all projects. Press `Ctrl+R` to rename a KISS session in place. `Esc` clears
+  the search first, then closes the browser.
+
 ## 0.0.38 - 2026-11-08
 
 ### Fixed
