@@ -1,9 +1,9 @@
 //! Terminal Markdown renderer (streaming-friendly: render is pure text-in,
 //! lines-out, so callers can re-render partial documents cheaply).
 
-use crate::text::{ansi_sequence_end, osc8_target, wrap_text};
+use crate::text::{ansi_sequence_end, display_width, osc8_target, strip_ansi, wrap_text};
 use crate::theme::Theme;
-use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
+use pulldown_cmark::{Alignment, CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 use std::borrow::Cow;
 use std::sync::OnceLock;
 use syntect::easy::HighlightLines;
@@ -15,6 +15,9 @@ const MAX_HIGHLIGHT_BYTES: usize = 512 * 1024;
 const MAX_HIGHLIGHT_LINES: usize = 10_000;
 const MAX_HIGHLIGHT_LINE_BYTES: usize = 4 * 1024;
 const MAX_LINK_BYTES: usize = 2 * 1024;
+const MIN_TABLE_COLUMN_WIDTH: usize = 3;
+/// A grid row taller than this reads worse than a `Header: value` record.
+const MAX_TABLE_ROW_LINES: usize = 4;
 
 fn syntax_set() -> &'static SyntaxSet {
     static SYNTAX_SET: OnceLock<SyntaxSet> = OnceLock::new();
@@ -214,6 +217,7 @@ impl MarkdownRenderer {
         let mut in_table = false;
         let mut table_row: Vec<String> = Vec::new();
         let mut table_rows: Vec<Vec<String>> = Vec::new();
+        let mut table_alignments: Vec<Alignment> = Vec::new();
         let mut heading: Option<HeadingLevel> = None;
 
         let flush = |current: &mut String,
@@ -350,7 +354,7 @@ impl MarkdownRenderer {
                         styles.push("\x1b[4m");
                         links.push(target.is_some());
                     }
-                    Tag::Table(_) => {
+                    Tag::Table(alignments) => {
                         flush(
                             &mut current,
                             &mut has_bare_url,
@@ -359,8 +363,12 @@ impl MarkdownRenderer {
                             width,
                             &self.theme,
                         );
+                        if !out.is_empty() {
+                            out.push(String::new());
+                        }
                         in_table = true;
                         table_rows.clear();
+                        table_alignments = alignments;
                     }
                     Tag::TableRow | Tag::TableHead => table_row.clear(),
                     Tag::TableCell => {
@@ -465,7 +473,7 @@ impl MarkdownRenderer {
                     }
                     TagEnd::Table => {
                         in_table = false;
-                        out.extend(self.render_table(&table_rows, width));
+                        out.extend(self.render_table(&table_rows, &table_alignments, width));
                         table_rows.clear();
                     }
                     _ => {}
@@ -656,80 +664,195 @@ impl MarkdownRenderer {
             .collect()
     }
 
-    fn render_table(&self, rows: &[Vec<String>], width: usize) -> Vec<String> {
-        if rows.is_empty() {
-            return Vec::new();
-        }
+    /// Draw a boxed grid in the style of Claude Code: bold centered headers,
+    /// column alignment from the delimiter row, and a rule between body rows.
+    /// A grid that cannot fit, or whose rows wrap taller than
+    /// `MAX_TABLE_ROW_LINES`, becomes one `Header: value` record per row.
+    fn render_table(
+        &self,
+        rows: &[Vec<String>],
+        alignments: &[Alignment],
+        width: usize,
+    ) -> Vec<String> {
         let cols = rows.iter().map(Vec::len).max().unwrap_or(0);
         if cols == 0 {
             return Vec::new();
         }
-        if width < cols {
-            return rows
-                .iter()
-                .flat_map(|row| row.iter().flat_map(|cell| wrap_text(cell, width.max(1))))
-                .collect();
-        }
-        let gap = if width >= cols.saturating_add(2 * cols.saturating_sub(1)) {
-            2
-        } else if width >= cols.saturating_add(cols.saturating_sub(1)) {
-            1
-        } else {
-            0
-        };
-        let budget = width - gap * (cols - 1);
-        let mut desired = vec![1usize; cols];
+        let mut minimum = vec![MIN_TABLE_COLUMN_WIDTH; cols];
+        let mut ideal = vec![MIN_TABLE_COLUMN_WIDTH; cols];
         for row in rows {
-            for (i, cell) in row.iter().enumerate() {
-                desired[i] = desired[i].max(crate::text::display_width(cell));
+            for (column, cell) in row.iter().enumerate() {
+                let plain = strip_ansi(cell);
+                ideal[column] = ideal[column].max(display_width(&plain));
+                for word in plain.split_whitespace() {
+                    minimum[column] = minimum[column].max(display_width(word));
+                }
             }
         }
-        let mut widths = vec![1usize; cols];
-        let mut remaining = budget - cols;
-        while remaining > 0 {
-            let pending = (0..cols)
-                .filter(|&i| widths[i] < desired[i])
-                .collect::<Vec<_>>();
-            if pending.is_empty() {
-                break;
-            }
-            for i in pending {
-                if remaining == 0 {
+
+        // `│ a │ b │` costs one border plus a space, a border, and a space per column.
+        let available = width.saturating_sub(1 + 3 * cols);
+        let total_minimum: usize = minimum.iter().sum();
+        let widths = if ideal.iter().sum::<usize>() <= available {
+            ideal
+        } else if total_minimum <= available {
+            // Every column gets its longest word. The remaining space follows
+            // each column's overflow, so prose columns grow before short ones.
+            let extra = available - total_minimum;
+            let overflow: Vec<usize> = ideal.iter().zip(&minimum).map(|(i, m)| i - m).collect();
+            let total_overflow: usize = overflow.iter().sum();
+            let mut widths: Vec<usize> = minimum
+                .iter()
+                .zip(&overflow)
+                .map(|(m, o)| m + o * extra / total_overflow)
+                .collect();
+            let mut leftover = available - widths.iter().sum::<usize>();
+            let mut order: Vec<usize> = (0..cols).collect();
+            order.sort_by_key(|&column| std::cmp::Reverse(ideal[column] - widths[column]));
+            for column in order {
+                if leftover == 0 {
                     break;
                 }
-                widths[i] += 1;
-                remaining -= 1;
+                if widths[column] < ideal[column] {
+                    widths[column] += 1;
+                    leftover -= 1;
+                }
             }
-        }
-        let mut out = Vec::new();
-        for (ri, row) in rows.iter().enumerate() {
-            let cells = widths
+            widths
+        } else {
+            // Words must break. Scale the minimums down; the row-height check
+            // below sends unreadable results to the record layout.
+            let scaled: Vec<usize> = minimum
                 .iter()
-                .enumerate()
-                .map(|(i, &w)| wrap_text(row.get(i).map(String::as_str).unwrap_or(""), w))
-                .collect::<Vec<_>>();
+                .map(|m| (m * available / total_minimum).max(MIN_TABLE_COLUMN_WIDTH))
+                .collect();
+            if scaled.iter().sum::<usize>() > available {
+                return self.render_table_records(rows, cols, width);
+            }
+            scaled
+        };
+
+        let wrapped: Vec<Vec<Vec<String>>> = rows
+            .iter()
+            .map(|row| {
+                widths
+                    .iter()
+                    .enumerate()
+                    .map(|(column, &w)| {
+                        wrap_text(row.get(column).map(String::as_str).unwrap_or(""), w)
+                    })
+                    .collect()
+            })
+            .collect();
+        if wrapped
+            .iter()
+            .flatten()
+            .any(|cell| cell.len() > MAX_TABLE_ROW_LINES)
+        {
+            return self.render_table_records(rows, cols, width);
+        }
+
+        let border = |left: &str, cross: &str, right: &str| {
+            let mut line = left.to_string();
+            for (column, w) in widths.iter().enumerate() {
+                line.push_str(&"─".repeat(w + 2));
+                line.push_str(if column + 1 < cols { cross } else { right });
+            }
+            self.theme.fg("border", &line)
+        };
+        let separator = self.theme.fg("border", "│");
+        let mut out = vec![border("┌", "┬", "┐")];
+        for (row_index, cells) in wrapped.iter().enumerate() {
+            let is_header = row_index == 0;
+            if row_index > 0 {
+                out.push(border("├", "┼", "┤"));
+            }
             let height = cells.iter().map(Vec::len).max().unwrap_or(1);
             for line_index in 0..height {
-                let mut line = String::new();
-                for (i, (cell, &w)) in cells.iter().zip(&widths).enumerate() {
-                    let fragment = cell.get(line_index).map(String::as_str).unwrap_or("");
-                    line.push_str(fragment);
-                    if i + 1 < cols {
-                        line.push_str(
-                            &" ".repeat(
-                                w.saturating_sub(crate::text::display_width(fragment)) + gap,
-                            ),
-                        );
+                let mut line = separator.clone();
+                for (column, (cell, &w)) in cells.iter().zip(&widths).enumerate() {
+                    let offset = (height - cell.len()) / 2;
+                    let fragment = line_index
+                        .checked_sub(offset)
+                        .and_then(|index| cell.get(index))
+                        .map(String::as_str)
+                        .unwrap_or("");
+                    let alignment = if is_header {
+                        Alignment::Center
+                    } else {
+                        alignments.get(column).copied().unwrap_or(Alignment::None)
+                    };
+                    let pad = w.saturating_sub(display_width(fragment));
+                    let (left, right) = match alignment {
+                        Alignment::Center => (pad / 2, pad - pad / 2),
+                        Alignment::Right => (pad, 0),
+                        Alignment::Left | Alignment::None => (0, pad),
+                    };
+                    line.push(' ');
+                    line.push_str(&" ".repeat(left));
+                    if is_header && !fragment.is_empty() {
+                        line.push_str(&self.theme.bold(fragment));
+                    } else {
+                        line.push_str(fragment);
                     }
+                    // Wrapped rows keep their styles open; close them before the border.
+                    if fragment.contains('\x1b') {
+                        line.push_str("\x1b[0m");
+                    }
+                    line.push_str(&" ".repeat(right + 1));
+                    line.push_str(&separator);
                 }
-                out.push(if ri == 0 {
-                    self.theme.bold(&line)
-                } else {
-                    line
-                });
+                out.push(line);
             }
-            if ri == 0 {
-                out.push(self.theme.fg("dim", &"─".repeat(width - remaining)));
+        }
+        out.push(border("└", "┴", "┘"));
+        out
+    }
+
+    /// Show each body row as `Header: value` lines for terminals too narrow
+    /// for a readable grid.
+    fn render_table_records(&self, rows: &[Vec<String>], cols: usize, width: usize) -> Vec<String> {
+        let width = width.max(1);
+        let labels: Vec<String> = (0..cols)
+            .map(|column| {
+                let label = rows[0]
+                    .get(column)
+                    .map(|cell| strip_ansi(cell))
+                    .unwrap_or_default();
+                let label = label.trim();
+                if label.is_empty() {
+                    format!("Column {}", column + 1)
+                } else {
+                    label.to_string()
+                }
+            })
+            .collect();
+        if rows.len() == 1 {
+            return labels
+                .iter()
+                .flat_map(|label| wrap_text(&self.theme.bold(label), width))
+                .collect();
+        }
+        let indent = if width > 2 { "  " } else { "" };
+        let rule = self.theme.fg("border", &"─".repeat(width.min(40)));
+        let mut out = Vec::new();
+        for (row_index, row) in rows[1..].iter().enumerate() {
+            if row_index > 0 {
+                out.push(rule.clone());
+            }
+            for (column, label) in labels.iter().enumerate() {
+                let value = row.get(column).map(String::as_str).unwrap_or("");
+                let record = format!("{} {value}", self.theme.bold(&format!("{label}:")));
+                let mut lines = wrap_text(&record, width).into_iter();
+                out.extend(lines.next());
+                let rest = lines.collect::<Vec<_>>().join(" ");
+                if !rest.is_empty() {
+                    out.extend(
+                        wrap_text(&rest, width - indent.len())
+                            .into_iter()
+                            .map(|line| format!("{indent}{line}")),
+                    );
+                }
             }
         }
         out
@@ -957,6 +1080,14 @@ mod tests {
             .collect()
     }
 
+    fn render_plain_at(md: &str, width: usize) -> Vec<String> {
+        MarkdownRenderer::new(Theme::dark())
+            .render(md, width)
+            .iter()
+            .map(|line| strip_ansi(line))
+            .collect()
+    }
+
     fn render_mermaid_plain(md: &str, streaming: bool, mode: MermaidMode) -> Vec<String> {
         MarkdownRenderer::new(Theme::dark())
             .render_with_state(md, 80, streaming, mode)
@@ -1075,10 +1206,32 @@ mod tests {
     }
 
     #[test]
-    fn table_renders_aligned() {
-        let lines = render_plain("| a | b |\n|---|---|\n| 1 | 2 |");
-        assert!(lines[0].starts_with('a'));
-        assert!(lines.iter().any(|l| l.starts_with('1')));
+    fn table_renders_boxed_grid_with_alignment() {
+        let lines = MarkdownRenderer::new(Theme::dark()).render(
+            "| Feature | Status | Notes |\n|:--------|:------:|------:|\n| Tables | **done** | Right aligned `code` |\n| Mermaid | partial | short |",
+            60,
+        );
+        let plain = lines
+            .iter()
+            .map(|line| strip_ansi(line))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            plain,
+            [
+                "┌─────────┬─────────┬──────────────────────┐",
+                "│ Feature │ Status  │        Notes         │",
+                "├─────────┼─────────┼──────────────────────┤",
+                "│ Tables  │  done   │ Right aligned `code` │",
+                "├─────────┼─────────┼──────────────────────┤",
+                "│ Mermaid │ partial │                short │",
+                "└─────────┴─────────┴──────────────────────┘",
+            ]
+        );
+        assert!(
+            lines[1].contains("\x1b[1mFeature\x1b[22m"),
+            "{:?}",
+            lines[1]
+        );
     }
 
     #[test]
@@ -1093,20 +1246,16 @@ mod tests {
             .map(|line| strip_ansi(line))
             .collect::<Vec<_>>();
         assert!(
-            plain
-                .iter()
-                .all(|line| crate::text::display_width(line) <= 60),
+            plain.iter().all(|line| display_width(line) <= 60),
             "{plain:?}"
         );
         assert!(!plain.join("\n").contains('…'), "{plain:?}");
-        assert!(
-            plain.iter().any(|line| line.starts_with("Example  This")),
-            "{plain:?}"
-        );
-        let fragments = plain[2..]
+        assert!(plain[0].starts_with('┌'), "{plain:?}");
+        let fragments = plain[3..]
             .iter()
-            .take_while(|line| !line.starts_with("Another"))
-            .map(|line| line.get(9..).unwrap_or("").trim())
+            .take_while(|line| !line.starts_with('├'))
+            .map(|line| line.split('│').nth(2).unwrap_or("").trim())
+            .filter(|fragment| !fragment.is_empty())
             .collect::<Vec<_>>()
             .join(" ");
         assert_eq!(fragments, prose);
@@ -1117,14 +1266,19 @@ mod tests {
         let md = "| Key | Value |\n|---|---|\n| 🔑 | [café 漢字 repeated words](https://example.com/docs) and `code` |";
         let lines = MarkdownRenderer::new(Theme::dark()).render(md, 22);
         assert!(
-            lines
-                .iter()
-                .all(|line| crate::text::display_width(line) <= 22),
+            lines.iter().all(|line| display_width(line) <= 22),
             "{lines:?}"
         );
-        let text = lines[2..]
+        let text = lines[3..]
             .iter()
-            .map(|line| strip_ansi(line).get(5..).unwrap_or("").trim().to_string())
+            .map(|line| {
+                strip_ansi(line)
+                    .split('│')
+                    .nth(2)
+                    .unwrap_or("")
+                    .trim()
+                    .to_string()
+            })
             .collect::<Vec<_>>()
             .join(" ");
         assert!(text.contains("café 漢字 repeated words"), "{text:?}");
@@ -1139,17 +1293,64 @@ mod tests {
     }
 
     #[test]
+    fn table_cell_styles_end_before_the_border() {
+        let lines = MarkdownRenderer::new(Theme::dark())
+            .render("| a |\n|---|\n| **bold words wrap here** |", 14);
+        let bold_rows = lines
+            .iter()
+            .skip(3)
+            .filter(|line| line.contains("\x1b[1m"))
+            .collect::<Vec<_>>();
+        assert!(bold_rows.len() >= 2, "{lines:?}");
+        for line in bold_rows {
+            let reset = line.rfind("\x1b[0m").expect("cell style is reset");
+            assert!(reset > line.rfind("\x1b[1m").unwrap(), "{line:?}");
+            assert!(strip_ansi(&line[reset..]).ends_with('│'), "{line:?}");
+        }
+    }
+
+    #[test]
+    fn narrow_table_renders_header_value_records() {
+        let lines = render_plain_at(
+            "| Feature | Status | Notes |\n|---|---|---|\n| Tables | done | Right aligned code |\n| | partial | x |",
+            20,
+        );
+        assert_eq!(
+            lines,
+            [
+                "Feature: Tables",
+                "Status: done",
+                "Notes: Right aligned",
+                "  code",
+                "────────────────────",
+                "Feature:",
+                "Status: partial",
+                "Notes: x",
+            ]
+        );
+        let lines = render_plain_at("| | b |\n|---|---|\n| x | y |", 9);
+        assert_eq!(lines[0], "Column 1:");
+    }
+
+    #[test]
     fn table_tiny_width_keeps_cells() {
         let lines = render_plain("| a | b |\n|---|---|\n| x | y |");
-        assert!(lines.iter().any(|line| line.starts_with('x')));
+        assert!(
+            lines.iter().any(|line| line == "│ x   │ y   │"),
+            "{lines:?}"
+        );
         let lines =
             MarkdownRenderer::new(Theme::dark()).render("| a | b |\n|---|---|\n| x | y |", 1);
-        assert!(
-            lines
-                .iter()
-                .all(|line| crate::text::display_width(line) <= 1)
-        );
+        assert!(lines.iter().all(|line| display_width(line) <= 1));
         assert!(lines.iter().any(|line| strip_ansi(line) == "y"));
+    }
+
+    #[test]
+    fn table_after_a_paragraph_is_separated_by_a_blank_row() {
+        let lines = render_plain("Intro\n\n| a |\n|---|\n| x |");
+        assert_eq!(lines[0], "Intro");
+        assert_eq!(lines[1], "");
+        assert!(lines[2].starts_with('┌'));
     }
 
     #[test]
@@ -1331,7 +1532,7 @@ mod tests {
     #[test]
     fn incremental_markdown_matches_full_streaming_render() {
         let renderer = MarkdownRenderer::new(Theme::dark());
-        let markdown = "# Heading\n\nFirst **paragraph**.\n\n- one\n- two\n\n```rust\nfn main() {}\n```\n\nTail text";
+        let markdown = "# Heading\n\nFirst **paragraph**.\n\n- one\n- two\n\n| a | b |\n|---|---:|\n| 1 | **2** |\n\n```rust\nfn main() {}\n```\n\nTail text";
         let mut cache = StreamingMarkdownCache::default();
         for end in markdown
             .char_indices()
