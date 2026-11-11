@@ -18,6 +18,9 @@ const MAX_LINK_BYTES: usize = 2 * 1024;
 const MIN_TABLE_COLUMN_WIDTH: usize = 3;
 /// A grid row taller than this reads worse than a `Header: value` record.
 const MAX_TABLE_ROW_LINES: usize = 4;
+/// `(layer_gap, node_gap)` for flowchart and state diagrams. The crate default
+/// layer gap of six rows leaves long empty edges in top-down flowcharts.
+const MERMAID_COMPACT_GAPS: (usize, usize) = (2, 2);
 
 fn syntax_set() -> &'static SyntaxSet {
     static SYNTAX_SET: OnceLock<SyntaxSet> = OnceLock::new();
@@ -609,30 +612,44 @@ impl MarkdownRenderer {
         }
 
         let inner_width = width.saturating_sub(self.code_indent.len()).max(10);
-        match mermaid_text::render_with_width(source.trim(), Some(inner_width)) {
-            Ok(diagram)
-                if !diagram.trim().is_empty()
-                    && diagram
-                        .lines()
-                        .all(|line| crate::text::display_width(line) <= inner_width) =>
-            {
-                diagram
+        // Compact gaps keep top-down flowcharts short. When they are too wide,
+        // the crate's own compaction may still fit the diagram by wrapping labels.
+        let mut options = mermaid_text::RenderOptions {
+            max_width: Some(inner_width),
+            max_width_strict: true,
+            gaps_override: Some(MERMAID_COMPACT_GAPS),
+            ..Default::default()
+        };
+        let mut result = mermaid_text::render_with_options(source.trim(), &options);
+        if matches!(result, Err(mermaid_text::Error::TooWide { .. })) {
+            options.gaps_override = None;
+            result = mermaid_text::render_with_options(source.trim(), &options);
+        }
+        let notice = match result {
+            Ok(diagram) if !diagram.trim().is_empty() => {
+                return diagram
                     .trim_end_matches('\n')
                     .lines()
                     .map(|line| format!("{}{}", self.code_indent, self.theme.fg("mdCode", line)))
-                    .collect()
+                    .collect();
             }
-            Ok(_) | Err(_) if is_streaming || !complete_fence => source_lines(),
-            Ok(_) => source_lines(),
-            Err(error) => {
-                let mut lines = source_lines();
-                lines.push(self.theme.fg(
-                    "warning",
-                    &format!("  Mermaid diagram not rendered: {error}"),
-                ));
-                lines
-            }
-        }
+            // An unfinished diagram is often invalid or incomplete; keep its source quietly.
+            _ if is_streaming || !complete_fence => return source_lines(),
+            Ok(_) => return source_lines(),
+            Err(mermaid_text::Error::TooWide { actual, .. }) => format!(
+                "Mermaid diagram needs {actual} columns, but only {inner_width} are available. Widen the terminal to see the diagram."
+            ),
+            Err(error) => format!(
+                "Mermaid diagram not rendered: {error}. The source is shown above. Fix the diagram syntax, or set markdown.mermaid to \"off\" in /settings to show Mermaid blocks as code."
+            ),
+        };
+        let mut lines = source_lines();
+        lines.extend(
+            wrap_text(&notice, inner_width)
+                .into_iter()
+                .map(|line| format!("{}{}", self.code_indent, self.theme.fg("warning", &line))),
+        );
+        lines
     }
 
     fn highlight_code(&self, source: &str, language: &str) -> Option<Vec<String>> {
@@ -1423,6 +1440,69 @@ mod tests {
         assert!(!streaming.contains("not rendered"));
         let final_text = render_mermaid_plain(source, false, MermaidMode::Streaming).join("\n");
         assert!(final_text.contains("Mermaid diagram not rendered"));
+    }
+
+    #[test]
+    fn mermaid_inputs_that_crashed_older_renderers_render() {
+        // mermaid-text 0.57.0 panicked on both; release builds abort on panic.
+        let class = render_mermaid_plain(
+            "```mermaid\nclassDiagram\n  Животное <|-- Собака\n```",
+            false,
+            MermaidMode::Final,
+        )
+        .join("\n");
+        assert!(
+            class.contains("Животное") && class.contains("Собака"),
+            "{class}"
+        );
+        assert!(!class.contains("<|--"), "{class}");
+        let slashes = render_mermaid_plain(
+            "```mermaid\nflowchart LR\n  A[/] --> B[\\]\n```",
+            false,
+            MermaidMode::Final,
+        );
+        assert!(!slashes.is_empty());
+    }
+
+    #[test]
+    fn mermaid_top_down_flowcharts_use_compact_layer_gaps() {
+        let source = "flowchart TD\n  A[Read config] --> B[Parse]\n  B --> C{Valid?}\n  C -->|yes| D[Run]\n  C -->|no| E[Report error]";
+        let lines = render_mermaid_plain(
+            &format!("```mermaid\n{source}\n```"),
+            false,
+            MermaidMode::Final,
+        );
+        let default_height = mermaid_text::render_with_width(source, Some(78))
+            .unwrap()
+            .trim_end()
+            .lines()
+            .count();
+        assert!(lines.join("\n").contains("Report error"), "{lines:?}");
+        assert!(
+            lines.len() < default_height,
+            "{} >= {default_height}",
+            lines.len()
+        );
+    }
+
+    #[test]
+    fn mermaid_wider_than_the_terminal_keeps_source_and_explains() {
+        let source = "```mermaid\nsequenceDiagram\n  Alice->>Bob: Hello\n  Bob->>Carol: Hello\n  Carol->>Dave: Hello\n  Dave->>Erin: Hello\n```";
+        let lines = MarkdownRenderer::new(Theme::dark())
+            .render_with_state(source, 30, false, MermaidMode::Final)
+            .iter()
+            .map(|line| strip_ansi(line))
+            .collect::<Vec<_>>();
+        let text = lines.join("\n");
+        assert!(text.contains("sequenceDiagram"), "{text}");
+        assert!(text.contains("Mermaid diagram needs"), "{text}");
+        let words = text.split_whitespace().collect::<Vec<_>>().join(" ");
+        assert!(
+            words.contains("Widen the terminal to see the diagram."),
+            "{text}"
+        );
+        let streaming = render_mermaid_plain(source, true, MermaidMode::Streaming);
+        assert!(!streaming.join("\n").contains("Mermaid diagram needs"));
     }
 
     #[test]

@@ -75,7 +75,7 @@ kiss-workflow = { path = "crates/kiss-workflow", version = "0.0.39" }
 kiss-webmcp = { path = "crates/kiss-webmcp" }
 libc = "0.2"
 mdwright-latex = "0.1.3"
-mermaid-text = "0.57"
+mermaid-text = "0.58"
 mimalloc = "0.1.52"
 pulldown-cmark = { version = "0.13", default-features = false }
 prost = "0.14"
