@@ -2548,6 +2548,89 @@ mod ephemeral_tests {
         }
     }
 
+    /// A transient stream error can end a response after it starts a tool call.
+    /// The retry and every later prompt must still send each call with exactly
+    /// one result; OpenAI rejects the request otherwise.
+    #[tokio::test]
+    async fn a_retried_stream_error_leaves_no_unanswered_tool_call() {
+        let session = AgentSession::new(
+            SessionManager::in_memory(Path::new("/test")),
+            Vec::new(),
+            Registry::load(None),
+            Settings {
+                compaction: crate::settings::CompactionSettings {
+                    enabled: false,
+                    ..Default::default()
+                },
+                retry: crate::settings::RetrySettings {
+                    base_delay_ms: 0,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            "test".into(),
+            openai_model(),
+            ThinkingLevel::Off,
+            None,
+            Arc::new(|_| {}),
+        );
+        let requests: Arc<Mutex<Vec<Vec<kiss_ai::Message>>>> = Arc::default();
+        let saved_requests = requests.clone();
+        session.set_stream_fn(Some(Arc::new(move |_, context, _| {
+            let mut requests = saved_requests.lock().unwrap();
+            requests.push(context.messages.clone());
+            let mut message =
+                kiss_ai::AssistantMessage::empty("openai-responses", "openai", "gpt-test");
+            let (sink, stream) = kiss_ai::EventStream::channel();
+            if requests.len() == 1 {
+                message.content = vec![kiss_ai::ContentBlock::ToolCall(kiss_ai::ToolCall {
+                    id: "call_partial|fc_partial".into(),
+                    name: "bash".into(),
+                    arguments: serde_json::json!({}),
+                    thought_signature: None,
+                    arguments_error: None,
+                })];
+                message.stop_reason = StopReason::Error;
+                message.error_message = Some("stream error: error decoding response body".into());
+                sink.error(message);
+            } else {
+                message.content = vec![kiss_ai::ContentBlock::text("done")];
+                message.stop_reason = StopReason::Stop;
+                sink.done(message);
+            }
+            stream
+        })));
+        session.prompt(vec![AgentMessage::user("first")]).await;
+        session.prompt(vec![AgentMessage::user("second")]).await;
+
+        let requests = requests.lock().unwrap().clone();
+        assert_eq!(requests.len(), 3, "error, retry, and the second prompt");
+        for (index, messages) in requests.iter().enumerate() {
+            let mut pending: Vec<&str> = Vec::new();
+            for message in messages {
+                match message {
+                    kiss_ai::Message::Assistant(assistant) => {
+                        pending.extend(assistant.tool_calls().map(|call| call.id.as_str()));
+                    }
+                    kiss_ai::Message::ToolResult(result) => {
+                        let before = pending.len();
+                        pending.retain(|id| *id != result.tool_call_id);
+                        assert_eq!(
+                            pending.len() + 1,
+                            before,
+                            "request {index} has a result without one matching call: {messages:#?}"
+                        );
+                    }
+                    kiss_ai::Message::User(_) => {}
+                }
+            }
+            assert!(
+                pending.is_empty(),
+                "request {index} has a tool call without a result: {messages:#?}"
+            );
+        }
+    }
+
     /// A session whose first model request waits until `release` fires and then
     /// fails with a permanent error. Later requests succeed at once.
     fn session_with_blocked_failure(
