@@ -640,7 +640,7 @@ impl MarkdownRenderer {
                 "Mermaid diagram needs {actual} columns, but only {inner_width} are available. Widen the terminal to see the diagram."
             ),
             Err(error) => format!(
-                "Mermaid diagram not rendered: {error}. The source is shown above. Fix the diagram syntax, or set markdown.mermaid to \"off\" in /settings to show Mermaid blocks as code."
+                "Mermaid diagram not rendered: {error}. The source is shown above. Fix the diagram syntax, or set Mermaid rendering to \"off\" in /settings to show Mermaid blocks as code."
             ),
         };
         let mut lines = source_lines();
@@ -699,7 +699,11 @@ impl MarkdownRenderer {
         let mut ideal = vec![MIN_TABLE_COLUMN_WIDTH; cols];
         for row in rows {
             for (column, cell) in row.iter().enumerate() {
-                let plain = strip_ansi(cell);
+                let plain = if cell.contains('\x1b') {
+                    Cow::Owned(strip_ansi(cell))
+                } else {
+                    Cow::Borrowed(cell.as_str())
+                };
                 ideal[column] = ideal[column].max(display_width(&plain));
                 for word in plain.split_whitespace() {
                     minimum[column] = minimum[column].max(display_width(word));
@@ -778,11 +782,12 @@ impl MarkdownRenderer {
             self.theme.fg("border", &line)
         };
         let separator = self.theme.fg("border", "│");
+        let middle = border("├", "┼", "┤");
         let mut out = vec![border("┌", "┬", "┐")];
         for (row_index, cells) in wrapped.iter().enumerate() {
             let is_header = row_index == 0;
             if row_index > 0 {
-                out.push(border("├", "┼", "┤"));
+                out.push(middle.clone());
             }
             let height = cells.iter().map(Vec::len).max().unwrap_or(1);
             for line_index in 0..height {

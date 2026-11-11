@@ -135,7 +135,10 @@ cat error.log | kiss -p "find the cause"
 - Use the Up arrow to restore earlier prompts.
 
 KISS renders bold Markdown, cyan underlined terminal links, bare web links, and
-syntax colors for fenced code.
+syntax colors for fenced code. Tables appear as boxed grids that follow the
+column alignment row. A table too wide for the terminal appears as
+`Header: value` records. Fenced `mermaid` blocks appear as Unicode diagrams.
+Set "Mermaid rendering" in `/settings` to `streaming`, `final`, or `off`.
 
 Send a new instruction while the agent works. Press `Enter` to steer the
 current task, or `Alt+Enter` to queue the instruction for later.

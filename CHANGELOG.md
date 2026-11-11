@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+### Fixed
+
+- A Mermaid diagram in a reply no longer ends KISS. Class diagrams with
+  non-ASCII names and flowchart labels such as `A[/]` used to crash the
+  renderer. KISS now uses `mermaid-text` 0.58.0.
+- A Mermaid diagram that does not fit the terminal keeps its source and says
+  how many columns it needs. A diagram with a syntax error says how to fix it
+  or how to turn Mermaid rendering off.
+
+### Changed
+
+- Markdown tables appear as boxed grids with bold centered headers and a rule
+  between rows. Body cells follow the `:---`, `:---:`, and `---:` alignment
+  markers. Long cells wrap in their column without losing text. When the
+  terminal is too narrow, or a row would wrap past four lines, each row
+  appears as `Header: value` lines.
+- Top-down Mermaid flowcharts are about one third shorter, because the empty
+  space between layers is smaller.
+
 ## 0.0.39 - 2026-11-09
 
 ### Fixed
