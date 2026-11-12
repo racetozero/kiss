@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- `Esc` now stops a `!command` that ignores SIGTERM, or whose child keeps
+  running. KISS kills the whole process group and stops waiting for output.
 - A Mermaid diagram in a reply no longer ends KISS. Class diagrams with
   non-ASCII names and flowchart labels such as `A[/]` used to crash the
   renderer. KISS now uses `mermaid-text` 0.58.0.

@@ -4517,12 +4517,19 @@ async fn run_shell_command(
         tokio::select! {
             _ = cancel.cancelled(), if !cancelled => {
                 cancelled = true;
+                // Kill the whole group, as the bash tool does. SIGTERM can be
+                // ignored or inherited as ignored, and a surviving child keeps
+                // the output pipes open, so cancellation must not wait for EOF.
                 #[cfg(unix)]
                 if let Some(pid) = child.id() {
-                    // The child is the leader of its process group.
-                    unsafe { libc::kill(-(pid as i32), libc::SIGTERM); }
+                    // The child is the leader of its process group. On macOS,
+                    // stopping the group first keeps `a; b` from starting `b`.
+                    #[cfg(target_os = "macos")]
+                    unsafe { libc::killpg(pid as i32, libc::SIGSTOP); }
+                    unsafe { libc::killpg(pid as i32, libc::SIGKILL); }
                 }
                 let _ = child.kill().await;
+                break;
             }
             read = stdout.read(&mut buffer_out), if !stdout_done => {
                 match read {
@@ -11016,31 +11023,30 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn shell_command_can_be_cancelled() {
-        let temp = tempfile::tempdir().unwrap();
-        let cancel = CancellationToken::new();
-        let (tx, _rx) = mpsc::unbounded_channel();
-        let task = CommandTask {
-            id: 0,
-            sender: tx.clone(),
-        };
-        let future = run_shell_command(
-            Some("sh"),
+        // The second command ignores SIGTERM, and so does its `sleep` child.
+        for command in [
             "printf started; sleep 30",
-            temp.path(),
-            false,
-            &cancel,
-            &task,
-        );
-        tokio::pin!(future);
-        tokio::select! {
-            result = &mut future => panic!("shell ended before cancellation: {result:?}"),
-            _ = tokio::time::sleep(std::time::Duration::from_millis(50)) => cancel.cancel(),
+            "trap '' TERM; printf started; sleep 30",
+        ] {
+            let temp = tempfile::tempdir().unwrap();
+            let cancel = CancellationToken::new();
+            let (tx, _rx) = mpsc::unbounded_channel();
+            let task = CommandTask {
+                id: 0,
+                sender: tx.clone(),
+            };
+            let future = run_shell_command(Some("sh"), command, temp.path(), false, &cancel, &task);
+            tokio::pin!(future);
+            tokio::select! {
+                result = &mut future => panic!("shell ended before cancellation: {result:?}"),
+                _ = tokio::time::sleep(std::time::Duration::from_millis(50)) => cancel.cancel(),
+            }
+            let result = tokio::time::timeout(std::time::Duration::from_secs(2), future)
+                .await
+                .unwrap_or_else(|_| panic!("cancelled shell must stop: {command}"))
+                .unwrap();
+            assert!(result.cancelled, "{command}");
         }
-        let result = tokio::time::timeout(std::time::Duration::from_secs(2), future)
-            .await
-            .expect("cancelled shell must stop")
-            .unwrap();
-        assert!(result.cancelled);
     }
 
     fn press(
