@@ -8373,6 +8373,9 @@ fn reload_interactive(
         }
     };
 
+    for problem in reloaded.problems.iter().chain(&reloaded.settings.problems) {
+        app.cells.push(Cell::Notice(problem.clone()));
+    }
     resources.enabled_models =
         crate::setup::enabled_models(args, &reloaded.settings, &session.registry);
     resources.skills = reloaded.skills;

@@ -37,6 +37,8 @@ pub struct ReloadedRuntime {
     pub context_file_paths: Vec<PathBuf>,
     pub tools: Vec<DynTool>,
     pub system_prompt: String,
+    /// Files skipped because they could not be read, for the mode to show.
+    pub problems: Vec<String>,
 }
 
 // The tool table lives in kiss-sdk so the command-line program and every SDK
@@ -111,8 +113,8 @@ pub fn reload_runtime(args: &Args, cwd: &std::path::Path) -> Result<ReloadedRunt
         kiss_coding::skills::discover(cwd, trusted, &skill_paths)
     };
     let template_paths: Vec<PathBuf> = args.prompt_templates.iter().map(PathBuf::from).collect();
-    let prompt_templates = if args.no_prompt_templates {
-        Vec::new()
+    let (prompt_templates, problems) = if args.no_prompt_templates {
+        (Vec::new(), Vec::new())
     } else {
         kiss_coding::prompts::discover(cwd, trusted, &template_paths)
     };
@@ -138,6 +140,7 @@ pub fn reload_runtime(args: &Args, cwd: &std::path::Path) -> Result<ReloadedRunt
         context_file_paths: context.into_iter().map(|item| item.path).collect(),
         tools,
         system_prompt,
+        problems,
     })
 }
 
@@ -212,6 +215,7 @@ pub async fn build_startup(
         context_file_paths,
         tools,
         system_prompt,
+        problems,
     } = reload_runtime(args, &cwd)?;
 
     let mut registry = Registry::load(None);
@@ -227,6 +231,7 @@ pub async fn build_startup(
                 })
         })
         .await;
+    warnings.extend(problems);
     warnings.extend(settings.problems.iter().cloned());
     warnings.extend(registry.problems.iter().cloned());
 

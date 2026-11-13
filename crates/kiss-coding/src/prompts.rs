@@ -13,27 +13,27 @@ pub struct PromptTemplate {
     pub path: PathBuf,
 }
 
-fn parse_template(path: &Path) -> Option<PromptTemplate> {
+fn parse_template(path: &Path, problems: &mut Vec<String>) -> Option<PromptTemplate> {
     let text = std::fs::read_to_string(path).ok()?;
     let (frontmatter, body) = split_frontmatter(&text);
     let name = path.file_stem()?.to_str()?.to_string();
     let mut description = None;
     let mut argument_hint = None;
     if text.starts_with("---") && frontmatter.is_none() {
-        eprintln!(
-            "warning: invalid prompt frontmatter in {}: missing closing ---",
+        problems.push(format!(
+            "kiss ignores the prompt template {} because its frontmatter has no closing ---. Add the closing --- line.",
             path.display()
-        );
+        ));
         return None;
     }
     if let Some(fm) = frontmatter {
         let value = match serde_yaml::from_str::<serde_yaml::Value>(fm) {
             Ok(value) => value,
             Err(error) => {
-                eprintln!(
-                    "warning: invalid prompt frontmatter in {}: {error}",
+                problems.push(format!(
+                    "kiss ignores the prompt template {} because its frontmatter is not valid YAML ({error}). Correct the frontmatter.",
                     path.display()
-                );
+                ));
                 return None;
             }
         };
@@ -56,38 +56,45 @@ fn parse_template(path: &Path) -> Option<PromptTemplate> {
     })
 }
 
-fn scan(dir: &Path, out: &mut Vec<PromptTemplate>) {
+fn scan(dir: &Path, out: &mut Vec<PromptTemplate>, problems: &mut Vec<String>) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
     };
     for entry in entries.flatten() {
         let path = entry.path();
         if path.extension().and_then(|e| e.to_str()) == Some("md")
-            && let Some(t) = parse_template(&path)
+            && let Some(t) = parse_template(&path, problems)
         {
             out.push(t);
         }
     }
 }
 
-pub fn discover(cwd: &Path, project_trusted: bool, extra_paths: &[PathBuf]) -> Vec<PromptTemplate> {
+/// The prompt templates, and the files skipped because they could not be
+/// read, for the caller to show.
+pub fn discover(
+    cwd: &Path,
+    project_trusted: bool,
+    extra_paths: &[PathBuf],
+) -> (Vec<PromptTemplate>, Vec<String>) {
     let mut out = Vec::new();
+    let mut problems = Vec::new();
     if let Some(agent_dir) = kiss_ai::paths::agent_dir() {
-        scan(&agent_dir.join("prompts"), &mut out);
+        scan(&agent_dir.join("prompts"), &mut out, &mut problems);
     }
     if project_trusted {
-        scan(&cwd.join(".kiss/prompts"), &mut out);
+        scan(&cwd.join(".kiss/prompts"), &mut out, &mut problems);
     }
     for path in extra_paths {
         if path.is_dir() {
-            scan(path, &mut out);
-        } else if let Some(t) = parse_template(path) {
+            scan(path, &mut out, &mut problems);
+        } else if let Some(t) = parse_template(path, &mut problems) {
             out.push(t);
         }
     }
     let mut seen = std::collections::HashSet::new();
     out.retain(|t| seen.insert(t.name.clone()));
-    out
+    (out, problems)
 }
 
 /// Expand `$1..$n`, `$@`/`$ARGUMENTS`, and `${n:-default}` in the body.
@@ -229,7 +236,10 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("broken.md");
         std::fs::write(&path, "---\ndescription: [broken\n---\nbody").unwrap();
-        assert!(parse_template(&path).is_none());
+        let mut problems = Vec::new();
+        assert!(parse_template(&path, &mut problems).is_none());
+        assert_eq!(problems.len(), 1);
+        assert!(problems[0].contains("broken.md"), "{problems:?}");
     }
 
     #[test]
@@ -237,7 +247,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("review.md");
         std::fs::write(&path, "Review the staged changes carefully.\nMore text.").unwrap();
-        let t = parse_template(&path).unwrap();
+        let t = parse_template(&path, &mut Vec::new()).unwrap();
         assert_eq!(t.name, "review");
         assert_eq!(t.description, "Review the staged changes carefully.");
     }
