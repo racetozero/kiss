@@ -1092,13 +1092,14 @@ impl AgentSession {
                 if let Some((override_provider, key)) = api_key_override
                     && override_provider == provider
                 {
-                    return Some(kiss_ai::ResolvedCredential::api_key(key));
+                    return Ok(Some(kiss_ai::ResolvedCredential::api_key(key)));
                 }
                 let credential_provider = registry.credential_provider(&provider).to_string();
                 kiss_ai::auth::resolve_credential_async(&credential_provider, &declared)
                     .await
-                    .ok()
-                    .flatten()
+                    .map_err(|error| {
+                        format!("could not get the {credential_provider} credential: {error:#}")
+                    })
             })
         }));
 

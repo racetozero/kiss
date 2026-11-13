@@ -232,6 +232,36 @@ fn collect_events() -> (kiss_agent::EventSink, Arc<Mutex<Vec<String>>>) {
 }
 
 #[tokio::test]
+async fn a_credential_error_fails_the_turn_with_its_message() {
+    let mut config = scripted_config(vec![assistant_text("unreachable", StopReason::Stop)]);
+    config.get_credential = Some(Arc::new(|_| {
+        Box::pin(async { Err("token refresh failed: invalid_grant".to_string()) })
+    }));
+    let (sink, _log) = collect_events();
+    let messages = run_agent_loop(
+        vec![AgentMessage::user("hi")],
+        AgentContext {
+            system_prompt: "sys".into(),
+            openai_responses_input: None,
+            messages: vec![],
+            tools: vec![],
+        },
+        config,
+        CancellationToken::new(),
+        sink,
+    )
+    .await;
+    let Some(AgentMessage::Assistant(answer)) = messages.last() else {
+        panic!("the turn must end with an assistant message: {messages:?}");
+    };
+    assert_eq!(answer.stop_reason, StopReason::Error);
+    assert_eq!(
+        answer.error_message.as_deref(),
+        Some("token refresh failed: invalid_grant")
+    );
+}
+
+#[tokio::test]
 async fn simple_turn_no_tools() {
     let config = scripted_config(vec![assistant_text("hello!", StopReason::Stop)]);
     let (sink, log) = collect_events();

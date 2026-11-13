@@ -475,12 +475,18 @@ async fn resolve_api_key_async_generic(
                         | "cursor"
                 ) && credential.is_expired() =>
             {
-                static REFRESH_LOCK: std::sync::OnceLock<tokio::sync::Mutex<()>> =
-                    std::sync::OnceLock::new();
-                let _guard = REFRESH_LOCK
-                    .get_or_init(|| tokio::sync::Mutex::new(()))
+                // One refresh at a time for each provider, so a stalled
+                // refresh does not hold up the others.
+                type Locks = Mutex<BTreeMap<String, std::sync::Arc<tokio::sync::Mutex<()>>>>;
+                static REFRESH_LOCKS: OnceLock<Locks> = OnceLock::new();
+                let lock = REFRESH_LOCKS
+                    .get_or_init(Default::default)
                     .lock()
-                    .await;
+                    .unwrap()
+                    .entry(provider.to_string())
+                    .or_default()
+                    .clone();
+                let _guard = lock.lock().await;
                 // Another request can complete the refresh while this request
                 // waits for the lock. Read the file again before network I/O.
                 file = read_auth_file();
@@ -492,23 +498,41 @@ async fn resolve_api_key_async_generic(
                 if !current.is_expired() {
                     return Ok(Some(current.access));
                 }
-                let refreshed = match provider {
-                    "openai-codex" => openai_codex::refresh(&current, &Default::default()).await?,
-                    "openai" => {
-                        openai_codex::refresh(&current, &openai_codex::OAuthConfig::chatgpt(None))
+                let refresh = async {
+                    anyhow::Ok(match provider {
+                        "openai-codex" => {
+                            openai_codex::refresh(&current, &Default::default()).await?
+                        }
+                        "openai" => {
+                            openai_codex::refresh(
+                                &current,
+                                &openai_codex::OAuthConfig::chatgpt(None),
+                            )
                             .await?
-                    }
-                    "anthropic" => anthropic::refresh(&current, &Default::default()).await?,
-                    "github-copilot" => {
-                        github_copilot::refresh(&current, &Default::default()).await?
-                    }
-                    "kimi-coding" => kimi_coding::refresh(&current, &Default::default()).await?,
-                    "meta" => meta::refresh(&current, &Default::default()).await?,
-                    "xai" => xai::refresh(&current, &Default::default()).await?,
-                    "radius" => radius::refresh(&current, &Default::default()).await?,
-                    "cursor" => cursor::refresh(&current, &Default::default()).await?,
-                    _ => unreachable!(),
+                        }
+                        "anthropic" => anthropic::refresh(&current, &Default::default()).await?,
+                        "github-copilot" => {
+                            github_copilot::refresh(&current, &Default::default()).await?
+                        }
+                        "kimi-coding" => {
+                            kimi_coding::refresh(&current, &Default::default()).await?
+                        }
+                        "meta" => meta::refresh(&current, &Default::default()).await?,
+                        "xai" => xai::refresh(&current, &Default::default()).await?,
+                        "radius" => radius::refresh(&current, &Default::default()).await?,
+                        "cursor" => cursor::refresh(&current, &Default::default()).await?,
+                        _ => unreachable!(),
+                    })
                 };
+                // A refresh that never answers must not hold every request
+                // for this provider.
+                let refreshed = tokio::time::timeout(std::time::Duration::from_secs(30), refresh)
+                    .await
+                    .map_err(|_| {
+                        anyhow::anyhow!(
+                            "the {provider} token refresh did not answer within 30 seconds. Check your connection, or sign in again with `kiss login {provider}`"
+                        )
+                    })??;
                 let access = refreshed.access.clone();
                 let path = auth_file_path().ok_or_else(|| anyhow::anyhow!("no home directory"))?;
                 accounts::save_refreshed_at(

@@ -258,10 +258,11 @@ async fn stream_assistant(
     };
     let credential = match &config.get_credential {
         Some(resolve) => resolve(config.model.provider.clone()).await,
-        None => None,
+        None => Ok(None),
     };
+    let credential_error = credential.as_ref().err().cloned();
     let options = StreamOptions {
-        credential,
+        credential: credential.ok().flatten(),
         temperature: config.temperature,
         sampling_params: Default::default(),
         max_tokens: config.max_tokens,
@@ -273,7 +274,21 @@ async fn stream_assistant(
         cancel,
     };
 
-    let mut stream = (config.stream_fn)(&config.model, &llm_context, &options);
+    let mut stream = match credential_error {
+        Some(error) => {
+            let (sink, stream) = kiss_ai::EventStream::channel();
+            let mut message = AssistantMessage::empty(
+                &config.model.api,
+                &config.model.provider,
+                &config.model.id,
+            );
+            message.stop_reason = StopReason::Error;
+            message.error_message = Some(error);
+            sink.error(message);
+            stream
+        }
+        None => (config.stream_fn)(&config.model, &llm_context, &options),
+    };
     let mut added_partial = false;
 
     while let Some(event) = stream.next().await {

@@ -82,7 +82,8 @@ type PrepareTurnFn =
     Arc<dyn for<'a> Fn(&'a TurnInfo<'a>) -> BoxFuture<Option<TurnUpdate>> + Send + Sync>;
 type PrepareGenerationFn =
     Arc<dyn Fn(ThinkingLevel) -> BoxFuture<Option<TurnUpdate>> + Send + Sync>;
-type CredentialFn = Arc<dyn Fn(String) -> BoxFuture<Option<ResolvedCredential>> + Send + Sync>;
+type CredentialFn =
+    Arc<dyn Fn(String) -> BoxFuture<Result<Option<ResolvedCredential>, String>> + Send + Sync>;
 /// The function the loop calls to reach a model provider.
 ///
 /// It is public so embedders and tests can substitute their own transport (for
@@ -107,6 +108,8 @@ pub struct AgentLoopConfig {
     /// Convert harness messages to provider messages at the call boundary.
     pub convert_to_llm: ConvertFn,
     pub transform_context: Option<TransformFn>,
+    /// The credential for a provider. An error, such as a failed token
+    /// refresh, fails the turn with that message.
     pub get_credential: Option<CredentialFn>,
     pub get_steering_messages: Option<SteeringFn>,
     pub get_follow_up_messages: Option<SteeringFn>,
