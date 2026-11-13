@@ -324,6 +324,18 @@ pub fn resolve_api_key_local(
     resolve_credential_local(provider, declared).map(ResolvedCredential::into_value)
 }
 
+/// Whether the provider can be used without asking the user: a local secret
+/// resolves, or a login (Microsoft Entra ID) that obtains its token at
+/// request time is saved.
+pub fn is_signed_in_local(provider: &str, declared: &BTreeMap<String, String>) -> bool {
+    resolve_credential_local(provider, declared).is_some()
+        || (provider == azure::PROVIDER
+            && read_auth_file()
+                .entries
+                .get(provider)
+                .is_some_and(azure::is_entra_marker))
+}
+
 pub fn resolve_credential_local(
     provider: &str,
     declared: &BTreeMap<String, String>,

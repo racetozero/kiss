@@ -614,9 +614,7 @@ impl Registry {
             .map(|model| self.credential_provider(&model.provider))
             .collect::<BTreeSet<_>>()
             .into_iter()
-            .filter(|provider| {
-                crate::auth::resolve_api_key_local(provider, &no_declared_keys).is_some()
-            })
+            .filter(|provider| crate::auth::is_signed_in_local(provider, &no_declared_keys))
             .map(str::to_owned)
             .collect();
         self.available_models_for(&authenticated)
