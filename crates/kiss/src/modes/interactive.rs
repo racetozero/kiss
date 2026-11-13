@@ -2227,7 +2227,7 @@ const FEATURED_ACCOUNT_PROVIDERS: &[&str] = &[
 
 const ADD_ACCOUNT: usize = usize::MAX;
 
-fn run_accounts_command(app: &mut App, arguments: &str) {
+fn run_accounts_command(app: &mut App, resources: &mut InteractiveResources, arguments: &str) {
     let parts = arguments.split_whitespace().collect::<Vec<_>>();
     let (action, rest) = match parts.first().copied() {
         None | Some("list") => (AccountAction::Manage, &parts[parts.len().min(1)..]),
@@ -2251,7 +2251,13 @@ fn run_accounts_command(app: &mut App, arguments: &str) {
             start_account_add(app, provider, label);
         }
         (AccountAction::Use | AccountAction::Remove, Some(index)) => {
-            apply_account_action(app, provider, index, action == AccountAction::Use);
+            apply_account_action(
+                app,
+                resources,
+                provider,
+                index,
+                action == AccountAction::Use,
+            );
         }
         _ => open_accounts_picker(app, provider, action),
     }
@@ -2399,14 +2405,34 @@ fn start_account_add(app: &mut App, provider: &str, label: Option<String>) {
     open_login_methods_picker(app, provider);
 }
 
+/// Refresh what depends on a provider's credentials after a login, logout
+/// or account switch: Cursor's model list comes from the account, and a
+/// Copilot account lists the models it may use.
+fn credentials_changed(app: &mut App, resources: &mut InteractiveResources, provider: &str) {
+    if provider == "cursor" {
+        app.model_catalog = None;
+    }
+    if provider == "github-copilot"
+        && let Some(ids) = kiss_ai::auth::stored_oauth_model_ids(provider)
+    {
+        resources
+            .enabled_models
+            .retain(|model| model.provider != provider || ids.contains(&model.id));
+    }
+}
+
 /// Make account `index` active (`activate`) or remove it.
-fn apply_account_action(app: &mut App, provider: &str, index: usize, activate: bool) {
+fn apply_account_action(
+    app: &mut App,
+    resources: &mut InteractiveResources,
+    provider: &str,
+    index: usize,
+    activate: bool,
+) {
     use kiss_ai::auth::accounts;
     let result = if activate {
         accounts::activate(provider, index).map(|account| {
-            if provider == "cursor" {
-                app.model_catalog = None;
-            }
+            credentials_changed(app, resources, provider);
             format!(
                 "{provider}: account {} ({}) is active",
                 index + 1,
@@ -2530,16 +2556,7 @@ fn handle_command_event(
             app.command = None;
             match result {
                 Ok(()) => {
-                    if provider == "cursor" {
-                        app.model_catalog = None;
-                    }
-                    if provider == "github-copilot"
-                        && let Some(ids) = kiss_ai::auth::stored_oauth_model_ids(&provider)
-                    {
-                        resources
-                            .enabled_models
-                            .retain(|model| model.provider != provider || ids.contains(&model.id));
-                    }
+                    credentials_changed(app, resources, &provider);
                     app.cells
                         .push(Cell::Notice(format!("logged in to {provider}")));
                     complete_account_add(app, &provider, true);
@@ -3573,7 +3590,7 @@ fn handle_input(
             return Flow::Continue;
         }
         InputLayer::SecretPrompt => {
-            return handle_secret_prompt(app, session, event, command_tx);
+            return handle_secret_prompt(app, session, resources, event, command_tx);
         }
         // The progress view owns the keyboard while it is open, so that `x`,
         // `p`, and the arrow keys steer the run rather than the editor.
@@ -3865,6 +3882,7 @@ fn handle_input(
 fn handle_secret_prompt(
     app: &mut App,
     session: &Arc<kiss_coding::AgentSession>,
+    resources: &mut InteractiveResources,
     event: &InputEvent,
     command_tx: &mpsc::UnboundedSender<CommandEvent>,
 ) -> Flow {
@@ -3921,9 +3939,7 @@ fn handle_secret_prompt(
                         SecretPromptKind::ApiKey(provider) => {
                             match kiss_ai::auth::store_api_key(&provider, key) {
                                 Ok(()) => {
-                                    if provider == "cursor" {
-                                        app.model_catalog = None;
-                                    }
+                                    credentials_changed(app, resources, &provider);
                                     app.cells.push(Cell::Notice(format!(
                                         "saved API key for {provider}"
                                     )));
@@ -6562,13 +6578,17 @@ fn apply_picker_selection(
         PickerKind::Accounts(provider, action) => match (value, action) {
             (ADD_ACCOUNT, _) => start_account_add(app, &provider, None),
             (index, AccountAction::Manage) => open_account_actions(app, &provider, index),
-            (index, action) => {
-                apply_account_action(app, &provider, index, action == AccountAction::Use)
-            }
+            (index, action) => apply_account_action(
+                app,
+                resources,
+                &provider,
+                index,
+                action == AccountAction::Use,
+            ),
         },
         PickerKind::AccountActions(provider, index) => {
             if value < 2 {
-                apply_account_action(app, &provider, index, value == 0);
+                apply_account_action(app, resources, &provider, index, value == 0);
             }
             open_accounts_picker(app, &provider, AccountAction::Manage);
         }
@@ -6581,6 +6601,7 @@ fn apply_picker_selection(
                     LoginChoice::External(source) => {
                         match kiss_ai::auth::external::import(source) {
                             Ok(()) => {
+                                credentials_changed(app, resources, &provider);
                                 app.cells.push(Cell::Notice(format!(
                                     "imported {provider} credentials from {}",
                                     source.application
@@ -6600,9 +6621,7 @@ fn apply_picker_selection(
         }
         PickerKind::Logout(providers) => {
             if let Some(provider) = providers.get(value) {
-                if provider == "cursor" {
-                    app.model_catalog = None;
-                }
+                credentials_changed(app, resources, provider);
                 match kiss_ai::auth::remove_api_key(provider) {
                     Ok(true) => app.cells.push(Cell::Notice(format!(
                         "removed stored credentials for {provider}"
@@ -7770,7 +7789,7 @@ fn run_slash_command(
             }
         }
         "trust" => open_trust_picker(app, session),
-        "accounts" => run_accounts_command(app, &rest),
+        "accounts" => run_accounts_command(app, resources, &rest),
         "login" => {
             // A login in flight may belong to an account add. It must finish
             // first, or its credential would replace the active account.
@@ -7796,9 +7815,7 @@ fn run_slash_command(
             if rest.is_empty() {
                 open_logout_picker(app);
             } else {
-                if rest == "cursor" {
-                    app.model_catalog = None;
-                }
+                credentials_changed(app, resources, rest);
                 match kiss_ai::auth::remove_api_key(rest) {
                     Ok(true) => app.cells.push(Cell::Notice(format!(
                         "removed stored credentials for {rest}"
