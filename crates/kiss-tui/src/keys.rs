@@ -316,6 +316,14 @@ impl InputDecoder {
                 let Some(len) = utf8_len(byte) else {
                     return Some((None, 1));
                 };
+                // A byte that cannot continue the character ends it now; do
+                // not wait for more input behind it.
+                if buf[1..buf.len().min(len)]
+                    .iter()
+                    .any(|byte| byte & 0xc0 != 0x80)
+                {
+                    return Some((None, 1));
+                }
                 if buf.len() < len {
                     return None;
                 }
@@ -752,6 +760,10 @@ mod tests {
         assert_eq!(
             decode(&[0x80, b'x']),
             [InputEvent::Key(KeyEvent::char('x'))]
+        );
+        assert_eq!(
+            decode(&[0xe1, 0x03]),
+            [InputEvent::Key(KeyEvent::ctrl('c'))]
         );
     }
 
