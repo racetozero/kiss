@@ -779,8 +779,21 @@ impl AgentSession {
         custom_instructions: Option<String>,
         cancel: CancellationToken,
     ) -> anyhow::Result<TreeNavigationOutcome> {
+        // A run appends to the current leaf, so the leaf may move only while
+        // the session is idle. The manager lock is taken before the phase
+        // lock, so a run cannot start between the check and the move.
+        let busy = |_: &SessionManager| {
+            (*self.phase.lock().unwrap() != RunPhase::Idle).then(|| {
+                anyhow::anyhow!(
+                    "The session has an active prompt. Abort it or wait for it to finish before you move in the session tree."
+                )
+            })
+        };
         let (old_leaf, new_leaf, editor_text, abandoned_messages) = {
             let manager = self.manager.lock().unwrap();
+            if let Some(error) = busy(&manager) {
+                return Err(error);
+            }
             let target = manager
                 .get_entry(target_id)
                 .cloned()
@@ -858,6 +871,9 @@ impl AgentSession {
         };
 
         let mut manager = self.manager.lock().unwrap();
+        if let Some(error) = busy(&manager) {
+            return Err(error);
+        }
         if manager.leaf_id() != old_leaf.as_deref() {
             anyhow::bail!("the session tree changed during navigation");
         }
