@@ -309,7 +309,9 @@ struct McpPanelServer {
     tools: Vec<kiss_mcp::CachedTool>,
     authenticated: bool,
     source: String,
-    scope: kiss_mcp::config::ConfigScope,
+    /// The scope kiss edits for this server, or none when its definition
+    /// lives in a file that kiss does not edit.
+    scope: Option<kiss_mcp::config::ConfigScope>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -6030,28 +6032,18 @@ fn open_mcp_picker(
         .config
         .mcp_servers
         .iter()
-        .map(|(name, entry)| {
-            let project = loaded
-                .sources
-                .get(name)
-                .is_some_and(|sources| sources.iter().any(|source| source.project));
-            McpPanelServer {
-                name: name.clone(),
-                entry: entry.clone(),
-                state: if entry.disabled {
-                    McpPanelState::Disabled
-                } else {
-                    McpPanelState::Checking
-                },
-                tools: Vec::new(),
-                authenticated: false,
-                source: loaded.source_labels(name).join(", "),
-                scope: if project {
-                    kiss_mcp::config::ConfigScope::Project
-                } else {
-                    kiss_mcp::config::ConfigScope::User
-                },
-            }
+        .map(|(name, entry)| McpPanelServer {
+            name: name.clone(),
+            entry: entry.clone(),
+            state: if entry.disabled {
+                McpPanelState::Disabled
+            } else {
+                McpPanelState::Checking
+            },
+            tools: Vec::new(),
+            authenticated: false,
+            source: loaded.source_labels(name).join(", "),
+            scope: loaded.writable_scope(name),
         })
         .collect();
     show_mcp_server_picker(app);
@@ -6256,13 +6248,17 @@ fn toggle_mcp_server(app: &mut App, name: &str) {
         return;
     };
     let disabled = server.state != McpPanelState::Disabled;
-    match kiss_mcp::config::set_disabled(
-        paths,
-        server.scope,
-        &server.name,
-        disabled,
-        Some(&server.entry),
-    ) {
+    let Some(scope) = server.scope else {
+        app.cells.push(Cell::Error(format!(
+            "MCP server {} is defined in {}, which kiss does not edit. Set \"disabled\" there, or add the server to ~/.kiss/agent/mcp.json with `kiss mcp add`",
+            server.name, server.source
+        )));
+        return;
+    };
+    match kiss_mcp::config::edit_server(paths, scope, &server.name, |entry| {
+        entry.disabled = disabled;
+        Ok(())
+    }) {
         Ok(()) => {
             server.entry.disabled = disabled;
             server.state = if disabled {
@@ -9019,7 +9015,7 @@ mod tests {
             tools: Vec::new(),
             authenticated: true,
             source: "KISS global".into(),
-            scope: kiss_mcp::config::ConfigScope::User,
+            scope: Some(kiss_mcp::config::ConfigScope::User),
         });
         open_mcp_actions(&mut app, "example");
         let picker = app.picker.as_ref().expect("MCP action picker");
@@ -11243,7 +11239,7 @@ mod tests {
                 tools: Vec::new(),
                 authenticated: false,
                 source: "KISS global".into(),
-                scope: kiss_mcp::config::ConfigScope::User,
+                scope: Some(kiss_mcp::config::ConfigScope::User),
             })),
         );
         assert!(visible_frame(&mut app, &session).contains("running !sleep 30 (esc"));

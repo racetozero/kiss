@@ -397,6 +397,16 @@ impl LoadedConfig {
             .count()
     }
 
+    /// The scope whose file defines `name` and wins the merge, when that
+    /// file is one kiss edits. A server whose winning definition is in
+    /// another file has none.
+    pub fn writable_scope(&self, name: &str) -> Option<ConfigScope> {
+        let winner = self.sources.get(name)?.last()?;
+        [ConfigScope::Project, ConfigScope::User]
+            .into_iter()
+            .find(|scope| self.paths.write_path(*scope) == winner.path)
+    }
+
     pub fn source_labels(&self, name: &str) -> Vec<String> {
         self.sources
             .get(name)
@@ -472,18 +482,6 @@ pub fn add_server(
     write_scope(paths, scope, &config)
 }
 
-pub fn put_server(
-    paths: &ConfigPaths,
-    scope: ConfigScope,
-    name: &str,
-    server: ServerEntry,
-) -> Result<()> {
-    server.validate(name)?;
-    let mut config = read_scope(paths, scope)?;
-    config.mcp_servers.insert(name.to_string(), server);
-    write_scope(paths, scope, &config)
-}
-
 pub fn remove_server(paths: &ConfigPaths, scope: ConfigScope, name: &str) -> Result<bool> {
     let mut config = read_scope(paths, scope)?;
     let removed = config.mcp_servers.remove(name).is_some();
@@ -493,19 +491,24 @@ pub fn remove_server(paths: &ConfigPaths, scope: ConfigScope, name: &str) -> Res
     Ok(removed)
 }
 
-pub fn set_disabled(
+/// Change the entry for `name` in the scope's own file. Only that file's
+/// entry is edited, never the merged one, so values from other files,
+/// such as a user's tokens, are not copied into it.
+pub fn edit_server(
     paths: &ConfigPaths,
     scope: ConfigScope,
     name: &str,
-    disabled: bool,
-    inherited: Option<&ServerEntry>,
+    change: impl FnOnce(&mut ServerEntry) -> Result<()>,
 ) -> Result<()> {
     let mut config = read_scope(paths, scope)?;
-    let server = config
-        .mcp_servers
-        .entry(name.to_string())
-        .or_insert_with(|| inherited.cloned().unwrap_or_default());
-    server.disabled = disabled;
+    let path = paths.write_path(scope);
+    let server = config.mcp_servers.get_mut(name).with_context(|| {
+        format!(
+            "MCP server `{name}` is not defined in {}. Run the command with the --scope of the file that defines it (see `kiss mcp get {name}`), or add it to this file with `kiss mcp add`.",
+            path.display()
+        )
+    })?;
+    change(server)?;
     server.validate(name)?;
     write_scope(paths, scope, &config)
 }
@@ -631,6 +634,34 @@ mod tests {
             command: Some(command.to_string()),
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn editing_a_scope_never_copies_another_scope_entry_into_it() {
+        let temp = tempfile::tempdir().unwrap();
+        let paths = paths(&temp);
+        let mut user = McpConfig::default();
+        let mut entry = stdio("tool");
+        entry.env.insert("TOKEN".into(), "secret".into());
+        user.mcp_servers.insert("demo".to_string(), entry);
+        write_config(&paths.kiss_global, &user).unwrap();
+
+        let loaded = load_with_paths(paths.clone(), true).unwrap();
+        assert_eq!(loaded.writable_scope("demo"), Some(ConfigScope::User));
+        let error = edit_server(&paths, ConfigScope::Project, "demo", |entry| {
+            entry.disabled = true;
+            Ok(())
+        })
+        .unwrap_err();
+        assert!(error.to_string().contains("--scope"), "{error}");
+        assert!(!paths.shared_project.exists());
+
+        edit_server(&paths, ConfigScope::User, "demo", |entry| {
+            entry.disabled = true;
+            Ok(())
+        })
+        .unwrap();
+        assert!(read_scope(&paths, ConfigScope::User).unwrap().mcp_servers["demo"].disabled);
     }
 
     #[test]

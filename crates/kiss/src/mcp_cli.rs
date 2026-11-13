@@ -86,15 +86,10 @@ pub async fn run(command: &McpCommand, trust_override: Option<bool>) -> Result<i
             scope,
             server,
         } => {
-            let base = loaded
-                .config
-                .mcp_servers
-                .get(name)
-                .cloned()
-                .with_context(|| format!("MCP server `{name}` is not configured"))?;
-            let entry = update_server(base, server)?;
-            reject_project_provider_auth(name, *scope, &entry)?;
-            config::put_server(&loaded.paths, scope_value(*scope), name, entry)?;
+            config::edit_server(&loaded.paths, scope_value(*scope), name, |entry| {
+                apply_server_args(entry, server, false)?;
+                reject_project_provider_auth(name, *scope, entry)
+            })?;
             println!("Updated MCP server `{name}` in {}.", scope_label(*scope));
         }
         McpCommand::Remove { name, scope } => {
@@ -109,13 +104,10 @@ pub async fn run(command: &McpCommand, trust_override: Option<bool>) -> Result<i
         }
         McpCommand::Enable { name, scope } | McpCommand::Disable { name, scope } => {
             let disabled = matches!(command, McpCommand::Disable { .. });
-            config::set_disabled(
-                &loaded.paths,
-                scope_value(*scope),
-                name,
-                disabled,
-                loaded.config.mcp_servers.get(name),
-            )?;
+            config::edit_server(&loaded.paths, scope_value(*scope), name, |entry| {
+                entry.disabled = disabled;
+                Ok(())
+            })?;
             println!(
                 "{} MCP server `{name}` in {}.",
                 if disabled { "Disabled" } else { "Enabled" },
@@ -177,11 +169,6 @@ fn reject_project_provider_auth(name: &str, scope: McpScope, server: &ServerEntr
 fn new_server(input: &McpServerArgs) -> Result<ServerEntry> {
     let mut server = ServerEntry::default();
     apply_server_args(&mut server, input, true)?;
-    Ok(server)
-}
-
-fn update_server(mut server: ServerEntry, input: &McpServerArgs) -> Result<ServerEntry> {
-    apply_server_args(&mut server, input, false)?;
     Ok(server)
 }
 
