@@ -2456,6 +2456,19 @@ fn credentials_changed(app: &mut App, provider: &str) {
     }
 }
 
+/// Remove the stored credentials of `provider`, for /logout and its picker.
+fn log_out(app: &mut App, provider: &str) {
+    let removed = kiss_ai::auth::remove_api_key(provider);
+    if matches!(removed, Ok(true)) {
+        credentials_changed(app, provider);
+    }
+    app.cells.push(match removed {
+        Ok(true) => Cell::Notice(format!("removed stored credentials for {provider}")),
+        Ok(false) => Cell::Notice(format!("no stored credentials for {provider}")),
+        Err(error) => Cell::Error(format!("logout failed: {error:#}")),
+    });
+}
+
 /// Make account `index` active (`activate`) or remove it.
 fn apply_account_action(app: &mut App, provider: &str, index: usize, activate: bool) {
     use kiss_ai::auth::accounts;
@@ -6624,18 +6637,7 @@ fn apply_picker_selection(
         }
         PickerKind::Logout(providers) => {
             if let Some(provider) = providers.get(value) {
-                credentials_changed(app, provider);
-                match kiss_ai::auth::remove_api_key(provider) {
-                    Ok(true) => app.cells.push(Cell::Notice(format!(
-                        "removed stored credentials for {provider}"
-                    ))),
-                    Ok(false) => app.cells.push(Cell::Notice(format!(
-                        "no stored credentials for {provider}"
-                    ))),
-                    Err(error) => app
-                        .cells
-                        .push(Cell::Error(format!("logout failed: {error:#}"))),
-                }
+                log_out(app, provider);
             }
         }
         PickerKind::Settings => {
@@ -7844,18 +7846,7 @@ fn run_slash_command(
             if rest.is_empty() {
                 open_logout_picker(app);
             } else {
-                credentials_changed(app, rest);
-                match kiss_ai::auth::remove_api_key(rest) {
-                    Ok(true) => app.cells.push(Cell::Notice(format!(
-                        "removed stored credentials for {rest}"
-                    ))),
-                    Ok(false) => app
-                        .cells
-                        .push(Cell::Notice(format!("no stored credentials for {rest}"))),
-                    Err(error) => app
-                        .cells
-                        .push(Cell::Error(format!("logout failed: {error:#}"))),
-                }
+                log_out(app, rest);
             }
         }
         "name" => {
