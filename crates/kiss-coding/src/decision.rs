@@ -53,11 +53,9 @@ impl DecisionModel {
     }
 
     fn endpoint(self) -> anyhow::Result<String> {
-        let account = if self.provider() == "cloudflare-workers-ai" {
-            kiss_ai::auth::provider_env(self.provider(), "CLOUDFLARE_ACCOUNT_ID")
-        } else {
-            None
-        };
+        let account = matches!(self, Self::Clef | Self::ClefFlash)
+            .then(|| kiss_ai::auth::provider_env(self.provider(), "CLOUDFLARE_ACCOUNT_ID"))
+            .flatten();
         self.endpoint_for_account(account.as_deref())
     }
 

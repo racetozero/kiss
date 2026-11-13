@@ -268,28 +268,18 @@ impl IterativeRuntime {
     pub fn start(
         self: &Arc<Self>,
         kind: JobKind,
-        goal: impl Into<String>,
-        limit: Option<u32>,
-        interval: Option<Duration>,
+        request: JobRequest,
     ) -> anyhow::Result<Arc<JobRecord>> {
-        let goal = goal.into();
-        if goal.trim().is_empty() {
-            anyhow::bail!("the job goal cannot be empty");
-        }
+        let JobRequest {
+            goal,
+            limit,
+            interval,
+        } = request;
         let parent = self
             .parent
             .upgrade()
             .ok_or_else(|| anyhow::anyhow!("the parent session has closed"))?;
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
-        if limit.is_some() && interval.is_some() {
-            anyhow::bail!("an interval and --iterations cannot be used together");
-        }
-        if kind == JobKind::Autoresearch && interval.is_some() {
-            anyhow::bail!("autoresearch does not support an interval");
-        }
-        if interval.is_some_and(|interval| interval.is_zero()) {
-            anyhow::bail!("the interval must be greater than zero");
-        }
         let limit = limit.map(|limit| limit.clamp(1, MAX_ITERATIONS));
         let task_name = format!("{}_{}", kind.label(), id);
         let child = parent.create_subagent_session(
@@ -470,6 +460,125 @@ impl IterativeRuntime {
     }
 }
 
+/// A validated `/loop` or `/autoresearch` request: the goal, and at most
+/// one of an iteration limit (`--iterations N` at the end) and an interval
+/// (a leading duration such as `15m`, loops only).
+#[derive(Debug, PartialEq)]
+pub struct JobRequest {
+    goal: String,
+    limit: Option<u32>,
+    interval: Option<Duration>,
+}
+
+impl JobRequest {
+    pub fn parse(kind: JobKind, arguments: &str) -> Result<JobRequest, String> {
+        let arguments = arguments.trim();
+        let (goal, limit) = if let Some((goal, value)) = arguments.rsplit_once("--iterations") {
+            let value = value.trim();
+            if value.is_empty() || value.split_whitespace().count() != 1 {
+                return Err("use --iterations N at the end of the job goal".into());
+            }
+            let limit = value
+                .parse::<u32>()
+                .ok()
+                .filter(|limit| *limit > 0)
+                .ok_or_else(|| "iterations must be a positive number".to_string())?;
+            (goal.trim(), Some(limit))
+        } else {
+            (arguments, None)
+        };
+
+        let mut words = goal.splitn(2, char::is_whitespace);
+        let first = words.next().unwrap_or_default();
+        let parsed_interval = parse_interval(first)?;
+        if kind == JobKind::Autoresearch && parsed_interval.is_some() {
+            return Err("autoresearch does not support an interval".into());
+        }
+        let interval = (kind == JobKind::Loop).then_some(parsed_interval).flatten();
+        if interval.is_some() && limit.is_some() {
+            return Err("an interval and --iterations cannot be used together".into());
+        }
+        let goal = if interval.is_some() {
+            words.next().unwrap_or_default().trim()
+        } else {
+            goal
+        };
+        if goal.is_empty() {
+            return Err("the job goal cannot be empty".into());
+        }
+        Ok(JobRequest {
+            goal: goal.to_string(),
+            limit,
+            interval,
+        })
+    }
+}
+
+fn parse_interval(value: &str) -> Result<Option<Duration>, String> {
+    if !value
+        .as_bytes()
+        .first()
+        .is_some_and(|byte| byte.is_ascii_digit() || *byte == b'.')
+    {
+        return Ok(None);
+    }
+
+    let mut offset = 0;
+    let mut seconds = 0.0;
+    let mut components = 0;
+    while offset < value.len() {
+        let number_start = offset;
+        let mut dot = false;
+        while let Some(byte) = value.as_bytes().get(offset) {
+            if byte.is_ascii_digit() {
+                offset += 1;
+            } else if *byte == b'.' && !dot {
+                dot = true;
+                offset += 1;
+            } else {
+                break;
+            }
+        }
+        let number = value[number_start..offset].parse::<f64>().ok();
+        let Some(number) = number.filter(|number| number.is_finite() && *number >= 0.0) else {
+            return if components == 0 {
+                Ok(None)
+            } else {
+                Err(format!("invalid loop interval: {value}"))
+            };
+        };
+        let rest = &value[offset..];
+        let Some((suffix, scale)) = [
+            ("ns", 0.000_000_001),
+            ("us", 0.000_001),
+            ("µs", 0.000_001),
+            ("ms", 0.001),
+            ("s", 1.0),
+            ("m", 60.0),
+            ("h", 3_600.0),
+            ("d", 86_400.0),
+        ]
+        .into_iter()
+        .find(|(suffix, _)| rest.starts_with(suffix)) else {
+            return if components == 0 {
+                Ok(None)
+            } else {
+                Err(format!("invalid loop interval: {value}"))
+            };
+        };
+        seconds += number * scale;
+        offset += suffix.len();
+        components += 1;
+    }
+
+    let interval = Duration::try_from_secs_f64(seconds)
+        .map_err(|_| format!("loop interval is too large: {value}"))?;
+    if interval.is_zero() {
+        return Err("the loop interval must be greater than zero".into());
+    }
+    Ok(Some(interval))
+}
+
 fn contains_completion_marker(result: &str) -> bool {
     result.to_ascii_lowercase().contains("[goal-complete]")
 }
@@ -493,6 +602,41 @@ fn iteration_prompt(kind: JobKind, goal: &str, iteration: u32, limit: Option<u32
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn iterative_job_arguments_accept_optional_count_or_interval() {
+        assert_eq!(
+            JobRequest::parse(JobKind::Loop, "fix the parser --iterations 7").unwrap(),
+            JobRequest {
+                goal: "fix the parser".into(),
+                limit: Some(7),
+                interval: None,
+            }
+        );
+        assert_eq!(
+            JobRequest::parse(JobKind::Loop, "2d4h measure startup time").unwrap(),
+            JobRequest {
+                goal: "measure startup time".into(),
+                limit: None,
+                interval: Some(Duration::from_secs(2 * 86_400 + 4 * 3_600)),
+            }
+        );
+        assert_eq!(
+            JobRequest::parse(JobKind::Autoresearch, "measure startup time").unwrap(),
+            JobRequest {
+                goal: "measure startup time".into(),
+                limit: None,
+                interval: None,
+            }
+        );
+        assert!(JobRequest::parse(JobKind::Loop, "fix it --iterations 0").is_err());
+        assert!(JobRequest::parse(JobKind::Loop, "--iterations 4").is_err());
+        assert!(JobRequest::parse(JobKind::Loop, "15m fix it --iterations 4").is_err());
+        assert!(JobRequest::parse(JobKind::Autoresearch, "15m fix it").is_err());
+        assert!(JobRequest::parse(JobKind::Loop, "0s fix it").is_err());
+        assert!(JobRequest::parse(JobKind::Loop, "2h30wat fix it").is_err());
+    }
+
     use kiss_ai::{AssistantEvent, AssistantMessage, ContentBlock, EventStream, StopReason};
     use std::sync::atomic::AtomicUsize;
 
@@ -553,7 +697,10 @@ mod tests {
         let job = parent
             .iterative_jobs()
             .unwrap()
-            .start(JobKind::Loop, "finish it", None, None)
+            .start(
+                JobKind::Loop,
+                JobRequest::parse(JobKind::Loop, "finish it").unwrap(),
+            )
             .unwrap();
         job.pause();
         job.mark_running();
@@ -567,7 +714,10 @@ mod tests {
         let job = parent
             .iterative_jobs()
             .unwrap()
-            .start(JobKind::Loop, "finish it", None, None)
+            .start(
+                JobKind::Loop,
+                JobRequest::parse(JobKind::Loop, "finish it").unwrap(),
+            )
             .unwrap();
         job.pause();
         let ready = job.wait_until_ready();
@@ -616,7 +766,10 @@ mod tests {
 
         let runtime = parent.iterative_jobs().unwrap();
         let job = runtime
-            .start(JobKind::Loop, "finish it", None, None)
+            .start(
+                JobKind::Loop,
+                JobRequest::parse(JobKind::Loop, "finish it").unwrap(),
+            )
             .unwrap();
         let mut updates = job.subscribe();
         tokio::time::timeout(Duration::from_secs(2), async {
