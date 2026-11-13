@@ -167,28 +167,49 @@ struct BackgroundCommand {
     control: CommandControl,
 }
 
+/// The sending side of the command that holds the command slot. When the
+/// last copy is dropped, because the task ended or panicked, the slot is
+/// released; a handler that already released it is not affected, because
+/// the release names this command's id.
 #[derive(Clone)]
-struct CommandTask {
+struct CommandTask(Arc<CommandSender>);
+
+struct CommandSender {
     id: u64,
     sender: mpsc::UnboundedSender<CommandEvent>,
 }
 
+impl Drop for CommandSender {
+    fn drop(&mut self) {
+        let _ = self.sender.send(CommandEvent::ForCommand {
+            id: self.id,
+            event: Box::new(CommandEvent::CommandFinished),
+        });
+    }
+}
+
 impl CommandTask {
     fn new(app: &App, sender: &mpsc::UnboundedSender<CommandEvent>) -> Self {
-        Self {
-            id: app
-                .command
-                .as_ref()
-                .expect("command admission precedes task creation")
-                .id,
+        let id = app
+            .command
+            .as_ref()
+            .expect("command admission precedes task creation")
+            .id;
+        Self::with_id(id, sender)
+    }
+
+    fn with_id(id: u64, sender: &mpsc::UnboundedSender<CommandEvent>) -> Self {
+        Self(Arc::new(CommandSender {
+            id,
             sender: sender.clone(),
-        }
+        }))
     }
 
     fn send(&self, event: CommandEvent) -> std::result::Result<(), ()> {
-        self.sender
+        self.0
+            .sender
             .send(CommandEvent::ForCommand {
-                id: self.id,
+                id: self.0.id,
                 event: Box::new(event),
             })
             .map_err(|_| ())
@@ -8497,10 +8518,7 @@ mod tests {
         let text = format!("{}éEND", "a".repeat(49_999));
         std::fs::write(directory.path().join("output.txt"), text).unwrap();
         let (tx, _rx) = mpsc::unbounded_channel();
-        let task = CommandTask {
-            id: 0,
-            sender: tx.clone(),
-        };
+        let task = CommandTask::with_id(0, &tx);
         let result = run_shell_command(
             Some("bash"),
             "cat output.txt",
@@ -9324,6 +9342,24 @@ mod tests {
         run_command_for_test(&mut app, &session, &mut resources, "fast");
         assert!(!session.fast_mode());
         assert!(matches!(app.cells.last(), Some(Cell::Error(_))));
+    }
+
+    #[tokio::test]
+    async fn a_command_task_that_ends_without_a_result_frees_the_slot() {
+        let session = synthetic_session();
+        let mut app = test_app();
+        let mut resources = test_resources();
+        let (command_tx, mut command_rx) = mpsc::unbounded_channel();
+        assert!(begin_uncancellable_command(&mut app, "working".into()));
+        let task = CommandTask::new(&app, &command_tx);
+        // A panicking task drops its handle the same way.
+        drop(task);
+        let event = command_rx.recv().await.expect("release");
+        let (file_tx, _file_rx) = mpsc::unbounded_channel();
+        let mut file_search = FileSearchService::new(file_tx);
+        handle_command_event(&mut app, event, &mut resources, &mut file_search, &session);
+        assert!(app.command.is_none());
+        assert!(begin_uncancellable_command(&mut app, "next".into()));
     }
 
     #[tokio::test]
@@ -10740,10 +10776,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let cancel = CancellationToken::new();
         let (tx, _rx) = mpsc::unbounded_channel();
-        let task = CommandTask {
-            id: 0,
-            sender: tx.clone(),
-        };
+        let task = CommandTask::with_id(0, &tx);
         let result = run_shell_command(
             Some("sh"),
             "printf stdout; printf stderr >&2; exit 7",
@@ -10773,10 +10806,7 @@ mod tests {
             let temp = tempfile::tempdir().unwrap();
             let cancel = CancellationToken::new();
             let (tx, _rx) = mpsc::unbounded_channel();
-            let task = CommandTask {
-                id: 0,
-                sender: tx.clone(),
-            };
+            let task = CommandTask::with_id(0, &tx);
             let future = run_shell_command(Some("sh"), command, temp.path(), false, &cancel, &task);
             tokio::pin!(future);
             tokio::select! {
