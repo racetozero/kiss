@@ -448,16 +448,27 @@ impl AgentSession {
     /// Count usage that no session message carries (side requests, child
     /// agents, cache warming, remote compaction) and save it, so a resumed
     /// session shows the same totals.
-    pub(crate) fn record_usage(&self, kind: &str, provider: &str, model: &str, usage: Usage) {
+    /// Save the usage of a side request made for session `session_id`. It
+    /// is dropped when that session was replaced meanwhile, so it never
+    /// counts against another session.
+    pub(crate) fn record_usage(
+        &self,
+        session_id: &str,
+        kind: &str,
+        provider: &str,
+        model: &str,
+        usage: Usage,
+    ) {
         if usage == Usage::default() {
             return;
         }
+        let mut manager = self.manager.lock().unwrap();
+        if manager.session_id() != session_id {
+            return;
+        }
         self.totals.lock().unwrap().add(&usage);
-        let saved = self
-            .manager
-            .lock()
-            .unwrap()
-            .append_usage(kind, provider, model, usage, None);
+        let saved = manager.append_usage(kind, provider, model, usage, None);
+        drop(manager);
         self.report_save(saved);
     }
 
@@ -1488,6 +1499,8 @@ impl AgentSession {
         max_tokens: u64,
         cancel: CancellationToken,
     ) -> anyhow::Result<EphemeralResponse> {
+        let session_id = self.manager.lock().unwrap().session_id().to_string();
+        let model = self.model();
         let mut config = self.loop_config(self, Arc::new(Mutex::new(PromptMode::Ordinary)));
         config.thinking_level = ThinkingLevel::Off;
         config.max_tokens = Some(max_tokens);
@@ -1518,8 +1531,7 @@ impl AgentSession {
                 usage.add(&assistant.usage);
             }
         }
-        let model = self.model();
-        self.record_usage(kind, &model.provider, &model.id, usage);
+        self.record_usage(&session_id, kind, &model.provider, &model.id, usage);
         if cancel.is_cancelled() {
             anyhow::bail!("request cancelled");
         }
@@ -1984,12 +1996,13 @@ impl AgentSession {
                 let Some(credential) = session.resolve_credential(&model.provider).await else {
                     return;
                 };
+                let session_id = session.manager.lock().unwrap().session_id().to_string();
                 let options = kiss_ai::StreamOptions {
                     credential: Some(credential),
                     max_tokens: Some(1),
                     reasoning,
                     fast_mode,
-                    session_id: Some(session.manager.lock().unwrap().session_id().to_string()),
+                    session_id: Some(session_id.clone()),
                     transport: settings.transport,
                     cancel: cancel.clone(),
                     ..Default::default()
@@ -2001,6 +2014,7 @@ impl AgentSession {
                     return;
                 }
                 session.record_usage(
+                    &session_id,
                     "cache_warm",
                     &warmed.provider,
                     warmed.response_model.as_deref().unwrap_or(&warmed.model),
@@ -2204,7 +2218,14 @@ impl AgentSession {
                 );
                 self.report_save(saved);
                 if let Some(usage) = result.remote_usage {
-                    self.record_usage("remote_compaction", &model.provider, &model.id, usage);
+                    let session_id = self.manager.lock().unwrap().session_id().to_string();
+                    self.record_usage(
+                        &session_id,
+                        "remote_compaction",
+                        &model.provider,
+                        &model.id,
+                        usage,
+                    );
                 }
                 (self.sink)(SessionEvent::CompactionEnd {
                     summary: result.summary,

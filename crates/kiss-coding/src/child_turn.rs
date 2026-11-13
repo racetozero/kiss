@@ -40,6 +40,9 @@ pub(crate) async fn run_child_turn(
         }
     };
 
+    let parent_session = parent
+        .upgrade()
+        .map(|parent| parent.manager.lock().unwrap().session_id().to_string());
     let usage_before = child.totals();
     let run = child.prompt(vec![AgentMessage::user(prompt)]);
     tokio::pin!(run);
@@ -51,9 +54,9 @@ pub(crate) async fn run_child_turn(
         }
     }
     let usage = child.totals().saturating_sub(&usage_before);
-    if let Some(parent) = parent.upgrade() {
+    if let (Some(parent), Some(session_id)) = (parent.upgrade(), parent_session) {
         let model = child.model();
-        parent.record_usage("subagent", &model.provider, &model.id, usage);
+        parent.record_usage(&session_id, "subagent", &model.provider, &model.id, usage);
     }
     let (status, result, error) = turn_outcome(child);
     ChildTurnOutcome {
