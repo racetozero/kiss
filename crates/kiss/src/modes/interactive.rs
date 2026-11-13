@@ -2944,12 +2944,12 @@ fn command_argument_items(
 ) -> Option<(Vec<SelectItem>, Vec<CompletionReplacement>)> {
     let mut candidates: Vec<(String, Option<String>, String, String)> = match command {
         "model" => {
-            let copilot_models = kiss_ai::auth::stored_oauth_model_ids("github-copilot");
+            let access = ModelAccess::current();
             session
                 .registry
                 .all()
                 .iter()
-                .filter(|model| account_allows_model(model, copilot_models.as_deref()))
+                .filter(|model| access.allows(model))
                 .map(|model| {
                     let replacement = format!("{}/{}", model.provider, model.id);
                     (
@@ -4265,10 +4265,10 @@ fn cycle_model(
             })
             .collect()
     };
-    let copilot_models = kiss_ai::auth::stored_oauth_model_ids("github-copilot");
+    let access = ModelAccess::current();
     let models = source
         .into_iter()
-        .filter(|model| account_allows_model(model, copilot_models.as_deref()))
+        .filter(|model| access.allows(model))
         .collect::<Vec<_>>();
     if models.is_empty() {
         return;
@@ -4784,11 +4784,11 @@ fn open_model_picker_with_filter(
     registry: &kiss_ai::Registry,
     filter: Option<&str>,
 ) {
-    let copilot_models = kiss_ai::auth::stored_oauth_model_ids("github-copilot");
+    let access = ModelAccess::current();
     let models: Vec<kiss_ai::Model> = registry
         .available_models()
         .into_iter()
-        .filter(|(_, model)| account_allows_model(model, copilot_models.as_deref()))
+        .filter(|(_, model)| access.allows(model))
         .map(|(_, model)| model.clone())
         .collect();
     let items: Vec<SelectItem> = models
@@ -4867,12 +4867,12 @@ fn scoped_models_picker(
     session: &Arc<kiss_coding::AgentSession>,
     resources: &InteractiveResources,
 ) -> Picker {
-    let copilot_models = kiss_ai::auth::stored_oauth_model_ids("github-copilot");
+    let access = ModelAccess::current();
     let items = session
         .registry
         .available_models()
         .into_iter()
-        .filter(|(_, model)| account_allows_model(model, copilot_models.as_deref()))
+        .filter(|(_, model)| access.allows(model))
         .map(|(value, model)| {
             let enabled = resources
                 .enabled_models
@@ -4915,9 +4915,22 @@ fn reopen_scoped_models_picker(
     app.show_picker(picker);
 }
 
-fn account_allows_model(model: &kiss_ai::Model, copilot_models: Option<&[String]>) -> bool {
-    model.provider != "github-copilot"
-        || copilot_models.is_none_or(|ids| ids.iter().any(|id| id == &model.id))
+/// Which catalog models the signed-in accounts may use. Only a GitHub
+/// Copilot account restricts them, to the models it listed at login.
+struct ModelAccess(Option<Vec<String>>);
+
+impl ModelAccess {
+    fn current() -> Self {
+        Self(kiss_ai::auth::stored_oauth_model_ids("github-copilot"))
+    }
+
+    fn allows(&self, model: &kiss_ai::Model) -> bool {
+        model.provider != "github-copilot"
+            || self
+                .0
+                .as_ref()
+                .is_none_or(|ids| ids.iter().any(|id| id == &model.id))
+    }
 }
 
 fn open_session_picker(
@@ -7530,8 +7543,8 @@ fn run_slash_command(
                     command_tx,
                 );
             } else if let Some((model, thinking)) = session.registry.resolve(&rest, None) {
-                let copilot_models = kiss_ai::auth::stored_oauth_model_ids("github-copilot");
-                if account_allows_model(&model, copilot_models.as_deref()) {
+                let access = ModelAccess::current();
+                if access.allows(&model) {
                     session.set_model(model);
                     if let Some(thinking) = thinking {
                         session.set_thinking_level(thinking);
