@@ -519,30 +519,30 @@ async fn resolve_api_key_async_generic(
                 )?;
                 return Ok(Some(access));
             }
-            other => return Ok(Some(other.access_token().to_string())),
+            _ => {}
         }
     }
-    for variable in env_var_names(provider) {
-        if let Ok(value) = std::env::var(variable)
-            && !value.is_empty()
+    // The sources and their order are the local resolver's, so a provider
+    // that counts as signed in sends the same credential. Only the markers
+    // that stand for a token fetched at request time are replaced here.
+    let local = match resolve_credential_local(provider, declared) {
+        Some(credential) => Some(credential),
+        None if external::auto_import_unique(provider)?.is_some() => {
+            resolve_credential_local(provider, declared)
+        }
+        None => None,
+    };
+    Ok(match local.map(ResolvedCredential::into_value) {
+        Some(value)
+            if provider == "google-vertex" && value == "google-application-default-credentials" =>
         {
-            return Ok(Some(value));
+            Some(google_application_access_token().await?)
         }
-    }
-    if external::auto_import_unique(provider)?.is_some()
-        && let Some(entry) = read_auth_file().entries.get(provider)
-    {
-        return Ok(Some(entry.access_token().to_string()));
-    }
-    if provider == "google-vertex" && has_google_application_credentials() {
-        return Ok(Some(google_application_access_token().await?));
-    }
-    // Workload identity federation comes after keys and tokens, as in the
-    // Anthropic SDK.
-    if provider == "anthropic" && anthropic_federation::configured() {
-        return Ok(Some(anthropic_federation::access_token().await?));
-    }
-    Ok(declared.get(provider).cloned())
+        Some(value) if provider == "anthropic" && value == anthropic_federation::MARKER => {
+            Some(anthropic_federation::access_token().await?)
+        }
+        other => other,
+    })
 }
 
 fn has_google_application_credentials() -> bool {
@@ -990,6 +990,25 @@ mod tests {
         assert_eq!(
             resolve_api_key_local("test-provider", &declared).as_deref(),
             Some("test-key")
+        );
+    }
+
+    #[tokio::test]
+    async fn a_request_sends_the_value_of_a_declared_variable_key() {
+        let variable = "KISS_TEST_DECLARED_KEY_VARIABLE";
+        // SAFETY: the variable name is unique to this test.
+        unsafe { std::env::set_var(variable, "from-env") };
+        let declared = BTreeMap::from([("test-provider".to_string(), format!("${variable}"))]);
+        assert_eq!(
+            resolve_api_key_async("test-provider", &declared)
+                .await
+                .unwrap()
+                .as_deref(),
+            Some("from-env")
+        );
+        assert_eq!(
+            resolve_api_key_local("test-provider", &declared).as_deref(),
+            Some("from-env")
         );
     }
 
