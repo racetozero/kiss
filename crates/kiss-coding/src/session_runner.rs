@@ -229,7 +229,8 @@ fn normalize_session_title(text: &str) -> Option<String> {
 }
 
 pub struct AgentSession {
-    /// Lock order: take `manager` before `phase`, never the other way.
+    /// Lock order: take `manager` before `phase`, never the other way; take
+    /// `context_file` before `manager`.
     pub manager: Mutex<SessionManager>,
     pub registry: Arc<Registry>,
     base_tools: Mutex<Vec<DynTool>>,
@@ -494,7 +495,13 @@ impl AgentSession {
     pub fn update_settings(&self, settings: Settings) {
         let was_enabled = self.subagents_enabled();
         let workflows_were_enabled = self.workflows_enabled();
+        let cache_warming = settings.cache_warming;
         *self.settings.lock().unwrap() = settings;
+        if cache_warming == CacheWarmingMode::Off
+            || (cache_warming == CacheWarmingMode::Streaming && !self.is_running())
+        {
+            self.cache_warm_cancel.lock().unwrap().cancel();
+        }
         let is_enabled = self.subagents_enabled();
         if was_enabled && !is_enabled {
             self.stop_child_work();
@@ -509,6 +516,7 @@ impl AgentSession {
         *self.system_prompt.lock().unwrap() = system_prompt;
         *self.base_tools.lock().unwrap() = tools;
         self.update_settings(settings);
+        self.prefix_changed();
     }
 
     /// Add or replace one tool for this process without changing saved tool configuration.
@@ -614,8 +622,21 @@ impl AgentSession {
         {
             tools.extend(runtime.control_tools());
         }
-        *self.tools.lock().unwrap() = tools;
-        self.prefix_changed();
+        // Only a different tool list changes the request prefix; a settings
+        // change that keeps the tools must not stop cache warming.
+        let signature = |tools: &[DynTool]| {
+            tools
+                .iter()
+                .map(|tool| (tool.name().to_string(), tool.description()))
+                .collect::<Vec<_>>()
+        };
+        let mut current = self.tools.lock().unwrap();
+        let changed = signature(&current) != signature(&tools);
+        *current = tools;
+        drop(current);
+        if changed {
+            self.prefix_changed();
+        }
     }
 
     fn tools_for(&self, mode: PromptMode) -> Vec<DynTool> {
@@ -681,7 +702,6 @@ impl AgentSession {
             );
         }
         let manager = create(&current)?;
-        *self.context_file.lock().unwrap() = None;
         if let Some(runtime) = self.subagents.get() {
             runtime.reset();
         }
@@ -704,6 +724,9 @@ impl AgentSession {
         *current = manager;
         drop(phase);
         drop(current);
+        // Context-file sync takes this lock before the manager's, so clear it
+        // only after both are released.
+        *self.context_file.lock().unwrap() = None;
         self.prefix_changed();
         *self.totals.lock().unwrap() = totals;
         Ok(())

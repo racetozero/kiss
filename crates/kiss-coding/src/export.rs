@@ -1,6 +1,6 @@
 //! Session -> standalone HTML export.
 
-use crate::{SessionEntry, SessionManager};
+use crate::SessionManager;
 use anyhow::Result;
 use kiss_agent::AgentMessage;
 use std::path::Path;
@@ -32,75 +32,81 @@ pub fn export_html(
             escape(&tools)
         ));
     }
-    for entry in manager.build_context_entries() {
-        match entry {
-            SessionEntry::Message { message, .. } => {
-                match message {
-                    AgentMessage::User(u) => {
-                        body.push_str(&format!(
-                            "<div class=\"msg user\"><h4>user</h4><pre>{}</pre></div>\n",
-                            escape(&u.content.as_text())
-                        ));
-                    }
-                    AgentMessage::Assistant(a) => {
-                        let mut inner = String::new();
-                        for block in &a.content {
-                            match block {
-                                kiss_ai::ContentBlock::Text { text, .. } => {
-                                    inner.push_str(&format!(
-                                        "<pre class=\"text\">{}</pre>",
-                                        escape(text)
-                                    ));
-                                }
-                                kiss_ai::ContentBlock::Thinking { thinking, .. } => {
-                                    inner.push_str(&format!("<details><summary>thinking</summary><pre>{}</pre></details>", escape(thinking)));
-                                }
-                                kiss_ai::ContentBlock::ToolCall(tc) => {
-                                    inner.push_str(&format!(
-                                        "<div class=\"toolcall\">→ {} <code>{}</code></div>",
-                                        escape(&tc.name),
-                                        escape(&tc.arguments.to_string())
-                                    ));
-                                }
-                                kiss_ai::ContentBlock::Image { .. } => {
-                                    inner.push_str("<em>[image]</em>")
-                                }
-                            }
+    // The conversation as the model sees it, including compaction summaries
+    // and the messages a compaction kept.
+    for message in manager.context_messages() {
+        match message.as_ref() {
+            AgentMessage::User(u) => {
+                body.push_str(&format!(
+                    "<div class=\"msg user\"><h4>user</h4><pre>{}</pre></div>\n",
+                    escape(&u.content.as_text())
+                ));
+            }
+            AgentMessage::Assistant(a) => {
+                let mut inner = String::new();
+                for block in &a.content {
+                    match block {
+                        kiss_ai::ContentBlock::Text { text, .. } => {
+                            inner.push_str(&format!("<pre class=\"text\">{}</pre>", escape(text)));
                         }
-                        body.push_str(&format!(
-                            "<div class=\"msg assistant\"><h4>assistant ({})</h4>{inner}</div>\n",
-                            escape(&a.model)
-                        ));
-                    }
-                    AgentMessage::ToolResult(t) => {
-                        let text: String = t
-                            .content
-                            .iter()
-                            .filter_map(|c| match c {
-                                kiss_ai::ContentBlock::Text { text, .. } => Some(text.as_str()),
-                                _ => None,
-                            })
-                            .collect::<Vec<_>>()
-                            .join("\n");
-                        let class = if t.is_error { "tool error" } else { "tool" };
-                        body.push_str(&format!(
-                        "<details class=\"{class}\"><summary>{} result</summary><pre>{}</pre></details>\n",
-                        escape(&t.tool_name),
-                        escape(&text)
-                    ));
-                    }
-                    other => {
-                        body.push_str(&format!(
-                            "<div class=\"msg meta\"><h4>{}</h4></div>\n",
-                            other.role()
-                        ));
+                        kiss_ai::ContentBlock::Thinking { thinking, .. } => {
+                            inner.push_str(&format!(
+                                "<details><summary>thinking</summary><pre>{}</pre></details>",
+                                escape(thinking)
+                            ));
+                        }
+                        kiss_ai::ContentBlock::ToolCall(tc) => {
+                            inner.push_str(&format!(
+                                "<div class=\"toolcall\">→ {} <code>{}</code></div>",
+                                escape(&tc.name),
+                                escape(&tc.arguments.to_string())
+                            ));
+                        }
+                        kiss_ai::ContentBlock::Image { .. } => inner.push_str("<em>[image]</em>"),
                     }
                 }
+                body.push_str(&format!(
+                    "<div class=\"msg assistant\"><h4>assistant ({})</h4>{inner}</div>\n",
+                    escape(&a.model)
+                ));
             }
-            SessionEntry::Compaction { summary, .. } => {
-                body.push_str(&format!("<details class=\"meta\"><summary>compaction summary</summary><pre>{}</pre></details>\n", escape(summary)));
+            AgentMessage::ToolResult(t) => {
+                let text: String = t
+                    .content
+                    .iter()
+                    .filter_map(|c| match c {
+                        kiss_ai::ContentBlock::Text { text, .. } => Some(text.as_str()),
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                let class = if t.is_error { "tool error" } else { "tool" };
+                body.push_str(&format!(
+                "<details class=\"{class}\"><summary>{} result</summary><pre>{}</pre></details>\n",
+                escape(&t.tool_name),
+                escape(&text)
+            ));
             }
-            _ => {}
+            AgentMessage::CompactionSummary(c) => {
+                body.push_str(&format!("<details class=\"meta\"><summary>compaction summary</summary><pre>{}</pre></details>\n", escape(&c.summary)));
+            }
+            AgentMessage::BranchSummary(b) => {
+                body.push_str(&format!("<details class=\"meta\"><summary>branch summary</summary><pre>{}</pre></details>\n", escape(&b.summary)));
+            }
+            AgentMessage::BashExecution(b) => {
+                body.push_str(&format!(
+                    "<details class=\"tool\"><summary>! {}</summary><pre>{}</pre></details>\n",
+                    escape(&b.command),
+                    escape(&b.output)
+                ));
+            }
+            AgentMessage::Custom(c) => {
+                body.push_str(&format!(
+                    "<div class=\"msg meta\"><h4>{}</h4><pre>{}</pre></div>\n",
+                    escape(&c.custom_type),
+                    escape(&c.content.as_text())
+                ));
+            }
         }
     }
 
@@ -161,6 +167,29 @@ mod tests {
         export_session(&manager, &target, None).unwrap();
         let reopened = SessionManager::open(&target).unwrap();
         assert_eq!(reopened.session_id(), manager.session_id());
+    }
+
+    #[test]
+    fn html_export_keeps_messages_a_compaction_retained() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("session.html");
+        let mut manager = SessionManager::in_memory(Path::new("/tmp/project"));
+        manager
+            .append_message(AgentMessage::user("summarized away"))
+            .unwrap();
+        manager
+            .append_compaction(
+                "the summary".into(),
+                100,
+                vec![AgentMessage::user("kept after compaction")],
+                None,
+                None,
+            )
+            .unwrap();
+        export_html(&manager, &target, None).unwrap();
+        let html = std::fs::read_to_string(&target).unwrap();
+        assert!(html.contains("the summary"));
+        assert!(html.contains("kept after compaction"));
     }
 
     #[test]
