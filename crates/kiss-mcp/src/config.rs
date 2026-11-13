@@ -474,21 +474,20 @@ pub fn add_server(
     server: ServerEntry,
 ) -> Result<()> {
     server.validate(name)?;
-    let mut config = read_scope(paths, scope)?;
-    if config.mcp_servers.contains_key(name) {
-        bail!("MCP server `{name}` already exists in this scope. Use update")
-    }
-    config.mcp_servers.insert(name.to_string(), server);
-    write_scope(paths, scope, &config)
+    change_scope(paths, scope, |config| {
+        if config.mcp_servers.contains_key(name) {
+            bail!("MCP server `{name}` already exists in this scope. Use update")
+        }
+        config.mcp_servers.insert(name.to_string(), server);
+        Ok(((), true))
+    })
 }
 
 pub fn remove_server(paths: &ConfigPaths, scope: ConfigScope, name: &str) -> Result<bool> {
-    let mut config = read_scope(paths, scope)?;
-    let removed = config.mcp_servers.remove(name).is_some();
-    if removed {
-        write_scope(paths, scope, &config)?;
-    }
-    Ok(removed)
+    change_scope(paths, scope, |config| {
+        let removed = config.mcp_servers.remove(name).is_some();
+        Ok((removed, removed))
+    })
 }
 
 /// Change the entry for `name` in the scope's own file. Only that file's
@@ -500,21 +499,37 @@ pub fn edit_server(
     name: &str,
     change: impl FnOnce(&mut ServerEntry) -> Result<()>,
 ) -> Result<()> {
-    let mut config = read_scope(paths, scope)?;
     let path = paths.write_path(scope);
-    let server = config.mcp_servers.get_mut(name).with_context(|| {
-        format!(
-            "MCP server `{name}` is not defined in {}. Run the command with the --scope of the file that defines it (see `kiss mcp get {name}`), or add it to this file with `kiss mcp add`.",
-            path.display()
-        )
-    })?;
-    change(server)?;
-    server.validate(name)?;
-    write_scope(paths, scope, &config)
+    change_scope(paths, scope, |config| {
+        let server = config.mcp_servers.get_mut(name).with_context(|| {
+            format!(
+                "MCP server `{name}` is not defined in {}. Run the command with the --scope of the file that defines it (see `kiss mcp get {name}`), or add it to this file with `kiss mcp add`.",
+                path.display()
+            )
+        })?;
+        change(server)?;
+        server.validate(name)?;
+        Ok(((), true))
+    })
 }
 
-pub fn write_scope(paths: &ConfigPaths, scope: ConfigScope, config: &McpConfig) -> Result<()> {
-    write_config(paths.write_path(scope), config)
+/// Read, change and write one scope's file under its lock, so two edits
+/// at the same time cannot lose one of them. `change` returns its result
+/// and whether it changed the file.
+fn change_scope<T>(
+    paths: &ConfigPaths,
+    scope: ConfigScope,
+    change: impl FnOnce(&mut McpConfig) -> Result<(T, bool)>,
+) -> Result<T> {
+    let path = paths.write_path(scope);
+    kiss_ai::config_file::with_lock(path, || {
+        let mut config = read_scope(paths, scope)?;
+        let (result, changed) = change(&mut config)?;
+        if changed {
+            kiss_ai::config_file::write_private_json(path, &config)?;
+        }
+        Ok(result)
+    })
 }
 
 pub fn validate_server_name(name: &str) -> Result<()> {
@@ -606,12 +621,6 @@ fn strip_json_comments(text: &str) -> String {
     output
 }
 
-fn write_config(path: &Path, config: &McpConfig) -> Result<()> {
-    kiss_ai::config_file::with_lock(path, || {
-        kiss_ai::config_file::write_private_json(path, config)
-    })
-}
-
 pub fn all_source_paths(paths: &ConfigPaths, trusted_project: bool) -> BTreeSet<PathBuf> {
     paths
         .read_sources(trusted_project)
@@ -644,7 +653,7 @@ mod tests {
         let mut entry = stdio("tool");
         entry.env.insert("TOKEN".into(), "secret".into());
         user.mcp_servers.insert("demo".to_string(), entry);
-        write_config(&paths.kiss_global, &user).unwrap();
+        kiss_ai::config_file::write_private_json(&paths.kiss_global, &user).unwrap();
 
         let loaded = load_with_paths(paths.clone(), true).unwrap();
         assert_eq!(loaded.writable_scope("demo"), Some(ConfigScope::User));
@@ -672,7 +681,7 @@ mod tests {
         let mut entry = stdio("global-command");
         entry.args = vec!["one".to_string()];
         global.mcp_servers.insert("demo".to_string(), entry);
-        write_config(&paths.kiss_global, &global).unwrap();
+        kiss_ai::config_file::write_private_json(&paths.kiss_global, &global).unwrap();
         std::fs::create_dir_all(paths.shared_project.parent().unwrap()).unwrap();
         std::fs::write(
             &paths.shared_project,

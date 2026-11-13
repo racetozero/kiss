@@ -53,68 +53,56 @@ impl FileCredentialStore {
         }
     }
 
-    fn read(&self) -> Result<CredentialFile> {
-        let text = match std::fs::read_to_string(&self.path) {
-            Ok(text) => text,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                return Ok(CredentialFile::default());
-            }
-            Err(error) => {
-                return Err(error).with_context(|| format!("read {}", self.path.display()));
-            }
-        };
-        serde_json::from_str(&text).with_context(|| format!("parse {}", self.path.display()))
-    }
-
-    fn write(&self, credentials: &CredentialFile) -> Result<()> {
+    /// Read, change and write the file under its lock, so a save for one
+    /// server cannot drop the credentials another server saved meanwhile.
+    /// `change` returns its result and whether it changed the file.
+    fn update<T>(
+        &self,
+        change: impl FnOnce(&mut CredentialFile) -> (T, bool),
+    ) -> std::result::Result<T, AuthError> {
         kiss_ai::config_file::with_lock(&self.path, || {
-            kiss_ai::config_file::write_private_json(&self.path, credentials)
+            let mut file: CredentialFile = kiss_ai::config_file::read_json(&self.path)?;
+            let (result, changed) = change(&mut file);
+            if changed {
+                kiss_ai::config_file::write_private_json(&self.path, &file)?;
+            }
+            Ok(result)
         })
+        .map_err(|error| AuthError::InternalError(format!("{error:#}")))
     }
 }
 
 #[async_trait]
 impl CredentialStore for FileCredentialStore {
     async fn load(&self) -> std::result::Result<Option<StoredCredentials>, AuthError> {
-        let mut file = self
-            .read()
-            .map_err(|error| AuthError::InternalError(error.to_string()))?;
-        let Some(envelope) = file.servers.get(&self.server_name) else {
-            return Ok(None);
-        };
-        if envelope.server_url == self.server_url {
-            return Ok(Some(envelope.credentials.clone()));
-        }
-        file.servers.remove(&self.server_name);
-        self.write(&file)
-            .map_err(|error| AuthError::InternalError(error.to_string()))?;
-        Ok(None)
+        self.update(|file| match file.servers.get(&self.server_name) {
+            None => (None, false),
+            Some(envelope) if envelope.server_url == self.server_url => {
+                (Some(envelope.credentials.clone()), false)
+            }
+            // Credentials saved for another URL must not be sent to this one.
+            Some(_) => {
+                file.servers.remove(&self.server_name);
+                (None, true)
+            }
+        })
     }
 
     async fn save(&self, credentials: StoredCredentials) -> std::result::Result<(), AuthError> {
-        let mut file = self
-            .read()
-            .map_err(|error| AuthError::InternalError(error.to_string()))?;
-        file.servers.insert(
-            self.server_name.clone(),
-            CredentialEnvelope {
-                server_url: self.server_url.clone(),
-                credentials,
-            },
-        );
-        self.write(&file)
-            .map_err(|error| AuthError::InternalError(error.to_string()))
+        self.update(|file| {
+            file.servers.insert(
+                self.server_name.clone(),
+                CredentialEnvelope {
+                    server_url: self.server_url.clone(),
+                    credentials,
+                },
+            );
+            ((), true)
+        })
     }
 
     async fn clear(&self) -> std::result::Result<(), AuthError> {
-        let mut file = self
-            .read()
-            .map_err(|error| AuthError::InternalError(error.to_string()))?;
-        if file.servers.remove(&self.server_name).is_some() {
-            self.write(&file)
-                .map_err(|error| AuthError::InternalError(error.to_string()))?;
-        }
-        Ok(())
+        self.update(|file| ((), file.servers.remove(&self.server_name).is_some()))
     }
 }
 
