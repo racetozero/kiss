@@ -240,15 +240,14 @@ async fn build_request(
         .as_ref()
         .filter(|prompt| !prompt.trim().is_empty())
         .map(|prompt| vec![SystemContentBlock::Text(prompt.clone())]);
+    let max_tokens = options.max_tokens.unwrap_or(model.max_tokens);
     let inference = InferenceConfiguration::builder()
-        .max_tokens(i32::try_from(
-            options.max_tokens.unwrap_or(model.max_tokens),
-        )?)
+        .max_tokens(i32::try_from(max_tokens)?)
         .set_temperature(options.temperature.map(|temperature| temperature as f32))
         .build();
     let tools = convert_tools(context)?;
-    let additional =
-        reasoning_fields(model, options.reasoning).map(|fields| value_to_document(&fields));
+    let additional = reasoning_fields(model, options.reasoning, max_tokens)
+        .map(|fields| value_to_document(&fields));
 
     Ok(client
         .converse_stream()
@@ -263,7 +262,9 @@ async fn build_request(
 
 /// OpenAI models on Bedrock take a reasoning effort, not a thinking budget.
 /// gpt-oss takes a flat `reasoning_effort` and accepts only low, medium, and high.
-fn reasoning_fields(model: &Model, level: crate::ThinkingLevel) -> Option<Value> {
+/// `max_tokens` is the request's output limit; a thinking budget must stay
+/// below it.
+fn reasoning_fields(model: &Model, level: crate::ThinkingLevel, max_tokens: u64) -> Option<Value> {
     use crate::ThinkingLevel::*;
     let id = model.id.to_ascii_lowercase();
     if level == Off {
@@ -295,7 +296,7 @@ fn reasoning_fields(model: &Model, level: crate::ThinkingLevel) -> Option<Value>
             });
         return Some(serde_json::json!({ "reasoning": { "effort": effort } }));
     }
-    thinking_budget(level, model.max_tokens).map(
+    thinking_budget(level, max_tokens).map(
         |budget| serde_json::json!({ "thinking": { "type": "enabled", "budget_tokens": budget } }),
     )
 }
@@ -341,11 +342,14 @@ fn endpoint_region(base_url: &str) -> Option<String> {
         .map(str::to_string)
 }
 
+/// Use the catalog's endpoint unless a region or profile is configured, in
+/// the process environment or saved with the Bedrock login, the same
+/// sources `bedrock_region` reads.
 fn should_use_catalog_endpoint(model: &Model) -> bool {
     endpoint_region(&model.base_url).is_none()
-        || (std::env::var_os("AWS_REGION").is_none()
-            && std::env::var_os("AWS_DEFAULT_REGION").is_none()
-            && std::env::var_os("AWS_PROFILE").is_none())
+        || ["AWS_REGION", "AWS_DEFAULT_REGION", "AWS_PROFILE"]
+            .iter()
+            .all(|name| crate::auth::provider_env("amazon-bedrock", name).is_none())
 }
 
 fn convert_messages(context: &Context) -> Result<Vec<Message>> {
@@ -632,17 +636,17 @@ mod tests {
         let mut gpt = model();
         gpt.id = "global.openai.gpt-6.1-sol".into();
         assert_eq!(
-            reasoning_fields(&gpt, crate::ThinkingLevel::Xhigh).unwrap(),
+            reasoning_fields(&gpt, crate::ThinkingLevel::Xhigh, gpt.max_tokens).unwrap(),
             serde_json::json!({"reasoning": {"effort": "xhigh"}})
         );
         gpt.id = "openai.gpt-oss-120b-1:0".into();
         assert_eq!(
-            reasoning_fields(&gpt, crate::ThinkingLevel::Max).unwrap(),
+            reasoning_fields(&gpt, crate::ThinkingLevel::Max, gpt.max_tokens).unwrap(),
             serde_json::json!({"reasoning_effort": "high"})
         );
-        assert!(reasoning_fields(&gpt, crate::ThinkingLevel::Off).is_none());
+        assert!(reasoning_fields(&gpt, crate::ThinkingLevel::Off, gpt.max_tokens).is_none());
         assert!(
-            reasoning_fields(&model(), crate::ThinkingLevel::High).unwrap()["thinking"].is_object()
+            reasoning_fields(&model(), crate::ThinkingLevel::High, model().max_tokens).unwrap()["thinking"].is_object()
         );
     }
 
