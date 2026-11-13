@@ -1139,16 +1139,6 @@ impl AgentSession {
                     fast_mode: Some(session.fast_mode()),
                     ..Default::default()
                 };
-                if settings.experimental_context_file
-                    && let Some(context) = &mut update.context
-                {
-                    // A retry must not put the failed answer back in the
-                    // provider request when the file refreshes the context.
-                    while matches!(context.messages.last(), Some(AgentMessage::Assistant(assistant)) if assistant.stop_reason == StopReason::Error)
-                    {
-                        context.messages.pop();
-                    }
-                }
                 let Some(decision_model) = decision_model else {
                     return Some(update);
                 };
@@ -1366,7 +1356,7 @@ impl AgentSession {
     fn build_context_for(&self, prompt_mode: PromptMode) -> AgentContext {
         let model = self.model();
         let manager = self.manager.lock().unwrap();
-        let (openai_responses_input, messages) = if !self.settings().experimental_context_file
+        let (openai_responses_input, mut messages) = if !self.settings().experimental_context_file
             && kiss_ai::api::openai_compaction::supports_remote_compaction(&model)
             && let Some(remote) = manager.build_openai_compaction_context(&model)
         {
@@ -1375,6 +1365,14 @@ impl AgentSession {
             (None, manager.build_session_context().messages)
         };
         drop(manager);
+        // A failed answer is not sent back: a retry, or a context rebuilt
+        // for another model, asks again from the turn before it.
+        while matches!(
+            messages.last(),
+            Some(AgentMessage::Assistant(assistant)) if assistant.stop_reason == StopReason::Error
+        ) {
+            messages.pop();
+        }
         let mut system_prompt = self.system_prompt.lock().unwrap().clone();
         let tools = self.tools_for(prompt_mode);
         // Cursor also advertises its native Shell tool; it must use the registered shell's syntax.
@@ -1840,13 +1838,6 @@ impl AgentSession {
                 }
                 *self.phase.lock().unwrap() = RunPhase::Streaming;
                 context = self.build_context_for(*active_prompt_mode.lock().unwrap());
-                // Drop the trailing error assistant message from context.
-                while matches!(
-                    context.messages.last(),
-                    Some(AgentMessage::Assistant(a)) if a.stop_reason == StopReason::Error
-                ) {
-                    context.messages.pop();
-                }
                 config.model = self.model();
                 config.thinking_level = self.thinking_level();
                 config.fast_mode = self.fast_mode();
@@ -1870,8 +1861,8 @@ impl AgentSession {
     fn on_agent_event(self: &Arc<Self>, event: &AgentEvent) {
         match event {
             AgentEvent::MessageEnd { message } => {
-                // Persist assistant + tool results (prompts persisted earlier;
-                // steering/follow-up user messages arrive here too).
+                // Save answers, tool results and queued prompts. A run's
+                // first prompts were saved before it and do not arrive here.
                 let persist = match message {
                     AgentMessage::Assistant(a) => {
                         self.schedule_cache_warming(a);
@@ -1885,18 +1876,8 @@ impl AgentSession {
                     _ => false,
                 };
                 if persist {
-                    // User prompts were persisted in prompt(). Avoid double
-                    // writes by checking the current leaf message identity.
-                    let mut manager = self.manager.lock().unwrap();
-                    let duplicate = matches!(
-                        (manager.entries().last(), message),
-                        (Some(crate::session::entry::SessionEntry::Message { message: last, .. }), m) if last == m
-                    );
-                    if !duplicate {
-                        let saved = manager.append_message(message.clone());
-                        drop(manager);
-                        self.report_save(saved);
-                    }
+                    let saved = self.manager.lock().unwrap().append_message(message.clone());
+                    self.report_save(saved);
                 }
             }
             AgentEvent::AgentEnd { .. } => {}
