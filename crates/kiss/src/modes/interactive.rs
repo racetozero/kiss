@@ -1317,6 +1317,18 @@ fn note_user_activity(app: &mut App) {
 }
 
 /// A recap that the user asked for survives input. An automatic one does not.
+/// Turn automatic recaps on or off. Off also cancels one in flight; on
+/// starts the idle timer from now.
+fn set_auto_recap(app: &mut App, resources: &mut InteractiveResources, enabled: bool) {
+    resources.settings.auto_recap = Some(enabled);
+    app.idle_recap_armed = enabled;
+    if enabled {
+        app.last_user_activity = Instant::now();
+    } else {
+        cancel_automatic_recap(app);
+    }
+}
+
 fn cancel_automatic_recap(app: &mut App) {
     if let Some(job) = app.recap_job.take_if(|job| job.automatic) {
         job.cancel.cancel();
@@ -3542,15 +3554,8 @@ fn handle_input(
     if voice_input(
         app,
         event,
-        crate::voice::Backend::parse(
-            resources
-                .settings
-                .voice_backend
-                .as_deref()
-                .unwrap_or("local"),
-        )
-        .unwrap_or(crate::voice::Backend::Local),
-        resources.settings.voice_language.as_deref().unwrap_or("en"),
+        crate::voice::Backend::from_settings(&resources.settings),
+        crate::voice::language(&resources.settings),
         command_tx,
     ) {
         return Flow::Continue;
@@ -6797,11 +6802,7 @@ fn apply_settings_selection(
             };
             app.mermaid_mode = mermaid_mode(resources.settings.markdown.mermaid);
         }
-        12 => {
-            resources.settings.auto_recap = Some(!resources.settings.auto_recap_enabled());
-            app.idle_recap_armed = resources.settings.auto_recap_enabled();
-            app.last_user_activity = Instant::now();
-        }
+        12 => set_auto_recap(app, resources, !resources.settings.auto_recap_enabled()),
         13 => {
             resources.settings.subagents.enabled.toggle();
         }
@@ -7600,14 +7601,7 @@ fn run_slash_command(
                 Some(mode) => {
                     if mode != VoiceMode::Off
                         && let Err(error) = crate::voice::check_setup(
-                            crate::voice::Backend::parse(
-                                resources
-                                    .settings
-                                    .voice_backend
-                                    .as_deref()
-                                    .unwrap_or("local"),
-                            )
-                            .unwrap_or(crate::voice::Backend::Local),
+                            crate::voice::Backend::from_settings(&resources.settings),
                         )
                     {
                         app.cells
@@ -7627,15 +7621,8 @@ fn run_slash_command(
                         }
                         VoiceMode::Off => "Voice mode disabled.",
                     };
-                    let backend = crate::voice::Backend::parse(
-                        resources
-                            .settings
-                            .voice_backend
-                            .as_deref()
-                            .unwrap_or("local"),
-                    )
-                    .unwrap_or(crate::voice::Backend::Local);
-                    app.cells.push(Cell::Notice(format!("{notice} Backend: {}{} Dictation language: {} (/config voice-language <code> to change).", backend.name(), if mode != VoiceMode::Off && backend != crate::voice::Backend::Local { " (microphone audio sent to provider)." } else { "." }, resources.settings.voice_language.as_deref().unwrap_or("en"))));
+                    let backend = crate::voice::Backend::from_settings(&resources.settings);
+                    app.cells.push(Cell::Notice(format!("{notice} Backend: {}{} Dictation language: {} (/config voice-language <code> to change).", backend.name(), if mode != VoiceMode::Off && backend != crate::voice::Backend::Local { " (microphone audio sent to provider)." } else { "." }, crate::voice::language(&resources.settings))));
                 }
                 None => app.cells.push(Cell::Error(
                     "usage: /voice [hold|tap|off|local|deepgram|elevenlabs]".into(),
@@ -7677,16 +7664,12 @@ fn run_slash_command(
         "recap" => match rest.as_str() {
             "" | "now" => start_recap(app, session, false, command_tx),
             "on" => {
-                resources.settings.auto_recap = Some(true);
-                app.idle_recap_armed = true;
-                app.last_user_activity = Instant::now();
+                set_auto_recap(app, resources, true);
                 save_interactive_settings(app, session, resources);
                 app.cells.push(Cell::Notice("automatic recap is on".into()));
             }
             "off" => {
-                resources.settings.auto_recap = Some(false);
-                app.idle_recap_armed = false;
-                cancel_automatic_recap(app);
+                set_auto_recap(app, resources, false);
                 save_interactive_settings(app, session, resources);
                 app.cells
                     .push(Cell::Notice("automatic recap is off".into()));

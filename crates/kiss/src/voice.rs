@@ -20,6 +20,16 @@ pub enum Backend {
 }
 
 impl Backend {
+    /// The backend the `voiceBackend` setting names; local when unset or
+    /// unknown.
+    pub fn from_settings(settings: &kiss_coding::Settings) -> Self {
+        settings
+            .voice_backend
+            .as_deref()
+            .and_then(Self::parse)
+            .unwrap_or(Self::Local)
+    }
+
     pub fn parse(value: &str) -> Option<Self> {
         match value {
             "local" => Some(Self::Local),
@@ -507,6 +517,12 @@ fn microphone_device() -> (&'static str, &'static str) {
     {
         ("pulse", "default")
     }
+}
+
+/// The dictation language the `voiceLanguage` setting names; English when
+/// unset.
+pub fn language(settings: &kiss_coding::Settings) -> &str {
+    settings.voice_language.as_deref().unwrap_or("en")
 }
 
 #[cfg(test)]
