@@ -106,7 +106,7 @@ struct App {
     btw_request_id: u64,
     recap: Option<String>,
     recap_job: Option<RecapJob>,
-    /// Identifies the current request, so a late answer of an old one drops.
+    /// The id the next recap request gets.
     recap_request_id: u64,
     last_user_activity: Instant,
     idle_recap_armed: bool,
@@ -228,6 +228,9 @@ enum CommandControl {
 
 /// A recap request in flight.
 struct RecapJob {
+    /// Matches the job's result; a result whose job was replaced or
+    /// cancelled finds no job and is dropped.
+    request_id: u64,
     automatic: bool,
     cancel: CancellationToken,
 }
@@ -1332,7 +1335,6 @@ fn set_auto_recap(app: &mut App, resources: &mut InteractiveResources, enabled: 
 fn cancel_automatic_recap(app: &mut App) {
     if let Some(job) = app.recap_job.take_if(|job| job.automatic) {
         job.cancel.cancel();
-        app.recap_request_id = app.recap_request_id.wrapping_add(1);
     }
 }
 
@@ -2707,13 +2709,15 @@ fn handle_command_event(
             automatic,
             result,
         } => {
-            if app.recap_request_id != request_id {
+            if app
+                .recap_job
+                .take_if(|job| job.request_id == request_id)
+                .is_none()
+            {
                 return;
             }
-            app.recap_job = None;
             match result {
                 Ok(response) => app.recap = Some(normalize_recap(&response.text)),
-                Err(error) if error.to_ascii_lowercase().contains("cancel") => {}
                 Err(error) if automatic => app
                     .cells
                     .push(Cell::Notice(format!("automatic recap failed: {error}"))),
@@ -3576,15 +3580,12 @@ fn handle_input(
         InputLayer::Btw => {
             if let InputEvent::Key(key) = event
                 && matches!(key.key, Key::Escape | Key::Enter)
-            {
-                if let Some(BtwPanel {
+                && let Some(BtwPanel {
                     state: BtwState::Answering(cancel),
                     ..
                 }) = app.btw_panel.take()
-                {
-                    cancel.cancel();
-                }
-                app.btw_request_id = app.btw_request_id.wrapping_add(1);
+            {
+                cancel.cancel();
             }
             return Flow::Continue;
         }
@@ -4315,7 +4316,6 @@ fn adopt_session(app: &mut App, session: &Arc<kiss_coding::AgentSession>, transc
     if let Some(job) = app.recap_job.take() {
         job.cancel.cancel();
     }
-    app.recap_request_id = app.recap_request_id.wrapping_add(1);
     app.recap = None;
     if let Some(BtwPanel {
         state: BtwState::Answering(cancel),
@@ -8030,6 +8030,7 @@ fn start_recap(
     let cancel = CancellationToken::new();
     let previous = app.recap.clone();
     app.recap_job = Some(RecapJob {
+        request_id,
         automatic,
         cancel: cancel.clone(),
     });
