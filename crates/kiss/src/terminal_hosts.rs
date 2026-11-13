@@ -136,6 +136,7 @@ impl TerminalHosts {
                 // an API-key override in another application's session file.
                 for (flag, value) in [
                     ("--session-dir", &args.session_dir),
+                    ("--models", &args.models),
                     ("--tools", &args.tools),
                     ("--exclude-tools", &args.exclude_tools),
                     ("--system-prompt", &args.system_prompt),
