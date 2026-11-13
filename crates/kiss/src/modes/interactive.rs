@@ -4517,18 +4517,11 @@ fn start_shell_passthrough(
             manager.session_id().to_string(),
         )
     };
+    // The same shell as the bash tool and SDK shell commands: shellPath,
+    // else bash.
     let settings = session.settings();
-    let shell = settings
-        .shell_path
-        .filter(|value| !value.trim().is_empty())
-        .or_else(|| {
-            std::env::var("SHELL")
-                .ok()
-                .filter(|path| !cfg!(windows) || std::path::Path::new(path).is_file())
-        });
-    let prefix = settings
-        .shell_command_prefix
-        .filter(|value| !value.trim().is_empty());
+    let shell = settings.shell_path;
+    let prefix = settings.shell_command_prefix;
     let Some(cancel) = begin_command(app, format!("running !{command}")) else {
         // Keep what the user typed, so it can run after the other command.
         if app.editor.is_empty() {
@@ -4566,10 +4559,7 @@ fn start_shell_passthrough(
                 exclude_from_context: result.exclude_from_context,
                 timestamp: kiss_ai::now_ms(),
             });
-            let mut manager = session.manager.lock().unwrap();
-            if manager.session_id() == session_id {
-                let _ = manager.append_message(message);
-            }
+            session.record_user_shell(&session_id, message);
         }
         let _ = tx.send(CommandEvent::ShellFinished(result));
     });

@@ -166,6 +166,8 @@ impl ActivePhase {
             }
         }
         *phase = RunPhase::Idle;
+        drop(phase);
+        session.flush_user_shell();
         session.idle.notify_waiters();
         self.armed = false;
         None
@@ -177,6 +179,7 @@ impl Drop for ActivePhase {
         if self.armed {
             self.cancel.cancel();
             *self.session.phase.lock().unwrap() = RunPhase::Idle;
+            self.session.flush_user_shell();
             self.session.idle.notify_waiters();
         }
     }
@@ -243,6 +246,9 @@ pub struct AgentSession {
     fast_mode: Mutex<bool>,
     steering: Arc<Mutex<VecDeque<QueuedPrompt>>>,
     follow_up: Arc<Mutex<VecDeque<QueuedPrompt>>>,
+    /// User shell results that finished during a run, with the id of the
+    /// session they belong to. They are saved when the run ends.
+    pending_user_shell: Mutex<Vec<(String, AgentMessage)>>,
     cancel: Mutex<CancellationToken>,
     cache_warm_cancel: Mutex<CancellationToken>,
     phase: Mutex<RunPhase>,
@@ -372,6 +378,7 @@ impl AgentSession {
             fast_mode: Mutex::new(false),
             steering: Default::default(),
             follow_up: Default::default(),
+            pending_user_shell: Default::default(),
             cancel: Mutex::new(CancellationToken::new()),
             cache_warm_cancel: Mutex::new(CancellationToken::new()),
             phase: Mutex::new(RunPhase::Idle),
@@ -734,6 +741,45 @@ impl AgentSession {
 
     /// Report a failed session-file write. The manager keeps the entries, so
     /// the run continues with them.
+    /// Save the result of a shell command the user ran in session
+    /// `session_id`. It is dropped when that session was replaced meanwhile.
+    /// While a run is active it waits and is saved when the run ends, so it
+    /// never lands between a tool call and its result.
+    pub fn record_user_shell(&self, session_id: &str, message: AgentMessage) {
+        let mut manager = self.manager.lock().unwrap();
+        if manager.session_id() != session_id {
+            return;
+        }
+        if *self.phase.lock().unwrap() != RunPhase::Idle {
+            self.pending_user_shell
+                .lock()
+                .unwrap()
+                .push((session_id.to_string(), message));
+            return;
+        }
+        let saved = manager.append_message(message);
+        drop(manager);
+        self.report_save(saved);
+    }
+
+    /// Save the user shell results that waited for a run to end. A run that
+    /// started again in the meantime keeps them waiting.
+    fn flush_user_shell(&self) {
+        let mut manager = self.manager.lock().unwrap();
+        if *self.phase.lock().unwrap() != RunPhase::Idle {
+            return;
+        }
+        let pending = std::mem::take(&mut *self.pending_user_shell.lock().unwrap());
+        let mut saved = Ok(());
+        for (session_id, message) in pending {
+            if manager.session_id() == session_id {
+                saved = saved.and(manager.append_message(message).map(drop));
+            }
+        }
+        drop(manager);
+        self.report_save(saved);
+    }
+
     fn report_save<T>(&self, result: anyhow::Result<T>) {
         let error = match result {
             Err(error) => Some(format!("{error:#}")),
@@ -2771,6 +2817,54 @@ mod ephemeral_tests {
         assert!(context.messages.iter().any(
             |message| matches!(message, AgentMessage::User(user) if user.content.as_text() == "second")
         ));
+    }
+
+    #[tokio::test]
+    async fn a_user_shell_result_during_a_run_is_saved_after_it() {
+        let release = Arc::new(tokio::sync::Notify::new());
+        let (session, calls, _events) = session_with_blocked_failure(release.clone());
+        let session_id = session.manager.lock().unwrap().session_id().to_string();
+        let task_session = session.clone();
+        let task = tokio::spawn(async move {
+            task_session.prompt(vec![AgentMessage::user("first")]).await;
+        });
+        wait_for_first_request(&calls).await;
+
+        let shell = AgentMessage::BashExecution(kiss_agent::BashExecutionMessage {
+            command: "ls".into(),
+            output: "a".into(),
+            exit_code: Some(0),
+            cancelled: false,
+            truncated: false,
+            full_output_path: None,
+            exclude_from_context: false,
+            timestamp: kiss_ai::now_ms(),
+        });
+        session.record_user_shell(&session_id, shell);
+        let is_shell = |message: &AgentMessage| matches!(message, AgentMessage::BashExecution(_));
+        assert!(
+            !session
+                .manager
+                .lock()
+                .unwrap()
+                .build_session_context()
+                .messages
+                .iter()
+                .any(is_shell),
+            "a shell result must not be saved in the middle of a run"
+        );
+        release.notify_one();
+        tokio::time::timeout(std::time::Duration::from_secs(5), task)
+            .await
+            .unwrap()
+            .unwrap();
+        let messages = session
+            .manager
+            .lock()
+            .unwrap()
+            .build_session_context()
+            .messages;
+        assert!(messages.last().is_some_and(is_shell), "{messages:?}");
     }
 
     #[tokio::test]

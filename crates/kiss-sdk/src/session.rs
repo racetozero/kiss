@@ -612,10 +612,7 @@ impl Session {
             exclude_from_context: false,
             timestamp: kiss_ai::now_ms(),
         });
-        let mut manager = self.inner.manager.lock().unwrap();
-        if manager.session_id() == session_id {
-            let _ = manager.append_message(message);
-        }
+        self.inner.record_user_shell(&session_id, message);
         Ok(result)
     }
 

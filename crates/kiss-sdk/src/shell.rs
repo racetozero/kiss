@@ -30,6 +30,9 @@ pub async fn run(
     cancel: CancellationToken,
     on_update: UpdateSink,
 ) -> Result<crate::session::BashResult> {
+    // An empty setting means the setting is not set.
+    let shell_path = shell_path.filter(|value| !value.trim().is_empty());
+    let command_prefix = command_prefix.filter(|value| !value.trim().is_empty());
     let mut child = kiss_agent::tools::shell::spawn(shell_path, command, command_prefix, cwd)?;
 
     let mut stdout = child.stdout.take().expect("piped stdout");
