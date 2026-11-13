@@ -466,7 +466,9 @@ enum CommandEvent {
 }
 
 enum WebMcpCommandResult {
-    Connected,
+    /// The manager that connected, which may no longer be the app's
+    /// manager after a /reload.
+    Connected(kiss_webmcp::WebMcpManager),
     Listed(Vec<kiss_webmcp::WebMcpToolInfo>),
     Disconnected,
 }
@@ -2745,8 +2747,13 @@ fn handle_command_event(
         CommandEvent::WebMcpFinished(result) => {
             app.command = None;
             match result {
-                Ok(WebMcpCommandResult::Connected) => {
-                    session.install_session_tool(app.webmcp_manager.agent_tool());
+                Ok(WebMcpCommandResult::Connected(manager))
+                    if !manager.same_as(&app.webmcp_manager) =>
+                {
+                    tokio::spawn(async move { manager.disconnect().await });
+                }
+                Ok(WebMcpCommandResult::Connected(manager)) => {
+                    session.install_session_tool(manager.agent_tool());
                     app.cells.push(Cell::Notice(
                         "WebMCP connected to Chrome. Tool discovery continues in the background. Run /webmcp list to see active tools. Page tool metadata and results are untrusted."
                             .into(),
@@ -2768,11 +2775,11 @@ fn handle_command_event(
                     )));
                 }
                 Ok(WebMcpCommandResult::Disconnected) => {
-                    session.remove_session_tool("webmcp");
+                    session.remove_session_tool(kiss_webmcp::TOOL_NAME);
                     app.cells.push(Cell::Notice("WebMCP disconnected".into()));
                 }
                 Err(error) => {
-                    session.remove_session_tool("webmcp");
+                    session.remove_session_tool(kiss_webmcp::TOOL_NAME);
                     app.cells
                         .push(Cell::Error(format!("WebMCP failed: {error}")));
                 }
@@ -7371,12 +7378,12 @@ fn start_webmcp(
                 return;
             }
             let tx = CommandTask::new(app, command_tx);
-            session.remove_session_tool("webmcp");
+            session.remove_session_tool(kiss_webmcp::TOOL_NAME);
             tokio::spawn(async move {
                 let result = manager
                     .connect()
                     .await
-                    .map(|_| WebMcpCommandResult::Connected)
+                    .map(|_| WebMcpCommandResult::Connected(manager.clone()))
                     .map_err(|error| format!("{error:#}"));
                 let _ = tx.send(CommandEvent::WebMcpFinished(result));
             });
@@ -7400,7 +7407,7 @@ fn start_webmcp(
                 return;
             }
             let tx = CommandTask::new(app, command_tx);
-            session.remove_session_tool("webmcp");
+            session.remove_session_tool(kiss_webmcp::TOOL_NAME);
             tokio::spawn(async move {
                 manager.disconnect().await;
                 let _ = tx.send(CommandEvent::WebMcpFinished(Ok(
@@ -8314,8 +8321,12 @@ fn reload_interactive(
     resources.skills = reloaded.skills;
     resources.prompt_templates = reloaded.prompt_templates;
     resources.context_file_paths = reloaded.context_file_paths;
-    session.remove_session_tool("webmcp");
-    app.webmcp_manager = webmcp_manager(&reloaded.settings.webmcp);
+    session.remove_session_tool(kiss_webmcp::TOOL_NAME);
+    let previous = std::mem::replace(
+        &mut app.webmcp_manager,
+        webmcp_manager(&reloaded.settings.webmcp),
+    );
+    tokio::spawn(async move { previous.disconnect().await });
     resources.settings = reloaded.settings.clone();
     session.reload_runtime(reloaded.settings, reloaded.system_prompt, reloaded.tools);
     resources.saved_workflows = discover_saved_workflows(session, args);

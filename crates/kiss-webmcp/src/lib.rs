@@ -17,6 +17,8 @@ use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use url::Url;
 
+/// The name of the agent tool that exposes page tools to the model.
+pub const TOOL_NAME: &str = "webmcp";
 const DEFAULT_CDP_PORT: u16 = 9222;
 const CALL_TIMEOUT: Duration = Duration::from_secs(60);
 
@@ -142,6 +144,11 @@ pub struct WebMcpManager {
 }
 
 impl WebMcpManager {
+    /// Whether both handles are the same manager.
+    pub fn same_as(&self, other: &WebMcpManager) -> bool {
+        Arc::ptr_eq(&self.inner, &other.inner)
+    }
+
     pub fn new(config: WebMcpConfig) -> Self {
         Self {
             inner: Arc::new(Inner {
@@ -748,7 +755,7 @@ struct WebMcpAgentTool {
 #[async_trait::async_trait]
 impl AgentTool for WebMcpAgentTool {
     fn name(&self) -> &str {
-        "webmcp"
+        TOOL_NAME
     }
 
     fn label(&self) -> &str {
