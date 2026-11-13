@@ -20,7 +20,7 @@ pub fn resolve(cwd: &Path, path: &str) -> PathBuf {
 
 /// Render a path relative to `cwd` when it is inside it (display only).
 pub fn display(cwd: &Path, path: &Path) -> String {
-    path.strip_prefix(cwd).unwrap_or(path).display().to_string()
+    path.trim_prefix(cwd).display().to_string()
 }
 
 #[cfg(test)]

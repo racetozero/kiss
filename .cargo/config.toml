@@ -1,0 +1,7 @@
+# Cargo 1.100 dependency cooldown. `cargo update` and new lockfile entries skip
+# crate versions published less than three days ago, which gives the ecosystem
+# time to yank a compromised or broken release before kiss picks it up.
+# To take a fresh release on purpose:
+#   CARGO_RESOLVER_INCOMPATIBLE_PUBLISH_AGE=allow cargo update <crate> --precise <version>
+[registry]
+global-min-publish-age = "3 days"

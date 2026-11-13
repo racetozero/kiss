@@ -2,6 +2,7 @@
 name = "kiss-agent-sdk"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Embeddable SDK and JSON-line RPC protocol for the kiss coding agent"

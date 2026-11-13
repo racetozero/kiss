@@ -15,6 +15,7 @@ use kiss_coding::session_runner::{AgentSession, QueueKind, SessionEvent};
 use kiss_coding::settings::QueueMode as SettingsQueueMode;
 use serde_json::{Value, json};
 use std::collections::HashMap;
+use std::mem::DropGuard;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tokio::sync::broadcast;
@@ -169,22 +170,6 @@ impl SessionLifecycle {
             for cancel in bash_runs.values() {
                 cancel.cancel();
             }
-        }
-    }
-}
-
-struct ActiveBash {
-    session: Arc<Session>,
-    id: u64,
-}
-
-impl Drop for ActiveBash {
-    fn drop(&mut self) {
-        if let SessionLifecycle::Open { bash_runs, .. } =
-            &mut *self.session.lifecycle.lock().unwrap()
-            && let Some(cancel) = bash_runs.remove(&self.id)
-        {
-            cancel.cancel();
         }
     }
 }
@@ -575,10 +560,16 @@ impl Session {
             ))?;
             let cancel = CancellationToken::new();
             bash_runs.insert(*next_bash_id, cancel.clone());
-            let active = ActiveBash {
-                session: self.clone(),
-                id: *next_bash_id,
-            };
+            // Remove and cancel this run when the call returns or its future
+            // is dropped.
+            let active = DropGuard::new((self.clone(), *next_bash_id), |(session, id)| {
+                if let SessionLifecycle::Open { bash_runs, .. } =
+                    &mut *session.lifecycle.lock().unwrap()
+                    && let Some(cancel) = bash_runs.remove(&id)
+                {
+                    cancel.cancel();
+                }
+            });
             let session_id = self.inner.manager.lock().unwrap().session_id().to_string();
             (active, cancel, session_id)
         };

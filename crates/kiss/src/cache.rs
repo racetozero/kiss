@@ -302,22 +302,18 @@ fn area_chart(values: &[f64]) -> String {
     if values.is_empty() {
         return String::new();
     }
-    let columns = (0..GRAPH_WIDTH)
-        .map(|column| {
-            let value = values[column * values.len() / GRAPH_WIDTH].clamp(0.0, 100.0);
-            (value * (GRAPH_HEIGHT * 8) as f64 / 100.0).round() as usize
-        })
-        .collect::<Vec<_>>();
-    let mut lines = (0..GRAPH_HEIGHT)
-        .map(|row| {
-            let below = (GRAPH_HEIGHT - row - 1) * 8;
-            let graph = columns
-                .iter()
-                .map(|units| BLOCKS[units.saturating_sub(below).min(8)])
-                .collect::<String>();
-            format!("{:>3}% │{graph}", (GRAPH_HEIGHT - row) * 100 / GRAPH_HEIGHT)
-        })
-        .collect::<Vec<_>>();
+    let columns = Vec::from_fn(GRAPH_WIDTH, |column| {
+        let value = values[column * values.len() / GRAPH_WIDTH].clamp(0.0, 100.0);
+        (value * (GRAPH_HEIGHT * 8) as f64 / 100.0).round() as usize
+    });
+    let mut lines = Vec::from_fn(GRAPH_HEIGHT, |row| {
+        let below = (GRAPH_HEIGHT - row - 1) * 8;
+        let graph = columns
+            .iter()
+            .map(|units| BLOCKS[units.saturating_sub(below).min(8)])
+            .collect::<String>();
+        format!("{:>3}% │{graph}", (GRAPH_HEIGHT - row) * 100 / GRAPH_HEIGHT)
+    });
     lines.push(format!("  0% └{}", "─".repeat(GRAPH_WIDTH)));
     lines.push(format!(
         "      oldest{}newest",

@@ -112,9 +112,9 @@ impl Script {
             }
         };
 
-        let globals = (0..interner.len())
-            .map(|symbol| global_for(interner.resolve(symbol as Symbol)))
-            .collect();
+        let globals = Vec::from_fn(interner.len(), |symbol| {
+            global_for(interner.resolve(symbol as Symbol))
+        });
 
         let mut script = Script {
             ast: parsed.ast,

@@ -531,7 +531,7 @@ fn read_json_value(path: &Path) -> Result<Option<Value>> {
         Err(error) => return Err(error).with_context(|| format!("read {}", path.display())),
     };
     // Windows PowerShell 5.1 writes a UTF-8 byte order mark.
-    let cleaned = strip_json_comments(text.strip_prefix('\u{feff}').unwrap_or(&text));
+    let cleaned = strip_json_comments(text.trim_prefix('\u{feff}'));
     let value = serde_json::from_str(&cleaned)
         .with_context(|| format!("parse MCP config {}", path.display()))?;
     Ok(Some(value))

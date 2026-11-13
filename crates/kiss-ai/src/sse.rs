@@ -98,7 +98,7 @@ impl SseParser {
             return; // comment / keep-alive
         }
         let (field, value) = match line.split_once(':') {
-            Some((f, v)) => (f, v.strip_prefix(' ').unwrap_or(v)),
+            Some((f, v)) => (f, v.trim_prefix(' ')),
             None => (line, ""),
         };
         match field {
@@ -119,7 +119,7 @@ impl SseParser {
         if self.pos < self.buffer.len() {
             let line = String::from_utf8_lossy(&self.buffer[self.pos..]).into_owned();
             self.pos = self.buffer.len();
-            let line = line.strip_suffix('\r').unwrap_or(&line).to_string();
+            let line = line.trim_suffix('\r').to_string();
             Self::process_line(
                 &mut self.event_name,
                 &mut self.data,

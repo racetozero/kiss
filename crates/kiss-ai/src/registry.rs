@@ -355,11 +355,7 @@ impl Registry {
                 .await
                 .context("parse the Databricks model-services response")?;
             for service in page.model_services {
-                let id = service
-                    .name
-                    .trim()
-                    .strip_prefix("model-services/")
-                    .unwrap_or(service.name.trim());
+                let id = service.name.trim().trim_prefix("model-services/");
                 if id.starts_with("system.ai.") {
                     model_ids.insert(id.to_string());
                 }

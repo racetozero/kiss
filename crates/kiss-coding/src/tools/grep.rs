@@ -161,7 +161,7 @@ fn run_grep(
                 return ignore::WalkState::Continue;
             }
             if let Some(glob_matcher) = glob_matcher {
-                let relative = path.strip_prefix(search_path).unwrap_or(path);
+                let relative = path.trim_prefix(search_path);
                 if !glob_matcher.is_match(relative) && !glob_matcher.is_match(path) {
                     return ignore::WalkState::Continue;
                 }
@@ -268,7 +268,7 @@ fn search_grep_chunk(
         if cancel.is_cancelled() || match_count >= limit {
             break;
         }
-        let display_path = path.strip_prefix(cwd).unwrap_or(path).display().to_string();
+        let display_path = path.trim_prefix(cwd).display().to_string();
         let _ = searcher.search_path(
             matcher,
             path,

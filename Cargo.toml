@@ -22,6 +22,7 @@ exclude = ["crates/kiss-py", "crates/kiss-node", "crates/kiss-wasm", "crates/kis
 [workspace.package]
 version = "0.0.39"
 edition = "2024"
+rust-version = "1.100"
 license = "MIT"
 repository = "https://github.com/racetozero/kiss"
 

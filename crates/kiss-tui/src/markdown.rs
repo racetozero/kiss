@@ -96,9 +96,7 @@ impl StreamingMarkdownCache {
         mermaid_mode: MermaidMode,
     ) -> Vec<String> {
         let stable_end = stable_prefix_len(markdown);
-        let appended = markdown
-            .strip_prefix(&self.stable_source)
-            .unwrap_or(markdown);
+        let appended = markdown.trim_prefix(self.stable_source.as_str());
         if contains_link_reference_definition(appended) {
             self.clear();
             return renderer.render_with_state(markdown, width, true, mermaid_mode);

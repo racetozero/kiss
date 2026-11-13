@@ -43,7 +43,7 @@ impl FileSearchQuery {
         let (raw_query, quoted) = prefix
             .strip_prefix("@\"")
             .map(|query| (query, true))
-            .unwrap_or_else(|| (prefix.strip_prefix('@').unwrap_or(prefix), false));
+            .unwrap_or_else(|| (prefix.trim_prefix('@'), false));
         let normalized = raw_query.replace('\\', "/");
 
         if normalized == "~" {

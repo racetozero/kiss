@@ -3714,11 +3714,11 @@ fn handle_input(
                 return Flow::Continue;
             }
             Some(Action::ToggleThinking) => {
-                app.hide_thinking = !app.hide_thinking;
+                app.hide_thinking.toggle();
                 return Flow::Continue;
             }
             Some(Action::ExpandTools) => {
-                app.expand_tools = !app.expand_tools;
+                app.expand_tools.toggle();
                 return Flow::Continue;
             }
             Some(Action::QueueFollowUp) => {
@@ -6929,7 +6929,7 @@ fn apply_settings_selection(
             update_thinking_border(app, session.thinking_level());
         }
         2 => {
-            resources.settings.hide_thinking_block = !resources.settings.hide_thinking_block;
+            resources.settings.hide_thinking_block.toggle();
             app.hide_thinking = resources.settings.hide_thinking_block;
         }
         3 => {
@@ -6952,9 +6952,9 @@ fn apply_settings_selection(
                 QueueMode::OneAtATime => QueueMode::All,
             };
         }
-        6 => resources.settings.compaction.enabled = !resources.settings.compaction.enabled,
-        7 => resources.settings.retry.enabled = !resources.settings.retry.enabled,
-        8 => resources.settings.quiet_startup = !resources.settings.quiet_startup,
+        6 => resources.settings.compaction.enabled.toggle(),
+        7 => resources.settings.retry.enabled.toggle(),
+        8 => resources.settings.quiet_startup.toggle(),
         9 => {
             resources.settings.default_project_trust =
                 match resources.settings.default_project_trust {
@@ -6987,7 +6987,7 @@ fn apply_settings_selection(
             app.last_user_activity = Instant::now();
         }
         13 => {
-            resources.settings.subagents.enabled = !resources.settings.subagents.enabled;
+            resources.settings.subagents.enabled.toggle();
         }
         14 => {
             if !resources.settings.subagents.enabled {
@@ -6998,7 +6998,7 @@ fn apply_settings_selection(
                 ));
                 return;
             }
-            resources.settings.workflows.enabled = !resources.settings.workflows.enabled;
+            resources.settings.workflows.enabled.toggle();
         }
         15 => {
             let Some(mode) = next_compaction_mode(resources.settings.compaction.mode, |model| {
@@ -7026,7 +7026,7 @@ fn apply_settings_selection(
             };
             resources.settings.reasoning_effort.mode = mode;
         }
-        17 => resources.settings.desktop_notifications = !resources.settings.desktop_notifications,
+        17 => resources.settings.desktop_notifications.toggle(),
         _ => return,
     }
     save_interactive_settings(app, session, resources);

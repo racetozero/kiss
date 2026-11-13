@@ -2,6 +2,7 @@
 name = "kiss-tui"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Differential-rendering terminal UI library for kiss"
@@ -20,7 +21,6 @@ pulldown-cmark.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 syntect.workspace = true
-tokio.workspace = true
 two-face.workspace = true
 unicode-segmentation.workspace = true
 unicode-width.workspace = true

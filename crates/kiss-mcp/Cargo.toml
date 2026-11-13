@@ -2,6 +2,7 @@
 name = "kiss-mcp"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "First-class MCP client support for KISS"

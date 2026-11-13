@@ -2,6 +2,7 @@
 name = "kiss-agent-ai"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Unified multi-provider LLM streaming API for the kiss coding harness"

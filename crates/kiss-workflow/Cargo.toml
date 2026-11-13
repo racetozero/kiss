@@ -2,6 +2,7 @@
 name = "kiss-workflow"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Deterministic workflow orchestration scripts for KISS"
@@ -10,13 +11,12 @@ description = "Deterministic workflow orchestration scripts for KISS"
 workspace = true
 
 [dependencies]
-anyhow.workspace = true
 async-trait.workspace = true
 futures.workspace = true
-serde.workspace = true
 serde_json.workspace = true
 tokio = { workspace = true }
 tokio-util.workspace = true
 
 [dev-dependencies]
+anyhow.workspace = true
 kiss-bench.workspace = true

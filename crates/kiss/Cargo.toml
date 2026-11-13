@@ -2,6 +2,7 @@
 name = "kiss"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "kiss: a fast, minimal terminal coding agent"

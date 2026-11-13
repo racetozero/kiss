@@ -919,7 +919,7 @@ mod tests {
             10,
             "10000_rows_last_row_changes",
             || {
-                toggle = !toggle;
+                toggle.toggle();
                 changed[9_999] = if toggle {
                     "changed terminal row a".into()
                 } else {
@@ -951,7 +951,7 @@ mod tests {
             3,
             &format!("1800_logical_rows_{resize_bytes}_output_bytes"),
             || {
-                wide = !wide;
+                wide.toggle();
                 output.clear();
                 renderer
                     .render_frame(&lines, if wide { 120 } else { 100 }, 40, &mut output)

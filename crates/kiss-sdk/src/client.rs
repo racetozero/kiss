@@ -67,7 +67,7 @@ impl LineBuffer {
         while let Some(index) = self.buffer[consumed..].find('\n') {
             let end = consumed + index;
             let line = &self.buffer[consumed..end];
-            let line = line.strip_suffix('\r').unwrap_or(line);
+            let line = line.trim_suffix('\r');
             if !line.trim().is_empty() {
                 lines.push(line.to_string());
             }

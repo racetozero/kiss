@@ -76,7 +76,7 @@ impl AgentTool for FindTool {
                 if !entry.file_type().is_some_and(|t| t.is_file()) {
                     continue;
                 }
-                let rel = entry.path().strip_prefix(&search_path).unwrap_or(entry.path());
+                let rel = entry.path().trim_prefix(&search_path);
                 if glob.is_match(rel) {
                     results.push(rel.display().to_string().replace('\\', "/"));
                 }

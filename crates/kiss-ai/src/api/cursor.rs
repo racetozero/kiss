@@ -924,7 +924,7 @@ fn tool_result_text(result: &ToolResultMessage) -> String {
 }
 
 fn strip_tool_prefix(name: &str) -> &str {
-    name.strip_prefix("mcp_kiss_").unwrap_or(name)
+    name.trim_prefix("mcp_kiss_")
 }
 
 struct BuiltRequest {
