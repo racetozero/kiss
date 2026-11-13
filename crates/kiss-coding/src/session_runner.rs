@@ -1062,39 +1062,25 @@ impl AgentSession {
                     return Some(update);
                 }
 
-                let selected = match kiss_ai::auth::resolve_api_key_async(
-                    decision_model.provider(),
-                    &session.registry.declared_keys,
-                )
-                .await
-                {
-                    Ok(Some(api_key)) => {
-                        let messages = session
-                            .manager
-                            .lock()
-                            .unwrap()
-                            .build_session_context()
-                            .messages;
-                        let cancel = session.cancel.lock().unwrap().clone();
-                        async {
-                            crate::decision::DecisionClient::new(decision_model, &api_key)?
-                                .select_reasoning(&messages, &[], &model, cancel)
-                                .await
-                        }
+                let selected = async {
+                    let client = crate::decision::DecisionClient::connect(
+                        decision_model,
+                        &session.registry.declared_keys,
+                    )
+                    .await?;
+                    let messages = session
+                        .manager
+                        .lock()
+                        .unwrap()
+                        .build_session_context()
+                        .messages;
+                    let cancel = session.cancel.lock().unwrap().clone();
+                    client
+                        .select_reasoning(&messages, &[], &model, cancel)
                         .await
-                        .map_err(|error: anyhow::Error| error.to_string())
-                    }
-                    Ok(None) => Err(format!(
-                        "{} credentials are unavailable; run /login {}",
-                        decision_model.label(),
-                        decision_model.provider(),
-                    )),
-                    Err(error) => Err(format!(
-                        "{} credentials could not be read: {error}; run /login {}",
-                        decision_model.label(),
-                        decision_model.provider(),
-                    )),
-                };
+                }
+                .await
+                .map_err(|error: anyhow::Error| error.to_string());
                 let latest_model = session.model();
                 let latest_effort = session.thinking_level();
                 if latest_model.provider != model.provider
@@ -2017,12 +2003,11 @@ impl AgentSession {
         }
 
         if let Some(decision_model) = settings.compaction.mode.decision_model()
-            && let Ok(Some(api_key)) = kiss_ai::auth::resolve_api_key_async(
-                decision_model.provider(),
+            && let Ok(client) = crate::decision::DecisionClient::connect(
+                decision_model,
                 &self.registry.declared_keys,
             )
             .await
-            && let Ok(client) = crate::decision::DecisionClient::new(decision_model, &api_key)
         {
             let cancel = self.cancel.lock().unwrap().clone();
             let pinned_start = ctx.messages.len().saturating_sub(plan.kept.len());

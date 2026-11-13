@@ -198,14 +198,33 @@ enum Decision {
     Drop,
 }
 
-pub(crate) struct DecisionClient<'a> {
+pub(crate) struct DecisionClient {
     model: DecisionModel,
     endpoint: String,
-    api_key: &'a str,
+    api_key: String,
 }
 
-impl<'a> DecisionClient<'a> {
-    pub(crate) fn new(model: DecisionModel, api_key: &'a str) -> anyhow::Result<Self> {
+impl DecisionClient {
+    /// Find the decision model's credentials and endpoint. The error says
+    /// which login fixes it.
+    pub(crate) async fn connect(
+        model: DecisionModel,
+        declared_keys: &std::collections::BTreeMap<String, String>,
+    ) -> anyhow::Result<Self> {
+        let api_key =
+            match kiss_ai::auth::resolve_api_key_async(model.provider(), declared_keys).await {
+                Ok(Some(api_key)) => api_key,
+                Ok(None) => bail!(
+                    "{} credentials are unavailable; run /login {}",
+                    model.label(),
+                    model.provider(),
+                ),
+                Err(error) => bail!(
+                    "{} credentials could not be read: {error}; run /login {}",
+                    model.label(),
+                    model.provider(),
+                ),
+            };
         Ok(Self {
             model,
             endpoint: model.endpoint()?,
@@ -274,7 +293,7 @@ impl<'a> DecisionClient<'a> {
         let send = http_client()
             .post(&self.endpoint)
             .timeout(timeout)
-            .bearer_auth(self.api_key)
+            .bearer_auth(&self.api_key)
             .json(request)
             .send();
         let response = tokio::select! {
@@ -986,7 +1005,7 @@ mod tests {
             let client = DecisionClient {
                 model: DecisionModel::ClefFlash,
                 endpoint,
-                api_key: "test-key",
+                api_key: "test-key".into(),
             };
             let output = client
                 .compact(&messages, messages.len() - 2, CancellationToken::new())
@@ -1091,7 +1110,7 @@ mod tests {
             let client = DecisionClient {
                 model,
                 endpoint: endpoint.clone(),
-                api_key: "test-key",
+                api_key: "test-key".into(),
             };
             let cancel = CancellationToken::new();
             let messages = [AgentMessage::user("fix it")];
@@ -1125,7 +1144,7 @@ mod tests {
         let client = DecisionClient {
             model: DecisionModel::Jev,
             endpoint,
-            api_key: "test-key",
+            api_key: "test-key".into(),
         };
         let error = client
             .send_request(&request, Duration::from_secs(1), &cancelled)
