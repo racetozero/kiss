@@ -14,7 +14,7 @@ use kiss_agent::{AgentEvent, AgentMessage};
 use kiss_ai::{AssistantEvent, ContentBlock, StopReason, ThinkingLevel, Transport};
 use kiss_coding::decision::DecisionModel;
 use kiss_coding::session_runner::{PromptMode, QueueKind, RunPhase, SessionEvent};
-use kiss_coding::settings::{CompactionMode, MermaidRendering, QueueMode, ReasoningEffortMode};
+use kiss_coding::settings::{DecisionMode as _, MermaidRendering, QueueMode};
 use kiss_coding::workflows::workflow_trigger;
 use kiss_tui::{
     Action, Component, DiffRenderer, Editor, EditorSubmission, InputDecoder, InputEvent, Key,
@@ -5171,36 +5171,6 @@ fn decision_model_detail(
     }
 }
 
-fn next_compaction_mode(
-    current: CompactionMode,
-    available: impl Fn(DecisionModel) -> bool,
-) -> Option<CompactionMode> {
-    let modes = CompactionMode::ALL;
-    let index = modes.iter().position(|mode| *mode == current)?;
-    modes
-        .iter()
-        .cycle()
-        .skip(index + 1)
-        .take(modes.len() - 1)
-        .copied()
-        .find(|mode| mode.decision_model().is_none_or(&available))
-}
-
-fn next_reasoning_effort_mode(
-    current: ReasoningEffortMode,
-    available: impl Fn(DecisionModel) -> bool,
-) -> Option<ReasoningEffortMode> {
-    let modes = ReasoningEffortMode::ALL;
-    let index = modes.iter().position(|mode| *mode == current)?;
-    modes
-        .iter()
-        .cycle()
-        .skip(index + 1)
-        .take(modes.len() - 1)
-        .copied()
-        .find(|mode| mode.decision_model().is_none_or(&available))
-}
-
 fn settings_picker(
     app: &App,
     session: &Arc<kiss_coding::AgentSession>,
@@ -6992,9 +6962,12 @@ fn apply_settings_selection(
             resources.settings.workflows.enabled.toggle();
         }
         15 => {
-            let Some(mode) = next_compaction_mode(resources.settings.compaction.mode, |model| {
-                model.available(&session.registry.declared_keys)
-            }) else {
+            let Some(mode) = resources
+                .settings
+                .compaction
+                .mode
+                .next_available(|model| model.available(&session.registry.declared_keys))
+            else {
                 app.cells.push(Cell::Notice(
                     "Decision compaction needs credentials. Run /login typesafe, /login liquid, or /login cloudflare-workers-ai"
                         .into(),
@@ -7004,10 +6977,11 @@ fn apply_settings_selection(
             resources.settings.compaction.mode = mode;
         }
         16 => {
-            let Some(mode) =
-                next_reasoning_effort_mode(resources.settings.reasoning_effort.mode, |model| {
-                    model.available(&session.registry.declared_keys)
-                })
+            let Some(mode) = resources
+                .settings
+                .reasoning_effort
+                .mode
+                .next_available(|model| model.available(&session.registry.declared_keys))
             else {
                 app.cells.push(Cell::Notice(
                     "Dynamic reasoning needs credentials. Run /login typesafe, /login liquid, or /login cloudflare-workers-ai"
@@ -8549,6 +8523,7 @@ fn reload_interactive(
 mod tests {
     use super::*;
     use clap::Parser as _;
+    use kiss_coding::settings::{CompactionMode, ReasoningEffortMode};
     use std::path::PathBuf;
 
     fn test_app() -> App {
@@ -9655,11 +9630,11 @@ mod tests {
             ),
         ] {
             assert_eq!(
-                next_compaction_mode(compaction, |model| model.provider() == provider),
+                compaction.next_available(|model| model.provider() == provider),
                 next_compaction
             );
             assert_eq!(
-                next_reasoning_effort_mode(reasoning, |model| model.provider() == provider),
+                reasoning.next_available(|model| model.provider() == provider),
                 next_reasoning
             );
         }

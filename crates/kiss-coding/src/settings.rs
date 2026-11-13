@@ -23,8 +23,29 @@ pub enum CompactionMode {
     ClefFlash,
 }
 
-impl CompactionMode {
-    pub const ALL: [Self; 6] = [
+/// A setting that is either off or names a decision model, in a fixed
+/// cycling order (the compaction and reasoning-effort modes).
+pub trait DecisionMode: Copy + PartialEq + 'static {
+    const ALL: &'static [Self];
+
+    fn decision_model(self) -> Option<DecisionModel>;
+
+    /// The next mode after this one whose decision model is available. The
+    /// off mode is always available. `None` when no other mode is.
+    fn next_available(self, available: impl Fn(DecisionModel) -> bool) -> Option<Self> {
+        let index = Self::ALL.iter().position(|mode| *mode == self)?;
+        Self::ALL
+            .iter()
+            .cycle()
+            .skip(index + 1)
+            .take(Self::ALL.len() - 1)
+            .copied()
+            .find(|mode| mode.decision_model().is_none_or(&available))
+    }
+}
+
+impl DecisionMode for CompactionMode {
+    const ALL: &'static [Self] = &[
         Self::Summary,
         Self::Jev,
         Self::D1Ultra,
@@ -33,7 +54,7 @@ impl CompactionMode {
         Self::Clef,
     ];
 
-    pub fn decision_model(self) -> Option<DecisionModel> {
+    fn decision_model(self) -> Option<DecisionModel> {
         match self {
             Self::Summary => None,
             Self::Jev => Some(DecisionModel::Jev),
@@ -89,8 +110,8 @@ pub enum ReasoningEffortMode {
     ClefFlash,
 }
 
-impl ReasoningEffortMode {
-    pub const ALL: [Self; 6] = [
+impl DecisionMode for ReasoningEffortMode {
+    const ALL: &'static [Self] = &[
         Self::Fixed,
         Self::Jev,
         Self::D1Ultra,
@@ -99,7 +120,7 @@ impl ReasoningEffortMode {
         Self::Clef,
     ];
 
-    pub fn decision_model(self) -> Option<DecisionModel> {
+    fn decision_model(self) -> Option<DecisionModel> {
         match self {
             Self::Fixed => None,
             Self::Jev => Some(DecisionModel::Jev),

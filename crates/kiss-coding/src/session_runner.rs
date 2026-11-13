@@ -8,7 +8,7 @@ use crate::compaction::{
 use crate::decision::DecisionModel;
 use crate::iterative::IterativeRuntime;
 use crate::session::manager::SessionManager;
-use crate::settings::{CacheWarmingMode, QueueMode, Settings};
+use crate::settings::{CacheWarmingMode, DecisionMode as _, QueueMode, Settings};
 use crate::subagents::{ForkTurns, SUBAGENT_SYSTEM_PROMPT, SubagentRuntime, fork_messages};
 use crate::workflows::{WorkflowApprover, WorkflowRuntime};
 use anyhow::Context as _;
