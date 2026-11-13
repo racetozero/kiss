@@ -1,7 +1,6 @@
 //! Filterable, scrollable selection list (model picker, session picker,
 //! settings, tree view).
 
-use crate::component::Component;
 use crate::text::{display_width, fit_to_width, truncate_to_width, wrap_text};
 use crate::theme::Theme;
 
@@ -172,8 +171,9 @@ impl SelectList {
     }
 }
 
-impl Component for SelectList {
-    fn render(&mut self, width: usize) -> Vec<String> {
+impl SelectList {
+    /// The list as lines no wider than `width`.
+    pub fn render(&mut self, width: usize) -> Vec<String> {
         let mut lines = Vec::new();
         let theme = self.theme.clone();
         lines.extend(

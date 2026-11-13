@@ -1,7 +1,6 @@
 //! Multi-line input editor with cursor movement, word navigation, kill ring,
 //! undo, history, and a pluggable autocomplete hook.
 
-use crate::component::Component;
 use crate::keys::{InputEvent, Key, KeyEvent};
 use crate::text::display_width;
 use crate::theme::Theme;
@@ -507,8 +506,9 @@ impl Editor {
     }
 }
 
-impl Component for Editor {
-    fn render(&mut self, width: usize) -> Vec<String> {
+impl Editor {
+    /// The editor box as lines no wider than `width`.
+    pub fn render(&mut self, width: usize) -> Vec<String> {
         let inner = width.saturating_sub(4).max(1);
         let border = self.theme.fg(&self.border_color_token, "│");
         let top = self.theme.fg(

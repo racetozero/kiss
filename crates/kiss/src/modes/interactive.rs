@@ -17,8 +17,8 @@ use kiss_coding::session_runner::{PromptMode, QueueKind, RunPhase, SessionEvent}
 use kiss_coding::settings::{DecisionMode as _, MermaidRendering, QueueMode};
 use kiss_coding::workflows::workflow_trigger;
 use kiss_tui::{
-    Action, Component, DiffRenderer, Editor, EditorSubmission, InputDecoder, InputEvent, Key,
-    KeyEvent, Keybindings, MarkdownRenderer, MermaidMode, ProgramStatus, SelectItem, SelectList,
+    Action, DiffRenderer, Editor, EditorSubmission, InputDecoder, InputEvent, Key, KeyEvent,
+    Keybindings, MarkdownRenderer, MermaidMode, ProgramStatus, SelectItem, SelectList,
     StreamingMarkdownCache, Terminal, Theme,
 };
 use std::collections::HashSet;

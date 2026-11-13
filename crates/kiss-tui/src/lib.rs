@@ -4,7 +4,6 @@
 //! and repaints only changed rows on the terminal main screen. Nothing else
 //! writes escape sequences.
 
-pub mod component;
 pub mod editor;
 pub mod fuzzy;
 pub mod keybindings;
@@ -18,7 +17,6 @@ pub mod theme;
 #[cfg(windows)]
 mod windows_console;
 
-pub use component::{Component, Spacer, TextBlock};
 pub use editor::{Editor, EditorSubmission, edit_single_line};
 pub use keybindings::{Action, Keybindings};
 pub use keys::{InputDecoder, InputEvent, Key, KeyEvent};
