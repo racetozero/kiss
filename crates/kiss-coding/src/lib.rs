@@ -8,6 +8,7 @@ pub mod compaction;
 mod context_file;
 pub mod context_files;
 pub mod decision;
+pub mod export;
 pub mod iterative;
 pub mod prompts;
 pub mod session;

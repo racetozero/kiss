@@ -964,43 +964,10 @@ impl Session {
     }
 
     fn export_html(&self, path: &Path) -> Result<(), SdkErrorText> {
-        let mut body = String::new();
-        for message in self.messages() {
-            let (role, text) = match message {
-                AgentMessage::User(user) => ("user", user.content.as_text()),
-                AgentMessage::Assistant(assistant) => ("assistant", assistant.text()),
-                AgentMessage::ToolResult(result) => (
-                    "tool",
-                    result
-                        .content
-                        .iter()
-                        .filter_map(|block| match block {
-                            ContentBlock::Text { text, .. } => Some(text.as_str()),
-                            _ => None,
-                        })
-                        .collect::<Vec<_>>()
-                        .join("\n"),
-                ),
-                other => (other.role(), message_text(&other)),
-            };
-            body.push_str(&format!(
-                "<section><h2>{}</h2><pre>{}</pre></section>\n",
-                escape_html(role),
-                escape_html(&text)
-            ));
-        }
-        let document = format!(
-            "<!doctype html><meta charset=\"utf-8\"><title>KISS session</title>\
-             <style>body{{max-width:60rem;margin:2rem auto;font:16px system-ui}}\
-             pre{{white-space:pre-wrap;background:#f5f5f5;padding:1rem}}</style>\
-             <h1>KISS session</h1>{body}"
-        );
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|error| SdkErrorText(format!("create {}: {error}", parent.display())))?;
-        }
-        std::fs::write(path, document)
-            .map_err(|error| SdkErrorText(format!("write {}: {error}", path.display())))
+        let system = self.inner.system_context();
+        let manager = self.inner.manager.lock().unwrap();
+        kiss_coding::export::export_html(&manager, path, Some(&system))
+            .map_err(|error| SdkErrorText(format!("export {}: {error:#}", path.display())))
     }
 
     fn session_stats(&self) -> Value {
@@ -1109,13 +1076,6 @@ fn user_message(args: &PromptArgs) -> AgentMessage {
 }
 
 /// Recursively build `{entry, children}` nodes for `get_tree`.
-fn escape_html(text: &str) -> String {
-    text.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-}
-
 fn build_tree(manager: &kiss_coding::SessionManager, parent: Option<&str>) -> Vec<Value> {
     manager
         .children(parent)

@@ -7940,7 +7940,7 @@ fn run_slash_command(
             let manager = session.manager.lock().unwrap();
             let target = parse_path_argument(&rest)
                 .unwrap_or_else(|| format!("session-{}.html", manager.session_id()));
-            match crate::export::export_session(
+            match kiss_coding::export::export_session(
                 &manager,
                 std::path::Path::new(&target),
                 Some(&system),
@@ -8200,7 +8200,7 @@ fn start_share_session(
             std::process::id(),
             chrono::Utc::now().timestamp_millis()
         ));
-        if let Err(error) = crate::export::export_html(&manager, &target, Some(&system)) {
+        if let Err(error) = kiss_coding::export::export_html(&manager, &target, Some(&system)) {
             app.cells.push(Cell::Error(format!(
                 "could not prepare session share: {error:#}"
             )));

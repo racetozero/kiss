@@ -2,7 +2,6 @@ mod args;
 mod auth_flow;
 mod cache;
 mod doctor;
-mod export;
 mod file_search;
 mod job_ui;
 mod modes {
@@ -105,7 +104,7 @@ async fn run(args: Args) -> anyhow::Result<i32> {
             .get(1)
             .map(std::path::PathBuf::from)
             .unwrap_or_else(|| input.with_extension("html"));
-        export::export_session(&manager, &output, None)?;
+        kiss_coding::export::export_session(&manager, &output, None)?;
         println!("exported to {}", output.display());
         return Ok(0);
     }

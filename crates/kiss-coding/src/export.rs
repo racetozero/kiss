@@ -1,8 +1,8 @@
 //! Session -> standalone HTML export.
 
+use crate::{SessionEntry, SessionManager};
 use anyhow::Result;
 use kiss_agent::AgentMessage;
-use kiss_coding::{SessionEntry, SessionManager};
 use std::path::Path;
 
 fn escape(text: &str) -> String {
@@ -121,11 +121,17 @@ pub fn export_html(
         </style></head><body><h1>{title}</h1>\n{body}</body></html>",
         title = escape(&title),
     );
+    if let Some(parent) = target.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
     std::fs::write(target, html)?;
     Ok(())
 }
 
 pub fn export_jsonl(manager: &SessionManager, target: &Path) -> Result<()> {
+    if let Some(parent) = target.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
     std::fs::write(target, manager.to_jsonl()?)?;
     Ok(())
 }
