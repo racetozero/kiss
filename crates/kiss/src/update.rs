@@ -27,16 +27,27 @@ struct VersionCache {
     last_checked_at: DateTime<Utc>,
 }
 
+/// Where a custom update command writes and reads.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum CommandOutput {
+    /// The terminal: the command shows its progress and can ask for input,
+    /// such as a password.
+    Terminal,
+    /// Captured, for a caller that owns the screen, such as the TUI. Its
+    /// standard error goes into the failure message.
+    Captured,
+}
+
 /// Run the explicit `kiss update` command and return what happened, for the
-/// caller to show. Nothing is printed, so the TUI can run it too.
-pub async fn run() -> Result<String> {
+/// caller to show. kiss itself prints nothing.
+pub async fn run(output: CommandOutput) -> Result<String> {
     if cfg!(debug_assertions) {
         anyhow::bail!(
             "`kiss update` is not available in debug builds. Install a KISS release to use this command"
         );
     }
     if let Some(command) = custom_update_command() {
-        return run_custom_update(&command).await;
+        return run_custom_update(&command, output).await;
     }
     if installed_by_homebrew() {
         anyhow::bail!(
@@ -73,7 +84,7 @@ fn update_command_argv(template: &[String], latest: &Version) -> Vec<String> {
         .collect()
 }
 
-async fn run_custom_update(template: &[String]) -> Result<String> {
+async fn run_custom_update(template: &[String], output: CommandOutput) -> Result<String> {
     let client = http_client()?;
     let current = current_version()?;
     let latest = fetch_latest_version(&client).await?;
@@ -82,23 +93,39 @@ async fn run_custom_update(template: &[String]) -> Result<String> {
     }
     let argv = update_command_argv(template, &latest);
     let shown = argv.join(" ");
-    let output = tokio::process::Command::new(&argv[0])
-        .args(&argv[1..])
-        .stdin(std::process::Stdio::null())
-        .output()
-        .await
+    let mut process = tokio::process::Command::new(&argv[0]);
+    process.args(&argv[1..]);
+    let result = match output {
+        CommandOutput::Terminal => process.status().await.map(|status| (status, String::new())),
+        CommandOutput::Captured => process
+            .stdin(std::process::Stdio::null())
+            .output()
+            .await
+            .map(|output| {
+                // Some tools write their errors to standard output.
+                let text = [&output.stderr, &output.stdout]
+                    .into_iter()
+                    .map(|bytes| String::from_utf8_lossy(bytes).trim().to_string())
+                    .find(|text| !text.is_empty())
+                    .unwrap_or_default();
+                (output.status, text)
+            }),
+    };
+    let (status, errors) = result
         .with_context(|| {
             format!(
                 "start the update command `{shown}` from KISS_SELF_UPDATE_COMMAND or selfUpdateCommand. Check that `{}` is installed and on PATH",
                 argv[0]
             )
         })?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
+    if !status.success() {
+        let errors = if errors.is_empty() {
+            String::new()
+        } else {
+            format!(": {errors}")
+        };
         anyhow::bail!(
-            "the update command `{shown}` failed ({}): {}. Fix KISS_SELF_UPDATE_COMMAND or selfUpdateCommand, or remove it to use the KISS installer",
-            output.status,
-            stderr.trim()
+            "the update command `{shown}` failed ({status}){errors}. Fix KISS_SELF_UPDATE_COMMAND or selfUpdateCommand, or remove it to use the KISS installer"
         );
     }
     Ok(format!(
@@ -403,7 +430,7 @@ mod tests {
     #[cfg(debug_assertions)]
     #[tokio::test]
     async fn debug_update_stops_before_network_or_replacement() {
-        let error = run().await.unwrap_err();
+        let error = run(CommandOutput::Captured).await.unwrap_err();
         assert!(error.to_string().contains("not available in debug builds"));
     }
 

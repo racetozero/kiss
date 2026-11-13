@@ -8268,7 +8268,7 @@ fn start_update(app: &mut App, command_tx: &mpsc::UnboundedSender<CommandEvent>)
     }
     let tx = CommandTask::new(app, command_tx);
     tokio::spawn(async move {
-        let result = crate::update::run()
+        let result = crate::update::run(crate::update::CommandOutput::Captured)
             .await
             .map_err(|error| format!("{error:#}"));
         let _ = tx.send(CommandEvent::UpdateFinished(result));

@@ -137,7 +137,7 @@ async fn run_command(args: &Args, command: &Command) -> anyhow::Result<i32> {
         Command::Doctor { summary } => doctor::run(*summary).await,
         Command::Update => {
             eprintln!("Checking for a KISS update...");
-            println!("{}", update::run().await?);
+            println!("{}", update::run(update::CommandOutput::Terminal).await?);
             Ok(0)
         }
         Command::Mcp { command } => mcp_cli::run(command, args.trust_override()).await,
