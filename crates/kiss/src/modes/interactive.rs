@@ -3622,7 +3622,19 @@ fn handle_input(
             return Flow::Continue;
         }
         InputLayer::SecretPrompt => {
-            return handle_secret_prompt(app, session, event, command_tx);
+            let flow = handle_secret_prompt(app, session, event, command_tx);
+            // An account add waits only while its login runs: a prompt is
+            // still open or a login command works. Any other way out of the
+            // prompt, such as input it rejected, ends the add.
+            if app.secret_prompt.is_none()
+                && !app
+                    .command
+                    .as_ref()
+                    .is_some_and(|command| matches!(command.control, CommandControl::LoggingIn(_)))
+            {
+                cancel_account_add(app);
+            }
+            return flow;
         }
         // The progress view owns the keyboard while it is open, so that `x`,
         // `p`, and the arrow keys steer the run rather than the editor.
@@ -3931,9 +3943,6 @@ fn handle_secret_prompt(
                     .as_ref()
                     .is_some_and(|prompt| prompt.kind.is_login());
                 app.secret_prompt = None;
-                if login {
-                    cancel_account_add(app);
-                }
                 app.cells.push(Cell::Notice(if login {
                     "login cancelled".into()
                 } else {
@@ -11318,6 +11327,26 @@ mod tests {
             &mut resources,
             InputEvent::Key(key(Key::Escape)),
         );
+        assert_eq!(app.pending_account_add, None);
+    }
+
+    #[test]
+    fn a_login_prompt_that_rejects_its_input_abandons_the_account_add() {
+        let mut app = test_app();
+        let session = synthetic_session();
+        let mut resources = test_resources();
+        app.pending_account_add = Some(("openai".into(), None));
+        app.secret_prompt = Some(SecretPrompt {
+            kind: SecretPromptKind::ApiKey("openai".into()),
+            value: String::new(),
+        });
+        press(
+            &mut app,
+            &session,
+            &mut resources,
+            InputEvent::Key(key(Key::Enter)),
+        );
+        assert!(app.secret_prompt.is_none());
         assert_eq!(app.pending_account_add, None);
     }
 }
