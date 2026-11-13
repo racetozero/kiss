@@ -83,6 +83,27 @@ pub struct CompactionModelOverride {
     pub keep_recent_tokens: Option<u64>,
 }
 
+impl CompactionSettings {
+    fn model_override(&self, model: &kiss_ai::Model) -> Option<&CompactionModelOverride> {
+        self.model_overrides
+            .get(&format!("{}/{}", model.provider, model.id))
+    }
+
+    /// Tokens to keep free for the reply, with the model's override.
+    pub fn reserve_tokens_for(&self, model: &kiss_ai::Model) -> u64 {
+        self.model_override(model)
+            .and_then(|value| value.reserve_tokens)
+            .unwrap_or(self.reserve_tokens)
+    }
+
+    /// Recent tokens a compaction keeps verbatim, with the model's override.
+    pub fn keep_recent_tokens_for(&self, model: &kiss_ai::Model) -> u64 {
+        self.model_override(model)
+            .and_then(|value| value.keep_recent_tokens)
+            .unwrap_or(self.keep_recent_tokens)
+    }
+}
+
 impl Default for CompactionSettings {
     fn default() -> Self {
         CompactionSettings {

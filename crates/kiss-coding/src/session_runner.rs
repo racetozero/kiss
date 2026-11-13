@@ -2,8 +2,7 @@
 //! manager, tool set, queues, retry, auto-compaction, and cost accounting.
 
 use crate::compaction::{
-    self, estimate_context_tokens, extract_file_ops, file_ops_details, plan_compaction,
-    should_compact,
+    self, extract_file_ops, file_ops_details, plan_compaction, should_compact,
 };
 use crate::decision::DecisionModel;
 use crate::iterative::IterativeRuntime;
@@ -1982,16 +1981,8 @@ impl AgentSession {
         });
         let settings = self.settings();
         let model = self.model();
-        let override_settings = settings
-            .compaction
-            .model_overrides
-            .get(&format!("{}/{}", model.provider, model.id));
-        let keep_recent_tokens = override_settings
-            .and_then(|value| value.keep_recent_tokens)
-            .unwrap_or(settings.compaction.keep_recent_tokens);
-        let reserve_tokens = override_settings
-            .and_then(|value| value.reserve_tokens)
-            .unwrap_or(settings.compaction.reserve_tokens);
+        let keep_recent_tokens = settings.compaction.keep_recent_tokens_for(&model);
+        let reserve_tokens = settings.compaction.reserve_tokens_for(&model);
         let plan = plan_compaction(&ctx.messages, keep_recent_tokens);
         if plan.to_summarize.is_empty() && plan.turn_prefix.is_empty() {
             (self.sink)(SessionEvent::CompactionEnd {
@@ -2173,14 +2164,10 @@ impl AgentSession {
         {
             tokens
         } else {
-            let messages = manager.context_messages();
-            let tokens = if self.settings().experimental_context_file {
-                messages
-                    .map(|message| compaction::estimate_message_tokens(&message))
-                    .sum()
-            } else {
-                compaction::estimate_context_tokens_iter(messages)
-            };
+            let tokens = compaction::estimate_request_tokens(
+                manager.context_messages(),
+                self.settings().experimental_context_file,
+            );
             *self.context_usage_cache.lock().unwrap() = Some((revision, tokens));
             tokens
         };
@@ -2309,28 +2296,16 @@ fn auto_compaction_needed(
     model: &Model,
     cancelled: bool,
 ) -> bool {
-    let reserve_tokens = settings
-        .compaction
-        .model_overrides
-        .get(&format!("{}/{}", model.provider, model.id))
-        .and_then(|value| value.reserve_tokens)
-        .unwrap_or(settings.compaction.reserve_tokens);
     settings.compaction.enabled
         && !cancelled
         && model.context_window > 0
         && should_compact(
-            if settings.experimental_context_file {
-                // Usage in retained assistant messages describes the old
-                // request, not the conversation after a model-owned edit.
-                messages
-                    .iter()
-                    .map(compaction::estimate_message_tokens)
-                    .sum()
-            } else {
-                estimate_context_tokens(messages)
-            },
+            compaction::estimate_request_tokens(
+                messages.iter(),
+                settings.experimental_context_file,
+            ),
             model.context_window,
-            reserve_tokens,
+            settings.compaction.reserve_tokens_for(model),
         )
 }
 

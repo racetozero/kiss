@@ -52,6 +52,22 @@ pub fn estimate_message_tokens(message: &AgentMessage) -> u64 {
 
 /// Estimated context size: prefer the last assistant usage (input+output+
 /// cache) and add estimates for everything after it.
+/// Tokens the next request would send. With the experimental context file,
+/// the model may have edited history, so usage reported by old assistant
+/// messages no longer describes it and every message is estimated.
+pub(crate) fn estimate_request_tokens<M: Borrow<AgentMessage>>(
+    messages: impl DoubleEndedIterator<Item = M>,
+    context_file: bool,
+) -> u64 {
+    if context_file {
+        messages
+            .map(|message| estimate_message_tokens(message.borrow()))
+            .sum()
+    } else {
+        estimate_context_tokens_iter(messages)
+    }
+}
+
 pub fn estimate_context_tokens(messages: &[AgentMessage]) -> u64 {
     estimate_context_tokens_iter(messages.iter())
 }
