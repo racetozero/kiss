@@ -2437,11 +2437,11 @@ fn start_account_add(app: &mut App, provider: &str, label: Option<String>) {
 }
 
 /// Refresh what depends on a provider's credentials after a login, logout
-/// or account switch: Cursor's model list comes from the account. A Copilot
+/// or account switch: the model lists that come from the account. A Copilot
 /// account's allowed models need nothing here, because `ModelAccess` reads
 /// them for every model list.
 fn credentials_changed(app: &mut App, provider: &str) {
-    if provider == "cursor" {
+    if kiss_ai::Registry::is_dynamic(provider) {
         app.model_catalog = None;
     }
 }
@@ -2602,7 +2602,7 @@ fn handle_command_event(
             Ok(registry) => {
                 if let Some((model, thinking)) = pattern
                     .as_deref()
-                    .filter(|pattern| *pattern != "cursor")
+                    .filter(|pattern| !kiss_ai::Registry::is_dynamic(pattern))
                     .and_then(|pattern| registry.resolve(pattern, Some(&session.model().provider)))
                 {
                     session.set_model(model);
@@ -4720,17 +4720,21 @@ fn open_model_picker(
         return;
     }
     let mut registry = (*session.registry).clone();
+    let signed_in: Vec<&str> = kiss_ai::Registry::DYNAMIC_PROVIDERS
+        .into_iter()
+        .filter(|provider| registry.signed_in(provider))
+        .collect();
     let Some(cancel) = begin_command(app, "reading account models".into()) else {
         return;
     };
     let tx = CommandTask::new(app, command_tx);
     tokio::spawn(async move {
         let result = tokio::select! {
-            result = tokio::time::timeout(Duration::from_secs(30), registry.refresh_dynamic(|provider| provider == "cursor")) => {
+            result = tokio::time::timeout(Duration::from_secs(30), registry.refresh_dynamic(|provider| signed_in.contains(&provider))) => {
                 match result {
                     Ok(warnings) if warnings.is_empty() => Ok(Arc::new(registry)),
-                    Ok(warnings) => Err(format!("{}. Check your connection or use /login cursor, then run /model again", warnings.join("; "))),
-                    Err(_) => Err("Cursor model discovery timed out. Check your connection, then run /model again".into()),
+                    Ok(warnings) => Err(format!("{}. Check your connection or sign in again with /login, then run /model again", warnings.join("; "))),
+                    Err(_) => Err("Account model discovery timed out. Check your connection, then run /model again".into()),
                 }
             }
             _ = cancel.cancelled() => {
@@ -7538,10 +7542,10 @@ fn run_slash_command(
             )));
         }
         "model" => {
+            let dynamic = kiss_ai::Registry::is_dynamic;
             if rest.is_empty()
-                || rest == "cursor"
-                || rest.starts_with("cursor/")
-                || (session.model().provider == "cursor" && !rest.contains('/'))
+                || rest.split('/').next().is_some_and(dynamic)
+                || (dynamic(&session.model().provider) && !rest.contains('/'))
             {
                 open_model_picker(
                     app,

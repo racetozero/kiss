@@ -257,6 +257,14 @@ impl Registry {
     /// `selected` names (Radius, Cursor and Databricks Unity Gateway list
     /// models per account). A failed fetch keeps the built-in list and is
     /// returned as a warning for the caller to show.
+    /// The providers whose model list comes from the signed-in account, so
+    /// [`Registry::refresh_dynamic`] must fetch it after a login.
+    pub const DYNAMIC_PROVIDERS: [&str; 3] = ["radius", "cursor", "databricks-unity-gateway"];
+
+    pub fn is_dynamic(provider: &str) -> bool {
+        Self::DYNAMIC_PROVIDERS.contains(&provider)
+    }
+
     pub async fn refresh_dynamic(&mut self, selected: impl Fn(&str) -> bool) -> Vec<String> {
         let mut warnings = Vec::new();
         if selected("radius")
