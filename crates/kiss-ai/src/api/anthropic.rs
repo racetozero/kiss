@@ -169,6 +169,21 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
             None => break,
         }
     }
+    // A stream may end without the blank line after its last event.
+    parser.finish(&mut events);
+    for event in events.drain(..) {
+        match handle_event(&event, &mut builder, &mut state) {
+            Flow::Continue => {}
+            Flow::Done => {
+                builder.finish(state.stop_reason, model);
+                return;
+            }
+            Flow::Error(msg) => {
+                builder.fail(msg, false, model);
+                return;
+            }
+        }
+    }
     // Some compatible endpoints end after the final message_delta without
     // message_stop. Without even a stop reason the reply was cut off, and
     // finishing would hand the agent a half-written tool call.

@@ -98,6 +98,14 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
             None => break,
         }
     }
+    // A stream may end without the blank line after its last event.
+    parser.finish(&mut events);
+    for event in events.drain(..) {
+        if let Err(msg) = handle_chunk(&event.data, &mut builder, &mut state) {
+            builder.fail(msg, false, model);
+            return;
+        }
+    }
 
     if let Some(idx) = state.text_idx.take() {
         builder.end_text(idx);

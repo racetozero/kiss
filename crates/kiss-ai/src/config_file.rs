@@ -116,6 +116,16 @@ fn parent_dir(path: &Path) -> Result<&Path> {
 }
 
 fn replace(path: &Path, contents: &[u8], private: bool) -> Result<()> {
+    // Replace a symlink's target, not the link: a dotfile setup links these
+    // files into another folder.
+    let resolved;
+    let path = if std::fs::symlink_metadata(path).is_ok_and(|data| data.file_type().is_symlink()) {
+        resolved = std::fs::canonicalize(path)
+            .with_context(|| format!("Could not follow the link {}.", path.display()))?;
+        resolved.as_path()
+    } else {
+        path
+    };
     let parent = parent_dir(path)?;
     let temp_path = parent.join(format!(
         ".{}.tmp-{}-{}",
@@ -150,4 +160,30 @@ fn replace(path: &Path, contents: &[u8], private: bool) -> Result<()> {
         let _ = std::fs::remove_file(&temp_path);
     }
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn a_save_through_a_symlink_keeps_the_link() {
+        let directory = tempfile::tempdir().unwrap();
+        let target = directory.path().join("dotfiles-settings.json");
+        let link = directory.path().join("settings.json");
+        std::fs::write(&target, "{}").unwrap();
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+        write_atomic(&link, b"{\"theme\":\"light\"}").unwrap();
+        assert!(
+            std::fs::symlink_metadata(&link)
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
+        assert_eq!(
+            std::fs::read_to_string(&target).unwrap(),
+            "{\"theme\":\"light\"}"
+        );
+    }
 }

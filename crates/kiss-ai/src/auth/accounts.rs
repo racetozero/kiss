@@ -242,8 +242,12 @@ fn capture_add(provider: &str, auth: &mut AuthFile, pool: &mut Pool) -> bool {
 
 /// Called under the auth lock before an unrelated credential write.
 pub(super) fn recover_add_at(auth_path: &Path) -> Result<()> {
+    // An unreadable accounts.json must not block auth.json writes, such as
+    // saving a refreshed token; account commands still refuse to change it.
+    let Ok(mut file) = read_accounts_at(&accounts_path(auth_path)) else {
+        return Ok(());
+    };
     let mut auth = read_auth_file_at(auth_path)?;
-    let mut file = read_accounts_at(&accounts_path(auth_path))?;
     let mut changed = false;
     for (provider, pool) in &mut file.pools {
         changed |= capture_add(provider, &mut auth, pool);
