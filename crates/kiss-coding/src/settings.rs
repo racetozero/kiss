@@ -371,6 +371,11 @@ pub struct Settings {
     #[serde(skip)]
     #[doc(hidden)]
     pub baseline: Value,
+    /// What `load` could not read and ignored, for the caller to show.
+    /// Public for the same reason as `baseline`.
+    #[serde(skip)]
+    #[doc(hidden)]
+    pub problems: Vec<String>,
 }
 
 pub fn global_settings_path() -> Option<PathBuf> {
@@ -381,9 +386,16 @@ pub fn project_settings_path(cwd: &Path) -> PathBuf {
     cwd.join(".kiss/settings.json")
 }
 
-fn read_json(path: &Path) -> Option<Value> {
+fn read_json(path: &Path, problems: &mut Vec<String>) -> Option<Value> {
     let text = std::fs::read_to_string(path).ok()?;
-    serde_json::from_str(&text).ok()
+    serde_json::from_str(&text)
+        .map_err(|error| {
+            problems.push(format!(
+                "{} is not valid JSON ({error}), so kiss ignores all of it. Correct the file and restart kiss.",
+                path.display()
+            ));
+        })
+        .ok()
 }
 
 fn merged_settings(mut global: Value, project: Option<Value>) -> Settings {
@@ -436,7 +448,29 @@ fn merged_settings(mut global: Value, project: Option<Value>) -> Settings {
         }
         kiss_ai::config_file::deep_merge(&mut global, project);
     }
+    let mut problems = Vec::new();
+    // One value of the wrong type must not reset every other setting: drop
+    // only the keys that cannot be read.
+    if serde_json::from_value::<Settings>(global.clone()).is_err()
+        && let Some(object) = global.as_object_mut()
+    {
+        object.retain(|key, value| {
+            let readable = serde_json::from_value::<Settings>(Value::Object(Map::from_iter([(
+                key.clone(),
+                value.clone(),
+            )])))
+            .is_ok();
+            if !readable {
+                problems.push(format!(
+                    "the setting `{key}` has a value kiss cannot read, so kiss uses its default. Correct `{key}` in {} or the project's .kiss/settings.json.",
+                    global_settings_path().map_or_else(|| "settings.json".into(), |path| path.display().to_string())
+                ));
+            }
+            readable
+        });
+    }
     let mut settings: Settings = serde_json::from_value(global).unwrap_or_default();
+    settings.problems = problems;
     // Subagents are a user-level authority choice. A repository must not turn
     // them on through a trusted project settings file.
     settings.subagents.enabled = subagents_enabled;
@@ -521,13 +555,17 @@ impl Settings {
 
     /// Load global settings, overlaying project settings when trusted.
     pub fn load(cwd: &Path, project_trusted: bool) -> Settings {
+        let mut problems = Vec::new();
         let global = global_settings_path()
-            .and_then(|p| read_json(&p))
+            .and_then(|p| read_json(&p, &mut problems))
             .unwrap_or_else(|| Value::Object(Default::default()));
         let project = project_trusted
-            .then(|| read_json(&project_settings_path(cwd)))
+            .then(|| read_json(&project_settings_path(cwd), &mut problems))
             .flatten();
-        Self::from_layers(global, project)
+        let mut settings = Self::from_layers(global, project);
+        problems.append(&mut settings.problems);
+        settings.problems = problems;
+        settings
     }
 
     fn from_layers(global: Value, project: Option<Value>) -> Settings {
@@ -587,6 +625,18 @@ impl Settings {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn one_unreadable_value_keeps_the_other_settings_and_is_reported() {
+        let settings = Settings::from_layers(
+            json!({"defaultModel": 5, "defaultProvider": "openai"}),
+            None,
+        );
+        assert_eq!(settings.default_provider.as_deref(), Some("openai"));
+        assert_eq!(settings.default_model, None);
+        assert_eq!(settings.problems.len(), 1);
+        assert!(settings.problems[0].contains("defaultModel"));
+    }
 
     #[test]
     fn a_save_writes_only_changed_settings_and_never_project_or_run_values() {

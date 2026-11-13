@@ -216,7 +216,7 @@ pub async fn build_startup(
 
     let mut registry = Registry::load(None);
     // Fetch only the account model lists this run can use.
-    let warnings = registry
+    let mut warnings = registry
         .refresh_dynamic(|provider| {
             args.provider.as_deref() == Some(provider)
                 || settings.default_provider.as_deref() == Some(provider)
@@ -227,6 +227,7 @@ pub async fn build_startup(
                 })
         })
         .await;
+    warnings.extend(settings.problems.iter().cloned());
 
     let (model, pattern_thinking, needs_login) = startup_model(
         args,
