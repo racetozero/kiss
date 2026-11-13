@@ -2160,7 +2160,11 @@ impl AgentSession {
         }
 
         let summary_cancel = self.cancel.lock().unwrap().clone();
-        let remote_request = if kiss_ai::api::openai_compaction::supports_remote_compaction(&model)
+        // Remote compaction calls OpenAI directly. A session with its own
+        // transport (an embedder or a scripted test) gets only the local
+        // summary, which goes through that transport.
+        let remote_request = if self.stream_fn.lock().unwrap().is_none()
+            && kiss_ai::api::openai_compaction::supports_remote_compaction(&model)
         {
             let context = self.build_context();
             Some((
