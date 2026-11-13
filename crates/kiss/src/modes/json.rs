@@ -8,7 +8,6 @@ use crate::args::Args;
 use crate::setup::build_startup;
 use anyhow::Result;
 use kiss_coding::session_runner::SessionEvent;
-use std::io::Read;
 use std::sync::Arc;
 
 use kiss_sdk::events::session_event_json;
@@ -24,21 +23,7 @@ pub async fn run(args: &Args) -> Result<i32> {
         eprintln!("warning: {warning}");
     }
 
-    let mut prompt = startup.initial_message.clone().unwrap_or_default();
-    if !std::io::IsTerminal::is_terminal(&std::io::stdin()) {
-        let mut piped = String::new();
-        std::io::stdin().read_to_string(&mut piped)?;
-        if !piped.trim().is_empty() {
-            prompt = if prompt.is_empty() {
-                piped.trim().to_string()
-            } else {
-                format!("{}\n\n{prompt}", piped.trim())
-            };
-        }
-    }
-    if prompt.trim().is_empty() {
-        anyhow::bail!("no prompt provided");
-    }
+    let prompt = super::print::prompt_with_stdin(startup.initial_message.clone())?;
     let prompt_mode = startup.session.prompt_mode_for(&prompt);
     startup
         .session

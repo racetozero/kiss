@@ -61,24 +61,7 @@ pub async fn run(args: &Args) -> Result<i32> {
         eprintln!("warning: {warning}");
     }
 
-    // Merge piped stdin into the prompt.
-    let mut prompt = startup.initial_message.clone().unwrap_or_default();
-    if !std::io::IsTerminal::is_terminal(&std::io::stdin()) {
-        let mut piped = String::new();
-        std::io::stdin().read_to_string(&mut piped)?;
-        let piped = piped.trim();
-        if !piped.is_empty() {
-            prompt = if prompt.is_empty() {
-                piped.to_string()
-            } else {
-                format!("{piped}\n\n{prompt}")
-            };
-        }
-    }
-    if prompt.trim().is_empty() {
-        anyhow::bail!("no prompt provided (pass a message or pipe stdin)");
-    }
-
+    let prompt = prompt_with_stdin(startup.initial_message.clone())?;
     let prompt_mode = startup.session.prompt_mode_for(&prompt);
     startup
         .session
@@ -103,4 +86,28 @@ pub async fn run(args: &Args) -> Result<i32> {
         return Ok(1);
     }
     Ok(0)
+}
+
+/// The prompt of a one-shot run: piped stdin, then the message from the
+/// command line, separated by a blank line.
+pub(super) fn prompt_with_stdin(message: Option<String>) -> anyhow::Result<String> {
+    let mut prompt = message.unwrap_or_default();
+    if !std::io::IsTerminal::is_terminal(&std::io::stdin()) {
+        let mut piped = String::new();
+        std::io::stdin().read_to_string(&mut piped)?;
+        let piped = piped.trim();
+        if !piped.is_empty() {
+            prompt = if prompt.is_empty() {
+                piped.to_string()
+            } else {
+                format!("{piped}\n\n{prompt}")
+            };
+        }
+    }
+    if prompt.trim().is_empty() {
+        anyhow::bail!(
+            "no prompt provided. Pass a message as an argument, or pipe text to standard input"
+        );
+    }
+    Ok(prompt)
 }
