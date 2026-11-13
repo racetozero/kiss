@@ -228,6 +228,7 @@ pub async fn build_startup(
         })
         .await;
     warnings.extend(settings.problems.iter().cloned());
+    warnings.extend(registry.problems.iter().cloned());
 
     let (model, pattern_thinking, needs_login) = startup_model(
         args,

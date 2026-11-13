@@ -213,19 +213,14 @@ pub struct Registry {
     /// Placeholder API keys declared in models.json (e.g. "ollama").
     pub declared_keys: BTreeMap<String, String>,
     auth_providers: BTreeMap<String, String>,
+    /// What `load` could not read and ignored, for the caller to show.
+    pub problems: Vec<String>,
 }
 
 impl Registry {
     /// Load built-ins plus the user overlay file if present.
     pub fn load(custom_path: Option<&Path>) -> Registry {
-        let mut registry = Registry {
-            models: Vec::new(),
-            model_indices: HashMap::new(),
-            manually_configured_providers: BTreeSet::new(),
-            declared_keys: BTreeMap::new(),
-            auth_providers: BTreeMap::new(),
-        };
-        registry.merge_builtins();
+        let mut registry = Self::from_builtin();
         let overlay = custom_path
             .map(|p| p.to_path_buf())
             .or_else(|| crate::provider_config::catalog_path().ok());
@@ -233,7 +228,10 @@ impl Registry {
             && let Ok(text) = std::fs::read_to_string(&path)
             && let Err(err) = registry.merge_catalog(&text)
         {
-            eprintln!("warning: ignoring invalid {}: {err:#}", path.display());
+            registry.problems.push(format!(
+                "kiss ignores {} because it is not valid: {err:#}. Correct the file and restart kiss.",
+                path.display()
+            ));
         }
         if let Some(model_ids) = crate::auth::stored_oauth_model_ids("github-copilot") {
             registry.retain_provider_models("github-copilot", &model_ids);
@@ -248,6 +246,7 @@ impl Registry {
             manually_configured_providers: BTreeSet::new(),
             declared_keys: BTreeMap::new(),
             auth_providers: BTreeMap::new(),
+            problems: Vec::new(),
         };
         r.merge_builtins();
         r
@@ -290,8 +289,8 @@ impl Registry {
     /// Load Radius's authenticated, dynamic model catalog when a Radius
     /// credential is available. Radius has no static models in Pi.
     async fn refresh_radius(&mut self) -> Result<()> {
-        let Ok(Some(api_key)) =
-            crate::auth::resolve_api_key_async("radius", &self.declared_keys).await
+        let Some(api_key) =
+            crate::auth::resolve_api_key_async("radius", &self.declared_keys).await?
         else {
             return Ok(());
         };
@@ -328,9 +327,9 @@ impl Registry {
         else {
             return Ok(());
         };
-        let Ok(Some(token)) =
+        let Some(token) =
             crate::auth::resolve_api_key_async("databricks-unity-gateway", &self.declared_keys)
-                .await
+                .await?
         else {
             return Ok(());
         };
