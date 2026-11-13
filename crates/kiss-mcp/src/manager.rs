@@ -109,7 +109,13 @@ struct ServerCache {
 
 enum Runtime {
     Disconnected,
-    Connected { client: Client, last_used: Instant },
+    /// `active` counts calls in flight; the connection is idle only when
+    /// there are none.
+    Connected {
+        client: Client,
+        last_used: Instant,
+        active: usize,
+    },
     Failed(String),
 }
 
@@ -137,16 +143,30 @@ impl Runtime {
         }
     }
 
-    fn last_used(&self) -> Option<Instant> {
+    /// How long the connection has had no call in flight.
+    fn idle_for(&self) -> Option<Duration> {
         match self {
-            Self::Connected { last_used, .. } => Some(*last_used),
+            Self::Connected {
+                last_used,
+                active: 0,
+                ..
+            } => Some(last_used.elapsed()),
             _ => None,
         }
     }
 
-    fn mark_used(&mut self) {
-        if let Self::Connected { last_used, .. } = self {
+    /// Count a call in or out. Either way the connection was just used.
+    fn track_call(&mut self, starting: bool) {
+        if let Self::Connected {
+            last_used, active, ..
+        } = self
+        {
             *last_used = Instant::now();
+            *active = if starting {
+                *active + 1
+            } else {
+                active.saturating_sub(1)
+            };
         }
     }
 }
@@ -506,21 +526,24 @@ impl McpManager {
         F: std::future::Future<Output = std::result::Result<T, E>>,
         E: std::error::Error + Send + Sync + 'static,
     {
-        let runtime = self.runtime(server_name)?;
-        let mut runtime = runtime.lock().await;
-        let outcome = match self.ensure_connected(server_name, &mut runtime).await {
-            Ok(()) => {
-                let peer = runtime.client()?.peer().clone();
-                wait_request(call(peer), self.timeout(server_name), cancel, label).await
-            }
-            Err(error) => Err(error),
-        };
         let server = &self.inner.config.config.mcp_servers[server_name];
-        let result = outcome.map_err(|error| anyhow!(redact(server, &format!("{error:#}"))))?;
-        runtime.mark_used();
-        drop(runtime);
+        let hide_secrets = |error: anyhow::Error| anyhow!(redact(server, &format!("{error:#}")));
+        let runtime = self.runtime(server_name)?;
+        // Hold the server's lock only to connect and to count the call, so
+        // calls to one server run in parallel and status never waits on one.
+        let peer = {
+            let mut guard = runtime.lock().await;
+            self.ensure_connected(server_name, &mut guard)
+                .await
+                .map_err(hide_secrets)?;
+            let peer = guard.client()?.peer().clone();
+            guard.track_call(true);
+            peer
+        };
+        let outcome = wait_request(call(peer), self.timeout(server_name), cancel, label).await;
+        runtime.lock().await.track_call(false);
         self.schedule_idle_disconnect(server_name);
-        Ok(result)
+        outcome.map_err(hide_secrets)
     }
 
     /// How long a server may sit unused before it is disconnected: its
@@ -559,9 +582,7 @@ impl McpManager {
             bail!("MCP server `{server_name}` is disabled")
         }
         if let Some(limit) = self.idle_limit(server_name)
-            && runtime
-                .last_used()
-                .is_some_and(|last| last.elapsed() >= limit)
+            && runtime.idle_for().is_some_and(|idle| idle >= limit)
         {
             runtime.disconnect_client().await;
         }
@@ -582,6 +603,7 @@ impl McpManager {
                 *runtime = Runtime::Connected {
                     client,
                     last_used: Instant::now(),
+                    active: 0,
                 };
                 self.schedule_idle_disconnect(server_name);
                 Ok(())
@@ -646,10 +668,7 @@ impl McpManager {
                 return;
             };
             let mut runtime = runtime.lock().await;
-            if runtime
-                .last_used()
-                .is_some_and(|last_used| last_used.elapsed() >= delay)
-            {
+            if runtime.idle_for().is_some_and(|idle| idle >= delay) {
                 runtime.disconnect_client().await;
             }
         });
@@ -1382,8 +1401,12 @@ done
         assert_eq!(proxy_result.output_text(), "hello from MCP");
         let slow_cancel = CancellationToken::new();
         let trigger = slow_cancel.clone();
+        let watcher = manager.clone();
         tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(20)).await;
+            // A call in flight does not hold the server's lock.
+            let status = tokio::time::timeout(Duration::from_secs(2), watcher.status()).await;
+            assert!(status.is_ok(), "status waited for a call in flight");
             trigger.cancel();
         });
         let error = manager
