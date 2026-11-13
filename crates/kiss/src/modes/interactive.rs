@@ -452,8 +452,12 @@ enum CommandEvent {
         code: String,
         opened: bool,
     },
+    /// The model list with every account list that loaded. `warnings` name
+    /// the lists that did not; a list with warnings is not kept, so the
+    /// next /model tries again.
     ModelCatalog {
-        result: std::result::Result<Arc<kiss_ai::Registry>, String>,
+        registry: Arc<kiss_ai::Registry>,
+        warnings: Vec<String>,
         pattern: Option<String>,
     },
     LlamaModels(std::result::Result<Vec<LlamaModel>, String>),
@@ -2621,25 +2625,33 @@ fn handle_command_event(
                 if opened { "Use" } else { "Open" }
             )));
         }
-        CommandEvent::ModelCatalog { result, pattern } => match result {
-            Ok(registry) => {
-                if let Some((model, thinking)) = pattern
-                    .as_deref()
-                    .filter(|pattern| !kiss_ai::Registry::is_dynamic(pattern))
-                    .and_then(|pattern| registry.resolve(pattern, Some(&session.model().provider)))
-                {
-                    session.set_model(model);
-                    if let Some(thinking) = thinking {
-                        session.set_thinking_level(thinking);
-                        update_thinking_border(app, session.thinking_level());
-                    }
-                } else {
-                    open_model_picker_with_filter(app, &registry, pattern.as_deref());
+        CommandEvent::ModelCatalog {
+            registry,
+            warnings,
+            pattern,
+        } => {
+            for warning in &warnings {
+                app.cells.push(Cell::Notice(format!(
+                    "{warning}. Check your connection or sign in again with /login, then run /model again"
+                )));
+            }
+            if let Some((model, thinking)) = pattern
+                .as_deref()
+                .filter(|pattern| !kiss_ai::Registry::is_dynamic(pattern))
+                .and_then(|pattern| registry.resolve(pattern, Some(&session.model().provider)))
+            {
+                session.set_model(model);
+                if let Some(thinking) = thinking {
+                    session.set_thinking_level(thinking);
+                    update_thinking_border(app, session.thinking_level());
                 }
+            } else {
+                open_model_picker_with_filter(app, &registry, pattern.as_deref());
+            }
+            if warnings.is_empty() {
                 app.model_catalog = Some(registry);
             }
-            Err(error) => app.cells.push(Cell::Error(error)),
-        },
+        }
         CommandEvent::LlamaModels(result) => {
             app.command = None;
             match result {
@@ -4737,7 +4749,8 @@ fn open_model_picker(
     let pattern = pattern.map(str::to_owned);
     if let Some(registry) = &app.model_catalog {
         let _ = command_tx.send(CommandEvent::ModelCatalog {
-            result: Ok(Arc::clone(registry)),
+            registry: Arc::clone(registry),
+            warnings: Vec::new(),
             pattern,
         });
         return;
@@ -4752,20 +4765,21 @@ fn open_model_picker(
     };
     let tx = CommandTask::new(app, command_tx);
     tokio::spawn(async move {
-        let result = tokio::select! {
+        // A list that fails to load leaves the others usable.
+        let warnings = tokio::select! {
             result = tokio::time::timeout(Duration::from_secs(30), registry.refresh_dynamic(|provider| signed_in.contains(&provider))) => {
-                match result {
-                    Ok(warnings) if warnings.is_empty() => Ok(Arc::new(registry)),
-                    Ok(warnings) => Err(format!("{}. Check your connection or sign in again with /login, then run /model again", warnings.join("; "))),
-                    Err(_) => Err("Account model discovery timed out. Check your connection, then run /model again".into()),
-                }
+                result.unwrap_or_else(|_| vec!["account model discovery timed out".into()])
             }
             _ = cancel.cancelled() => {
                 let _ = tx.send(CommandEvent::CommandFinished);
                 return;
             }
         };
-        let _ = tx.send(CommandEvent::ModelCatalog { result, pattern });
+        let _ = tx.send(CommandEvent::ModelCatalog {
+            registry: Arc::new(registry),
+            warnings,
+            pattern,
+        });
         let _ = tx.send(CommandEvent::CommandFinished);
     });
 }
@@ -9184,7 +9198,8 @@ mod tests {
             handle_command_event(
                 &mut app,
                 CommandEvent::ModelCatalog {
-                    result: Ok(Arc::new(registry.clone())),
+                    registry: Arc::new(registry.clone()),
+                    warnings: Vec::new(),
                     pattern: pattern.map(str::to_owned),
                 },
                 &mut file_search,
@@ -9249,7 +9264,8 @@ mod tests {
             handle_command_event(
                 &mut app,
                 CommandEvent::ModelCatalog {
-                    result: Err("discovery failed".into()),
+                    registry: session.registry.clone(),
+                    warnings: vec!["discovery failed".into()],
                     pattern: None,
                 },
                 &mut file_search,
