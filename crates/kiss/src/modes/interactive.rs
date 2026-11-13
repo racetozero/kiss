@@ -1586,9 +1586,18 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
             "accent",
             &theme.bold(&format!("kiss v{}", env!("CARGO_PKG_VERSION"))),
         ));
+        // The keys come from the keybindings, as in /hotkeys, so the hint
+        // stays right when the user rebinds them.
+        let key = |action| key_label(&keybindings, action);
         startup_lines.push(theme.fg(
             "dim",
-            "enter send · shift+tab effort · esc cancel · ctrl+d exit · / commands",
+            &format!(
+                "{} send · {} effort · {} cancel · {} exit · / commands",
+                key(Action::Submit),
+                key(Action::CycleThinking),
+                key(Action::Abort),
+                key(Action::Quit),
+            ),
         ));
         if let Some(latest) = latest_update
             && let Ok(current) = semver::Version::parse(env!("CARGO_PKG_VERSION"))
