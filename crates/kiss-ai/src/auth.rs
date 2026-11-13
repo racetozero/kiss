@@ -510,11 +510,13 @@ async fn resolve_api_key_async_generic(
                     _ => unreachable!(),
                 };
                 let access = refreshed.access.clone();
-                update_auth_file(|file| {
-                    file.entries
-                        .insert(provider.to_string(), AuthEntry::OAuth(refreshed));
-                    Ok(())
-                })?;
+                let path = auth_file_path().ok_or_else(|| anyhow::anyhow!("no home directory"))?;
+                accounts::save_refreshed_at(
+                    &path,
+                    provider,
+                    &AuthEntry::OAuth(current),
+                    AuthEntry::OAuth(refreshed),
+                )?;
                 return Ok(Some(access));
             }
             other => return Ok(Some(other.access_token().to_string())),

@@ -501,6 +501,45 @@ fn activate_at(auth_path: &Path, provider: &str, index: usize) -> Result<Account
     })
 }
 
+/// Save the refreshed token of the account whose credential was
+/// `previous`. While that account is still the live one, `auth.json` gets
+/// the token. When the pool rotated to another account during the refresh,
+/// only the refreshed account's slot gets it, so the live account keeps its
+/// own credential. A credential that is gone (a logout) stays gone.
+pub(super) fn save_refreshed_at(
+    auth_path: &Path,
+    provider: &str,
+    previous: &AuthEntry,
+    refreshed: AuthEntry,
+) -> Result<()> {
+    crate::config_file::with_lock(auth_path, || {
+        recover_at(auth_path)?;
+        recover_add_at(auth_path)?;
+        let mut auth = read_auth_file_at(auth_path)?;
+        let same = |entry: &AuthEntry| entry.access_token() == previous.access_token();
+        match auth.entries.get_mut(provider) {
+            Some(entry) if same(entry) => {
+                *entry = refreshed;
+                return write_auth_file_at(auth_path, &auth);
+            }
+            None => return Ok(()),
+            Some(_) => {}
+        }
+        let Ok(mut file) = read_accounts_at(&accounts_path(auth_path)) else {
+            return Ok(());
+        };
+        let Some(account) = file.pools.get_mut(provider).and_then(|pool| {
+            pool.accounts
+                .iter_mut()
+                .find(|account| same(&account.credential))
+        }) else {
+            return Ok(());
+        };
+        account.credential = refreshed;
+        commit_at(auth_path, auth, file)
+    })
+}
+
 /// Make account `index` (zero-based) active and clear its cooldown.
 pub fn activate(provider: &str, index: usize) -> Result<AccountInfo> {
     activate_at(&auth_path()?, provider, index)
@@ -702,6 +741,35 @@ mod tests {
             finish_add_at(&auth_path, "openai-codex", Some(label)).unwrap();
         }
         (directory, auth_path)
+    }
+
+    #[test]
+    fn a_refresh_that_finishes_after_a_rotation_updates_only_its_own_account() {
+        let (_directory, auth_path) = three_accounts();
+        let slot = |index: usize| {
+            read_accounts_at(&accounts_path(&auth_path)).unwrap().pools["openai-codex"].accounts
+                [index]
+                .credential
+                .access_token()
+                .to_string()
+        };
+        save_refreshed_at(&auth_path, "openai-codex", &oauth("one"), oauth("one-new")).unwrap();
+        assert_eq!(active_secret(&auth_path, "openai-codex"), "one-new");
+
+        // A refresh of account 1 starts, then the pool rotates to account 2.
+        activate_at(&auth_path, "openai-codex", 1).unwrap();
+        save_refreshed_at(
+            &auth_path,
+            "openai-codex",
+            &oauth("one-new"),
+            oauth("one-newer"),
+        )
+        .unwrap();
+        assert_eq!(active_secret(&auth_path, "openai-codex"), "two");
+        assert_eq!(slot(0), "one-newer");
+        assert_eq!(slot(1), "two");
+        activate_at(&auth_path, "openai-codex", 2).unwrap();
+        assert_eq!(slot(1), "two");
     }
 
     #[test]
