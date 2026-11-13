@@ -423,6 +423,15 @@ impl AgentSession {
 
     pub fn set_fast_mode(&self, enabled: bool) {
         *self.fast_mode.lock().unwrap() = enabled;
+        self.prefix_changed();
+    }
+
+    /// The next request will not start with the prefix that cache warming
+    /// keeps warm or that the context-usage estimate measured: the model,
+    /// reasoning, tools, history or session changed.
+    fn prefix_changed(&self) {
+        *self.context_usage_cache.lock().unwrap() = None;
+        self.cache_warm_cancel.lock().unwrap().cancel();
     }
 
     pub fn totals(&self) -> Usage {
@@ -484,16 +493,9 @@ impl AgentSession {
     }
 
     pub fn update_settings(&self, settings: Settings) {
-        *self.context_usage_cache.lock().unwrap() = None;
         let was_enabled = self.subagents_enabled();
         let workflows_were_enabled = self.workflows_enabled();
-        let cache_warming = settings.cache_warming;
         *self.settings.lock().unwrap() = settings;
-        if cache_warming == CacheWarmingMode::Off
-            || (cache_warming == CacheWarmingMode::Streaming && !self.is_running())
-        {
-            self.cache_warm_cancel.lock().unwrap().cancel();
-        }
         let is_enabled = self.subagents_enabled();
         if was_enabled && !is_enabled {
             self.stop_child_work();
@@ -505,25 +507,9 @@ impl AgentSession {
 
     /// Replace resources used by the next model request.
     pub fn reload_runtime(&self, settings: Settings, system_prompt: String, tools: Vec<DynTool>) {
-        *self.context_usage_cache.lock().unwrap() = None;
-        let was_enabled = self.subagents_enabled();
-        let workflows_were_enabled = self.workflows_enabled();
-        let cache_warming = settings.cache_warming;
-        *self.settings.lock().unwrap() = settings;
         *self.system_prompt.lock().unwrap() = system_prompt;
         *self.base_tools.lock().unwrap() = tools;
-        if cache_warming == CacheWarmingMode::Off
-            || (cache_warming == CacheWarmingMode::Streaming && !self.is_running())
-        {
-            self.cache_warm_cancel.lock().unwrap().cancel();
-        }
-        let is_enabled = self.subagents_enabled();
-        if was_enabled && !is_enabled {
-            self.stop_child_work();
-        } else if workflows_were_enabled && !self.workflows_enabled() {
-            self.stop_workflows();
-        }
-        self.rebuild_tools();
+        self.update_settings(settings);
     }
 
     /// Add or replace one tool for this process without changing saved tool configuration.
@@ -630,6 +616,7 @@ impl AgentSession {
             tools.extend(runtime.control_tools());
         }
         *self.tools.lock().unwrap() = tools;
+        self.prefix_changed();
     }
 
     fn tools_for(&self, mode: PromptMode) -> Vec<DynTool> {
@@ -695,7 +682,6 @@ impl AgentSession {
             );
         }
         let manager = create(&current)?;
-        self.cache_warm_cancel.lock().unwrap().cancel();
         *self.context_file.lock().unwrap() = None;
         if let Some(runtime) = self.subagents.get() {
             runtime.reset();
@@ -719,7 +705,7 @@ impl AgentSession {
         *current = manager;
         drop(phase);
         drop(current);
-        *self.context_usage_cache.lock().unwrap() = None;
+        self.prefix_changed();
         *self.totals.lock().unwrap() = totals;
         Ok(())
     }
@@ -735,7 +721,7 @@ impl AgentSession {
     }
 
     pub fn set_model(&self, model: Model) {
-        self.cache_warm_cancel.lock().unwrap().cancel();
+        self.prefix_changed();
         let saved = self
             .manager
             .lock()
@@ -757,6 +743,7 @@ impl AgentSession {
             .append_thinking_level_change(level);
         self.report_save(saved);
         *self.thinking.lock().unwrap() = level;
+        self.prefix_changed();
     }
 
     /// Move the active leaf in the current session tree, with an optional
@@ -870,6 +857,8 @@ impl AgentSession {
             }
             false
         };
+        drop(manager);
+        self.prefix_changed();
 
         Ok(TreeNavigationOutcome {
             editor_text,
@@ -1255,8 +1244,7 @@ impl AgentSession {
         match result {
             Ok(changed) => {
                 if changed {
-                    *self.context_usage_cache.lock().unwrap() = None;
-                    self.cache_warm_cancel.lock().unwrap().cancel();
+                    self.prefix_changed();
                 }
                 changed
             }
