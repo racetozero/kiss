@@ -1714,17 +1714,16 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
 
     // Kick off initial message if provided.
     if let Some(message) = initial_message {
-        maybe_generate_session_title(&mut app, &session, &message, &command_tx);
         let prompt_mode = session.prompt_mode_for(&message);
-        if prompt_mode == PromptMode::Workflow
-            && let Some(trigger) = workflow_trigger(&message)
-        {
-            app.cells.push(Cell::Notice(format!(
-                "running this as a dynamic workflow ({trigger}) · /workflows opens the progress view"
-            )));
-        }
-        app.cells.push(Cell::User(message.clone()));
-        tokio::spawn(session.prompt_with_mode(vec![AgentMessage::user(message)], prompt_mode));
+        deliver_prompt(
+            &mut app,
+            &session,
+            message.clone(),
+            message,
+            prompt_mode,
+            QueueKind::Steering,
+            &command_tx,
+        );
     }
 
     let mut ticker = tokio::time::interval(std::time::Duration::from_millis(80));
@@ -3903,13 +3902,6 @@ fn handle_input(
             return Flow::Continue;
         }
         let prompt_mode = session.prompt_mode_for(&text);
-        if prompt_mode == PromptMode::Workflow
-            && let Some(trigger) = workflow_trigger(&text)
-        {
-            app.cells.push(Cell::Notice(format!(
-                "running this as a dynamic workflow ({trigger}) · /workflows opens the progress view"
-            )));
-        }
         deliver_prompt(
             app,
             session,
@@ -4502,6 +4494,13 @@ fn deliver_prompt(
     kind: QueueKind,
     command_tx: &mpsc::UnboundedSender<CommandEvent>,
 ) {
+    if prompt_mode == PromptMode::Workflow
+        && let Some(trigger) = workflow_trigger(&model_text)
+    {
+        app.cells.push(Cell::Notice(format!(
+            "running this as a dynamic workflow ({trigger}) · /workflows opens the progress view"
+        )));
+    }
     let stored_text = stored_user_text(&display_text, &model_text);
     if let Some(run) = session.submit(vec![AgentMessage::user(stored_text)], prompt_mode, kind) {
         maybe_generate_session_title(app, session, &display_text, command_tx);
