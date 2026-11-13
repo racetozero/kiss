@@ -47,9 +47,8 @@ impl DecisionModel {
         }
     }
 
-    pub fn available(self, declared: &BTreeMap<String, String>) -> bool {
-        kiss_ai::auth::resolve_api_key_local(self.provider(), declared).is_some()
-            && self.endpoint().is_ok()
+    pub fn available(self, registry: &kiss_ai::Registry) -> bool {
+        registry.signed_in(self.provider()) && self.endpoint().is_ok()
     }
 
     fn endpoint(self) -> anyhow::Result<String> {

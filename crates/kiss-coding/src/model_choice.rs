@@ -49,15 +49,12 @@ pub fn choose(
             return Ok(Some((model, None)));
         }
     }
-    for model in registry.all() {
-        if kiss_ai::auth::resolve_api_key_local(
-            registry.credential_provider(&model.provider),
-            &registry.declared_keys,
-        )
-        .is_some()
-        {
-            return Ok(Some((model.clone(), None)));
-        }
+    if let Some(model) = registry
+        .all()
+        .iter()
+        .find(|model| registry.signed_in(&model.provider))
+    {
+        return Ok(Some((model.clone(), None)));
     }
     if !request.import_external_credentials {
         return Ok(None);
@@ -75,11 +72,7 @@ pub fn choose(
             .ok()
             .flatten()
             .is_some()
-            && kiss_ai::auth::resolve_api_key_local(
-                registry.credential_provider(&model.provider),
-                &registry.declared_keys,
-            )
-            .is_some()
+            && registry.signed_in(&model.provider)
         {
             return Ok(Some((model.clone(), None)));
         }

@@ -185,11 +185,7 @@ fn local_checks(registry: &Registry) -> Vec<LocalCheck> {
     };
     let configured = providers
         .iter()
-        .filter(|provider| {
-            let credential_provider = registry.credential_provider(provider);
-            kiss_ai::auth::resolve_credential_local(credential_provider, &registry.declared_keys)
-                .is_some()
-        })
+        .filter(|provider| registry.signed_in(provider))
         .count();
     let auth = LocalCheck {
         name: "auth",

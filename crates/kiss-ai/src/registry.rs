@@ -627,14 +627,13 @@ impl Registry {
     /// Models from providers that the user configured or can authenticate.
     /// The index is the model's position in `all()`.
     pub fn available_models(&self) -> Vec<(usize, &Model)> {
-        let no_declared_keys = BTreeMap::new();
         let authenticated: BTreeSet<String> = self
             .models
             .iter()
             .map(|model| self.credential_provider(&model.provider))
             .collect::<BTreeSet<_>>()
             .into_iter()
-            .filter(|provider| crate::auth::is_signed_in_local(provider, &no_declared_keys))
+            .filter(|provider| self.signed_in(provider))
             .map(str::to_owned)
             .collect();
         self.available_models_for(&authenticated)
@@ -676,6 +675,13 @@ impl Registry {
                     .find(|model| model.provider == provider)
                     .cloned()
             })
+    }
+
+    /// Whether requests for `provider` can authenticate without asking the
+    /// user: a saved or environment credential, a key declared in
+    /// models.json, or a login that gets its token at request time.
+    pub fn signed_in(&self, provider: &str) -> bool {
+        crate::auth::is_signed_in_local(self.credential_provider(provider), &self.declared_keys)
     }
 
     /// Provider whose credentials authenticate requests for `provider`.
@@ -733,13 +739,7 @@ impl Registry {
         let exact = if exact.len() > 1 {
             exact
                 .iter()
-                .find(|m| {
-                    crate::auth::resolve_api_key_local(
-                        self.credential_provider(&m.provider),
-                        &self.declared_keys,
-                    )
-                    .is_some()
-                })
+                .find(|m| self.signed_in(&m.provider))
                 .or(exact.first())
                 .copied()
         } else {

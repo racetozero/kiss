@@ -5221,7 +5221,7 @@ fn decision_model_detail(
 ) -> String {
     match model {
         None => fallback.into(),
-        Some(model) if model.available(&session.registry.declared_keys) => model.label().into(),
+        Some(model) if model.available(&session.registry) => model.label().into(),
         Some(model) => format!(
             "{} unavailable · /login {}",
             model.label(),
@@ -6888,7 +6888,7 @@ fn apply_settings_selection(
                 .settings
                 .compaction
                 .mode
-                .next_available(|model| model.available(&session.registry.declared_keys))
+                .next_available(|model| model.available(&session.registry))
             else {
                 app.cells.push(Cell::Notice(
                     "Decision compaction needs credentials. Run /login typesafe, /login liquid, or /login cloudflare-workers-ai"
@@ -6903,7 +6903,7 @@ fn apply_settings_selection(
                 .settings
                 .reasoning_effort
                 .mode
-                .next_available(|model| model.available(&session.registry.declared_keys))
+                .next_available(|model| model.available(&session.registry))
             else {
                 app.cells.push(Cell::Notice(
                     "Dynamic reasoning needs credentials. Run /login typesafe, /login liquid, or /login cloudflare-workers-ai"
