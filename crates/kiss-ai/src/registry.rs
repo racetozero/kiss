@@ -253,19 +253,43 @@ impl Registry {
         r
     }
 
+    /// Fetch the account-specific model lists of the providers that
+    /// `selected` names (Radius, Cursor and Databricks Unity Gateway list
+    /// models per account). A failed fetch keeps the built-in list and is
+    /// returned as a warning for the caller to show.
+    pub async fn refresh_dynamic(&mut self, selected: impl Fn(&str) -> bool) -> Vec<String> {
+        let mut warnings = Vec::new();
+        if selected("radius")
+            && let Err(error) = self.refresh_radius().await
+        {
+            warnings.push(format!("could not refresh Radius models: {error:#}"));
+        }
+        if selected("cursor")
+            && let Err(error) = self.refresh_cursor().await
+        {
+            warnings.push(format!("could not refresh Cursor models: {error:#}"));
+        }
+        if selected("databricks-unity-gateway")
+            && let Err(error) = self.refresh_databricks_unity_gateway().await
+        {
+            warnings.push(format!(
+                "could not refresh Databricks Unity Gateway models: {error:#}"
+            ));
+        }
+        warnings
+    }
+
     /// Load Radius's authenticated, dynamic model catalog when a Radius
     /// credential is available. Radius has no static models in Pi.
-    pub async fn refresh_radius(&mut self) {
+    async fn refresh_radius(&mut self) -> Result<()> {
         let Ok(Some(api_key)) =
             crate::auth::resolve_api_key_async("radius", &self.declared_keys).await
         else {
-            return;
+            return Ok(());
         };
         let gateway =
             std::env::var("RADIUS_GATEWAY").unwrap_or_else(|_| "https://radius.pi.dev".into());
-        if let Err(error) = self.refresh_radius_from(&gateway, &api_key).await {
-            eprintln!("warning: could not refresh Radius models: {error:#}");
-        }
+        self.refresh_radius_from(&gateway, &api_key).await
     }
 
     /// Load Cursor's authenticated account model catalog. Keep the current
@@ -290,24 +314,20 @@ impl Registry {
 
     /// Load all built-in model services visible in a Databricks workspace.
     /// The embedded models remain available when discovery cannot run.
-    pub async fn refresh_databricks_unity_gateway(&mut self) {
+    async fn refresh_databricks_unity_gateway(&mut self) -> Result<()> {
         let Some(workspace) =
             crate::auth::provider_env("databricks-unity-gateway", "DATABRICKS_HOST")
         else {
-            return;
+            return Ok(());
         };
         let Ok(Some(token)) =
             crate::auth::resolve_api_key_async("databricks-unity-gateway", &self.declared_keys)
                 .await
         else {
-            return;
+            return Ok(());
         };
-        if let Err(error) = self
-            .refresh_databricks_unity_gateway_from(&workspace, &token)
+        self.refresh_databricks_unity_gateway_from(&workspace, &token)
             .await
-        {
-            eprintln!("warning: could not refresh Databricks Unity Gateway models: {error:#}");
-        }
     }
 
     async fn refresh_databricks_unity_gateway_from(

@@ -24,6 +24,9 @@ pub struct Startup {
     pub enabled_models: Vec<Model>,
     pub initial_message: Option<String>,
     pub needs_login: bool,
+    /// Problems found while starting that did not stop it, for the mode to
+    /// show where it shows notices.
+    pub warnings: Vec<String>,
 }
 
 pub struct ReloadedRuntime {
@@ -211,33 +214,18 @@ pub async fn build_startup(
     } = reload_runtime(args, &cwd)?;
 
     let mut registry = Registry::load(None);
-    let radius_selected = args.provider.as_deref() == Some("radius")
-        || args
-            .model
-            .as_deref()
-            .is_some_and(|model| model.starts_with("radius/"))
-        || settings.default_provider.as_deref() == Some("radius");
-    if radius_selected {
-        registry.refresh_radius().await;
-    }
-    let cursor_selected = args.provider.as_deref() == Some("cursor")
-        || args
-            .model
-            .as_deref()
-            .is_some_and(|model| model.starts_with("cursor/"))
-        || settings.default_provider.as_deref() == Some("cursor");
-    if cursor_selected && let Err(error) = registry.refresh_cursor().await {
-        eprintln!("warning: could not refresh Cursor models: {error:#}");
-    }
-    let databricks_selected = args.provider.as_deref() == Some("databricks-unity-gateway")
-        || args
-            .model
-            .as_deref()
-            .is_some_and(|model| model.starts_with("databricks-unity-gateway/"))
-        || settings.default_provider.as_deref() == Some("databricks-unity-gateway");
-    if databricks_selected {
-        registry.refresh_databricks_unity_gateway().await;
-    }
+    // Fetch only the account model lists this run can use.
+    let warnings = registry
+        .refresh_dynamic(|provider| {
+            args.provider.as_deref() == Some(provider)
+                || settings.default_provider.as_deref() == Some(provider)
+                || args.model.as_deref().is_some_and(|model| {
+                    model
+                        .strip_prefix(provider)
+                        .is_some_and(|rest| rest.starts_with('/'))
+                })
+        })
+        .await;
 
     let (model, cli_thinking, needs_login) = startup_model(
         args,
@@ -339,6 +327,7 @@ pub async fn build_startup(
         enabled_models,
         initial_message,
         needs_login,
+        warnings,
     })
 }
 

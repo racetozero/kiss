@@ -1547,6 +1547,7 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
         enabled_models,
         mut initial_message,
         needs_login,
+        warnings,
     } = startup;
     let mut resources = InteractiveResources {
         settings: settings.clone(),
@@ -1678,6 +1679,9 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
         app.md.code_indent = indent.clone();
     }
     app.editor.placeholder = "Ask anything. / commands, $ skills, @ files, ! shell.".into();
+    for warning in warnings {
+        app.cells.push(Cell::Notice(format!("warning: {warning}")));
+    }
     if needs_login {
         app.cells.push(Cell::Notice(
             "No credentials yet. Type /login to sign in.".into(),
@@ -4725,10 +4729,10 @@ fn open_model_picker(
     let tx = CommandTask::new(app, command_tx);
     tokio::spawn(async move {
         let result = tokio::select! {
-            result = tokio::time::timeout(Duration::from_secs(30), registry.refresh_cursor()) => {
+            result = tokio::time::timeout(Duration::from_secs(30), registry.refresh_dynamic(|provider| provider == "cursor")) => {
                 match result {
-                    Ok(Ok(())) => Ok(Arc::new(registry)),
-                    Ok(Err(error)) => Err(format!("Cursor model discovery failed: {error:#}. Check your connection or use /login cursor, then run /model again")),
+                    Ok(warnings) if warnings.is_empty() => Ok(Arc::new(registry)),
+                    Ok(warnings) => Err(format!("{}. Check your connection or use /login cursor, then run /model again", warnings.join("; "))),
                     Err(_) => Err("Cursor model discovery timed out. Check your connection, then run /model again".into()),
                 }
             }

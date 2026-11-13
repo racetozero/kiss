@@ -81,7 +81,9 @@ async fn run(args: Args) -> anyhow::Result<i32> {
     // --list-models
     if let Some(search) = &args.list_models {
         let mut registry = kiss_ai::Registry::load(None);
-        registry.refresh_databricks_unity_gateway().await;
+        for warning in registry.refresh_dynamic(|_| true).await {
+            eprintln!("warning: {warning}");
+        }
         let needle = search.to_lowercase();
         for (_, model) in registry.available_models() {
             let label = format!("{}/{}", model.provider, model.id);

@@ -57,6 +57,9 @@ pub async fn run(args: &Args) -> Result<i32> {
     };
 
     let startup = build_startup(args, false, sink).await?;
+    for warning in &startup.warnings {
+        eprintln!("warning: {warning}");
+    }
 
     // Merge piped stdin into the prompt.
     let mut prompt = startup.initial_message.clone().unwrap_or_default();
