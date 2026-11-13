@@ -276,6 +276,9 @@ enum McpPanelState {
     NeedsAuthentication(String),
     Failed(String),
     Disabled,
+    /// Enabled in the config, but this session's manager loaded it
+    /// disabled, so it connects after /reload.
+    EnabledAfterReload,
 }
 
 #[derive(Debug, Clone)]
@@ -2710,10 +2713,13 @@ fn handle_command_event(
         }
         CommandEvent::McpServerChecked(server) => {
             let server = *server;
+            // A check that was running when the user disabled the server
+            // must not bring it back.
             if let Some(current) = app
                 .mcp_servers
                 .iter_mut()
                 .find(|current| current.name == server.name)
+                && current.state != McpPanelState::Disabled
             {
                 *current = server;
             }
@@ -5728,6 +5734,7 @@ fn mcp_state_label(state: &McpPanelState) -> &'static str {
         McpPanelState::NeedsAuthentication(_) => "△ needs authentication",
         McpPanelState::Failed(_) => "✗ failed",
         McpPanelState::Disabled => "◯ disabled",
+        McpPanelState::EnabledAfterReload => "◌ enabled after /reload",
     }
 }
 
@@ -6169,7 +6176,7 @@ fn toggle_mcp_server(app: &mut App, name: &str) {
             server.state = if disabled {
                 McpPanelState::Disabled
             } else {
-                McpPanelState::Checking
+                McpPanelState::EnabledAfterReload
             };
             app.cells.push(Cell::Notice(format!(
                 "{} MCP server {}. Run /reload to apply the tool change",
