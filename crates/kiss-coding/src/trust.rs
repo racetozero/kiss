@@ -13,7 +13,7 @@ struct TrustFile {
 }
 
 pub fn trust_file_path() -> Option<PathBuf> {
-    dirs::home_dir().map(|h| h.join(".kiss/agent/trust.json"))
+    kiss_ai::paths::agent_dir().map(|dir| dir.join("trust.json"))
 }
 
 fn read_trust_file() -> TrustFile {

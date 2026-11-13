@@ -2150,10 +2150,8 @@ dependencies = [
 name = "kiss-workflow"
 version = "0.0.39"
 dependencies = [
- "anyhow",
  "async-trait",
  "futures",
- "serde",
  "serde_json",
  "tokio",
  "tokio-util",

@@ -1515,8 +1515,7 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
             });
         }
     }
-    let mut keybindings = Keybindings::default();
-    keybindings.load_overrides();
+    let keybindings = load_keybindings();
 
     let latest_update = crate::update::check_on_launch();
     let mut startup_lines: Vec<String> = Vec::new();
@@ -8074,7 +8073,7 @@ fn run_slash_command(
         "resume" => open_session_picker(app, session, false, String::new()),
         "import" => {
             if let Some(path) = parse_path_argument(&rest) {
-                let path = expand_user_path(&path);
+                let path = kiss_ai::paths::expand_home(&path);
                 let items = vec![
                     SelectItem {
                         label: "Import into a new Kiss session".into(),
@@ -8277,13 +8276,13 @@ fn normalize_recap(text: &str) -> String {
     recap
 }
 
-fn expand_user_path(value: &str) -> PathBuf {
-    if let Ok(rest) = std::path::Path::new(value).strip_prefix("~")
-        && let Some(home) = dirs::home_dir()
-    {
-        return home.join(rest);
+/// Default keybindings with the user's `keybindings.json` overrides.
+fn load_keybindings() -> Keybindings {
+    let mut keybindings = Keybindings::default();
+    if let Some(dir) = kiss_ai::paths::agent_dir() {
+        keybindings.load_overrides(&dir.join("keybindings.json"));
     }
-    PathBuf::from(value)
+    keybindings
 }
 
 fn parse_path_argument(value: &str) -> Option<String> {
@@ -8553,7 +8552,7 @@ fn reload_interactive(
     app.idle_recap_armed = resources.settings.auto_recap_enabled();
     app.last_user_activity = Instant::now();
     app.keybindings = Keybindings::default();
-    app.keybindings.load_overrides();
+    app.keybindings = load_keybindings();
     update_thinking_border(app, session.thinking_level());
     refresh_git_branch(app, session);
     app.cells.push(Cell::Notice(format!(
@@ -10748,18 +10747,21 @@ mod tests {
     #[test]
     fn expands_native_home_paths_and_keeps_literal_names() {
         let home = dirs::home_dir().unwrap();
-        assert_eq!(expand_user_path("~"), home);
+        assert_eq!(kiss_ai::paths::expand_home("~"), home);
         assert_eq!(
-            expand_user_path("~/sessions with spaces"),
+            kiss_ai::paths::expand_home("~/sessions with spaces"),
             home.join("sessions with spaces")
         );
         if cfg!(windows) {
             assert_eq!(
-                expand_user_path("~\\sessions with spaces"),
+                kiss_ai::paths::expand_home("~\\sessions with spaces"),
                 home.join("sessions with spaces")
             );
         }
-        assert_eq!(expand_user_path("~alice"), PathBuf::from("~alice"));
+        assert_eq!(
+            kiss_ai::paths::expand_home("~alice"),
+            PathBuf::from("~alice")
+        );
     }
 
     #[test]

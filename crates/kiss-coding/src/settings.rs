@@ -324,7 +324,7 @@ pub struct Settings {
 }
 
 pub fn global_settings_path() -> Option<PathBuf> {
-    dirs::home_dir().map(|h| h.join(".kiss/agent/settings.json"))
+    kiss_ai::paths::agent_dir().map(|dir| dir.join("settings.json"))
 }
 
 pub fn project_settings_path(cwd: &Path) -> PathBuf {

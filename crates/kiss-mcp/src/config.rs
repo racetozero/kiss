@@ -36,7 +36,7 @@ impl ConfigPaths {
             shared_global: home.join(".config/mcp/mcp.json"),
             agents_global: home.join(".agents/mcp.json"),
             agents_nested_global: home.join(".agents/mcp/mcp.json"),
-            kiss_global: home.join(".kiss/agent/mcp.json"),
+            kiss_global: kiss_ai::paths::agent_dir_in(home).join("mcp.json"),
             shared_project: cwd.join(".mcp.json"),
             kiss_project: cwd.join(".kiss/mcp.json"),
         }

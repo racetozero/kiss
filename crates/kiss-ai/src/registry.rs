@@ -6,7 +6,7 @@ use crate::types::ThinkingLevel;
 use anyhow::{Context as _, Result};
 use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// Generated model data verified against `@earendil-works/pi-ai` 1.4.0.
 const BUILTIN_PROVIDER_CATALOGS: &[&str] = &[
@@ -228,8 +228,7 @@ impl Registry {
         registry.merge_builtins();
         let overlay = custom_path
             .map(|p| p.to_path_buf())
-            .or_else(|| std::env::var_os("KISS_MODELS_FILE").map(PathBuf::from))
-            .or_else(|| dirs::home_dir().map(|h| h.join(".kiss/agent/models.json")));
+            .or_else(|| crate::provider_config::catalog_path().ok());
         if let Some(path) = overlay
             && let Ok(text) = std::fs::read_to_string(&path)
             && let Err(err) = registry.merge_catalog(&text)

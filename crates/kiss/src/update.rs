@@ -331,7 +331,7 @@ fn staged_binary_name() -> &'static str {
 }
 
 fn version_cache_path() -> Option<PathBuf> {
-    dirs::home_dir().map(|home| home.join(".kiss/agent").join(VERSION_CACHE_FILE))
+    kiss_ai::paths::agent_dir().map(|dir| dir.join(VERSION_CACHE_FILE))
 }
 
 fn read_cache(path: &Path) -> Result<VersionCache> {

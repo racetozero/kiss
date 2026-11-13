@@ -23,8 +23,8 @@ fn pick_context_file(dir: &Path) -> Option<PathBuf> {
 pub fn discover(cwd: &Path) -> Vec<ContextFile> {
     let mut paths: Vec<PathBuf> = Vec::new();
 
-    if let Some(home) = dirs::home_dir() {
-        let global = home.join(".kiss/agent/AGENTS.md");
+    if let Some(agent_dir) = kiss_ai::paths::agent_dir() {
+        let global = agent_dir.join("AGENTS.md");
         if global.is_file() {
             paths.push(global);
         }
@@ -60,7 +60,7 @@ pub struct SystemPromptFiles {
 
 pub fn system_prompt_files(cwd: &Path) -> SystemPromptFiles {
     let read = |p: PathBuf| std::fs::read_to_string(p).ok();
-    let global = dirs::home_dir().map(|h| h.join(".kiss/agent"));
+    let global = kiss_ai::paths::agent_dir();
     let project = cwd.join(".kiss");
 
     let replace = read(project.join("SYSTEM.md"))

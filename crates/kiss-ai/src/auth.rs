@@ -239,7 +239,7 @@ pub(crate) fn trusted_http_url(value: &str, server: &str) -> Result<String> {
 }
 
 pub fn auth_file_path() -> Option<PathBuf> {
-    dirs::home_dir().map(|home| home.join(".kiss/agent/auth.json"))
+    crate::paths::agent_dir().map(|dir| dir.join("auth.json"))
 }
 
 fn read_auth_file_at(path: &Path) -> AuthFile {

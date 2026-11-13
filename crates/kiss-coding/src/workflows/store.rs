@@ -28,7 +28,7 @@ pub enum SaveLocation {
 }
 
 pub fn user_workflow_dir() -> Option<PathBuf> {
-    dirs::home_dir().map(|home| home.join(".kiss/agent/workflows"))
+    kiss_ai::paths::agent_dir().map(|dir| dir.join("workflows"))
 }
 
 pub fn project_workflow_dir(cwd: &Path) -> PathBuf {

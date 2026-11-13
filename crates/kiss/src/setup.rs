@@ -262,15 +262,7 @@ pub fn session_dir(args: &Args, settings: &Settings) -> PathBuf {
         .clone()
         .or_else(|| std::env::var("KISS_SESSION_DIR").ok())
         .or_else(|| settings.session_dir.clone())
-        .map(|p| {
-            if let Ok(rest) = std::path::Path::new(&p).strip_prefix("~") {
-                dirs::home_dir()
-                    .map(|h| h.join(rest))
-                    .unwrap_or_else(|| PathBuf::from(&p))
-            } else {
-                PathBuf::from(p)
-            }
-        })
+        .map(|p| kiss_ai::paths::expand_home(&p))
         .unwrap_or_else(default_session_dir)
 }
 

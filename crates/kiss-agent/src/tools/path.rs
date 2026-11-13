@@ -4,23 +4,12 @@ use std::path::{Path, PathBuf};
 
 /// Resolve a tool-supplied path against `cwd`, expanding a leading `~`.
 pub fn resolve(cwd: &Path, path: &str) -> PathBuf {
-    let expanded: PathBuf = if let Ok(rest) = Path::new(path).strip_prefix("~") {
-        dirs::home_dir()
-            .map(|h| h.join(rest))
-            .unwrap_or_else(|| PathBuf::from(path))
-    } else {
-        PathBuf::from(path)
-    };
+    let expanded = kiss_ai::paths::expand_home(path);
     if expanded.is_absolute() {
         expanded
     } else {
         cwd.join(expanded)
     }
-}
-
-/// Render a path relative to `cwd` when it is inside it (display only).
-pub fn display(cwd: &Path, path: &Path) -> String {
-    path.trim_prefix(cwd).display().to_string()
 }
 
 #[cfg(test)]

@@ -119,11 +119,8 @@ impl Default for Keybindings {
 }
 
 impl Keybindings {
-    /// Apply user overrides: {"cycleModel": "ctrl+m", ...}.
-    pub fn load_overrides(&mut self) {
-        let Some(path) = dirs::home_dir().map(|h| h.join(".kiss/agent/keybindings.json")) else {
-            return;
-        };
+    /// Apply user overrides from `path`: {"cycleModel": "ctrl+m", ...}.
+    pub fn load_overrides(&mut self, path: &std::path::Path) {
         let Ok(text) = std::fs::read_to_string(path) else {
             return;
         };

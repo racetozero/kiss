@@ -172,8 +172,10 @@ fn scan_dir(dir: &Path, include_root_md: bool, out: &mut Vec<Skill>) {
 /// Discover skills from every location pi checks (kiss equivalents).
 pub fn discover(cwd: &Path, project_trusted: bool, extra_paths: &[PathBuf]) -> Vec<Skill> {
     let mut out: Vec<Skill> = Vec::new();
+    if let Some(agent_dir) = kiss_ai::paths::agent_dir() {
+        scan_dir(&agent_dir.join("skills"), true, &mut out);
+    }
     if let Some(home) = dirs::home_dir() {
-        scan_dir(&home.join(".kiss/agent/skills"), true, &mut out);
         scan_dir(&home.join(".agents/skills"), false, &mut out);
     }
     if project_trusted {

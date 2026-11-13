@@ -20,7 +20,6 @@ native-tools = [
   "portable",
   "kiss-ai/native",
   "dep:base64",
-  "dep:dirs",
   "dep:libc",
   "dep:jsonschema",
   "dep:similar",
@@ -46,7 +45,6 @@ tokio = { version = "1", features = ["sync"] }
 tokio-util = { version = "0.7", features = ["rt"] }
 
 base64 = { workspace = true, optional = true }
-dirs = { workspace = true, optional = true }
 libc = { workspace = true, optional = true }
 similar = { workspace = true, optional = true }
 tempfile = { workspace = true, optional = true }

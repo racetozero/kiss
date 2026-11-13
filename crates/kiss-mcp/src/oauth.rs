@@ -38,9 +38,9 @@ pub struct FileCredentialStore {
 
 impl FileCredentialStore {
     pub fn discover(server_name: &str, server_url: &str) -> Result<Self> {
-        let path = dirs::home_dir()
+        let path = kiss_ai::paths::agent_dir()
             .context("no home directory")?
-            .join(".kiss/agent/mcp-oauth.json");
+            .join("mcp-oauth.json");
         Ok(Self::new(path, server_name, server_url))
     }
 

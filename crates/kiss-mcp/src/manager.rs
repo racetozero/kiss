@@ -156,9 +156,9 @@ pub struct McpManager {
 
 impl McpManager {
     pub fn new(config: LoadedConfig) -> Result<Self> {
-        let cache_path = dirs::home_dir()
+        let cache_path = kiss_ai::paths::agent_dir()
             .context("no home directory")?
-            .join(".kiss/agent/mcp-cache.json");
+            .join("mcp-cache.json");
         Ok(Self::with_paths(config, cache_path, None))
     }
 
@@ -633,7 +633,7 @@ async fn connect(
         let cwd = server
             .cwd
             .as_deref()
-            .map(|value| expand_home(&expand_env(value)));
+            .map(|value| kiss_ai::paths::expand_home(&expand_env(value)));
         #[cfg(windows)]
         let command = {
             let path = server
@@ -783,14 +783,6 @@ fn expand_env(value: &str) -> String {
     }
     output.push_str(rest);
     output
-}
-
-fn expand_home(value: &str) -> PathBuf {
-    Path::new(value)
-        .strip_prefix("~")
-        .ok()
-        .and_then(|rest| dirs::home_dir().map(|home| home.join(rest)))
-        .unwrap_or_else(|| PathBuf::from(value))
 }
 
 fn fingerprint(server: &ServerEntry) -> String {
@@ -1227,6 +1219,6 @@ done
     fn environment_and_home_expansion_are_explicit() {
         unsafe { std::env::set_var("KISS_MCP_TEST_VALUE", "value") };
         assert_eq!(expand_env("a-${KISS_MCP_TEST_VALUE}-b"), "a-value-b");
-        assert!(expand_home("~/work").ends_with("work"));
+        assert!(kiss_ai::paths::expand_home("~/work").ends_with("work"));
     }
 }

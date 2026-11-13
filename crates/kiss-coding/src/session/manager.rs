@@ -70,9 +70,9 @@ pub fn cwd_slug(cwd: &Path) -> String {
 }
 
 pub fn default_session_dir() -> PathBuf {
-    dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join(".kiss/agent/sessions")
+    kiss_ai::paths::agent_dir()
+        .unwrap_or_else(|| PathBuf::from(".kiss/agent"))
+        .join("sessions")
 }
 
 #[derive(Debug, Clone)]
