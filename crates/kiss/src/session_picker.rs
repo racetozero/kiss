@@ -387,7 +387,7 @@ impl SessionPicker {
             .is_some_and(|path| self.current.as_deref() == Some(path));
         let mut details = vec![record.source.name().to_string()];
         if self.global {
-            details.push(crate::modes::interactive::shorten_path(
+            details.push(kiss_ai::paths::abbreviate_home(
                 &record.cwd.display().to_string(),
             ));
         }

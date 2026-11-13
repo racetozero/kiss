@@ -1107,7 +1107,7 @@ impl App {
             .unwrap_or_default();
         let path = format!(
             "{}{branch}{name}",
-            shorten_path(&manager.cwd().display().to_string())
+            kiss_ai::paths::abbreviate_home(&manager.cwd().display().to_string())
         );
         drop(manager);
         let left = format!(
@@ -1226,19 +1226,6 @@ fn format_tokens(tokens: u64) -> String {
         1_000_000..=9_999_999 => format!("{:.1}M", tokens as f64 / 1_000_000.0),
         _ => format!("{}M", tokens / 1_000_000),
     }
-}
-
-pub(crate) fn shorten_path(path: &str) -> String {
-    if let Some(home) = dirs::home_dir() {
-        let path_value = Path::new(path);
-        if let Ok(rest) = path_value.strip_prefix(&home) {
-            if rest.as_os_str().is_empty() {
-                return "~".into();
-            }
-            return format!("~/{}", rest.display());
-        }
-    }
-    path.to_string()
 }
 
 fn read_git_branch(cwd: &Path) -> Option<String> {
@@ -1582,7 +1569,7 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
             let names: Vec<String> = resources
                 .context_file_paths
                 .iter()
-                .map(|p| shorten_path(&p.display().to_string()))
+                .map(|p| kiss_ai::paths::abbreviate_home(&p.display().to_string()))
                 .collect();
             startup_lines.push(theme.fg("muted", &format!("context: {}", names.join(", "))));
         }
@@ -1843,7 +1830,7 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
     if let Some(file) = session.manager.lock().unwrap().session_file() {
         println!(
             "session saved: {}",
-            shorten_path(&file.display().to_string())
+            kiss_ai::paths::abbreviate_home(&file.display().to_string())
         );
         println!("resume with: kiss -c");
     }
@@ -5499,7 +5486,7 @@ fn save_workflow_run(
     match kiss_coding::workflows::save(location, &cwd, name, &record.source, false) {
         Ok(path) => app.cells.push(Cell::Notice(format!(
             "saved {}\nrun it with /{name} after /reload",
-            shorten_path(&path.display().to_string())
+            kiss_ai::paths::abbreviate_home(&path.display().to_string())
         ))),
         Err(error) => app
             .cells
@@ -8116,7 +8103,7 @@ fn import_session(
             adopt_session(app, session, Transcript::Rebuild);
             app.cells.push(Cell::Notice(format!(
                 "imported {} into a new Kiss session",
-                shorten_path(&source.display().to_string())
+                kiss_ai::paths::abbreviate_home(&source.display().to_string())
             )));
         }
         Err(error) => app
