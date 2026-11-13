@@ -234,7 +234,7 @@ async fn run_command(args: &Args, command: &Command) -> anyhow::Result<i32> {
                 Ok(0)
             }.await;
             if result.is_err() && *add_account {
-                kiss_ai::auth::accounts::cancel_add(provider)?;
+                kiss_ai::auth::accounts::cancel_owned_add(provider)?;
             }
             result
         }
