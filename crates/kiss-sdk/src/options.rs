@@ -208,7 +208,7 @@ impl SessionOptions {
         };
 
         let registry = Registry::load(self.models_file.as_deref());
-        let (model, pattern_thinking) = self.resolve_model(&registry)?;
+        let (model, pattern_thinking) = self.resolve_model(&settings, &registry)?;
         let thinking = self
             .thinking_level
             .or(pattern_thinking)
@@ -345,26 +345,23 @@ impl SessionOptions {
         Ok(Some(kiss_mcp::McpManager::new(loaded)?))
     }
 
-    fn resolve_model(&self, registry: &Registry) -> Result<(Model, Option<ThinkingLevel>)> {
-        if let Some(pattern) = &self.model {
-            return registry
-                .resolve(pattern, self.provider.as_deref())
-                .with_context(|| format!("no model matches pattern '{pattern}'"));
-        }
-        if let Some(provider) = &self.provider
-            && let Some(model) = registry.all().iter().find(|m| &m.provider == provider)
-        {
-            return Ok((model.clone(), None));
-        }
-        for model in registry.all() {
-            if kiss_ai::auth::resolve_api_key_local(&model.provider, &registry.declared_keys)
-                .is_some()
-            {
-                return Ok((model.clone(), None));
-            }
-        }
-        anyhow::bail!(
-            "no model available: pass `model`, or configure a credential such as ANTHROPIC_API_KEY"
+    fn resolve_model(
+        &self,
+        settings: &Settings,
+        registry: &Registry,
+    ) -> Result<(Model, Option<ThinkingLevel>)> {
+        kiss_coding::model_choice::choose(
+            &kiss_coding::model_choice::ModelRequest {
+                pattern: self.model.as_deref(),
+                provider: self.provider.as_deref(),
+                api_key_given: self.api_key.is_some(),
+                import_external_credentials: false,
+            },
+            settings,
+            registry,
+        )?
+        .context(
+            "no model available: pass `model`, or configure a credential such as ANTHROPIC_API_KEY",
         )
     }
 
@@ -420,7 +417,9 @@ mod tests {
             ..Default::default()
         };
         let registry = Registry::from_builtin();
-        let error = options.resolve_model(&registry).unwrap_err();
+        let error = options
+            .resolve_model(&Settings::default(), &registry)
+            .unwrap_err();
         assert!(
             error.to_string().contains("definitely/not-a-model"),
             "{error}"

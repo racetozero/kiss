@@ -147,65 +147,18 @@ pub fn resolve_model(
     settings: &Settings,
     registry: &Registry,
 ) -> Result<(Model, Option<ThinkingLevel>)> {
-    // CLI flag > settings default > first model with an available key.
-    if let Some(pattern) = &args.model {
-        return registry
-            .resolve(pattern, args.provider.as_deref())
-            .with_context(|| format!("no model matches pattern '{pattern}'"));
-    }
-    if let (Some(provider), Some(model)) = (&settings.default_provider, &settings.default_model)
-        && let Some(found) = registry.resolve(model, Some(provider))
-    {
-        return Ok(found);
-    }
-    if let Some(provider) = args
-        .provider
-        .as_deref()
-        .or(settings.default_provider.as_deref())
-        && let Some(model) = provider_default(registry, provider)
-    {
-        return Ok((model, None));
-    }
-    if args.api_key.is_some() {
-        let provider = args.provider.as_deref().unwrap_or("anthropic");
-        if let Some(model) = provider_default(registry, provider) {
-            return Ok((model, None));
-        }
-    }
-    for model in registry.all() {
-        if kiss_ai::auth::resolve_api_key_local(
-            registry.credential_provider(&model.provider),
-            &registry.declared_keys,
-        )
-        .is_some()
-        {
-            return Ok((model.clone(), None));
-        }
-    }
-    // External discovery can query the macOS Keychain. Run it once only after
-    // the fast local scan finds no usable credential.
-    let external = kiss_ai::auth::external::discover();
-    let mut checked = std::collections::HashSet::new();
-    for model in registry.all() {
-        let credential_provider = registry.credential_provider(&model.provider);
-        if !checked.insert(credential_provider) {
-            continue;
-        }
-        if kiss_ai::auth::external::auto_import_unique_from_sources(credential_provider, &external)
-            .ok()
-            .flatten()
-            .is_some()
-            && kiss_ai::auth::resolve_api_key_local(
-                registry.credential_provider(&model.provider),
-                &registry.declared_keys,
-            )
-            .is_some()
-        {
-            return Ok((model.clone(), None));
-        }
-    }
-    anyhow::bail!(
-        "no model available: set an API key (e.g. ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY) or pass --model/--api-key"
+    kiss_coding::model_choice::choose(
+        &kiss_coding::model_choice::ModelRequest {
+            pattern: args.model.as_deref(),
+            provider: args.provider.as_deref(),
+            api_key_given: args.api_key.is_some(),
+            import_external_credentials: true,
+        },
+        settings,
+        registry,
+    )?
+    .context(
+        "no model available: set an API key (e.g. ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY) or pass --model/--api-key",
     )
 }
 
@@ -217,37 +170,14 @@ fn startup_model(
 ) -> Result<(Model, Option<ThinkingLevel>, bool)> {
     if interactive && args.model.is_none() && resolved.is_err() {
         return Ok((
-            provider_default(registry, "openai-codex").context("no fallback model available")?,
+            registry
+                .provider_default("openai-codex")
+                .context("no fallback model available")?,
             None,
             true,
         ));
     }
     resolved.map(|(model, thinking)| (model, thinking, false))
-}
-
-fn provider_default(registry: &Registry, provider: &str) -> Option<Model> {
-    let preferred = match provider {
-        "openai" | "openai-codex" | "github-copilot" => Some("gpt-6.1-sol"),
-        "nvidia" => Some("nvidia/nemotron-3.5-super-vl-120b-a12b"),
-        "xiaomi" | "xiaomi-token-plan-cn" | "xiaomi-token-plan-ams" | "xiaomi-token-plan-sgp" => {
-            Some("mimo-v2.6-pro")
-        }
-        "fireworks" => Some("accounts/fireworks/models/kimi-k3"),
-        "together" => Some("moonshotai/Kimi-K3"),
-        "opencode-go" => Some("kimi-k3"),
-        "xai" => Some("grok-4.7"),
-        "meta" => Some("muse-spark-1.3"),
-        _ => None,
-    };
-    preferred
-        .and_then(|id| registry.resolve(id, Some(provider)).map(|(model, _)| model))
-        .or_else(|| {
-            registry
-                .all()
-                .iter()
-                .find(|model| model.provider == provider)
-                .cloned()
-        })
 }
 
 pub fn session_dir(args: &Args, settings: &Settings) -> PathBuf {
@@ -464,9 +394,9 @@ mod tests {
     #[test]
     fn changed_pi_provider_defaults_are_preferred() {
         let registry = Registry::from_builtin();
-        assert_eq!(provider_default(&registry, "xai").unwrap().id, "grok-4.7");
+        assert_eq!(registry.provider_default("xai").unwrap().id, "grok-4.7");
         assert_eq!(
-            provider_default(&registry, "meta").unwrap().id,
+            registry.provider_default("meta").unwrap().id,
             "muse-spark-1.3"
         );
         for (provider, id) in [
@@ -476,7 +406,7 @@ mod tests {
             ("together", "moonshotai/Kimi-K3"),
             ("opencode-go", "kimi-k3"),
         ] {
-            assert_eq!(provider_default(&registry, provider).unwrap().id, id);
+            assert_eq!(registry.provider_default(provider).unwrap().id, id);
         }
     }
 

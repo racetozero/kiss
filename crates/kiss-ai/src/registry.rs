@@ -631,6 +631,33 @@ impl Registry {
             .collect()
     }
 
+    /// The model to use for `provider` when none is named: kiss's choice
+    /// for some providers, otherwise the provider's first catalog model.
+    pub fn provider_default(&self, provider: &str) -> Option<Model> {
+        let preferred = match provider {
+            "openai" | "openai-codex" | "github-copilot" => Some("gpt-6.1-sol"),
+            "nvidia" => Some("nvidia/nemotron-3.5-super-vl-120b-a12b"),
+            "xiaomi"
+            | "xiaomi-token-plan-cn"
+            | "xiaomi-token-plan-ams"
+            | "xiaomi-token-plan-sgp" => Some("mimo-v2.6-pro"),
+            "fireworks" => Some("accounts/fireworks/models/kimi-k3"),
+            "together" => Some("moonshotai/Kimi-K3"),
+            "opencode-go" => Some("kimi-k3"),
+            "xai" => Some("grok-4.7"),
+            "meta" => Some("muse-spark-1.3"),
+            _ => None,
+        };
+        preferred
+            .and_then(|id| self.resolve(id, Some(provider)).map(|(model, _)| model))
+            .or_else(|| {
+                self.all()
+                    .iter()
+                    .find(|model| model.provider == provider)
+                    .cloned()
+            })
+    }
+
     /// Provider whose credentials authenticate requests for `provider`.
     pub fn credential_provider<'a>(&'a self, provider: &'a str) -> &'a str {
         self.auth_providers

@@ -10,6 +10,7 @@ pub mod context_files;
 pub mod decision;
 pub mod export;
 pub mod iterative;
+pub mod model_choice;
 pub mod prompts;
 pub mod session;
 pub mod session_runner;
