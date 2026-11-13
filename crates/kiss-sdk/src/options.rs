@@ -196,6 +196,14 @@ impl SessionOptions {
         let (trusted, settings) = self.trust_and_settings();
 
         let registry = Registry::load(self.models_file.as_deref());
+        // A models file the caller named must be valid. A problem with the
+        // user's own file is only reported, as the command-line program does.
+        if self.models_file.is_some() && !registry.problems.is_empty() {
+            anyhow::bail!("{}", registry.problems.join("\n"));
+        }
+        for problem in &registry.problems {
+            eprintln!("warning: {problem}");
+        }
         let chosen = model_choice::choose(&self.model_request(), &settings, &registry)?.context(
             "no model available: pass `model`, or configure a credential such as ANTHROPIC_API_KEY",
         )?;

@@ -81,7 +81,8 @@ async fn run(args: Args) -> anyhow::Result<i32> {
     // --list-models
     if let Some(search) = &args.list_models {
         let mut registry = kiss_ai::Registry::load(None);
-        for warning in registry.refresh_dynamic(|_| true).await {
+        let warnings = registry.refresh_dynamic(|_| true).await;
+        for warning in registry.problems.iter().chain(&warnings) {
             eprintln!("warning: {warning}");
         }
         let needle = search.to_lowercase();
