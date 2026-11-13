@@ -39,15 +39,7 @@ pub async fn run_agent_loop(
         });
     }
 
-    run_loop(
-        &mut context,
-        &mut new_messages,
-        &mut config,
-        cancel,
-        &emit,
-        true,
-    )
-    .await;
+    run_loop(&mut context, &mut new_messages, &mut config, cancel, &emit).await;
     emit(AgentEvent::AgentEnd {
         messages: new_messages.clone(),
     });
@@ -65,15 +57,7 @@ pub async fn run_agent_loop_continue(
     let mut new_messages: Vec<AgentMessage> = Vec::new();
     emit(AgentEvent::AgentStart);
     emit(AgentEvent::TurnStart);
-    run_loop(
-        &mut context,
-        &mut new_messages,
-        &mut config,
-        cancel,
-        &emit,
-        true,
-    )
-    .await;
+    run_loop(&mut context, &mut new_messages, &mut config, cancel, &emit).await;
     emit(AgentEvent::AgentEnd {
         messages: new_messages.clone(),
     });
@@ -86,8 +70,9 @@ async fn run_loop(
     config: &mut AgentLoopConfig,
     cancel: CancellationToken,
     emit: &EventSink,
-    mut first_turn: bool,
 ) {
+    // Both entry points already emitted the first TurnStart.
+    let mut first_turn = true;
     // The active prompt always gets the first turn. Steering is read after
     // that turn and is then inserted before the next model call.
     let mut pending: Vec<AgentMessage> = Vec::new();
@@ -352,8 +337,20 @@ struct ExecutedBatch {
 
 struct FinalizedCall {
     tool_call: ToolCall,
+    /// The result, whose `is_error` says whether the call failed.
     result: ToolResult,
-    is_error: bool,
+}
+
+impl FinalizedCall {
+    fn failed(tool_call: ToolCall, result: ToolResult) -> Self {
+        FinalizedCall {
+            tool_call,
+            result: ToolResult {
+                is_error: true,
+                ..result
+            },
+        }
+    }
 }
 
 /// Close calls that cannot run because the response is incomplete.
@@ -466,7 +463,7 @@ async fn execute_tool_batch(
     let terminate = !finalized.is_empty() && finalized.iter().all(|f| f.result.terminate);
     let mut messages = Vec::new();
     for f in &finalized {
-        let message = tool_result_message(&f.tool_call, &f.result, f.is_error);
+        let message = tool_result_message(&f.tool_call, &f.result, f.result.is_error);
         emit(AgentEvent::MessageStart {
             message: AgentMessage::ToolResult(message.clone()),
         });
@@ -517,12 +514,11 @@ async fn execute_parallel_tools(
                         .await
                         {
                             Ok(value) => value,
-                            Err(join_error) => FinalizedCall {
-                                // A panicking native tool task must not kill the loop.
+                            // A panicking native tool task must not kill the loop.
+                            Err(join_error) => FinalizedCall::failed(
                                 tool_call,
-                                result: ToolResult::text(format!("tool task failed: {join_error}")),
-                                is_error: true,
-                            },
+                                ToolResult::text(format!("tool task failed: {join_error}")),
+                            ),
                         }
                     }
                 }
@@ -579,11 +575,7 @@ async fn execute_parallel_tools(
 }
 
 fn cancelled_tool_call(tool_call: ToolCall) -> FinalizedCall {
-    FinalizedCall {
-        tool_call,
-        result: ToolResult::text("Operation aborted"),
-        is_error: true,
-    }
+    FinalizedCall::failed(tool_call, ToolResult::text("Operation aborted"))
 }
 
 async fn prepare_tool_call(
@@ -593,14 +585,13 @@ async fn prepare_tool_call(
     cancel: &CancellationToken,
 ) -> Result<(DynTool, Value), Box<FinalizedCall>> {
     let error = |text: String, terminate: bool| {
-        Box::new(FinalizedCall {
-            tool_call: tc.clone(),
-            result: ToolResult {
+        Box::new(FinalizedCall::failed(
+            tc.clone(),
+            ToolResult {
                 terminate,
                 ..ToolResult::text(text)
             },
-            is_error: true,
-        })
+        ))
     };
     let Some(tool) = context.find_tool(&tc.name) else {
         return Err(error(format!("Tool {} not found", tc.name), false));
@@ -703,11 +694,7 @@ async fn run_and_finalize(
     }
 
     result.is_error = is_error;
-    FinalizedCall {
-        tool_call,
-        result,
-        is_error,
-    }
+    FinalizedCall { tool_call, result }
 }
 
 fn emit_execution_end(f: &FinalizedCall, emit: &EventSink) {
@@ -715,7 +702,7 @@ fn emit_execution_end(f: &FinalizedCall, emit: &EventSink) {
         tool_call_id: f.tool_call.id.clone(),
         tool_name: f.tool_call.name.clone(),
         result: f.result.clone(),
-        is_error: f.is_error,
+        is_error: f.result.is_error,
     });
 }
 

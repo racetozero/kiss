@@ -83,31 +83,38 @@ pub struct Limits {
     pub max_steps: u64,
 }
 
+/// The most child agents running at once that the runtime allows.
+const MAX_CONCURRENCY: usize = 16;
+/// The most child agents one run may start, and the default.
+const MAX_AGENTS: u32 = 1000;
+/// The largest list one `parallel` or `pipeline` call may fan out over.
+const MAX_FANOUT: usize = 4096;
+
 impl Default for Limits {
     fn default() -> Self {
         Limits {
             max_concurrency: default_concurrency(),
-            max_agents: 1000,
-            max_fanout: 4096,
+            max_agents: MAX_AGENTS,
+            max_fanout: MAX_FANOUT,
             max_steps: 50_000_000,
         }
     }
 }
 
-/// Sixteen at once, or fewer on a machine or container with fewer cores.
+/// The most at once, or fewer on a machine or container with fewer cores.
 fn default_concurrency() -> usize {
     let cores = std::thread::available_parallelism()
         .map(|count| count.get())
         .unwrap_or(4);
-    cores.clamp(2, 16)
+    cores.clamp(2, MAX_CONCURRENCY)
 }
 
 impl Limits {
     /// Clamp caller-supplied limits into a range the runtime can honor.
     pub fn sanitized(mut self) -> Limits {
-        self.max_concurrency = self.max_concurrency.clamp(1, 16);
-        self.max_agents = self.max_agents.clamp(1, 1000);
-        self.max_fanout = self.max_fanout.clamp(1, 4096);
+        self.max_concurrency = self.max_concurrency.clamp(1, MAX_CONCURRENCY);
+        self.max_agents = self.max_agents.clamp(1, MAX_AGENTS);
+        self.max_fanout = self.max_fanout.clamp(1, MAX_FANOUT);
         self.max_steps = self.max_steps.max(1000);
         self
     }

@@ -194,7 +194,7 @@ impl AgentTool for ReadTool {
         } else if truncation.truncated {
             let end_display = start_display + truncation.output_lines - 1;
             let next = end_display + 1;
-            let notice = if truncation.truncated_by.as_deref() == Some("lines") {
+            let notice = if truncation.truncated_by == Some(super::truncate::TruncatedBy::Lines) {
                 format!(
                     "[Showing lines {start_display}-{end_display}. Use offset={next} to continue.]"
                 )

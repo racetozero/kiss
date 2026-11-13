@@ -20,13 +20,32 @@ pub fn limit_external_text(mut text: String, source: &str) -> String {
     text
 }
 
+/// Which limit cut the output. Serialized as `"lines"` or `"bytes"`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TruncatedBy {
+    Lines,
+    Bytes,
+}
+
+impl TruncatedBy {
+    /// The limit that applies when `lines` output lines reached `max_lines`.
+    pub fn after(lines: usize, max_lines: usize) -> Self {
+        if lines >= max_lines {
+            TruncatedBy::Lines
+        } else {
+            TruncatedBy::Bytes
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Default, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TruncationResult {
     pub content: String,
     pub truncated: bool,
-    /// "lines" | "bytes" when truncated.
-    pub truncated_by: Option<String>,
+    /// Set when truncated.
+    pub truncated_by: Option<TruncatedBy>,
     pub total_lines: usize,
     pub total_bytes: usize,
     pub output_lines: usize,
@@ -47,7 +66,7 @@ pub fn truncate_head(content: &str, max_lines: usize, max_bytes: usize) -> Trunc
         return TruncationResult {
             content: String::new(),
             truncated: true,
-            truncated_by: Some("bytes".into()),
+            truncated_by: Some(TruncatedBy::Bytes),
             total_lines,
             total_bytes,
             output_lines: 0,
@@ -82,17 +101,13 @@ pub fn truncate_head(content: &str, max_lines: usize, max_bytes: usize) -> Trunc
         };
     }
 
-    let truncated_by = if out_lines >= max_lines {
-        "lines"
-    } else {
-        "bytes"
-    };
+    let truncated_by = TruncatedBy::after(out_lines, max_lines);
     let content_out = lines[..out_lines].join("\n");
     TruncationResult {
         output_bytes: content_out.len(),
         content: content_out,
         truncated: true,
-        truncated_by: Some(truncated_by.into()),
+        truncated_by: Some(truncated_by),
         total_lines,
         total_bytes,
         output_lines: out_lines,
@@ -116,7 +131,7 @@ pub fn truncate_tail(content: &str, max_lines: usize, max_bytes: usize) -> Trunc
         return TruncationResult {
             content: piece.to_string(),
             truncated: true,
-            truncated_by: Some("bytes".into()),
+            truncated_by: Some(TruncatedBy::Bytes),
             total_lines,
             total_bytes,
             output_lines: 1,
@@ -151,17 +166,13 @@ pub fn truncate_tail(content: &str, max_lines: usize, max_bytes: usize) -> Trunc
         };
     }
 
-    let truncated_by = if out_lines >= max_lines {
-        "lines"
-    } else {
-        "bytes"
-    };
+    let truncated_by = TruncatedBy::after(out_lines, max_lines);
     let content_out = lines[total_lines - out_lines..].join("\n");
     TruncationResult {
         output_bytes: content_out.len(),
         content: content_out,
         truncated: true,
-        truncated_by: Some(truncated_by.into()),
+        truncated_by: Some(truncated_by),
         total_lines,
         total_bytes,
         output_lines: out_lines,
@@ -209,7 +220,7 @@ mod tests {
             .join("\n");
         let r = truncate_head(&content, 3, 1000);
         assert!(r.truncated);
-        assert_eq!(r.truncated_by.as_deref(), Some("lines"));
+        assert_eq!(r.truncated_by, Some(TruncatedBy::Lines));
         assert_eq!(r.content, "0\n1\n2");
         assert_eq!(r.output_lines, 3);
     }
@@ -218,7 +229,7 @@ mod tests {
     fn head_byte_limit_never_splits_line() {
         let r = truncate_head("aaaa\nbbbb\ncccc", 10, 9);
         assert!(r.truncated);
-        assert_eq!(r.truncated_by.as_deref(), Some("bytes"));
+        assert_eq!(r.truncated_by, Some(TruncatedBy::Bytes));
         assert_eq!(r.content, "aaaa\nbbbb");
     }
 
@@ -238,7 +249,7 @@ mod tests {
             .join("\n");
         let r = truncate_tail(&content, 3, 1000);
         assert_eq!(r.content, "7\n8\n9");
-        assert_eq!(r.truncated_by.as_deref(), Some("lines"));
+        assert_eq!(r.truncated_by, Some(TruncatedBy::Lines));
     }
 
     #[test]

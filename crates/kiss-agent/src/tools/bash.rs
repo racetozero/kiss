@@ -116,14 +116,10 @@ impl BashOutput {
         result.truncated =
             result.output_lines < result.total_lines || result.output_bytes < result.total_bytes;
         if result.truncated {
-            result.truncated_by = Some(
-                if result.output_lines >= DEFAULT_MAX_LINES {
-                    "lines"
-                } else {
-                    "bytes"
-                }
-                .into(),
-            );
+            result.truncated_by = Some(super::truncate::TruncatedBy::after(
+                result.output_lines,
+                DEFAULT_MAX_LINES,
+            ));
         }
         result
     }
@@ -315,7 +311,7 @@ impl AgentTool for BashTool {
                     format_size(truncation.output_bytes),
                     format_size(output.last_line_bytes),
                 )
-            } else if truncation.truncated_by.as_deref() == Some("lines") {
+            } else if truncation.truncated_by == Some(super::truncate::TruncatedBy::Lines) {
                 format!(
                     "[Showing lines {start}-{end} of {}. Full output: {full_path}]",
                     truncation.total_lines
