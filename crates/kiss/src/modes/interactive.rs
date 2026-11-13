@@ -382,6 +382,27 @@ enum SecretPromptKind {
     ),
 }
 
+impl SecretPromptKind {
+    /// Whether the prompt asks for login input. A login prompt cancels a
+    /// pending account add when dismissed, and the terminal host shows it
+    /// as waiting for authentication.
+    fn is_login(&self) -> bool {
+        match self {
+            SecretPromptKind::ApiKey(_)
+            | SecretPromptKind::ProviderConfig(_)
+            | SecretPromptKind::Llama
+            | SecretPromptKind::AnthropicManual(_)
+            | SecretPromptKind::OpenRouterManual(_)
+            | SecretPromptKind::GitHubEnterpriseDomain
+            | SecretPromptKind::GoogleApplicationDefault
+            | SecretPromptKind::AwsProfile => true,
+            SecretPromptKind::TreeLabel(_)
+            | SecretPromptKind::BranchSummary(_)
+            | SecretPromptKind::WorkflowName(..) => false,
+        }
+    }
+}
+
 enum LoginChoice {
     Method(kiss_ai::auth::LoginMethod),
     External(kiss_ai::auth::external::ExternalCredentialSource),
@@ -1879,7 +1900,13 @@ fn terminal_host_state(app: &App, session: &kiss_coding::AgentSession) -> Progra
         Some(PickerKind::Trust) => {
             Some((BlockedKind::Permission, "Project trust decision required"))
         }
-        _ if app.secret_prompt.is_some() => Some((BlockedKind::Auth, "Login input required")),
+        _ if app
+            .secret_prompt
+            .as_ref()
+            .is_some_and(|prompt| prompt.kind.is_login()) =>
+        {
+            Some((BlockedKind::Auth, "Login input required"))
+        }
         _ => None,
     };
     if let Some((kind, message)) = blocked {
@@ -3895,18 +3922,10 @@ fn handle_secret_prompt(
         }
         InputEvent::Key(key) | InputEvent::KeyRepeat(key) => match key.key {
             Key::Escape => {
-                let login = app.secret_prompt.as_ref().is_some_and(|prompt| {
-                    matches!(
-                        &prompt.kind,
-                        SecretPromptKind::ApiKey(_)
-                            | SecretPromptKind::ProviderConfig(_)
-                            | SecretPromptKind::AnthropicManual(_)
-                            | SecretPromptKind::OpenRouterManual(_)
-                            | SecretPromptKind::GitHubEnterpriseDomain
-                            | SecretPromptKind::GoogleApplicationDefault
-                            | SecretPromptKind::AwsProfile
-                    )
-                });
+                let login = app
+                    .secret_prompt
+                    .as_ref()
+                    .is_some_and(|prompt| prompt.kind.is_login());
                 app.secret_prompt = None;
                 if login {
                     cancel_account_add(app);
