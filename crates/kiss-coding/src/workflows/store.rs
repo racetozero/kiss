@@ -36,6 +36,16 @@ pub fn project_workflow_dir(cwd: &Path) -> PathBuf {
 }
 
 impl SaveLocation {
+    pub const ALL: [SaveLocation; 2] = [SaveLocation::Project, SaveLocation::Personal];
+
+    /// The folder as a user reads it, independent of the current project.
+    pub fn display_dir(self) -> &'static str {
+        match self {
+            SaveLocation::Project => ".kiss/workflows/",
+            SaveLocation::Personal => "~/.kiss/agent/workflows/",
+        }
+    }
+
     pub fn directory(self, cwd: &Path) -> Option<PathBuf> {
         match self {
             SaveLocation::Project => Some(project_workflow_dir(cwd)),

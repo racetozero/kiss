@@ -274,7 +274,7 @@ enum PickerKind {
     /// to the tool call that is waiting on it.
     WorkflowApproval(
         Box<kiss_coding::workflows::WorkflowPlan>,
-        Option<tokio::sync::oneshot::Sender<kiss_coding::workflows::ApprovalDecision>>,
+        tokio::sync::oneshot::Sender<kiss_coding::workflows::ApprovalDecision>,
     ),
     /// Pick which run to open in the progress view.
     WorkflowRuns(Vec<kiss_coding::workflows::RunId>),
@@ -983,11 +983,7 @@ impl App {
                 SecretPromptKind::BranchSummary(_) => "Custom branch summary instructions".into(),
                 SecretPromptKind::WorkflowName(_, location) => format!(
                     "Save the workflow as (lower-case, dashes): {}",
-                    match location {
-                        kiss_coding::workflows::SaveLocation::Project => ".kiss/workflows/",
-                        kiss_coding::workflows::SaveLocation::Personal =>
-                            "~/.kiss/agent/workflows/",
-                    }
+                    location.display_dir()
                 ),
             };
             lines.push(self.theme.fg("accent", &self.theme.bold(&title)));
@@ -5418,9 +5414,8 @@ fn start_saved_workflow(
     command_tx: &mpsc::UnboundedSender<CommandEvent>,
 ) {
     let Some(runtime) = session.workflows().filter(|_| session.workflows_enabled()) else {
-        app.cells.push(Cell::Notice(
-            "dynamic workflows need subagents. Open /settings and turn Subagents on".into(),
-        ));
+        app.cells
+            .push(Cell::Notice(WORKFLOWS_NEED_SUBAGENTS.into()));
         return;
     };
     let source = match std::fs::read_to_string(&path) {
@@ -5519,9 +5514,8 @@ fn open_workflow_view(
     run: Option<kiss_coding::workflows::RunId>,
 ) {
     let Some(runtime) = session.workflows() else {
-        app.cells.push(Cell::Notice(
-            "workflows need subagents. Turn them on in /settings".into(),
-        ));
+        app.cells
+            .push(Cell::Notice(WORKFLOWS_NEED_SUBAGENTS.into()));
         return;
     };
     let record = match run {
@@ -5606,9 +5600,8 @@ fn open_job_view(app: &mut App, session: &Arc<kiss_coding::AgentSession>) {
 /// Choose which run to open when there is more than one.
 fn open_workflow_runs_picker(app: &mut App, session: &Arc<kiss_coding::AgentSession>) {
     let Some(runtime) = session.workflows() else {
-        app.cells.push(Cell::Notice(
-            "workflows need subagents. Turn them on in /settings".into(),
-        ));
+        app.cells
+            .push(Cell::Notice(WORKFLOWS_NEED_SUBAGENTS.into()));
         return;
     };
     let summaries = runtime.summaries();
@@ -5642,18 +5635,26 @@ fn open_workflow_runs_picker(app: &mut App, session: &Arc<kiss_coding::AgentSess
 
 fn open_workflow_save_picker(app: &mut App, run: kiss_coding::workflows::RunId) {
     app.workflow_view = None;
-    let items = vec![
-        SelectItem {
-            label: "Save in this project".into(),
-            detail: Some(".kiss/workflows/ is shared with everyone who clones it".into()),
-            value: 0,
-        },
-        SelectItem {
-            label: "Save for me".into(),
-            detail: Some("~/.kiss/agent/workflows/ is available in every project".into()),
-            value: 1,
-        },
-    ];
+    let items = kiss_coding::workflows::SaveLocation::ALL
+        .iter()
+        .enumerate()
+        .map(|(value, location)| {
+            let (label, reach) = match location {
+                kiss_coding::workflows::SaveLocation::Project => (
+                    "Save in this project",
+                    "is shared with everyone who clones it",
+                ),
+                kiss_coding::workflows::SaveLocation::Personal => {
+                    ("Save for me", "is available in every project")
+                }
+            };
+            SelectItem {
+                label: label.into(),
+                detail: Some(format!("{} {reach}", location.display_dir())),
+                value,
+            }
+        })
+        .collect();
     app.show_picker(Picker {
         kind: PickerKind::WorkflowSaveLocation(run),
         list: SelectList::new("Save this workflow", items, app.theme.clone()),
@@ -5685,7 +5686,7 @@ fn open_workflow_approval(
     ];
     let title = workflow_ui::plan_summary(&plan);
     app.show_picker(Picker {
-        kind: PickerKind::WorkflowApproval(plan, Some(reply)),
+        kind: PickerKind::WorkflowApproval(plan, reply),
         list: SelectList::new(title, items, app.theme.clone()),
     });
 }
@@ -6622,11 +6623,9 @@ fn apply_picker_selection(
             }
         }
         PickerKind::McpTools(name) => open_mcp_tools(app, &name),
-        PickerKind::WorkflowApproval(plan, mut reply) => match value {
+        PickerKind::WorkflowApproval(plan, reply) => match value {
             0 => {
-                if let Some(reply) = reply.take() {
-                    let _ = reply.send(kiss_coding::workflows::ApprovalDecision::Approve);
-                }
+                let _ = reply.send(kiss_coding::workflows::ApprovalDecision::Approve);
                 app.cells.push(Cell::Notice(format!(
                     "running workflow {} · /workflows opens the progress view",
                     plan.name
@@ -6637,14 +6636,10 @@ fn apply_picker_selection(
                 // user.
                 app.cells
                     .push(Cell::Notice(format!("workflow script\n\n{}", plan.source)));
-                if let Some(reply) = reply.take() {
-                    open_workflow_approval(app, plan, reply);
-                }
+                open_workflow_approval(app, plan, reply);
             }
             _ => {
-                if let Some(reply) = reply.take() {
-                    let _ = reply.send(kiss_coding::workflows::ApprovalDecision::Cancel);
-                }
+                let _ = reply.send(kiss_coding::workflows::ApprovalDecision::Cancel);
                 app.cells.push(Cell::Notice("workflow cancelled".into()));
             }
         },
@@ -6654,10 +6649,11 @@ fn apply_picker_selection(
             }
         }
         PickerKind::WorkflowSaveLocation(run) => {
-            let location = if value == 0 {
-                kiss_coding::workflows::SaveLocation::Project
-            } else {
-                kiss_coding::workflows::SaveLocation::Personal
+            let Some(location) = kiss_coding::workflows::SaveLocation::ALL
+                .get(value)
+                .copied()
+            else {
+                return;
             };
             let suggested = session
                 .workflows()
@@ -6710,6 +6706,11 @@ fn format_queue_mode(mode: QueueMode) -> &'static str {
         QueueMode::OneAtATime => "one-at-a-time",
     }
 }
+
+/// Shown wherever a workflow is asked for while subagents are off; the
+/// workflow runtime exists only when they are on.
+const WORKFLOWS_NEED_SUBAGENTS: &str =
+    "workflows run on subagents. Open /settings and turn Subagents on first";
 
 fn save_interactive_settings(
     app: &mut App,
@@ -6810,9 +6811,8 @@ fn apply_settings_selection(
             if !resources.settings.subagents.enabled {
                 // Workflows are built on child agents, so this row cannot be
                 // turned on by itself.
-                app.cells.push(Cell::Notice(
-                    "turn Subagents on first. Dynamic workflows are built on them".into(),
-                ));
+                app.cells
+                    .push(Cell::Notice(WORKFLOWS_NEED_SUBAGENTS.into()));
                 return;
             }
             resources.settings.workflows.enabled.toggle();
@@ -7680,9 +7680,8 @@ fn run_slash_command(
         },
         "workflow" => {
             if !session.workflows_enabled() {
-                app.cells.push(Cell::Notice(
-                    "dynamic workflows need subagents. Open /settings and turn Subagents on".into(),
-                ));
+                app.cells
+                    .push(Cell::Notice(WORKFLOWS_NEED_SUBAGENTS.into()));
             } else if rest.is_empty() {
                 app.cells
                     .push(Cell::Notice("usage: /workflow <prompt>".into()));
