@@ -171,25 +171,44 @@ pub struct OAuthConfig {
     pub extra: BTreeMap<String, Value>,
 }
 
+/// One server's settings. Empty fields are not written, so an entry that
+/// sets only some fields, such as `disabled`, overlays the same server in
+/// an earlier file instead of clearing its other fields.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct ServerEntry {
     /// One line that tells the model what the server is for.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub command: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub args: Vec<String>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub env: BTreeMap<String, String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub cwd: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub headers: BTreeMap<String, String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub auth: Option<AuthSetting>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub bearer_token: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub bearer_token_env: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub oauth: Option<OAuthConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub lifecycle: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub idle_timeout: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub request_timeout_ms: Option<u64>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub include_tools: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub exclude_tools: Vec<String>,
     pub disabled: bool,
     #[serde(flatten)]
@@ -490,25 +509,37 @@ pub fn remove_server(paths: &ConfigPaths, scope: ConfigScope, name: &str) -> Res
     })
 }
 
-/// Change the entry for `name` in the scope's own file. Only that file's
-/// entry is edited, never the merged one, so values from other files,
-/// such as a user's tokens, are not copied into it.
+/// Change server `name` in the scope's own file. When that file defines
+/// the server, its entry is edited. When the server comes from another
+/// file, `merged` is its merged entry, and only the changed fields are
+/// written, as an overlay. Values from other files, such as a user's
+/// tokens, are never copied into this one.
 pub fn edit_server(
     paths: &ConfigPaths,
     scope: ConfigScope,
     name: &str,
+    merged: Option<&ServerEntry>,
     change: impl FnOnce(&mut ServerEntry) -> Result<()>,
 ) -> Result<()> {
-    let path = paths.write_path(scope);
     change_scope(paths, scope, |config| {
-        let server = config.mcp_servers.get_mut(name).with_context(|| {
-            format!(
-                "MCP server `{name}` is not defined in {}. Run the command with the --scope of the file that defines it (see `kiss mcp get {name}`), or add it to this file with `kiss mcp add`.",
-                path.display()
-            )
-        })?;
-        change(server)?;
-        server.validate(name)?;
+        if !config.mcp_servers.contains_key(name) {
+            let merged = merged.with_context(|| {
+                format!("MCP server `{name}` is not configured. Add it with `kiss mcp add {name}`.")
+            })?;
+            let overlay = ServerEntry {
+                disabled: merged.disabled,
+                ..Default::default()
+            };
+            config.mcp_servers.insert(name.to_string(), overlay);
+        }
+        let entry = config.mcp_servers.get_mut(name).expect("inserted above");
+        change(entry)?;
+        // This file's entry may be an overlay, so check the server as the
+        // merge will see it.
+        let mut effective =
+            merged.map_or(Ok(Value::Object(Default::default())), serde_json::to_value)?;
+        kiss_ai::config_file::deep_merge(&mut effective, serde_json::to_value(&*entry)?);
+        serde_json::from_value::<ServerEntry>(effective)?.validate(name)?;
         Ok(((), true))
     })
 }
@@ -657,20 +688,47 @@ mod tests {
 
         let loaded = load_with_paths(paths.clone(), true).unwrap();
         assert_eq!(loaded.writable_scope("demo"), Some(ConfigScope::User));
-        let error = edit_server(&paths, ConfigScope::Project, "demo", |entry| {
-            entry.disabled = true;
-            Ok(())
-        })
-        .unwrap_err();
-        assert!(error.to_string().contains("--scope"), "{error}");
-        assert!(!paths.shared_project.exists());
-
-        edit_server(&paths, ConfigScope::User, "demo", |entry| {
+        let merged = loaded.config.mcp_servers.get("demo");
+        edit_server(&paths, ConfigScope::Project, "demo", merged, |entry| {
             entry.disabled = true;
             Ok(())
         })
         .unwrap();
-        assert!(read_scope(&paths, ConfigScope::User).unwrap().mcp_servers["demo"].disabled);
+        let project = std::fs::read_to_string(&paths.shared_project).unwrap();
+        assert!(
+            !project.contains("secret") && !project.contains("tool"),
+            "{project}"
+        );
+        let loaded = load_with_paths(paths.clone(), true).unwrap();
+        let effective = &loaded.config.mcp_servers["demo"];
+        assert!(effective.disabled);
+        assert_eq!(effective.command.as_deref(), Some("tool"));
+        assert_eq!(effective.env["TOKEN"], "secret");
+        edit_server(
+            &paths,
+            ConfigScope::Project,
+            "demo",
+            Some(effective),
+            |entry| {
+                entry.disabled = false;
+                Ok(())
+            },
+        )
+        .unwrap();
+        assert!(
+            !load_with_paths(paths.clone(), true)
+                .unwrap()
+                .config
+                .mcp_servers["demo"]
+                .disabled
+        );
+
+        assert!(
+            edit_server(&paths, ConfigScope::User, "missing", None, |_| Ok(()))
+                .unwrap_err()
+                .to_string()
+                .contains("kiss mcp add")
+        );
     }
 
     #[test]

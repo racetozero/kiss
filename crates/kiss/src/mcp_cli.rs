@@ -86,7 +86,8 @@ pub async fn run(command: &McpCommand, trust_override: Option<bool>) -> Result<i
             scope,
             server,
         } => {
-            config::edit_server(&loaded.paths, scope_value(*scope), name, |entry| {
+            let merged = loaded.config.mcp_servers.get(name);
+            config::edit_server(&loaded.paths, scope_value(*scope), name, merged, |entry| {
                 apply_server_args(entry, server, false)?;
                 reject_project_provider_auth(name, *scope, entry)
             })?;
@@ -104,7 +105,8 @@ pub async fn run(command: &McpCommand, trust_override: Option<bool>) -> Result<i
         }
         McpCommand::Enable { name, scope } | McpCommand::Disable { name, scope } => {
             let disabled = matches!(command, McpCommand::Disable { .. });
-            config::edit_server(&loaded.paths, scope_value(*scope), name, |entry| {
+            let merged = loaded.config.mcp_servers.get(name);
+            config::edit_server(&loaded.paths, scope_value(*scope), name, merged, |entry| {
                 entry.disabled = disabled;
                 Ok(())
             })?;
