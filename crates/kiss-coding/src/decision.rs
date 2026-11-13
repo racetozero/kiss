@@ -265,7 +265,6 @@ impl DecisionClient {
     pub(crate) async fn select_reasoning(
         &self,
         messages: &[AgentMessage],
-        queued: &[AgentMessage],
         model: &Model,
         cancel: CancellationToken,
     ) -> anyhow::Result<ReasoningSelection> {
@@ -277,7 +276,7 @@ impl DecisionClient {
                 model.id
             );
         }
-        let request = build_reasoning_request(messages, queued, model, &supported, self.model);
+        let request = build_reasoning_request(messages, model, &supported, self.model);
         let body = self
             .send_request(&request, Duration::from_secs(2), &cancel)
             .await?;
@@ -412,15 +411,13 @@ fn build_request(
 
 fn build_reasoning_request(
     messages: &[AgentMessage],
-    queued: &[AgentMessage],
     model: &Model,
     supported: &[ThinkingLevel],
     decision_model: DecisionModel,
 ) -> DecisionRequest<ChoiceQuestion> {
-    let task = queued
+    let task = messages
         .iter()
         .rev()
-        .chain(messages.iter().rev())
         .find_map(|message| match message {
             AgentMessage::User(user) => Some(user_content_excerpt(&user.content, MAX_TASK_CHARS)),
             _ => None,
@@ -431,10 +428,9 @@ fn build_reasoning_request(
         _ => None,
     });
     let original_task = original_task.filter(|original| original != &task);
-    let mut prior_user_requests = queued
+    let mut prior_user_requests = messages
         .iter()
         .rev()
-        .chain(messages.iter().rev())
         .filter_map(|message| match message {
             AgentMessage::User(user) => Some(user_content_excerpt(&user.content, MAX_PRIOR_CHARS)),
             _ => None,
@@ -1114,7 +1110,7 @@ mod tests {
             };
             let cancel = CancellationToken::new();
             let messages = [AgentMessage::user("fix it")];
-            let call = client.select_reasoning(&messages, &[], &target, cancel);
+            let call = client.select_reasoning(&messages, &target, cancel);
             let serve = async {
                 let (mut stream, _) = listener.accept().await.unwrap();
                 let request = receive_request(&mut stream).await;
@@ -1284,16 +1280,11 @@ mod tests {
                 &format!("output {index} {}", "界".repeat(3_000)),
             ));
         }
-        let request = build_reasoning_request(
-            &messages,
-            &[AgentMessage::user(format!(
-                "new queued task {}",
-                "界".repeat(5_000)
-            ))],
-            &model,
-            &supported,
-            DecisionModel::Jev,
-        );
+        messages.push(AgentMessage::user(format!(
+            "new queued task {}",
+            "界".repeat(5_000)
+        )));
+        let request = build_reasoning_request(&messages, &model, &supported, DecisionModel::Jev);
         let value = serde_json::to_value(request).unwrap();
 
         assert_eq!(value["model"], "jev-latest");
@@ -1368,7 +1359,6 @@ mod tests {
         ];
         let request = build_reasoning_request(
             &messages,
-            &[],
             &model,
             &model.supported_thinking_levels(),
             DecisionModel::Jev,
@@ -1446,7 +1436,7 @@ mod tests {
         let registry = Registry::from_builtin();
         let (model, _) = registry.resolve("openai/gpt-5.4", None).unwrap();
         let supported = model.supported_thinking_levels();
-        let request = build_reasoning_request(&[], &[], &model, &supported, DecisionModel::Jev);
+        let request = build_reasoning_request(&[], &model, &supported, DecisionModel::Jev);
         let value = serde_json::to_value(request).unwrap();
         let efforts = value["questions"]["effort"]["criteria"]
             .as_object()

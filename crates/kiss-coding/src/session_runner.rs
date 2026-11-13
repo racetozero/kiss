@@ -1075,9 +1075,7 @@ impl AgentSession {
                         .build_session_context()
                         .messages;
                     let cancel = session.cancel.lock().unwrap().clone();
-                    client
-                        .select_reasoning(&messages, &[], &model, cancel)
-                        .await
+                    client.select_reasoning(&messages, &model, cancel).await
                 }
                 .await
                 .map_err(|error: anyhow::Error| error.to_string());

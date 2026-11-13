@@ -13,9 +13,10 @@ pub fn estimate_tokens_text(text: &str) -> u64 {
     (text.len() as u64).div_ceil(4)
 }
 
+/// About four characters per token; an image counts as 1600 characters.
 pub fn estimate_message_tokens(message: &AgentMessage) -> u64 {
-    let text = match message {
-        AgentMessage::User(u) => u.content.as_text(),
+    let chars = match message {
+        AgentMessage::User(u) => u.content.as_text().len(),
         AgentMessage::Assistant(a) => a
             .content
             .iter()
@@ -25,8 +26,7 @@ pub fn estimate_message_tokens(message: &AgentMessage) -> u64 {
                 ContentBlock::ToolCall(tc) => tc.arguments.to_string().len() + tc.name.len(),
                 ContentBlock::Image { .. } => 1600,
             })
-            .sum::<usize>()
-            .to_string(),
+            .sum(),
         AgentMessage::ToolResult(t) => t
             .content
             .iter()
@@ -34,20 +34,13 @@ pub fn estimate_message_tokens(message: &AgentMessage) -> u64 {
                 ContentBlock::Text { text, .. } => text.len(),
                 _ => 1600,
             })
-            .sum::<usize>()
-            .to_string(),
-        AgentMessage::BashExecution(b) => (b.command.len() + b.output.len()).to_string(),
-        AgentMessage::Custom(c) => c.content.as_text(),
-        AgentMessage::BranchSummary(b) => b.summary.clone(),
-        AgentMessage::CompactionSummary(c) => c.summary.clone(),
+            .sum(),
+        AgentMessage::BashExecution(b) => b.command.len() + b.output.len(),
+        AgentMessage::Custom(c) => c.content.as_text().len(),
+        AgentMessage::BranchSummary(b) => b.summary.len(),
+        AgentMessage::CompactionSummary(c) => c.summary.len(),
     };
-    match message {
-        AgentMessage::Assistant(_) | AgentMessage::ToolResult(_) => text
-            .parse::<u64>()
-            .map(|chars| chars.div_ceil(4))
-            .unwrap_or_else(|_| estimate_tokens_text(&text)),
-        _ => estimate_tokens_text(&text),
-    }
+    (chars as u64).div_ceil(4)
 }
 
 /// Estimated context size: prefer the last assistant usage (input+output+
@@ -378,6 +371,21 @@ pub fn serialize_agent_messages(messages: &[AgentMessage]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shell_output_counts_its_characters() {
+        let message = AgentMessage::BashExecution(kiss_agent::BashExecutionMessage {
+            command: "ls".into(),
+            output: "x".repeat(10_000),
+            exit_code: Some(0),
+            cancelled: false,
+            truncated: false,
+            full_output_path: None,
+            exclude_from_context: false,
+            timestamp: 0,
+        });
+        assert_eq!(estimate_message_tokens(&message), 2_501);
+    }
     use kiss_ai::{AssistantMessage, StopReason, ToolCall, ToolResultMessage};
 
     fn user(text: &str) -> AgentMessage {
