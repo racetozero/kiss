@@ -306,6 +306,17 @@ pub enum ThinkingLevel {
 }
 
 impl ThinkingLevel {
+    /// Every level, from none to the most.
+    pub const ALL: [ThinkingLevel; 7] = [
+        ThinkingLevel::Off,
+        ThinkingLevel::Minimal,
+        ThinkingLevel::Low,
+        ThinkingLevel::Medium,
+        ThinkingLevel::High,
+        ThinkingLevel::Xhigh,
+        ThinkingLevel::Max,
+    ];
+
     pub fn as_str(&self) -> &'static str {
         match self {
             ThinkingLevel::Off => "off",

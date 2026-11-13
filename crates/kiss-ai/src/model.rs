@@ -194,20 +194,21 @@ impl Model {
         }
     }
 
+    /// The supported level after `current`, wrapping to the first.
+    pub fn next_thinking_level(&self, current: ThinkingLevel) -> ThinkingLevel {
+        let levels = self.supported_thinking_levels();
+        let position = levels
+            .iter()
+            .position(|level| *level == current)
+            .unwrap_or(0);
+        levels[(position + 1) % levels.len()]
+    }
+
     pub fn supported_thinking_levels(&self) -> Vec<ThinkingLevel> {
-        const LEVELS: [ThinkingLevel; 7] = [
-            ThinkingLevel::Off,
-            ThinkingLevel::Minimal,
-            ThinkingLevel::Low,
-            ThinkingLevel::Medium,
-            ThinkingLevel::High,
-            ThinkingLevel::Xhigh,
-            ThinkingLevel::Max,
-        ];
         if !self.reasoning {
             return vec![ThinkingLevel::Off];
         }
-        LEVELS
+        ThinkingLevel::ALL
             .into_iter()
             .filter(|level| match self.thinking_level_map.get(level.as_str()) {
                 Some(None) => false,

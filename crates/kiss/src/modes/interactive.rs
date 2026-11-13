@@ -3722,10 +3722,11 @@ fn handle_input(
                         .push(Cell::Notice("this model has no thinking levels".into()));
                     return Flow::Continue;
                 }
-                let levels = session.model().supported_thinking_levels();
-                let current = session.thinking_level();
-                let pos = levels.iter().position(|l| *l == current).unwrap_or(0);
-                session.set_thinking_level(levels[(pos + 1) % levels.len()]);
+                session.set_thinking_level(
+                    session
+                        .model()
+                        .next_thinking_level(session.thinking_level()),
+                );
                 update_thinking_border(app, session.thinking_level());
                 return Flow::Continue;
             }
@@ -4764,16 +4765,6 @@ fn open_model_picker_with_filter(
     });
 }
 
-const THINKING_LEVELS: [ThinkingLevel; 7] = [
-    ThinkingLevel::Off,
-    ThinkingLevel::Minimal,
-    ThinkingLevel::Low,
-    ThinkingLevel::Medium,
-    ThinkingLevel::High,
-    ThinkingLevel::Xhigh,
-    ThinkingLevel::Max,
-];
-
 fn open_thinking_picker(app: &mut App, session: &Arc<kiss_coding::AgentSession>) {
     if !session.model().reasoning {
         app.cells
@@ -4782,7 +4773,7 @@ fn open_thinking_picker(app: &mut App, session: &Arc<kiss_coding::AgentSession>)
     }
     let current = session.thinking_level();
     let supported = session.model().supported_thinking_levels();
-    let items = THINKING_LEVELS
+    let items = ThinkingLevel::ALL
         .iter()
         .enumerate()
         .filter(|(_, level)| supported.contains(level))
@@ -6365,7 +6356,7 @@ fn apply_picker_selection(
             }
         }
         PickerKind::Thinking => {
-            if let Some(level) = THINKING_LEVELS.get(value).copied() {
+            if let Some(level) = ThinkingLevel::ALL.get(value).copied() {
                 session.set_thinking_level(level);
                 update_thinking_border(app, level);
                 if save_default {
@@ -6684,21 +6675,9 @@ fn apply_settings_selection(
 ) {
     match value {
         0 => {
-            let levels = [
-                ThinkingLevel::Off,
-                ThinkingLevel::Minimal,
-                ThinkingLevel::Low,
-                ThinkingLevel::Medium,
-                ThinkingLevel::High,
-                ThinkingLevel::Xhigh,
-                ThinkingLevel::Max,
-            ];
-            let current = session.thinking_level();
-            let position = levels
-                .iter()
-                .position(|level| *level == current)
-                .unwrap_or(0);
-            let next = levels[(position + 1) % levels.len()];
+            let next = session
+                .model()
+                .next_thinking_level(session.thinking_level());
             session.set_thinking_level(next);
             resources.settings.default_thinking_level = Some(next.as_str().into());
             update_thinking_border(app, next);
