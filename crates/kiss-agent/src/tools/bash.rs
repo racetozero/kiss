@@ -9,7 +9,6 @@ use kiss_ai::ContentBlock;
 use serde_json::{Value, json};
 use std::io::{BufWriter, Write};
 use std::path::PathBuf;
-use std::process::Stdio;
 use std::time::Duration;
 use tokio::io::AsyncReadExt;
 use tokio_util::sync::CancellationToken;
@@ -213,31 +212,16 @@ impl AgentTool for BashTool {
         {
             anyhow::bail!("Invalid timeout: must be a finite number of seconds");
         }
-        let mut cmd = super::shell::command(
+        let cwd = args["cwd"]
+            .as_str()
+            .map(|path| super::path::resolve(&self.cwd, path))
+            .unwrap_or_else(|| self.cwd.clone());
+        let mut child = super::shell::spawn(
             self.shell_path.as_deref(),
             &command,
             self.command_prefix.as_deref(),
-        );
-        let shell = cmd.as_std().get_program().to_string_lossy().into_owned();
-        let cwd = args["cwd"]
-            .as_str()
-            .map(|path| self.cwd.join(path))
-            .unwrap_or_else(|| self.cwd.clone());
-        cmd.current_dir(&cwd)
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .kill_on_drop(true);
-        #[cfg(unix)]
-        cmd.process_group(0);
-
-        let mut child = cmd
-            .spawn()
-            .map_err(|e| anyhow::anyhow!("Could not start shell {shell}: {e}. Install Bash or set shellPath to an installed Bash, PowerShell, or cmd.exe executable."))?;
-        #[cfg(unix)]
-        let pgid = child.id().map(|pid| pid as i32);
-        #[cfg(not(unix))]
-        let pgid = None;
+            &cwd,
+        )?;
 
         let mut stdout = child.stdout.take().expect("piped stdout");
         let mut stderr = child.stderr.take().expect("piped stderr");
@@ -251,25 +235,6 @@ impl AgentTool for BashTool {
         let mut timed_out = false;
 
         let deadline = timeout.map(|t| tokio::time::Instant::now() + Duration::from_secs_f64(t));
-        let kill_child = |pgid_opt: Option<i32>, child: &mut tokio::process::Child| {
-            #[cfg(unix)]
-            if let Some(pgid) = pgid_opt {
-                // macOS signals group members one at a time. A killed child
-                // can wake its shell before the shell gets the signal, so
-                // `a; b` could start `b`. Stopping the group first narrows
-                // this race. SIGKILL also ends stopped processes.
-                #[cfg(target_os = "macos")]
-                unsafe {
-                    libc::killpg(pgid, libc::SIGSTOP);
-                }
-                unsafe {
-                    libc::killpg(pgid, libc::SIGKILL);
-                }
-            }
-            #[cfg(not(unix))]
-            let _ = pgid_opt;
-            let _ = child.start_kill();
-        };
 
         loop {
             let mut output_error = None;
@@ -296,18 +261,18 @@ impl AgentTool for BashTool {
                 }
                 _ = cancel.cancelled() => {
                     cancelled = true;
-                    kill_child(pgid, &mut child);
+                    super::shell::kill_group(&mut child);
                     break;
                 }
                 _ = timeout_sleep => {
                     timed_out = true;
-                    kill_child(pgid, &mut child);
+                    super::shell::kill_group(&mut child);
                     break;
                 }
                 else => break,
             }
             if let Some(error) = output_error {
-                kill_child(pgid, &mut child);
+                super::shell::kill_group(&mut child);
                 let _ = child.wait().await;
                 return Err(error);
             }

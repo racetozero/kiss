@@ -63,7 +63,7 @@ pub mod options;
 #[cfg(feature = "native")]
 pub mod session;
 #[cfg(feature = "native")]
-pub(crate) mod shell;
+pub mod shell;
 #[cfg(feature = "native")]
 pub mod tools;
 

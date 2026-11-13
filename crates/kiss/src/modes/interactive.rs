@@ -27,7 +27,6 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::io::AsyncReadExt;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
@@ -524,6 +523,7 @@ struct ShellRunResult {
     exit_code: Option<i32>,
     cancelled: bool,
     truncated: bool,
+    full_output_path: Option<String>,
     exclude_from_context: bool,
 }
 
@@ -4515,11 +4515,9 @@ fn start_shell_passthrough(
                 .ok()
                 .filter(|path| !cfg!(windows) || std::path::Path::new(path).is_file())
         });
-    let command = settings
+    let prefix = settings
         .shell_command_prefix
-        .filter(|value| !value.trim().is_empty())
-        .map(|prefix| format!("{prefix} {command}"))
-        .unwrap_or(command);
+        .filter(|value| !value.trim().is_empty());
     let Some(cancel) = begin_command(app, format!("running !{command}")) else {
         // Keep what the user typed, so it can run after the other command.
         if app.editor.is_empty() {
@@ -4536,8 +4534,16 @@ fn start_shell_passthrough(
     let tx = CommandTask::new(app, command_tx);
     let session = session.clone();
     tokio::spawn(async move {
-        let result =
-            run_shell_command(shell.as_deref(), &command, &cwd, exclude, &cancel, &tx).await;
+        let result = run_shell_command(
+            shell.as_deref(),
+            prefix.as_deref(),
+            &command,
+            &cwd,
+            exclude,
+            &cancel,
+            &tx,
+        )
+        .await;
         if let Ok(result) = &result {
             let message = AgentMessage::BashExecution(kiss_agent::BashExecutionMessage {
                 command: result.command.clone(),
@@ -4545,7 +4551,7 @@ fn start_shell_passthrough(
                 exit_code: result.exit_code,
                 cancelled: result.cancelled,
                 truncated: result.truncated,
-                full_output_path: None,
+                full_output_path: result.full_output_path.clone(),
                 exclude_from_context: result.exclude_from_context,
                 timestamp: kiss_ai::now_ms(),
             });
@@ -4558,95 +4564,40 @@ fn start_shell_passthrough(
     });
 }
 
+/// Run a `!command` with the same runner as SDK shell commands: the
+/// configured prefix, group kill on cancel, and the output tail with the
+/// full output saved to a file when it is long.
 async fn run_shell_command(
     shell: Option<&str>,
+    prefix: Option<&str>,
     command: &str,
     cwd: &std::path::Path,
     exclude_from_context: bool,
     cancel: &CancellationToken,
     tx: &CommandTask,
 ) -> std::result::Result<ShellRunResult, String> {
-    let mut process = kiss_agent::tools::shell::command(shell, command, None);
-    let shell = process
-        .as_std()
-        .get_program()
-        .to_string_lossy()
-        .into_owned();
-    process
-        .current_dir(cwd)
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .kill_on_drop(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::process::CommandExt as _;
-        process.as_std_mut().process_group(0);
-    }
-    let mut child = process.spawn().map_err(|error| format!("Could not start shell {shell}: {error}. Install Bash or set shellPath to an installed Bash, PowerShell, or cmd.exe executable."))?;
-    let mut stdout = child.stdout.take().ok_or("shell stdout is not available")?;
-    let mut stderr = child.stderr.take().ok_or("shell stderr is not available")?;
-    let mut stdout_done = false;
-    let mut stderr_done = false;
-    let mut cancelled = false;
-    let mut output = String::new();
-    let mut buffer_out = [0_u8; 4096];
-    let mut buffer_err = [0_u8; 4096];
-
-    while !stdout_done || !stderr_done {
-        tokio::select! {
-            _ = cancel.cancelled(), if !cancelled => {
-                cancelled = true;
-                // Kill the whole group, as the bash tool does. SIGTERM can be
-                // ignored or inherited as ignored, and a surviving child keeps
-                // the output pipes open, so cancellation must not wait for EOF.
-                #[cfg(unix)]
-                if let Some(pid) = child.id() {
-                    // The child is the leader of its process group. On macOS,
-                    // stopping the group first keeps `a; b` from starting `b`.
-                    #[cfg(target_os = "macos")]
-                    unsafe { libc::killpg(pid as i32, libc::SIGSTOP); }
-                    unsafe { libc::killpg(pid as i32, libc::SIGKILL); }
-                }
-                let _ = child.kill().await;
-                break;
-            }
-            read = stdout.read(&mut buffer_out), if !stdout_done => {
-                match read {
-                    Ok(0) => stdout_done = true,
-                    Ok(length) => append_shell_output(&mut output, &buffer_out[..length], tx),
-                    Err(error) => return Err(error.to_string()),
-                }
-            }
-            read = stderr.read(&mut buffer_err), if !stderr_done => {
-                match read {
-                    Ok(0) => stderr_done = true,
-                    Ok(length) => append_shell_output(&mut output, &buffer_err[..length], tx),
-                    Err(error) => return Err(error.to_string()),
-                }
-            }
-        }
-    }
-    let status = child.wait().await.map_err(|error| error.to_string())?;
-    let truncated = output.len() > 50_000;
-    if truncated {
-        output.truncate(output.floor_char_boundary(50_000));
-    }
+    let updates = tx.clone();
+    let result = kiss_sdk::shell::run(
+        command,
+        cwd,
+        shell,
+        prefix,
+        cancel.clone(),
+        Arc::new(move |chunk| {
+            let _ = updates.send(CommandEvent::ShellOutput(chunk));
+        }),
+    )
+    .await
+    .map_err(|error| format!("{error:#}"))?;
     Ok(ShellRunResult {
         command: command.to_string(),
-        output,
-        exit_code: status.code(),
-        cancelled,
-        truncated,
+        output: result.output,
+        exit_code: result.exit_code,
+        cancelled: result.cancelled,
+        truncated: result.truncated,
+        full_output_path: result.full_output_path,
         exclude_from_context,
     })
-}
-
-fn append_shell_output(output: &mut String, bytes: &[u8], tx: &CommandTask) {
-    let chunk = String::from_utf8_lossy(bytes).into_owned();
-    if output.len() < 50_001 {
-        output.push_str(&chunk);
-    }
-    let _ = tx.send(CommandEvent::ShellOutput(chunk));
 }
 
 fn open_tree_picker(app: &mut App, session: &Arc<kiss_coding::AgentSession>) {
@@ -8597,51 +8548,6 @@ mod tests {
         run_slash_command(app, session, command, &args, resources, &tx)
     }
 
-    #[cfg(unix)]
-    #[tokio::test]
-    async fn shell_output_limit_preserves_utf8() {
-        let directory = tempfile::tempdir().unwrap();
-        let text = format!("{}éEND", "a".repeat(49_999));
-        std::fs::write(directory.path().join("output.txt"), text).unwrap();
-        let (tx, _rx) = mpsc::unbounded_channel();
-        let task = CommandTask::with_id(0, &tx);
-        let result = run_shell_command(
-            Some("bash"),
-            "cat output.txt",
-            directory.path(),
-            false,
-            &CancellationToken::new(),
-            &task,
-        )
-        .await
-        .unwrap();
-        assert!(result.truncated);
-        assert_eq!(result.output, "a".repeat(49_999));
-        assert_eq!(result.exit_code, Some(0));
-
-        let mut app = test_app();
-        app.cells.push(Cell::BashExecution {
-            command: "cat output.txt".into(),
-            output: "a".repeat(49_999),
-            exclude_from_context: false,
-        });
-        let session = synthetic_session();
-        let mut resources = test_resources();
-        let (tx, _rx) = mpsc::unbounded_channel();
-        let mut search = FileSearchService::new(tx);
-        handle_command_event(
-            &mut app,
-            CommandEvent::ShellOutput("éEND".into()),
-            &mut resources,
-            &mut search,
-            &session,
-        );
-        let Some(Cell::BashExecution { output, .. }) = app.cells.last() else {
-            panic!("shell output cell is missing");
-        };
-        assert_eq!(output, &"a".repeat(49_999));
-    }
-
     fn session_with_cache_usage() -> Arc<kiss_coding::AgentSession> {
         let mut manager = kiss_coding::SessionManager::in_memory(Path::new("/synthetic"));
         let mut answer = kiss_ai::AssistantMessage::empty("openai-responses", "openai", "gpt-5");
@@ -10889,6 +10795,7 @@ mod tests {
         let task = CommandTask::with_id(0, &tx);
         let result = run_shell_command(
             Some("sh"),
+            None,
             "printf stdout; printf stderr >&2; exit 7",
             temp.path(),
             true,
@@ -10917,7 +10824,15 @@ mod tests {
             let cancel = CancellationToken::new();
             let (tx, _rx) = mpsc::unbounded_channel();
             let task = CommandTask::with_id(0, &tx);
-            let future = run_shell_command(Some("sh"), command, temp.path(), false, &cancel, &task);
+            let future = run_shell_command(
+                Some("sh"),
+                None,
+                command,
+                temp.path(),
+                false,
+                &cancel,
+                &task,
+            );
             tokio::pin!(future);
             tokio::select! {
                 result = &mut future => panic!("shell ended before cancellation: {result:?}"),

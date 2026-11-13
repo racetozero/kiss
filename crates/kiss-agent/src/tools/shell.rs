@@ -1,7 +1,59 @@
 //! Command arguments shared by the agent, SDK, and terminal shell runners.
 
-use std::path::PathBuf;
-use tokio::process::Command;
+use std::path::{Path, PathBuf};
+use std::process::Stdio;
+use tokio::process::{Child, Command};
+
+/// Start `source` the way every kiss shell command runs: with the
+/// configured shell and prefix, in `cwd`, with no stdin, piped output, and
+/// (on Unix) in its own process group, so [`kill_group`] ends everything it
+/// started.
+pub fn spawn(
+    shell_path: Option<&str>,
+    source: &str,
+    prefix: Option<&str>,
+    cwd: &Path,
+) -> anyhow::Result<Child> {
+    let mut process = command(shell_path, source, prefix);
+    let shell = process
+        .as_std()
+        .get_program()
+        .to_string_lossy()
+        .into_owned();
+    process
+        .current_dir(cwd)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+    #[cfg(unix)]
+    process.process_group(0);
+    process.spawn().map_err(|error| {
+        anyhow::anyhow!(
+            "Could not start shell {shell}: {error}. Install Bash or set shellPath to an installed Bash, PowerShell, or cmd.exe executable."
+        )
+    })
+}
+
+/// End a command started by [`spawn`] and every process in its group. A
+/// shell can ignore SIGTERM and a surviving child keeps the output pipes
+/// open, so this kills, and callers must not wait for end of output.
+pub fn kill_group(child: &mut Child) {
+    #[cfg(unix)]
+    if let Some(pid) = child.id() {
+        // macOS signals group members one at a time. A killed child can wake
+        // its shell before the shell gets the signal, so `a; b` could start
+        // `b`. Stopping the group first narrows that race.
+        #[cfg(target_os = "macos")]
+        unsafe {
+            libc::killpg(pid as i32, libc::SIGSTOP);
+        }
+        unsafe {
+            libc::killpg(pid as i32, libc::SIGKILL);
+        }
+    }
+    let _ = child.start_kill();
+}
 
 pub fn resolve(shell_path: Option<&str>) -> PathBuf {
     shell_path

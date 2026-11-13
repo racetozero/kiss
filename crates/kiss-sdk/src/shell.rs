@@ -10,7 +10,6 @@
 use anyhow::{Context as _, Result};
 use std::io::{BufWriter, Write as _};
 use std::path::Path;
-use std::process::Stdio;
 use std::sync::Arc;
 use tokio::io::AsyncReadExt as _;
 use tokio_util::sync::CancellationToken;
@@ -31,21 +30,7 @@ pub async fn run(
     cancel: CancellationToken,
     on_update: UpdateSink,
 ) -> Result<crate::session::BashResult> {
-    let mut spawner = kiss_agent::tools::shell::command(shell_path, command, command_prefix);
-    let shell = spawner
-        .as_std()
-        .get_program()
-        .to_string_lossy()
-        .into_owned();
-    spawner
-        .current_dir(cwd)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true);
-    let mut child = spawner
-        .spawn()
-        .with_context(|| format!("Could not start shell {shell}. Install Bash or set shellPath to an installed Bash, PowerShell, or cmd.exe executable."))?;
+    let mut child = kiss_agent::tools::shell::spawn(shell_path, command, command_prefix, cwd)?;
 
     let mut stdout = child.stdout.take().expect("piped stdout");
     let mut stderr = child.stderr.take().expect("piped stderr");
@@ -71,7 +56,7 @@ pub async fn run(
             },
             _ = cancel.cancelled() => {
                 cancelled = true;
-                let _ = child.start_kill();
+                kiss_agent::tools::shell::kill_group(&mut child);
                 break;
             }
         };
