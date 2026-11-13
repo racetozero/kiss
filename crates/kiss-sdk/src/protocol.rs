@@ -212,6 +212,43 @@ impl Command {
             Command::Ping {} => "ping",
         }
     }
+
+    /// Whether the command changes the session or starts work. A closed
+    /// session refuses these and still answers queries and aborts.
+    pub fn changes_session(&self) -> bool {
+        match self {
+            Command::Prompt { .. }
+            | Command::Steer { .. }
+            | Command::FollowUp { .. }
+            | Command::ClearQueue {}
+            | Command::NewSession {}
+            | Command::SetSessionName { .. }
+            | Command::SetModel { .. }
+            | Command::SetThinkingLevel { .. }
+            | Command::SetSteeringMode { .. }
+            | Command::SetFollowUpMode { .. }
+            | Command::Compact { .. }
+            | Command::SetAutoCompaction { .. }
+            | Command::SetAutoRetry { .. }
+            | Command::Bash { .. }
+            | Command::ExportHtml { .. }
+            | Command::SwitchSession { .. }
+            | Command::Fork { .. } => true,
+            Command::Abort {}
+            | Command::GetState {}
+            | Command::GetMessages {}
+            | Command::GetEntries { .. }
+            | Command::GetTree {}
+            | Command::GetLastAssistantText {}
+            | Command::GetSessionStats {}
+            | Command::GetAvailableModels { .. }
+            | Command::GetAvailableThinkingLevels {}
+            | Command::AbortBash {}
+            | Command::GetTools {}
+            | Command::GetForkMessages {}
+            | Command::Ping {} => false,
+        }
+    }
 }
 
 /// One decoded input line: a command plus the client's optional correlation id.

@@ -470,3 +470,38 @@ async fn compaction_works_after_an_abort_and_closing_ends_the_session() {
     let refused = session.prompt("three").await;
     assert!(refused.is_err(), "{refused:?}");
 }
+
+#[tokio::test]
+async fn a_new_session_from_a_saved_session_is_saved_too() {
+    let directory = tempfile::tempdir().unwrap();
+    let provider = MockProvider::start(directory.path(), MockScript::text("hi"))
+        .await
+        .unwrap();
+    let session = Session::create(SessionOptions {
+        cwd: directory.path().to_path_buf(),
+        model: Some("mock/mock-1".into()),
+        models_file: Some(provider.catalog_path()),
+        session: kiss_sdk::SessionSource::Create,
+        session_dir: Some(directory.path().join("sessions")),
+        no_context_files: true,
+        ..Default::default()
+    })
+    .await
+    .unwrap();
+    assert!(session.execute(Command::NewSession {}).await.success);
+    assert!(session.state().session_file.is_some());
+}
+
+#[tokio::test]
+async fn a_closed_session_refuses_changes_and_still_answers_queries() {
+    let directory = tempfile::tempdir().unwrap();
+    let (_provider, session) = session_with(directory.path(), MockScript::text("hi")).await;
+    session.close();
+    let renamed = session
+        .execute(Command::SetSessionName {
+            name: "late".into(),
+        })
+        .await;
+    assert!(!renamed.success, "{renamed:?}");
+    assert!(session.execute(Command::GetState {}).await.success);
+}

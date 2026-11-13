@@ -103,6 +103,16 @@ pub struct PromptArgs {
 }
 
 impl PromptArgs {
+    fn text(message: impl Into<String>) -> Self {
+        PromptArgs {
+            message: message.into(),
+            images: Vec::new(),
+            streaming_behavior: None,
+        }
+    }
+}
+
+impl PromptArgs {
     pub fn new(message: impl Into<String>) -> Self {
         PromptArgs {
             message: message.into(),
@@ -152,7 +162,6 @@ pub struct Session {
     inner: Arc<AgentSession>,
     events: broadcast::Sender<Event>,
     lifecycle: Mutex<SessionLifecycle>,
-    cwd: PathBuf,
     closed: CancellationToken,
 }
 
@@ -331,7 +340,6 @@ impl Session {
                 next_bash_id: 0,
                 bash_runs: HashMap::new(),
             }),
-            cwd: options.cwd.clone(),
             closed: CancellationToken::new(),
         }))
     }
@@ -438,23 +446,26 @@ impl Session {
 
     /// Queue a message for delivery after the current turn's tool calls.
     pub fn steer(&self, message: impl Into<String>) -> Result<(), SdkError> {
-        let text = message.into();
-        let _lifecycle = self.ensure_open()?;
-        if text.trim().is_empty() {
-            return Err(SdkError::Command("steering message is empty".into()));
-        }
-        self.inner.queue_steering(AgentMessage::user(text));
-        Ok(())
+        self.queue(QueueKind::Steering, &PromptArgs::text(message))
     }
 
     /// Queue a message for delivery once the agent stops.
     pub fn follow_up(&self, message: impl Into<String>) -> Result<(), SdkError> {
-        let text = message.into();
+        self.queue(QueueKind::FollowUp, &PromptArgs::text(message))
+    }
+
+    fn queue(&self, kind: QueueKind, args: &PromptArgs) -> Result<(), SdkError> {
         let _lifecycle = self.ensure_open()?;
-        if text.trim().is_empty() {
-            return Err(SdkError::Command("follow-up message is empty".into()));
+        if args.message.trim().is_empty() && args.images.is_empty() {
+            return Err(SdkError::Command(match kind {
+                QueueKind::Steering => "steering message is empty".into(),
+                QueueKind::FollowUp => "follow-up message is empty".into(),
+            }));
         }
-        self.inner.queue_follow_up(AgentMessage::user(text));
+        match kind {
+            QueueKind::Steering => self.inner.queue_steering(user_message(args)),
+            QueueKind::FollowUp => self.inner.queue_follow_up(user_message(args)),
+        }
         Ok(())
     }
 
@@ -579,9 +590,10 @@ impl Session {
         let on_update = Arc::new(move |delta: String| {
             session.emit(bash_execution_update(id_for_updates.as_deref(), &delta));
         });
+        let cwd = self.inner.manager.lock().unwrap().cwd().to_path_buf();
         let result = crate::shell::run(
             command,
-            &self.cwd,
+            &cwd,
             settings.shell_path.as_deref(),
             settings.shell_command_prefix.as_deref(),
             cancel.clone(),
@@ -656,6 +668,11 @@ impl Session {
         id: Option<String>,
     ) -> Response {
         let name = command.name();
+        if command.changes_session()
+            && let Err(error) = self.ensure_open()
+        {
+            return Response::err(name, SdkErrorText::from(error)).with_id(id);
+        }
         let result = match command {
             Command::Bash { command } => self
                 .bash_with_id(&command, id.clone())
@@ -701,8 +718,7 @@ impl Session {
                     images,
                     streaming_behavior: None,
                 };
-                let _lifecycle = self.ensure_open()?;
-                self.inner.queue_steering(user_message(&args));
+                self.queue(QueueKind::Steering, &args)?;
                 Ok(Some(json!({"disposition": "queued"})))
             }
             Command::FollowUp { message, images } => {
@@ -711,8 +727,7 @@ impl Session {
                     images,
                     streaming_behavior: None,
                 };
-                let _lifecycle = self.ensure_open()?;
-                self.inner.queue_follow_up(user_message(&args));
+                self.queue(QueueKind::FollowUp, &args)?;
                 Ok(Some(json!({"disposition": "queued"})))
             }
             Command::Abort {} => {
@@ -732,8 +747,11 @@ impl Session {
                 Ok(Some(json!({"messages": reclaimed})))
             }
             Command::NewSession {} => {
-                let manager = kiss_coding::SessionManager::in_memory(&self.cwd);
-                self.replace_manager(manager)?;
+                // A sibling keeps the storage mode, so a saved session's next
+                // session is saved too.
+                self.inner
+                    .new_session()
+                    .map_err(|error| SdkErrorText(format!("{error:#}")))?;
                 Ok(Some(json!({"cancelled": false})))
             }
             Command::GetState {} => {
@@ -894,13 +912,11 @@ impl Session {
             }
             Command::ExportHtml { output_path } => {
                 let path = output_path.map(PathBuf::from).unwrap_or_else(|| {
-                    self.inner
-                        .manager
-                        .lock()
-                        .unwrap()
+                    let manager = self.inner.manager.lock().unwrap();
+                    manager
                         .session_file()
                         .map(|path| path.with_extension("html"))
-                        .unwrap_or_else(|| self.cwd.join("kiss-session.html"))
+                        .unwrap_or_else(|| manager.cwd().join("kiss-session.html"))
                 });
                 self.export_html(&path)?;
                 Ok(Some(json!({"path": path})))
