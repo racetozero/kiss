@@ -27,24 +27,23 @@ struct VersionCache {
     last_checked_at: DateTime<Utc>,
 }
 
-/// Run the explicit `kiss update` command.
-pub async fn run() -> Result<i32> {
+/// Run the explicit `kiss update` command and return what happened, for the
+/// caller to show. Nothing is printed, so the TUI can run it too.
+pub async fn run() -> Result<String> {
     if cfg!(debug_assertions) {
         anyhow::bail!(
             "`kiss update` is not available in debug builds. Install a KISS release to use this command"
         );
     }
     if let Some(command) = custom_update_command() {
-        run_custom_update(&command).await?;
-        return Ok(0);
+        return run_custom_update(&command).await;
     }
     if installed_by_homebrew() {
         anyhow::bail!(
             "`kiss update` cannot replace a KISS binary that Homebrew installed. Run `{HOMEBREW_UPGRADE_COMMAND}` to update it, or set KISS_SELF_UPDATE_COMMAND to that command"
         );
     }
-    run_release_update().await?;
-    Ok(0)
+    run_release_update().await
 }
 
 /// The update command of a wrapper or another package manager:
@@ -74,20 +73,19 @@ fn update_command_argv(template: &[String], latest: &Version) -> Vec<String> {
         .collect()
 }
 
-async fn run_custom_update(template: &[String]) -> Result<()> {
+async fn run_custom_update(template: &[String]) -> Result<String> {
     let client = http_client()?;
     let current = current_version()?;
     let latest = fetch_latest_version(&client).await?;
     if latest <= current {
-        println!("kiss v{current} is up to date.");
-        return Ok(());
+        return Ok(format!("kiss v{current} is up to date."));
     }
     let argv = update_command_argv(template, &latest);
     let shown = argv.join(" ");
-    println!("Updating kiss from v{current} to v{latest} with `{shown}`...");
-    let status = tokio::process::Command::new(&argv[0])
+    let output = tokio::process::Command::new(&argv[0])
         .args(&argv[1..])
-        .status()
+        .stdin(std::process::Stdio::null())
+        .output()
         .await
         .with_context(|| {
             format!(
@@ -95,33 +93,36 @@ async fn run_custom_update(template: &[String]) -> Result<()> {
                 argv[0]
             )
         })?;
-    if !status.success() {
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
         anyhow::bail!(
-            "the update command `{shown}` failed ({status}). Fix KISS_SELF_UPDATE_COMMAND or selfUpdateCommand, or remove it to use the KISS installer"
+            "the update command `{shown}` failed ({}): {}. Fix KISS_SELF_UPDATE_COMMAND or selfUpdateCommand, or remove it to use the KISS installer",
+            output.status,
+            stderr.trim()
         );
     }
-    println!("Updated kiss to v{latest}. Restart KISS to use the new version.");
-    Ok(())
+    Ok(format!(
+        "Updated kiss from v{current} to v{latest} with `{shown}`. Restart KISS to use the new version."
+    ))
 }
 
-async fn run_release_update() -> Result<()> {
+async fn run_release_update() -> Result<String> {
     let client = http_client()?;
     let current = current_version()?;
     let latest = fetch_latest_version(&client).await?;
 
     if latest <= current {
-        println!("kiss v{current} is up to date.");
-        return Ok(());
+        return Ok(format!("kiss v{current} is up to date."));
     }
 
-    println!("Updating kiss from v{current} to v{latest}...");
     let installer = download_installer(&client, &latest).await?;
     let staging = tempfile::tempdir().context("create update staging directory")?;
     let staged_binary = run_staged_installer(&installer, &latest, staging.path()).await?;
 
     self_replace::self_replace(&staged_binary).context("replace the current KISS executable")?;
-    println!("Updated kiss to v{latest}. Restart KISS to use the new version.");
-    Ok(())
+    Ok(format!(
+        "Updated kiss from v{current} to v{latest}. Restart KISS to use the new version."
+    ))
 }
 
 /// Read a cached update result and refresh stale data without delaying launch.

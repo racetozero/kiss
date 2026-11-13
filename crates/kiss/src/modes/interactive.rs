@@ -459,7 +459,7 @@ enum CommandEvent {
     ShellOutput(String),
     ShellFinished(std::result::Result<ShellRunResult, String>),
     ShareFinished(std::result::Result<String, String>),
-    UpdateFinished(std::result::Result<i32, String>),
+    UpdateFinished(std::result::Result<String, String>),
     TreeNavigationFinished(std::result::Result<kiss_coding::TreeNavigationOutcome, String>),
     BtwFinished {
         request_id: u64,
@@ -2695,9 +2695,7 @@ fn handle_command_event(
         CommandEvent::UpdateFinished(result) => {
             app.command = None;
             match result {
-                Ok(_) => app
-                    .cells
-                    .push(Cell::Notice("update finished. Restart KISS".into())),
+                Ok(message) => app.cells.push(Cell::Notice(message)),
                 Err(error) => app
                     .cells
                     .push(Cell::Error(format!("update failed: {error}"))),
