@@ -7938,7 +7938,6 @@ fn run_slash_command(
         "resume" => open_session_picker(app, session, false, String::new()),
         "import" => {
             if let Some(path) = parse_path_argument(&rest) {
-                let path = kiss_ai::paths::expand_home(&path);
                 let items = vec![
                     SelectItem {
                         label: "Import into a new Kiss session".into(),
@@ -7964,15 +7963,11 @@ fn run_slash_command(
             let system = session.system_context();
             let manager = session.manager.lock().unwrap();
             let target = parse_path_argument(&rest)
-                .unwrap_or_else(|| format!("session-{}.html", manager.session_id()));
-            match kiss_coding::export::export_session(
-                &manager,
-                std::path::Path::new(&target),
-                Some(&system),
-            ) {
+                .unwrap_or_else(|| format!("session-{}.html", manager.session_id()).into());
+            match kiss_coding::export::export_session(&manager, &target, Some(&system)) {
                 Ok(()) => app
                     .cells
-                    .push(Cell::Notice(format!("exported to {target}"))),
+                    .push(Cell::Notice(format!("exported to {}", target.display()))),
                 Err(e) => app.cells.push(Cell::Error(format!("export failed: {e:#}"))),
             }
         }
@@ -8151,15 +8146,17 @@ fn load_keybindings() -> Keybindings {
     keybindings
 }
 
-fn parse_path_argument(value: &str) -> Option<String> {
+/// The first path in a command argument, quoted or not, with `~` expanded.
+fn parse_path_argument(value: &str) -> Option<std::path::PathBuf> {
     let value = value.trim_start();
     let first = value.chars().next()?;
-    if matches!(first, '\'' | '"') {
+    let path = if matches!(first, '\'' | '"') {
         let rest = &value[first.len_utf8()..];
-        let end = rest.find(first)?;
-        return Some(rest[..end].to_string());
-    }
-    value.split_whitespace().next().map(str::to_string)
+        &rest[..rest.find(first)?]
+    } else {
+        value.split_whitespace().next()?
+    };
+    Some(kiss_ai::paths::expand_home(path))
 }
 
 fn import_session(
@@ -8205,6 +8202,11 @@ fn start_share_session(
     session: &Arc<kiss_coding::AgentSession>,
     command_tx: &mpsc::UnboundedSender<CommandEvent>,
 ) {
+    // Claim the command slot before writing the transcript to a temporary
+    // file, so a busy slot leaves no file behind.
+    let Some(cancel) = begin_command(app, "sharing session".into()) else {
+        return;
+    };
     let system = session.system_context();
     let (id, jsonl, target) = {
         let manager = session.manager.lock().unwrap();
@@ -8212,6 +8214,7 @@ fn start_share_session(
         let jsonl = match manager.to_jsonl() {
             Ok(jsonl) => jsonl,
             Err(error) => {
+                app.command = None;
                 app.cells.push(Cell::Error(format!(
                     "could not prepare session share: {error:#}"
                 )));
@@ -8224,15 +8227,13 @@ fn start_share_session(
             chrono::Utc::now().timestamp_millis()
         ));
         if let Err(error) = kiss_coding::export::export_html(&manager, &target, Some(&system)) {
+            app.command = None;
             app.cells.push(Cell::Error(format!(
                 "could not prepare session share: {error:#}"
             )));
             return;
         }
         (id, jsonl, target)
-    };
-    let Some(cancel) = begin_command(app, "sharing session".into()) else {
-        return;
     };
     let tx = CommandTask::new(app, command_tx);
     let destination = session.settings().session_share_destination;
@@ -8396,7 +8397,6 @@ fn reload_interactive(
         .unwrap_or_else(|| "  ".into());
     app.idle_recap_armed = resources.settings.auto_recap_enabled();
     app.last_user_activity = Instant::now();
-    app.keybindings = Keybindings::default();
     app.keybindings = load_keybindings();
     update_thinking_border(app, session.thinking_level());
     refresh_git_branch(app, session);
@@ -10375,6 +10375,11 @@ mod tests {
             parse_path_argument("folder/session.jsonl ignored"),
             Some("folder/session.jsonl".into())
         );
+        assert_eq!(
+            parse_path_argument("~/x.html"),
+            Some(kiss_ai::paths::expand_home("~/x.html"))
+        );
+        assert!(!parse_path_argument("~/x.html").unwrap().starts_with("~"));
     }
 
     #[test]
