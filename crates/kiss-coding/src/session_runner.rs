@@ -2352,16 +2352,9 @@ fn is_transient(error: &str) -> bool {
     {
         return false;
     }
-    let transient_status = [429, 500, 502, 503, 504, 520, 524].iter().any(|status| {
-        [
-            format!("http {status}"),
-            format!("status {status}"),
-            format!("status: {status}"),
-            format!("status code {status}"),
-        ]
-        .iter()
-        .any(|marker| e.contains(marker))
-    });
+    let transient_status = [429, 500, 502, 503, 504, 520, 524, 529]
+        .into_iter()
+        .any(|status| kiss_ai::api::mentions_status(error, status));
     transient_status
         || [
             "overloaded",
@@ -3177,6 +3170,8 @@ mod ephemeral_tests {
     #[test]
     fn transient_errors_require_a_status_or_specific_network_failure() {
         assert!(is_transient("request failed with HTTP 503"));
+        assert!(is_transient("HTTP 529: Overloaded"));
+        assert!(is_transient(r#"provider error {"status": 503}"#));
         assert!(is_transient("Cloudflare returned HTTP 520"));
         assert!(is_transient("Azure is currently experiencing high demand"));
         assert!(is_transient("connection reset by peer"));

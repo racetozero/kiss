@@ -605,19 +605,7 @@ pub fn mark_limited_and_rotate(
 pub fn rate_limit_retry_after(error: &str) -> Option<Option<Duration>> {
     let text = error.to_ascii_lowercase();
     let compact: String = text.chars().filter(|c| !c.is_whitespace()).collect();
-    let status = |code: u16| {
-        [
-            format!("http {code}"),
-            format!("status {code}"),
-            format!("status: {code}"),
-            format!("status code {code}"),
-            format!("{code} too many requests"),
-        ]
-        .iter()
-        .any(|marker| text.contains(marker))
-            || compact.contains(&format!("\"status\":{code}"))
-            || compact.contains(&format!("\"code\":{code}"))
-    };
+    let status = |code: u16| crate::api::mentions_status(error, code);
     if text.contains("overloaded") || [500, 502, 503, 504, 520, 529].into_iter().any(status) {
         return None;
     }

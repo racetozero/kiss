@@ -33,6 +33,26 @@ pub(crate) async fn http_error(response: reqwest::Response) -> String {
     format!("HTTP {status}: {}{hint}", crate::truncate_err(&body))
 }
 
+/// Whether an error text reports HTTP status `code`: in `http_error`'s
+/// `HTTP <code>` form, the forms SDKs and proxies print (`status <code>`,
+/// `status: <code>`, `status code <code>`, `<code> too many requests`), or a
+/// JSON body's `"status"` or `"code"` field.
+pub fn mentions_status(error: &str, code: u16) -> bool {
+    let text = error.to_ascii_lowercase();
+    let compact: String = text.chars().filter(|c| !c.is_whitespace()).collect();
+    [
+        format!("http {code}"),
+        format!("status {code}"),
+        format!("status: {code}"),
+        format!("status code {code}"),
+        format!("{code} too many requests"),
+    ]
+    .iter()
+    .any(|marker| text.contains(marker))
+        || compact.contains(&format!("\"status\":{code}"))
+        || compact.contains(&format!("\"code\":{code}"))
+}
+
 fn retry_after_seconds(headers: &reqwest::header::HeaderMap) -> Option<u64> {
     let header = |name: &str| {
         headers
