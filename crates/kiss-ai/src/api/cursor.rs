@@ -167,11 +167,15 @@ fn take_resume(context: &Context, options: &StreamOptions) -> Option<oneshot::Se
             _ => None,
         });
     let mut pending = pending().lock().unwrap();
-    options
+    let parked = options
         .session_id
         .as_deref()
         .and_then(|key| pending.remove(key))
-        .or_else(|| response_id.as_deref().and_then(|key| pending.remove(key)))
+        .or_else(|| response_id.as_deref().and_then(|key| pending.remove(key)));
+    // Only tool results continue the parked run. A new prompt, for example
+    // after an abort, starts a new run, and dropping the sender ends the
+    // parked one.
+    parked.filter(|_| matches!(context.messages.last(), Some(Message::ToolResult(_))))
 }
 
 async fn run(
@@ -536,7 +540,16 @@ async fn run(
         }
     }
     }.await;
-    pending().lock().unwrap().remove(&resume_key);
+    // Remove only this run's parked sender. A newer run under the same
+    // session key may have parked its own by now.
+    let mut parked = pending().lock().unwrap();
+    if parked
+        .get(&resume_key)
+        .is_some_and(oneshot::Sender::is_closed)
+    {
+        parked.remove(&resume_key);
+    }
+    drop(parked);
     if let Err(error) = drive_result
         && let Some(builder) = builder
     {
@@ -1468,6 +1481,29 @@ mod tests {
         builder.end_text(index);
         builder.finish(StopReason::Stop, &model());
         assert_eq!(output.result().await.text(), "continued");
+    }
+
+    #[tokio::test]
+    async fn a_new_prompt_ends_a_parked_tool_stream_instead_of_resuming_it() {
+        let session_id = format!("session-{}", Uuid::new_v4());
+        let (sender, receiver) = oneshot::channel();
+        pending().lock().unwrap().insert(session_id.clone(), sender);
+        let context = Context {
+            messages: vec![Message::User(crate::UserMessage {
+                content: crate::UserContent::Text("a new prompt".into()),
+                timestamp: now_ms(),
+            })],
+            ..Default::default()
+        };
+        let options = StreamOptions {
+            session_id: Some(session_id.clone()),
+            ..Default::default()
+        };
+        let (sink, output) = crate::EventStream::channel();
+        super::stream(&model(), &context, &options, sink).await;
+        assert!(receiver.await.is_err(), "the parked run must not resume");
+        assert!(!pending().lock().unwrap().contains_key(&session_id));
+        assert!(output.result().await.error_message.is_some());
     }
 
     // These fixture types use the upstream field numbers independently of the
