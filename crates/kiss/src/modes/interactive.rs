@@ -2934,10 +2934,7 @@ fn command_argument_items(
             })
             .collect(),
         "thinking" => Vec::new(),
-        "login" => kiss_ai::registry::BUILTIN_PROVIDER_IDS
-            .iter()
-            .copied()
-            .chain(["typesafe", "liquid", "llama.cpp"])
+        "login" => login_providers()
             .map(|provider| {
                 (
                     provider.to_string(),
@@ -4974,12 +4971,17 @@ fn open_login_picker(app: &mut App) {
     open_login_picker_with_filter(app, None);
 }
 
-fn open_login_picker_with_filter(app: &mut App, filter: Option<&str>) {
-    let mut providers: Vec<String> = kiss_ai::registry::BUILTIN_PROVIDER_IDS
+/// Every provider `/login` offers: the built-in catalog, the decision-model
+/// services, and a local llama.cpp server.
+fn login_providers() -> impl Iterator<Item = &'static str> {
+    kiss_ai::registry::BUILTIN_PROVIDER_IDS
         .iter()
-        .map(|provider| (*provider).to_string())
-        .collect();
-    providers.extend(["typesafe".into(), "liquid".into(), "llama.cpp".into()]);
+        .copied()
+        .chain(["typesafe", "liquid", "llama.cpp"])
+}
+
+fn open_login_picker_with_filter(app: &mut App, filter: Option<&str>) {
+    let providers: Vec<String> = login_providers().map(str::to_string).collect();
     let items = providers
         .iter()
         .enumerate()
@@ -7717,11 +7719,8 @@ fn run_slash_command(
             if rest.is_empty() {
                 open_login_picker(app);
             } else {
-                let provider = kiss_ai::registry::BUILTIN_PROVIDER_IDS
-                    .iter()
-                    .copied()
-                    .chain(std::iter::once("llama.cpp"))
-                    .find(|provider| provider.eq_ignore_ascii_case(rest));
+                let provider =
+                    login_providers().find(|provider| provider.eq_ignore_ascii_case(rest));
                 if let Some(provider) = provider {
                     open_login_methods_picker(app, provider);
                 } else {
