@@ -6884,7 +6884,7 @@ fn format_queue_mode(mode: QueueMode) -> &'static str {
 fn save_interactive_settings(
     app: &mut App,
     session: &Arc<kiss_coding::AgentSession>,
-    resources: &InteractiveResources,
+    resources: &mut InteractiveResources,
 ) {
     match resources.settings.save_global() {
         Ok(()) => session.update_settings(resources.settings.clone()),
@@ -11136,16 +11136,11 @@ mod tests {
             kiss_coding::SessionManager::in_memory(Path::new("/synthetic")),
             Vec::new(),
             registry,
-            kiss_coding::Settings {
-                compaction: kiss_coding::settings::CompactionSettings {
-                    enabled: false,
-                    ..Default::default()
-                },
-                retry: kiss_coding::settings::RetrySettings {
-                    base_delay_ms: 60_000,
-                    ..Default::default()
-                },
-                ..Default::default()
+            {
+                let mut settings = kiss_coding::Settings::default();
+                settings.compaction.enabled = false;
+                settings.retry.base_delay_ms = 60_000;
+                settings
             },
             "test prompt".into(),
             model,

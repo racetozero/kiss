@@ -4,7 +4,7 @@
 use crate::decision::DecisionModel;
 use kiss_ai::Transport;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
@@ -321,6 +321,14 @@ pub struct Settings {
     /// Unknown keys survive load/save.
     #[serde(flatten)]
     pub extra: serde_json::Map<String, Value>,
+    /// These settings as loaded, so a save writes only what changed since.
+    /// Project values and run-only overrides are part of it, so they never
+    /// reach the user's file unless the user changes them.
+    /// Public only so that struct literals with `..Default::default()` keep
+    /// working; `load` and `save_global` own it.
+    #[serde(skip)]
+    #[doc(hidden)]
+    pub baseline: Value,
 }
 
 pub fn global_settings_path() -> Option<PathBuf> {
@@ -401,37 +409,68 @@ fn merged_settings(mut global: Value, project: Option<Value>) -> Settings {
     settings
 }
 
+/// Write into `target` every leaf where `new` differs from `old`, and remove
+/// the keys that `new` no longer has. Keys that did not change keep the
+/// value `target` already holds.
+fn apply_changes(
+    target: &mut Map<String, Value>,
+    old: &Map<String, Value>,
+    new: &Map<String, Value>,
+) {
+    for (key, value) in new {
+        match (old.get(key), value) {
+            (Some(previous), _) if previous == value => {}
+            (Some(Value::Object(previous)), Value::Object(value)) => {
+                let slot = target
+                    .entry(key.clone())
+                    .or_insert_with(|| Value::Object(Map::new()));
+                if !slot.is_object() {
+                    *slot = Value::Object(Map::new());
+                }
+                apply_changes(slot.as_object_mut().unwrap(), previous, value);
+            }
+            _ => {
+                target.insert(key.clone(), value.clone());
+            }
+        }
+    }
+    for key in old.keys() {
+        if !new.contains_key(key) {
+            target.remove(key);
+        }
+    }
+}
+
 impl Settings {
     /// Read only user settings when creating the installation ID.
     pub fn get_or_create_device_id() -> anyhow::Result<String> {
         let path = global_settings_path().ok_or_else(|| anyhow::anyhow!(
             "ChatGPT login has no user settings path. A home directory is required. Set HOME and run login again."
         ))?;
-        let mut settings: Value = match std::fs::read_to_string(&path) {
-            Ok(text) => serde_json::from_str(&text).map_err(|_| anyhow::anyhow!(
-                "ChatGPT login cannot read {}. Settings must contain a JSON object. Correct the JSON and run login again.", path.display()
-            ))?,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => serde_json::json!({}),
-            Err(error) => return Err(error.into()),
-        };
-        if !settings.is_object() {
-            anyhow::bail!(
-                "ChatGPT login cannot update {}. Settings must contain a JSON object. Correct the JSON and run login again.",
-                path.display()
-            );
-        }
-        if let Some(id) = settings.get("deviceId").and_then(Value::as_str)
-            && uuid::Uuid::parse_str(id).is_ok()
-        {
-            return Ok(id.to_string());
-        }
-        let id = uuid::Uuid::new_v4().to_string();
-        settings["deviceId"] = Value::String(id.clone());
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        std::fs::write(path, serde_json::to_string_pretty(&settings)?)?;
-        Ok(id)
+        kiss_ai::config_file::with_lock(&path, || {
+            let mut settings: Value = kiss_ai::config_file::read_json(&path)?;
+            if settings.is_null() {
+                settings = Value::Object(Map::new());
+            }
+            if !settings.is_object() {
+                anyhow::bail!(
+                    "ChatGPT login cannot update {}. Settings must contain a JSON object. Correct the JSON and run login again.",
+                    path.display()
+                );
+            }
+            if let Some(id) = settings.get("deviceId").and_then(Value::as_str)
+                && uuid::Uuid::parse_str(id).is_ok()
+            {
+                return Ok(id.to_string());
+            }
+            let id = uuid::Uuid::new_v4().to_string();
+            settings["deviceId"] = Value::String(id.clone());
+            kiss_ai::config_file::write_atomic(
+                &path,
+                serde_json::to_string_pretty(&settings)?.as_bytes(),
+            )?;
+            Ok(id)
+        })
     }
 
     pub fn auto_recap_enabled(&self) -> bool {
@@ -446,19 +485,59 @@ impl Settings {
         let project = project_trusted
             .then(|| read_json(&project_settings_path(cwd)))
             .flatten();
-        merged_settings(global, project)
+        Self::from_layers(global, project)
     }
 
-    pub fn save_global(&self) -> anyhow::Result<()> {
-        let path = global_settings_path().ok_or_else(|| anyhow::anyhow!("no home directory"))?;
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
+    fn from_layers(global: Value, project: Option<Value>) -> Settings {
+        let mut settings = merged_settings(global, project);
+        settings.baseline = serde_json::to_value(&settings).unwrap_or_default();
+        settings
+    }
+
+    /// Change a setting for this run only, for example from a CLI flag.
+    /// `save_global` does not write it.
+    pub fn override_for_run(&mut self, change: impl Fn(&mut Settings)) {
+        change(self);
+        if let Ok(mut baseline) = serde_json::from_value::<Settings>(self.baseline.clone()) {
+            change(&mut baseline);
+            self.baseline = serde_json::to_value(&baseline).unwrap_or_default();
         }
-        let mut value = serde_json::to_value(self)?;
-        if let Some(id) = read_json(&path).and_then(|disk| disk.get("deviceId").cloned()) {
-            value["deviceId"] = id;
-        }
-        std::fs::write(&path, serde_json::to_string_pretty(&value)?)?;
+    }
+
+    /// Write the settings changed since `load` (or the last save) into the
+    /// user's settings file, leaving every other key in that file as it is.
+    pub fn save_global(&mut self) -> anyhow::Result<()> {
+        let path = global_settings_path().ok_or_else(|| anyhow::anyhow!(
+            "Settings cannot be saved because the home directory is unknown. Set HOME, then try again."
+        ))?;
+        self.save_to(&path)
+    }
+
+    fn save_to(&mut self, path: &Path) -> anyhow::Result<()> {
+        let current = serde_json::to_value(&*self)?;
+        kiss_ai::config_file::with_lock(path, || {
+            let mut disk: Value = kiss_ai::config_file::read_json(path)?;
+            if disk.is_null() {
+                disk = Value::Object(Map::new());
+            }
+            let Some(target) = disk.as_object_mut() else {
+                anyhow::bail!(
+                    "{} must contain a JSON object. Correct the file, then try again.",
+                    path.display()
+                );
+            };
+            let empty = Map::new();
+            apply_changes(
+                target,
+                self.baseline.as_object().unwrap_or(&empty),
+                current.as_object().unwrap_or(&empty),
+            );
+            kiss_ai::config_file::write_atomic(
+                path,
+                serde_json::to_string_pretty(&disk)?.as_bytes(),
+            )
+        })?;
+        self.baseline = current;
         Ok(())
     }
 }
@@ -466,6 +545,39 @@ impl Settings {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_save_writes_only_changed_settings_and_never_project_or_run_values() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("settings.json");
+        let global = json!({"theme": "dark", "deviceId": "id", "futureKey": 1});
+        std::fs::write(&path, global.to_string()).unwrap();
+        let mut settings = Settings::from_layers(
+            global,
+            Some(json!({"shellCommandPrefix": "source .envrc", "quietStartup": true})),
+        );
+        settings.override_for_run(|settings| settings.experimental_context_file = true);
+
+        settings.hide_thinking_block = true;
+        settings.save_to(&path).unwrap();
+
+        let saved: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(
+            saved,
+            json!({"theme": "dark", "deviceId": "id", "futureKey": 1, "hideThinkingBlock": true})
+        );
+    }
+
+    #[test]
+    fn a_save_refuses_to_replace_a_settings_file_it_cannot_parse() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("settings.json");
+        std::fs::write(&path, "{ not json").unwrap();
+        let mut settings = Settings::from_layers(json!({}), None);
+        settings.quiet_startup = true;
+        assert!(settings.save_to(&path).is_err());
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "{ not json");
+    }
     use serde_json::json;
 
     #[test]

@@ -93,7 +93,9 @@ pub fn reload_runtime(args: &Args, cwd: &std::path::Path) -> Result<ReloadedRunt
     let bootstrap = Settings::load(cwd, false);
     let trusted = trust::resolve_non_interactive(cwd, cli_trust, bootstrap.default_project_trust);
     let mut settings = Settings::load(cwd, trusted);
-    settings.experimental_context_file |= args.experimental_context_file;
+    if args.experimental_context_file {
+        settings.override_for_run(|settings| settings.experimental_context_file = true);
+    }
 
     let context = if args.no_context_files {
         Vec::new()
@@ -294,7 +296,9 @@ pub async fn build_startup(
     let trusted =
         trust::resolve_non_interactive(&cwd, cli_trust, bootstrap_settings.default_project_trust);
     let mut settings = Settings::load(&cwd, trusted);
-    settings.experimental_context_file |= args.experimental_context_file;
+    if args.experimental_context_file {
+        settings.override_for_run(|settings| settings.experimental_context_file = true);
+    }
 
     let mut registry = Registry::load(None);
     let radius_selected = args.provider.as_deref() == Some("radius")
