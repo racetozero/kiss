@@ -6,7 +6,7 @@ use anyhow::{Context as _, Result};
 use kiss_agent::DynTool;
 use kiss_ai::{Model, Registry, ThinkingLevel};
 use kiss_coding::context_files;
-use kiss_coding::session::manager::{SessionManager, default_session_dir};
+use kiss_coding::session::manager::SessionManager;
 use kiss_coding::session_runner::{AgentSession, SessionEventSink};
 use kiss_coding::settings::Settings;
 use kiss_coding::skills::Skill;
@@ -251,21 +251,7 @@ fn provider_default(registry: &Registry, provider: &str) -> Option<Model> {
 }
 
 pub fn session_dir(args: &Args, settings: &Settings) -> PathBuf {
-    args.session_dir
-        .clone()
-        .or_else(|| std::env::var("KISS_SESSION_DIR").ok())
-        .or_else(|| settings.session_dir.clone())
-        .map(|p| kiss_ai::paths::expand_home(&p))
-        .unwrap_or_else(default_session_dir)
-}
-
-fn locate_session(reference: &str, dir: &std::path::Path) -> Result<PathBuf> {
-    let as_path = PathBuf::from(reference);
-    if as_path.is_file() {
-        return Ok(as_path);
-    }
-    SessionManager::find_by_id(dir, reference)?
-        .with_context(|| format!("no session matches '{reference}'"))
+    kiss_coding::session_dir(args.session_dir.as_deref(), settings)
 }
 
 pub async fn build_startup(
@@ -378,9 +364,13 @@ pub async fn build_startup(
     let manager = if args.no_session {
         SessionManager::in_memory(&cwd)
     } else if let Some(reference) = &args.session {
-        SessionManager::open(&locate_session(reference, &dir)?)?
+        SessionManager::open(&SessionManager::resolve_reference(&dir, reference)?)?
     } else if let Some(reference) = &args.fork {
-        SessionManager::fork_from(&locate_session(reference, &dir)?, &cwd, Some(dir.clone()))?
+        SessionManager::fork_from(
+            &SessionManager::resolve_reference(&dir, reference)?,
+            &cwd,
+            Some(dir.clone()),
+        )?
     } else if args.continue_recent {
         SessionManager::continue_recent(&cwd, Some(dir.clone()))?
     } else {

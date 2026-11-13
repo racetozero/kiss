@@ -21,7 +21,7 @@ use kiss_agent::{AgentEvent, AgentMessage, ToolResult};
 use kiss_ai::{
     AssistantEvent, ContentBlock as KissContentBlock, ThinkingLevel, UserContent, UserMessage,
 };
-use kiss_coding::session::manager::{SessionManager, default_session_dir};
+use kiss_coding::session::manager::SessionManager;
 use kiss_coding::session_runner::{AgentSession, SessionEvent};
 use kiss_sdk::{SessionOptions, SessionSource};
 use serde_json::Value;
@@ -185,15 +185,9 @@ impl KissAcpAgent {
         if let Ok(session) = self.session(id) {
             return Ok(session);
         }
-        let directory = self
-            .options
-            .session_dir
-            .clone()
-            .unwrap_or_else(default_session_dir);
         let reference = id.to_string();
-        let path = SessionManager::find_by_id(&directory, &reference)
-            .map_err(internal_error)?
-            .ok_or_else(|| {
+        let path = SessionManager::resolve_reference(&self.session_directory(), &reference)
+            .map_err(|_| {
                 agent_client_protocol::Error::resource_not_found(Some(reference.clone()))
             })?;
         let stored_cwd = SessionManager::open(&path)
@@ -216,11 +210,16 @@ impl KissAcpAgent {
         Ok(session)
     }
 
+    /// The folder the SDK writes this agent's sessions to, so listing and
+    /// loading find them.
     fn session_directory(&self) -> PathBuf {
-        self.options
-            .session_dir
-            .clone()
-            .unwrap_or_else(default_session_dir)
+        kiss_coding::session_dir(
+            self.options
+                .session_dir
+                .as_deref()
+                .and_then(std::path::Path::to_str),
+            &kiss_coding::Settings::load(&self.options.cwd, false),
+        )
     }
 
     fn list_sessions(

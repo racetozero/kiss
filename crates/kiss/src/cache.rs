@@ -78,24 +78,7 @@ pub(crate) fn render_saved(
     provider: Option<&str>,
 ) -> Result<String> {
     let paths: Vec<PathBuf> = if let Some(reference) = session {
-        let path = PathBuf::from(reference);
-        if path.is_file() {
-            vec![path]
-        } else {
-            let matches = SessionManager::list_all(session_dir)?
-                .into_iter()
-                .filter(|listing| listing.id.starts_with(reference))
-                .collect::<Vec<_>>();
-            match matches.as_slice() {
-                [listing] => vec![listing.path.clone()],
-                [] => anyhow::bail!(
-                    "session '{reference}' was not found. Use an existing session ID prefix or a JSONL session file path"
-                ),
-                _ => anyhow::bail!(
-                    "session prefix '{reference}' matched more than one session. Use more ID characters or a JSONL session file path"
-                ),
-            }
-        }
+        vec![SessionManager::resolve_reference(session_dir, reference)?]
     } else {
         SessionManager::list_all(session_dir)?
             .into_iter()

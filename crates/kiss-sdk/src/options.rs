@@ -12,7 +12,7 @@ use crate::tools::{build_tools, select_tool_names};
 use anyhow::{Context as _, Result};
 use kiss_agent::{DynTool, StreamFn};
 use kiss_ai::{Model, Registry, ThinkingLevel};
-use kiss_coding::session::manager::{SessionManager, default_session_dir};
+use kiss_coding::session::manager::SessionManager;
 use kiss_coding::session_runner::{AgentSession, SessionEventSink};
 use kiss_coding::settings::Settings;
 use kiss_coding::system_prompt::{SystemPromptOptions, build_system_prompt};
@@ -369,11 +369,8 @@ impl SessionOptions {
     }
 
     fn open_manager(&self, cwd: &Path, settings: &Settings) -> Result<SessionManager> {
-        let dir = self
-            .session_dir
-            .clone()
-            .or_else(|| settings.session_dir.as_ref().map(PathBuf::from))
-            .unwrap_or_else(default_session_dir);
+        let dir =
+            kiss_coding::session_dir(self.session_dir.as_deref().and_then(Path::to_str), settings);
         Ok(match &self.session {
             SessionSource::InMemory => SessionManager::in_memory(cwd),
             SessionSource::InMemoryEntries(entries) => {

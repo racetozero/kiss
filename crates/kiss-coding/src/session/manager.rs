@@ -72,6 +72,19 @@ pub fn cwd_slug(cwd: &Path) -> String {
     format!("-{s}-")
 }
 
+/// Where sessions are saved: `explicit` (a CLI flag or SDK option), else
+/// `KISS_SESSION_DIR`, else the `sessionDir` setting, else the default
+/// under the agent directory. A leading `~` is expanded.
+pub fn session_dir(explicit: Option<&str>, settings: &crate::Settings) -> PathBuf {
+    explicit
+        .map(str::to_owned)
+        .or_else(|| std::env::var("KISS_SESSION_DIR").ok())
+        .or_else(|| settings.session_dir.clone())
+        .filter(|path| !path.trim().is_empty())
+        .map(|path| kiss_ai::paths::expand_home(&path))
+        .unwrap_or_else(default_session_dir)
+}
+
 pub fn default_session_dir() -> PathBuf {
     kiss_ai::paths::agent_dir()
         .unwrap_or_else(|| PathBuf::from(".kiss/agent"))
@@ -410,13 +423,28 @@ impl SessionManager {
     }
 
     /// Find a session file by partial UUID across all projects.
-    pub fn find_by_id(session_dir: &Path, partial: &str) -> Result<Option<PathBuf>> {
-        for listing in Self::list_all(session_dir)? {
-            if listing.id.starts_with(partial) {
-                return Ok(Some(listing.path));
-            }
+    /// A session file named by `reference`: an existing file path, or the
+    /// one session in `session_dir` whose id starts with it. No match and
+    /// several matches are errors that say what to pass instead.
+    pub fn resolve_reference(session_dir: &Path, reference: &str) -> Result<PathBuf> {
+        let path = PathBuf::from(reference);
+        if path.is_file() {
+            return Ok(path);
         }
-        Ok(None)
+        let matches = Self::list_all(session_dir)?
+            .into_iter()
+            .filter(|listing| listing.id.starts_with(reference))
+            .collect::<Vec<_>>();
+        match matches.as_slice() {
+            [listing] => Ok(listing.path.clone()),
+            [] => anyhow::bail!(
+                "session '{reference}' was not found in {}. Use an existing session ID prefix or a JSONL session file path",
+                session_dir.display()
+            ),
+            _ => anyhow::bail!(
+                "session prefix '{reference}' matched more than one session. Use more ID characters or a JSONL session file path"
+            ),
+        }
     }
 
     // ----- appends ------------------------------------------------------

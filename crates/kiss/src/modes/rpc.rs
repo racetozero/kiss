@@ -18,12 +18,24 @@ use std::path::PathBuf;
 /// Translate command-line arguments into SDK session options.
 pub fn options_from_args(args: &Args) -> Result<SessionOptions> {
     let cwd = std::env::current_dir()?;
+    let directory = || {
+        crate::setup::session_dir(
+            args,
+            &kiss_coding::Settings::load(&cwd, args.project_trusted(&cwd)),
+        )
+    };
     let session = if args.no_session {
         SessionSource::InMemory
     } else if let Some(reference) = &args.session {
-        SessionSource::Open(PathBuf::from(reference))
+        SessionSource::Open(kiss_coding::SessionManager::resolve_reference(
+            &directory(),
+            reference,
+        )?)
     } else if let Some(reference) = &args.fork {
-        SessionSource::Fork(PathBuf::from(reference))
+        SessionSource::Fork(kiss_coding::SessionManager::resolve_reference(
+            &directory(),
+            reference,
+        )?)
     } else if args.continue_recent {
         SessionSource::ContinueRecent
     } else {

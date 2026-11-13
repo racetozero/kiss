@@ -22,7 +22,7 @@ pub mod trust;
 pub mod workflows;
 
 pub use session::entry::{SessionEntry, SessionHeader};
-pub use session::manager::{SessionListing, SessionManager, default_session_dir};
+pub use session::manager::{SessionListing, SessionManager, default_session_dir, session_dir};
 pub use session_runner::{
     AgentSession, EphemeralResponse, PromptMode, QueueKind, RunPhase, SessionEvent,
     SessionEventSink, TreeNavigationOutcome, WorkflowTurnStatus,
