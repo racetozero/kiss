@@ -139,6 +139,9 @@ pub struct InputDecoder {
 #[derive(Debug, Clone, PartialEq)]
 pub enum InputEvent {
     Key(KeyEvent),
+    /// A held key auto-repeating (kitty keyboard protocol). Treat it as a
+    /// press unless the key is being held on purpose, as Space is for voice.
+    KeyRepeat(KeyEvent),
     KeyRelease(KeyEvent),
     Paste(String),
     /// Terminal focus reporting (CSI I / CSI O).
@@ -154,11 +157,29 @@ impl InputDecoder {
                 out.push(event);
             }
         }
-        if self.buffer == [0x1b] {
+        if self.pending_escape().is_some() {
             self.escape_since
                 .get_or_insert_with(std::time::Instant::now);
         } else {
             self.escape_since = None;
+        }
+    }
+
+    /// The key the buffer means if no more bytes arrive: a lone ESC is
+    /// Escape, and `ESC [` or `ESC O` is Alt+`[` or Alt+`O`. Longer partial
+    /// sequences, such as a paste still arriving, keep waiting.
+    fn pending_escape(&self) -> Option<KeyEvent> {
+        match self.buffer.as_slice() {
+            [0x1b] => Some(KeyEvent {
+                key: Key::Escape,
+                ..Default::default()
+            }),
+            [0x1b, next @ (b'[' | b'O')] => Some(KeyEvent {
+                key: Key::Char(*next as char),
+                alt: true,
+                ..Default::default()
+            }),
+            _ => None,
         }
     }
 
@@ -170,13 +191,10 @@ impl InputDecoder {
 
     /// Call when escape_deadline expires without receiving more bytes.
     pub fn flush_escape(&mut self, out: &mut Vec<InputEvent>) {
-        if self.buffer == [0x1b] {
+        if let Some(key) = self.pending_escape() {
             self.buffer.clear();
             self.escape_since = None;
-            out.push(InputEvent::Key(KeyEvent {
-                key: Key::Escape,
-                ..Default::default()
-            }));
+            out.push(InputEvent::Key(key));
         }
     }
 
@@ -293,13 +311,20 @@ impl InputDecoder {
                 }))
             }
             _ => {
-                // UTF-8 char.
-                let len = utf8_len(byte)?;
+                // UTF-8 char. A byte that cannot start one, or a sequence that
+                // is not valid UTF-8, is dropped so later input still decodes.
+                let Some(len) = utf8_len(byte) else {
+                    return Some((None, 1));
+                };
                 if buf.len() < len {
                     return None;
                 }
-                let s = std::str::from_utf8(&buf[..len]).ok()?;
-                let c = s.chars().next()?;
+                let Some(c) = std::str::from_utf8(&buf[..len])
+                    .ok()
+                    .and_then(|s| s.chars().next())
+                else {
+                    return Some((None, 1));
+                };
                 return Some((Some(InputEvent::Key(KeyEvent::char(c))), len));
             }
         };
@@ -431,14 +456,10 @@ impl InputDecoder {
             }
             _ => return Some((None, consumed)),
         };
-        // Repeated Space must not toggle voice recording.
-        if event_type == Some(2) && event.key == Key::Char(' ') {
-            return Some((None, consumed));
-        }
-        let input = if event_type == Some(3) {
-            InputEvent::KeyRelease(event)
-        } else {
-            InputEvent::Key(event)
+        let input = match event_type {
+            Some(2) => InputEvent::KeyRepeat(event),
+            Some(3) => InputEvent::KeyRelease(event),
+            _ => InputEvent::Key(event),
         };
         Some((Some(input), consumed))
     }
@@ -677,13 +698,13 @@ mod tests {
     }
 
     #[test]
-    fn kitty_protocol_reports_release_and_repeats_except_voice_space() {
+    fn kitty_protocol_reports_presses_repeats_and_releases() {
         assert_eq!(
             decode(b"\x1b[1;1:1B\x1b[1;1:2B\x1b[1;1:2B\x1b[1;1:3B"),
             vec![
                 InputEvent::Key(KeyEvent::parse("down").unwrap()),
-                InputEvent::Key(KeyEvent::parse("down").unwrap()),
-                InputEvent::Key(KeyEvent::parse("down").unwrap()),
+                InputEvent::KeyRepeat(KeyEvent::parse("down").unwrap()),
+                InputEvent::KeyRepeat(KeyEvent::parse("down").unwrap()),
                 InputEvent::KeyRelease(KeyEvent::parse("down").unwrap()),
             ]
         );
@@ -696,17 +717,62 @@ mod tests {
         ] {
             assert_eq!(
                 decode(bytes),
-                vec![InputEvent::Key(KeyEvent::parse(spec).unwrap())]
+                vec![InputEvent::KeyRepeat(KeyEvent::parse(spec).unwrap())]
             );
         }
         assert_eq!(
             decode(b"\x1b[32;1:3u"),
             vec![InputEvent::KeyRelease(KeyEvent::char(' '))]
         );
-        assert!(decode(b"\x1b[32;1:2u").is_empty());
+        assert_eq!(
+            decode(b"\x1b[32;1:2u"),
+            vec![InputEvent::KeyRepeat(KeyEvent::char(' '))]
+        );
         assert_eq!(
             decode(b"\x1b[9;2:1u"),
             vec![InputEvent::Key(KeyEvent::parse("shift+tab").unwrap())]
         );
+    }
+
+    #[test]
+    fn an_invalid_byte_is_dropped_and_later_input_still_decodes() {
+        let mut decoder = InputDecoder::default();
+        let mut events = Vec::new();
+        decoder.feed(&[0xe1], &mut events);
+        decoder.feed(b"bc", &mut events);
+        decoder.feed(&[0x03], &mut events);
+        assert_eq!(
+            events,
+            [
+                InputEvent::Key(KeyEvent::char('b')),
+                InputEvent::Key(KeyEvent::char('c')),
+                InputEvent::Key(KeyEvent::ctrl('c')),
+            ]
+        );
+        assert_eq!(
+            decode(&[0x80, b'x']),
+            [InputEvent::Key(KeyEvent::char('x'))]
+        );
+    }
+
+    #[test]
+    fn a_partial_escape_prefix_times_out_as_an_alt_key() {
+        let mut decoder = InputDecoder::default();
+        let mut events = Vec::new();
+        decoder.feed(b"\x1b[", &mut events);
+        assert!(events.is_empty());
+        assert!(decoder.escape_deadline().is_some());
+        decoder.flush_escape(&mut events);
+        decoder.feed(b"a", &mut events);
+        assert_eq!(
+            events,
+            [
+                InputEvent::Key(KeyEvent::parse("alt+[").unwrap()),
+                InputEvent::Key(KeyEvent::char('a')),
+            ]
+        );
+        let mut paste = InputDecoder::default();
+        paste.feed(b"\x1b[200~partial", &mut events);
+        assert!(paste.escape_deadline().is_none());
     }
 }

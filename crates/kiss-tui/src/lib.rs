@@ -19,7 +19,7 @@ pub mod theme;
 mod windows_console;
 
 pub use component::{Component, Spacer, TextBlock};
-pub use editor::{Editor, EditorSubmission};
+pub use editor::{Editor, EditorSubmission, edit_single_line};
 pub use keybindings::{Action, Keybindings};
 pub use keys::{InputDecoder, InputEvent, Key, KeyEvent};
 pub use markdown::{MarkdownRenderer, MermaidMode, StreamingMarkdownCache};

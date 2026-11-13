@@ -183,7 +183,9 @@ impl Notifications {
                     self.pending = None;
                 }
             }
-            InputEvent::Key(_) | InputEvent::Paste(_) => self.pending = None,
+            InputEvent::Key(_) | InputEvent::KeyRepeat(_) | InputEvent::Paste(_) => {
+                self.pending = None
+            }
             InputEvent::KeyRelease(_) => {}
         }
     }

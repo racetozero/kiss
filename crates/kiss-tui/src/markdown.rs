@@ -145,11 +145,14 @@ fn append_markdown_block(lines: &mut Vec<String>, mut block: Vec<String>) {
     lines.append(&mut block);
 }
 
+/// The Markdown dialect kiss renders. Block boundaries must be found with
+/// the same options, or a block can be split where the renderer joins it.
+const MARKDOWN_OPTIONS: Options = Options::ENABLE_STRIKETHROUGH
+    .union(Options::ENABLE_TABLES)
+    .union(Options::ENABLE_MATH);
+
 fn stable_prefix_len(markdown: &str) -> usize {
-    let parser = Parser::new_ext(
-        markdown,
-        Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TABLES,
-    );
+    let parser = Parser::new_ext(markdown, MARKDOWN_OPTIONS);
     let mut depth = 0usize;
     let mut stable_end = 0usize;
     for (event, range) in parser.into_offset_iter() {
@@ -203,8 +206,7 @@ impl MarkdownRenderer {
         mermaid_mode: MermaidMode,
     ) -> Vec<String> {
         let mut out: Vec<String> = Vec::new();
-        let options = Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TABLES | Options::ENABLE_MATH;
-        let parser = Parser::new_ext(markdown, options);
+        let parser = Parser::new_ext(markdown, MARKDOWN_OPTIONS);
 
         let mut current = String::new();
         let mut has_bare_url = false;

@@ -128,12 +128,9 @@ impl SessionPicker {
                         return SessionPickerAction::Rename { path, name };
                     }
                 }
-                Key::Backspace => {
-                    name.pop();
+                _ => {
+                    kiss_tui::edit_single_line(name, key);
                 }
-                Key::Char('u') if key.ctrl => name.clear(),
-                Key::Char(character) if !key.ctrl && !key.alt => name.push(character),
-                _ => {}
             }
             return SessionPickerAction::None;
         }
@@ -173,29 +170,11 @@ impl SessionPicker {
             Key::PageDown => self.move_by(page),
             Key::Home => self.selected = 0,
             Key::End => self.selected = self.matches.len().saturating_sub(1),
-            Key::Backspace => {
-                if self.query.pop().is_some() {
+            _ => {
+                if kiss_tui::edit_single_line(&mut self.query, key) {
                     self.refilter();
                 }
             }
-            Key::Char('u') if key.ctrl => {
-                self.query.clear();
-                self.refilter();
-            }
-            Key::Char('w') if key.ctrl => {
-                let kept = self
-                    .query
-                    .trim_end()
-                    .rfind(' ')
-                    .map_or(0, |index| index + 1);
-                self.query.truncate(kept);
-                self.refilter();
-            }
-            Key::Char(character) if !key.ctrl && !key.alt => {
-                self.query.push(character);
-                self.refilter();
-            }
-            _ => {}
         }
         SessionPickerAction::None
     }

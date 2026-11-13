@@ -125,17 +125,21 @@ pub fn fuzzy_score(query: &str, candidate: &str) -> Option<i64> {
 }
 
 /// Rank candidates by score, best first, dropping non-matches.
-pub fn fuzzy_rank<'a>(
-    query: &str,
-    candidates: impl IntoIterator<Item = &'a str>,
-) -> Vec<(&'a str, i64)> {
+/// The positions of the candidates that match `query`, best match first.
+/// Equal scores prefer the shorter candidate, then the earlier one.
+pub fn fuzzy_rank<'a>(query: &str, candidates: impl IntoIterator<Item = &'a str>) -> Vec<usize> {
     let query = PreparedFuzzyQuery::new(query);
-    let mut out: Vec<(&str, i64)> = candidates
+    let mut out: Vec<(usize, usize, i64)> = candidates
         .into_iter()
-        .filter_map(|candidate| query.score(candidate).map(|score| (candidate, score)))
+        .enumerate()
+        .filter_map(|(index, candidate)| {
+            query
+                .score(candidate)
+                .map(|score| (index, candidate.len(), score))
+        })
         .collect();
-    out.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.len().cmp(&b.0.len())));
-    out
+    out.sort_by(|a, b| b.2.cmp(&a.2).then_with(|| a.1.cmp(&b.1)));
+    out.into_iter().map(|(index, ..)| index).collect()
 }
 
 #[cfg(test)]
@@ -144,8 +148,7 @@ mod tests {
 
     #[test]
     fn ranks_boundary_matches_higher() {
-        let ranked = fuzzy_rank("sm", ["src/main.rs", "somefile.txt"]);
-        assert_eq!(ranked[0].0, "src/main.rs");
+        assert_eq!(fuzzy_rank("sm", ["src/main.rs", "somefile.txt"])[0], 0);
     }
 
     #[test]
@@ -158,11 +161,17 @@ mod tests {
                 "anthropic/claude-opus-4.1",
             ],
         );
-        assert_eq!(ranked[0].0, "anthropic/claude-opus-4.1");
-        let ranked = fuzzy_rank("astra", ["radius/gpt-6-sol", "openai/gpt-6-astra"]);
-        assert_eq!(ranked[0].0, "openai/gpt-6-astra");
-        let ranked = fuzzy_rank("ÖL", ["öffentlich/datei-l", "src/öl.rs"]);
-        assert_eq!(ranked[0].0, "src/öl.rs");
+        assert_eq!(ranked[0], 2);
+        assert_eq!(
+            fuzzy_rank("astra", ["radius/gpt-6-sol", "openai/gpt-6-astra"])[0],
+            1
+        );
+        assert_eq!(fuzzy_rank("ÖL", ["öffentlich/datei-l", "src/öl.rs"])[0], 1);
+    }
+
+    #[test]
+    fn equal_candidates_keep_their_own_positions() {
+        assert_eq!(fuzzy_rank("cont", ["continue", "continue"]), [0, 1]);
     }
 
     #[test]

@@ -15,7 +15,7 @@ pub struct SelectItem {
 
 pub struct SelectList {
     pub items: Vec<SelectItem>,
-    pub filter: String,
+    filter: String,
     pub selected: usize,
     pub max_visible: usize,
     pub title: String,
@@ -46,11 +46,7 @@ impl SelectList {
         let indices: Vec<usize> = if self.filter.is_empty() {
             (0..self.items.len()).collect()
         } else {
-            let labels: Vec<&str> = self.items.iter().map(|i| i.label.as_str()).collect();
-            crate::fuzzy::fuzzy_rank(&self.filter, labels.iter().copied())
-                .into_iter()
-                .filter_map(|(label, _)| self.items.iter().position(|i| i.label == label))
-                .collect()
+            crate::fuzzy::fuzzy_rank(&self.filter, self.items.iter().map(|i| i.label.as_str()))
         };
         self.filtered_cache = Some(indices.clone());
         indices
@@ -63,6 +59,21 @@ impl SelectList {
         }
         let new = (self.selected as isize + delta).rem_euclid(count as isize);
         self.selected = new as usize;
+    }
+
+    pub fn filter(&self) -> &str {
+        &self.filter
+    }
+
+    /// Edit the filter with a key, as a one-line text field. Returns whether
+    /// the key was a filter edit.
+    pub fn edit_filter(&mut self, key: &crate::KeyEvent) -> bool {
+        let mut filter = self.filter.clone();
+        if !crate::editor::edit_single_line(&mut filter, key) {
+            return false;
+        }
+        self.set_filter(filter);
+        true
     }
 
     pub fn set_filter(&mut self, filter: String) {

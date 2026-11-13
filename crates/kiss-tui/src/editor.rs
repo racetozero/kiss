@@ -35,8 +35,8 @@ pub struct Editor {
     state: EditorState,
     undo_stack: Vec<EditorState>,
     kill_ring: Vec<String>,
-    pub history: Vec<String>,
-    history_states: Vec<EditorState>,
+    /// Submitted drafts, oldest first, at most 100.
+    history: Vec<EditorState>,
     history_pos: Option<usize>,
     history_draft: Option<EditorState>,
     pub border_color_token: String,
@@ -56,7 +56,6 @@ impl Editor {
             undo_stack: Vec::new(),
             kill_ring: Vec::new(),
             history: Vec::new(),
-            history_states: Vec::new(),
             history_pos: None,
             history_draft: None,
             border_color_token: "border".into(),
@@ -67,6 +66,14 @@ impl Editor {
 
     pub fn text(&self) -> String {
         self.state.lines.join("\n")
+    }
+
+    /// The visible text of each submitted draft, oldest first.
+    pub fn history(&self) -> Vec<String> {
+        self.history
+            .iter()
+            .map(|state| state.lines.join("\n"))
+            .collect()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -110,17 +117,13 @@ impl Editor {
         let display_text = self.text();
         let text = expand_pending_pastes(&display_text, &self.state.pending_pastes);
         if !display_text.trim().is_empty()
-            && (self.history.last() != Some(&display_text)
-                || self
-                    .history_states
-                    .last()
-                    .is_some_and(|state| state.pending_pastes != self.state.pending_pastes))
+            && self.history.last().is_none_or(|last| {
+                last.lines != self.state.lines || last.pending_pastes != self.state.pending_pastes
+            })
         {
-            self.history.push(display_text.clone());
-            self.history_states.push(self.state.clone());
+            self.history.push(self.state.clone());
             if self.history.len() > 100 {
                 self.history.remove(0);
-                self.history_states.remove(0);
             }
         }
         self.history_pos = None;
@@ -156,16 +159,18 @@ impl Editor {
     pub fn insert(&mut self, text: &str) {
         self.leave_history_navigation();
         self.push_undo();
-        for c in text.chars() {
-            if c == '\n' {
+        for (index, segment) in text.split('\n').enumerate() {
+            if index > 0 {
                 self.split_line();
-            } else if c != '\r' {
-                let (row, col) = self.state.cursor;
-                let line = &mut self.state.lines[row];
-                let byte = grapheme_byte_offset(line, col);
-                line.insert(byte, c);
-                self.state.cursor.1 += 1;
             }
+            let segment = segment.replace('\r', "");
+            let (row, col) = self.state.cursor;
+            let line = &mut self.state.lines[row];
+            let end = grapheme_byte_offset(line, col) + segment.len();
+            line.insert_str(end - segment.len(), &segment);
+            // Count graphemes, not chars: an emoji with a skin tone or a
+            // letter with a combining mark is one cursor step.
+            self.state.cursor.1 = grapheme_count(&line[..end]);
         }
     }
 
@@ -364,7 +369,7 @@ impl Editor {
         };
         self.history_pos = Some(pos);
         self.push_undo();
-        self.state = self.history_states[pos].clone();
+        self.state = self.history[pos].clone();
     }
 
     pub fn history_next(&mut self) {
@@ -372,7 +377,7 @@ impl Editor {
         if pos + 1 < self.history.len() {
             self.history_pos = Some(pos + 1);
             self.push_undo();
-            self.state = self.history_states[pos + 1].clone();
+            self.state = self.history[pos + 1].clone();
         } else {
             self.history_pos = None;
             if let Some(draft) = self.history_draft.take() {
@@ -421,7 +426,7 @@ impl Editor {
                 self.paste(text);
                 None
             }
-            InputEvent::Key(key) => self.handle_key(key),
+            InputEvent::Key(key) | InputEvent::KeyRepeat(key) => self.handle_key(key),
             InputEvent::KeyRelease(_) | InputEvent::Focus(_) => None,
         }
     }
@@ -658,6 +663,30 @@ fn grapheme_byte_offset(s: &str, col: usize) -> usize {
         .unwrap_or(s.len())
 }
 
+/// Apply a key to a one-line text field whose cursor stays at the end, such
+/// as a picker filter or a secret prompt. The deletion keys match the
+/// editor's. Returns whether the key changed or belongs to the text.
+pub fn edit_single_line(text: &mut String, key: &KeyEvent) -> bool {
+    match (&key.key, key.ctrl, key.alt) {
+        (Key::Backspace, false, false) => {
+            let keep = text
+                .grapheme_indices(true)
+                .next_back()
+                .map_or(0, |(index, _)| index);
+            text.truncate(keep);
+        }
+        (Key::Backspace, ..) | (Key::Char('w'), true, false) => {
+            let count = grapheme_count(text);
+            let keep = grapheme_byte_offset(text, word_left(text, count));
+            text.truncate(keep);
+        }
+        (Key::Char('u'), true, false) => text.clear(),
+        (Key::Char(c), false, false) => text.push(*c),
+        _ => return false,
+    }
+    true
+}
+
 fn is_word_char(c: char) -> bool {
     c.is_alphanumeric() || c == '_'
 }
@@ -717,7 +746,7 @@ mod tests {
             })
         );
         assert!(e.is_empty());
-        assert_eq!(e.history, vec!["hello"]);
+        assert_eq!(e.history(), vec!["hello"]);
     }
 
     #[test]
@@ -807,6 +836,20 @@ mod tests {
     }
 
     #[test]
+    fn the_cursor_moves_over_whole_graphemes_after_typing() {
+        let mut e = editor();
+        e.insert("👍🏽");
+        e.insert("x");
+        e.handle_event(&InputEvent::Key(KeyEvent {
+            key: Key::Left,
+            ..Default::default()
+        }));
+        e.insert("y");
+        assert_eq!(e.text(), "👍🏽yx");
+        assert_eq!(e.cursor(), (0, 2));
+    }
+
+    #[test]
     fn undo_restores() {
         let mut e = editor();
         e.insert("first");
@@ -870,13 +913,13 @@ mod tests {
             e.insert("same");
             e.take();
         }
-        assert_eq!(e.history, vec!["same"]);
+        assert_eq!(e.history(), vec!["same"]);
         for index in 0..110 {
             e.insert(&format!("prompt {index}"));
             e.take();
         }
-        assert_eq!(e.history.len(), 100);
-        assert_eq!(e.history.first().map(String::as_str), Some("prompt 10"));
+        assert_eq!(e.history().len(), 100);
+        assert_eq!(e.history().first().map(String::as_str), Some("prompt 10"));
     }
 
     #[test]

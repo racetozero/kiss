@@ -1501,10 +1501,7 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
         saved_workflows: discover_saved_workflows(&session, args),
     };
 
-    let theme = match settings.theme.as_deref() {
-        Some("light") => Theme::light(),
-        _ => Theme::dark(),
-    };
+    let theme = Theme::named(settings.theme.as_deref());
     provisional_editor.set_theme(theme.clone());
     if submit_after_startup {
         let draft = provisional_editor.take();
@@ -3431,6 +3428,11 @@ fn voice_input(
     if app.voice_mode == VoiceMode::Off {
         return false;
     }
+    if matches!(event, InputEvent::KeyRepeat(key) if *key == KeyEvent::char(' ')) {
+        // Holding Space for a capture repeats it; the repeats are part of
+        // the hold. Without a capture they type spaces.
+        return !matches!(app.voice, VoiceState::Idle);
+    }
     let Some(pressed) = voice_space(event) else {
         return false;
     };
@@ -3531,6 +3533,14 @@ fn handle_input(
     if matches!(event, InputEvent::KeyRelease(_)) {
         return Flow::Continue;
     }
+    let repeated;
+    let event = match event {
+        InputEvent::KeyRepeat(key) => {
+            repeated = InputEvent::Key(key.clone());
+            &repeated
+        }
+        event => event,
+    };
 
     match app.input_layer() {
         InputLayer::Btw => {
@@ -3854,7 +3864,7 @@ fn handle_secret_prompt(
                 prompt.value.push_str(text.trim());
             }
         }
-        InputEvent::Key(key) => match key.key {
+        InputEvent::Key(key) | InputEvent::KeyRepeat(key) => match key.key {
             Key::Escape => {
                 let login = app.secret_prompt.as_ref().is_some_and(|prompt| {
                     matches!(
@@ -3877,11 +3887,6 @@ fn handle_secret_prompt(
                 } else {
                     "input cancelled".into()
                 }));
-            }
-            Key::Backspace => {
-                if let Some(prompt) = &mut app.secret_prompt {
-                    prompt.value.pop();
-                }
             }
             Key::Enter => {
                 let Some(prompt) = app.secret_prompt.take() else {
@@ -4136,12 +4141,11 @@ fn handle_secret_prompt(
                     }
                 }
             }
-            Key::Char(character) if !key.ctrl && !key.alt => {
+            _ => {
                 if let Some(prompt) = &mut app.secret_prompt {
-                    prompt.value.push(character);
+                    kiss_tui::edit_single_line(&mut prompt.value, key);
                 }
             }
-            _ => {}
         },
     }
     Flow::Continue
@@ -6493,7 +6497,7 @@ fn handle_picker_key(
         return Flow::Continue;
     }
     let activates_settings = matches!(&picker.kind, PickerKind::Settings)
-        && picker.list.filter.is_empty()
+        && picker.list.filter().is_empty()
         && key.key == Key::Char(' ')
         && !key.ctrl
         && !key.alt;
@@ -6502,7 +6506,7 @@ fn handle_picker_key(
     if key.key == Key::Enter || activates_settings || saves_default {
         let mut picker = app.picker.take().expect("picker is present");
         let value = picker.list.current().map(|item| item.value);
-        let filter = std::mem::take(&mut picker.list.filter);
+        let filter = picker.list.filter().to_string();
         if let Some(value) = value {
             apply_picker_selection(
                 app,
@@ -6525,17 +6529,9 @@ fn handle_picker_key(
         }
         Key::Up => picker.list.move_selection(-1),
         Key::Down => picker.list.move_selection(1),
-        Key::Backspace => {
-            let mut f = picker.list.filter.clone();
-            f.pop();
-            picker.list.set_filter(f);
+        _ => {
+            picker.list.edit_filter(key);
         }
-        Key::Char(c) if !key.ctrl && !key.alt => {
-            let mut f = picker.list.filter.clone();
-            f.push(c);
-            picker.list.set_filter(f);
-        }
-        _ => {}
     }
     Flow::Continue
 }
@@ -6909,9 +6905,13 @@ fn apply_settings_selection(
             update_thinking_border(app, next);
         }
         1 => {
-            let light = resources.settings.theme.as_deref() != Some("light");
-            resources.settings.theme = Some(if light { "light" } else { "dark" }.into());
-            app.apply_theme(if light { Theme::light() } else { Theme::dark() });
+            let next = if app.theme.name == "light" {
+                "dark"
+            } else {
+                "light"
+            };
+            resources.settings.theme = Some(next.into());
+            app.apply_theme(Theme::named(Some(next)));
             update_thinking_border(app, session.thinking_level());
         }
         2 => {
@@ -8516,12 +8516,7 @@ fn reload_interactive(
     session.reload_runtime(reloaded.settings, reloaded.system_prompt, reloaded.tools);
     resources.saved_workflows = discover_saved_workflows(session, args);
 
-    let theme = if resources.settings.theme.as_deref() == Some("light") {
-        Theme::light()
-    } else {
-        Theme::dark()
-    };
-    app.apply_theme(theme);
+    app.apply_theme(Theme::named(resources.settings.theme.as_deref()));
     app.hide_thinking = resources.settings.hide_thinking_block;
     app.mermaid_mode = mermaid_mode(resources.settings.markdown.mermaid);
     app.md.code_indent = resources
@@ -9329,12 +9324,12 @@ mod tests {
         run_command_for_test(&mut app, &session, &mut resources, "model missing-model");
         let picker = app.picker.as_ref().expect("filtered model picker");
         assert!(matches!(picker.kind, PickerKind::Model(_)));
-        assert_eq!(picker.list.filter, "missing-model");
+        assert_eq!(picker.list.filter(), "missing-model");
 
         run_command_for_test(&mut app, &session, &mut resources, "login missing-provider");
         let picker = app.picker.as_ref().expect("filtered login picker");
         assert!(matches!(picker.kind, PickerKind::LoginProviders(_)));
-        assert_eq!(picker.list.filter, "missing-provider");
+        assert_eq!(picker.list.filter(), "missing-provider");
     }
 
     #[tokio::test]
@@ -9406,7 +9401,7 @@ mod tests {
                     panic!("model picker")
                 };
                 assert!(models.iter().any(|model| model.id == "gpt-5.5-high"));
-                assert_eq!(picker.list.filter, "cursor");
+                assert_eq!(picker.list.filter(), "cursor");
             }
             handle_command_event(
                 &mut app,
@@ -9576,7 +9571,7 @@ mod tests {
         reopen_settings_picker(&mut app, &session, &resources, "automatic".into(), 12);
 
         let picker = app.picker.as_mut().expect("rebuilt settings picker");
-        assert_eq!(picker.list.filter, "automatic");
+        assert_eq!(picker.list.filter(), "automatic");
         assert_eq!(picker.list.current().map(|item| item.value), Some(12));
         assert_eq!(
             picker
@@ -9935,7 +9930,7 @@ mod tests {
             &key(Key::Enter)
         ));
         assert_eq!(app.editor.text(), "read @main.rs ");
-        assert!(app.editor.history.is_empty());
+        assert!(app.editor.history().is_empty());
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -9956,7 +9951,7 @@ mod tests {
             &key(Key::Enter)
         ));
         assert_eq!(app.editor.text(), "read @\"folder with/file name.rs\" ");
-        assert!(app.editor.history.is_empty());
+        assert!(app.editor.history().is_empty());
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -10537,7 +10532,7 @@ mod tests {
         // A missing or unknown provider opens the picker filtered by the text.
         run_command_for_test(&mut app, &session, &mut resources, "accounts add codex");
         assert_eq!(picker(&app).unwrap().1, AccountAction::Add);
-        assert_eq!(app.picker.as_ref().unwrap().list.filter, "codex");
+        assert_eq!(app.picker.as_ref().unwrap().list.filter(), "codex");
         assert!(app.pending_account_add.is_none());
 
         // Selecting a provider in manage mode lists its accounts with an add row.

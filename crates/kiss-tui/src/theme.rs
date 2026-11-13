@@ -138,6 +138,15 @@ impl Theme {
         })
     }
 
+    /// The built-in theme a `theme` setting names: "light", or dark for
+    /// anything else.
+    pub fn named(name: Option<&str>) -> Theme {
+        match name {
+            Some("light") => Theme::light(),
+            _ => Theme::dark(),
+        }
+    }
+
     pub fn dark() -> Theme {
         let mut colors = BTreeMap::new();
         let mut set = |k: &str, c: Color| colors.insert(k.to_string(), c);

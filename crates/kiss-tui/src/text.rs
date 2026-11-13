@@ -8,47 +8,12 @@ pub const CURSOR_MARKER: &str = "\x1b_pi:c\x07";
 
 /// Display width of a string, ignoring ANSI escape sequences.
 pub fn display_width(s: &str) -> usize {
-    let bytes = s.as_bytes();
-    let mut width = 0usize;
-    let mut visible_start = 0usize;
-    let mut index = 0usize;
-    while index < bytes.len() {
-        if bytes[index] != b'\x1b' {
-            index += 1;
-            continue;
-        }
-
-        width += s[visible_start..index].width();
-        index += 1;
-        match bytes.get(index).copied() {
-            Some(b'[') => {
-                index += 1;
-                while index < bytes.len() {
-                    let byte = bytes[index];
-                    index += 1;
-                    if (0x40..=0x7e).contains(&byte) {
-                        break;
-                    }
-                }
-            }
-            Some(b']' | b'_') => {
-                index += 1;
-                while index < bytes.len() {
-                    if bytes[index] == b'\x07' {
-                        index += 1;
-                        break;
-                    }
-                    if bytes[index] == b'\x1b' && bytes.get(index + 1) == Some(&b'\\') {
-                        index += 2;
-                        break;
-                    }
-                    index += 1;
-                }
-            }
-            Some(_) => index += 1,
-            None => {}
-        }
-        visible_start = index;
+    let mut width = 0;
+    let mut visible_start = 0;
+    while let Some(offset) = s[visible_start..].find('\x1b') {
+        let start = visible_start + offset;
+        width += s[visible_start..start].width();
+        visible_start = ansi_sequence_end(s, start);
     }
     width + s[visible_start..].width()
 }
@@ -56,37 +21,54 @@ pub fn display_width(s: &str) -> usize {
 /// Remove ANSI CSI/OSC escape sequences.
 pub fn strip_ansi(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
-    let mut chars = s.chars().peekable();
-    while let Some(c) = chars.next() {
-        if c != '\x1b' {
-            out.push(c);
-            continue;
-        }
-        match chars.peek() {
-            Some('[') => {
-                chars.next();
-                for c in chars.by_ref() {
-                    if ('\x40'..='\x7e').contains(&c) {
-                        break;
-                    }
-                }
+    let mut visible_start = 0;
+    while let Some(offset) = s[visible_start..].find('\x1b') {
+        let start = visible_start + offset;
+        out.push_str(&s[visible_start..start]);
+        visible_start = ansi_sequence_end(s, start);
+    }
+    out.push_str(&s[visible_start..]);
+    out
+}
+
+/// The SGR styles and open hyperlink in effect at a point in styled text,
+/// so a wrapped line can close them at its end and reopen them on the next.
+#[derive(Default)]
+struct StyleState {
+    sgr: String,
+    hyperlink: Option<String>,
+}
+
+impl StyleState {
+    fn track(&mut self, sequence: &str) {
+        if sequence.starts_with("\x1b[") && sequence.ends_with('m') {
+            if matches!(sequence, "\x1b[m" | "\x1b[0m") {
+                self.sgr.clear();
+            } else {
+                self.sgr.push_str(sequence);
             }
-            Some(']' | '_') => {
-                chars.next();
-                let mut prev = ' ';
-                for c in chars.by_ref() {
-                    if c == '\x07' || (prev == '\x1b' && c == '\\') {
-                        break;
-                    }
-                    prev = c;
-                }
-            }
-            _ => {
-                chars.next();
-            }
+        } else if let Some(target) = osc8_target(sequence) {
+            self.hyperlink = (!target.is_empty()).then(|| sequence.to_string());
         }
     }
-    out
+
+    fn reopen(&self, line: &mut String) {
+        line.push_str(&self.sgr);
+        if let Some(link) = &self.hyperlink {
+            line.push_str(link);
+        }
+    }
+
+    /// Close an open link with the same terminator that opened it.
+    fn close(&self, line: &mut String) {
+        if let Some(link) = &self.hyperlink {
+            line.push_str(if link.ends_with('\x07') {
+                "\x1b]8;;\x07"
+            } else {
+                "\x1b]8;;\x1b\\"
+            });
+        }
+    }
 }
 
 /// Wrap plain text to `width` columns on grapheme boundaries, preferring
@@ -180,17 +162,13 @@ fn wrap_styled_words(text: &str, width: usize) -> Vec<String> {
     }
 
     let mut sequence_index = 0;
-    let mut sgr = String::new();
-    let mut hyperlink: Option<String> = None;
+    let mut style = StyleState::default();
     wrap_plain_text_inner(&masked, width, true)
         .into_iter()
         .map(|line| {
             let mut rendered = String::new();
             if sequence_index > 0 {
-                rendered.push_str(&sgr);
-                if let Some(link) = &hyperlink {
-                    rendered.push_str(link);
-                }
+                style.reopen(&mut rendered);
             }
             for character in line.chars() {
                 if character != '\0' {
@@ -200,19 +178,9 @@ fn wrap_styled_words(text: &str, width: usize) -> Vec<String> {
                 let sequence = sequences[sequence_index];
                 sequence_index += 1;
                 rendered.push_str(sequence);
-                if sequence.starts_with("\x1b[") && sequence.ends_with('m') {
-                    if matches!(sequence, "\x1b[m" | "\x1b[0m") {
-                        sgr.clear();
-                    } else {
-                        sgr.push_str(sequence);
-                    }
-                } else if let Some(target) = osc8_target(sequence) {
-                    hyperlink = (!target.is_empty()).then(|| sequence.to_string());
-                }
+                style.track(sequence);
             }
-            if hyperlink.is_some() {
-                rendered.push_str("\x1b]8;;\x1b\\");
-            }
+            style.close(&mut rendered);
             rendered
         })
         .collect()
@@ -228,18 +196,15 @@ pub fn wrap_terminal_text(text: &str, width: usize) -> Vec<String> {
     let mut lines = Vec::new();
     let mut line = String::new();
     let mut line_width = 0;
-    let mut sgr = String::new();
-    let mut hyperlink: Option<String> = None;
+    let mut style = StyleState::default();
     let mut index = 0;
 
     while index < text.len() {
         if text[index..].starts_with(CURSOR_MARKER) {
             if line_width == width {
-                push_terminal_line(&mut lines, &mut line, hyperlink.is_some());
-                line.push_str(&sgr);
-                if let Some(link) = &hyperlink {
-                    line.push_str(link);
-                }
+                style.close(&mut line);
+                lines.push(std::mem::take(&mut line));
+                style.reopen(&mut line);
                 line_width = 0;
             }
             line.push_str(CURSOR_MARKER);
@@ -251,15 +216,7 @@ pub fn wrap_terminal_text(text: &str, width: usize) -> Vec<String> {
             let end = ansi_sequence_end(text, index);
             let sequence = &text[index..end];
             line.push_str(sequence);
-            if sequence.starts_with("\x1b[") && sequence.ends_with('m') {
-                if matches!(sequence, "\x1b[m" | "\x1b[0m") {
-                    sgr.clear();
-                } else {
-                    sgr.push_str(sequence);
-                }
-            } else if let Some(target) = osc8_target(sequence) {
-                hyperlink = (!target.is_empty()).then(|| sequence.to_string());
-            }
+            style.track(sequence);
             index = end;
             continue;
         }
@@ -270,11 +227,9 @@ pub fn wrap_terminal_text(text: &str, width: usize) -> Vec<String> {
             .expect("index is before the end of text");
         let grapheme_width = grapheme.width();
         if line_width > 0 && line_width + grapheme_width > width {
-            push_terminal_line(&mut lines, &mut line, hyperlink.is_some());
-            line.push_str(&sgr);
-            if let Some(link) = &hyperlink {
-                line.push_str(link);
-            }
+            style.close(&mut line);
+            lines.push(std::mem::take(&mut line));
+            style.reopen(&mut line);
             line_width = 0;
         }
         line.push_str(grapheme);
@@ -284,13 +239,6 @@ pub fn wrap_terminal_text(text: &str, width: usize) -> Vec<String> {
 
     lines.push(line);
     lines
-}
-
-fn push_terminal_line(lines: &mut Vec<String>, line: &mut String, close_hyperlink: bool) {
-    if close_hyperlink {
-        line.push_str("\x1b]8;;\x07");
-    }
-    lines.push(std::mem::take(line));
 }
 
 pub(crate) fn ansi_sequence_end(text: &str, start: usize) -> usize {
@@ -321,7 +269,8 @@ pub(crate) fn ansi_sequence_end(text: &str, start: usize) -> usize {
                 index += 1;
             }
         }
-        Some(_) => index += 1,
+        // Any other escape covers the one character after ESC.
+        Some(_) => index += text[index..].chars().next().map_or(1, char::len_utf8),
         None => {}
     }
     index
@@ -374,6 +323,12 @@ pub fn fit_to_width(text: &str, width: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_escape_before_a_multibyte_character_is_one_sequence() {
+        assert_eq!(display_width("a\x1bé b"), 3);
+        assert_eq!(strip_ansi("a\x1bé b"), "a b");
+    }
 
     #[test]
     fn ansi_stripped_from_width() {
