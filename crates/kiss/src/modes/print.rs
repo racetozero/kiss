@@ -26,9 +26,12 @@ pub async fn run(args: &Args) -> Result<i32> {
                 } = *agent_event
                 {
                     *truncated.lock().unwrap() = a.stop_reason == kiss_ai::StopReason::Length;
+                    // The last assistant message decides the outcome, so a
+                    // failed attempt that a retry then answered is not an error.
                     if a.stop_reason == kiss_ai::StopReason::Error {
                         *error.lock().unwrap() = Some(a.error_message.clone().unwrap_or_default());
                     } else {
+                        *error.lock().unwrap() = None;
                         let text = a.text();
                         if !text.is_empty() {
                             final_text.lock().unwrap().push(text);
