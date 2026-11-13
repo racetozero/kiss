@@ -449,9 +449,21 @@ impl SessionManager {
 
     // ----- appends ------------------------------------------------------
 
+    /// An entry id that neither this session nor `pending` (entries about
+    /// to be added) uses. Ids are 8 hex digits, as in pi, so a collision is
+    /// rare, but it would make a parent id point at two entries.
+    fn unused_entry_id(&self, pending: &[SessionEntry]) -> String {
+        loop {
+            let id = new_entry_id();
+            if !self.index.contains_key(&id) && !pending.iter().any(|entry| entry.id() == id) {
+                return id;
+            }
+        }
+    }
+
     fn make_base(&self) -> EntryBase {
         EntryBase {
-            id: new_entry_id(),
+            id: self.unused_entry_id(&[]),
             parent_id: self.leaf_id.clone(),
             timestamp: iso_now(),
         }
@@ -474,7 +486,7 @@ impl SessionManager {
         for message in messages {
             let entry = SessionEntry::Message {
                 base: EntryBase {
-                    id: new_entry_id(),
+                    id: self.unused_entry_id(&entries),
                     parent_id: parent_id.clone(),
                     timestamp: iso_now(),
                 },
@@ -486,7 +498,7 @@ impl SessionManager {
         }
         entries.push(SessionEntry::SessionInfo {
             base: EntryBase {
-                id: new_entry_id(),
+                id: self.unused_entry_id(&entries),
                 parent_id,
                 timestamp: iso_now(),
             },
