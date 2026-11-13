@@ -202,13 +202,6 @@ pub async fn login_browser(
     }
 }
 
-pub async fn refresh(
-    credential: &OAuthCredential,
-    _config: &OAuthConfig,
-) -> Result<OAuthCredential> {
-    Ok(credential.clone())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

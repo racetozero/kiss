@@ -301,7 +301,7 @@ impl Registry {
 
     /// Load Cursor's authenticated account model catalog. Keep the current
     /// catalog if discovery fails, and let the caller report the error.
-    pub async fn refresh_cursor(&mut self) -> Result<()> {
+    async fn refresh_cursor(&mut self) -> Result<()> {
         let Some(access_token) =
             crate::auth::resolve_api_key_async("cursor", &self.declared_keys).await?
         else {

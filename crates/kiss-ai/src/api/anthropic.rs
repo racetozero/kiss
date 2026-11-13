@@ -304,7 +304,7 @@ fn handle_event(event: &SseEvent, builder: &mut PartialBuilder, state: &mut Deco
         }
         "content_block_delta" => {
             let provider_idx = data["index"].as_u64().unwrap_or(0);
-            let Some(&(idx, kind)) = state.index_map.get(&provider_idx) else {
+            let Some(&(idx, _)) = state.index_map.get(&provider_idx) else {
                 return Flow::Continue;
             };
             let delta = &data["delta"];
@@ -331,7 +331,6 @@ fn handle_event(event: &SseEvent, builder: &mut PartialBuilder, state: &mut Deco
                 }
                 _ => {}
             }
-            let _ = kind;
             Flow::Continue
         }
         "content_block_stop" => {
