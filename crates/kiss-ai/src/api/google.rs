@@ -222,7 +222,7 @@ fn handle_chunk(
                     builder.end_text(idx);
                 }
                 let name = fc["name"].as_str().unwrap_or_default().to_string();
-                let id = format!("call_{}", uuid_ish());
+                let id = format!("call_{}", uuid::Uuid::new_v4().simple());
                 let idx = builder.begin_tool_call(id, name);
                 if let Some(sig) = part["thoughtSignature"].as_str() {
                     builder.set_tool_thought_signature(idx, sig.to_string());
@@ -248,15 +248,6 @@ fn handle_chunk(
         }
     }
     Ok(())
-}
-
-fn uuid_ish() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.subsec_nanos())
-        .unwrap_or(0);
-    format!("{:x}{:08x}", chrono::Utc::now().timestamp_micros(), nanos)
 }
 
 fn build_request(model: &Model, context: &Context, options: &StreamOptions) -> Value {
@@ -467,6 +458,34 @@ fn sanitize_schema(schema: &Value, name_map: bool) -> Value {
 mod vertex_tests {
     use super::*;
     use std::collections::BTreeMap;
+
+    #[test]
+    fn calls_in_one_chunk_get_different_ids() {
+        let model = crate::Registry::from_builtin()
+            .provider_default("google")
+            .unwrap();
+        let (sink, _events) = crate::event::EventStream::channel();
+        let mut builder = PartialBuilder::new(&model, sink);
+        let call = json!({"functionCall": {"name": "read", "args": {}}});
+        let chunk = json!({"candidates": [{"content": {"parts": [call, call]}}]});
+        handle_chunk(
+            &chunk.to_string(),
+            &mut builder,
+            &mut DecodeState::default(),
+        )
+        .unwrap();
+        let ids: Vec<&str> = builder
+            .message
+            .content
+            .iter()
+            .filter_map(|block| match block {
+                ContentBlock::ToolCall(call) => Some(call.id.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(ids.len(), 2);
+        assert_ne!(ids[0], ids[1]);
+    }
 
     #[test]
     fn tool_schemas_send_const_as_enum_and_keep_property_names() {
