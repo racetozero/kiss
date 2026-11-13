@@ -169,8 +169,18 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
             None => break,
         }
     }
-    // Stream ended without message_stop.
-    builder.finish(state.stop_reason, model);
+    // Some compatible endpoints end after the final message_delta without
+    // message_stop. Without even a stop reason the reply was cut off, and
+    // finishing would hand the agent a half-written tool call.
+    if builder.message.raw_stop_reason.is_some() {
+        builder.finish(state.stop_reason, model);
+    } else {
+        builder.fail(
+            "stream error: the response ended before the provider sent a stop reason",
+            false,
+            model,
+        );
+    }
 }
 
 #[derive(Default)]

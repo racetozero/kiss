@@ -108,7 +108,17 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
     builder.message.raw_stop_reason = state.finish_reason.clone();
     let stop = match state.finish_reason.as_deref() {
         Some("MAX_TOKENS") => StopReason::Length,
-        Some("STOP") | None => StopReason::Stop,
+        Some("STOP") => StopReason::Stop,
+        // The last chunk carries finishReason, so its absence means the
+        // stream was cut off.
+        None => {
+            builder.fail(
+                "stream error: the response ended before the provider sent a finish reason",
+                false,
+                model,
+            );
+            return;
+        }
         Some(other) => {
             builder.fail(format!("generation stopped: {other}"), false, model);
             return;
