@@ -59,9 +59,11 @@ pub struct SessionManager {
     context_revision: u64,
     file: Option<PathBuf>,
     append_file: Option<File>,
-    /// Entry lines that a failed write left out of the file. The next
-    /// append writes them first, so the file keeps every entry in order.
-    unwritten: String,
+    /// Why the last write failed, while the file is behind the session in
+    /// memory. The next append rewrites the whole file to catch up.
+    save_error: Option<String>,
+    /// Whether `take_save_error` already returned the current failure.
+    save_error_reported: bool,
     session_dir: PathBuf,
     cwd: PathBuf,
 }
@@ -130,7 +132,8 @@ impl SessionManager {
             context_revision: 0,
             file: None,
             append_file: None,
-            unwritten: String::new(),
+            save_error: None,
+            save_error_reported: false,
             session_dir: default_session_dir(),
             cwd: cwd.to_path_buf(),
         }
@@ -174,7 +177,8 @@ impl SessionManager {
             context_revision: 0,
             file: Some(path.to_path_buf()),
             append_file: None,
-            unwritten: String::new(),
+            save_error: None,
+            save_error_reported: false,
             session_dir: path
                 .parent()
                 .and_then(|p| p.parent())
@@ -508,26 +512,49 @@ impl SessionManager {
         self.append_entries(entries)
     }
 
-    /// Add entries to the session. They are always part of the live
-    /// session; an error means only that the file is behind, and the next
-    /// successful append catches it up.
+    /// Add entries to the session. They are part of the live session even
+    /// when the file cannot be written: the failure is kept for
+    /// `take_save_error`, and the next append rewrites the whole file, so a
+    /// partly written line never stays in it. A usage entry does not move the
+    /// leaf, so a request that ends during a turn or a tree navigation cannot
+    /// change the conversation path.
     fn append_entries(&mut self, entries: Vec<SessionEntry>) -> Result<()> {
+        let mut lines = String::new();
         for entry in &entries {
-            self.unwritten.push_str(&serde_json::to_string(&entry)?);
-            self.unwritten.push('\n');
+            lines.push_str(&serde_json::to_string(&entry)?);
+            lines.push('\n');
         }
         for entry in entries {
-            self.leaf_id = Some(entry.id().to_string());
+            if !matches!(entry, SessionEntry::Usage { .. }) {
+                self.leaf_id = Some(entry.id().to_string());
+            }
             self.insert_entry(entry);
         }
-        if !self.unwritten.is_empty() {
-            let lines = std::mem::take(&mut self.unwritten);
-            if let Err(error) = self.append_lines(&lines) {
-                self.unwritten = lines;
-                return Err(error);
+        let written = if self.save_error.is_some() {
+            self.rewrite_file()
+        } else if lines.is_empty() {
+            Ok(())
+        } else {
+            self.append_lines(&lines)
+        };
+        match written {
+            Ok(()) => {
+                self.save_error = None;
+                self.save_error_reported = false;
             }
+            Err(error) => self.save_error = Some(format!("{error:#}")),
         }
         Ok(())
+    }
+
+    /// The reason the session file is behind, once per failure, for the
+    /// owner to report. Later appends retry the write.
+    pub fn take_save_error(&mut self) -> Option<String> {
+        if self.save_error_reported {
+            return None;
+        }
+        self.save_error_reported = self.save_error.is_some();
+        self.save_error.clone()
     }
 
     pub fn append_model_change(&mut self, provider: &str, model_id: &str) -> Result<String> {
@@ -702,8 +729,6 @@ impl SessionManager {
         temporary.write_all(out.as_bytes())?;
         temporary.as_file().sync_all()?;
         temporary.persist(&path).map_err(|error| error.error)?;
-        // The file now holds every entry, including any a failed append left out.
-        self.unwritten.clear();
         self.reopen_append_file()?;
         Ok(())
     }
@@ -1445,8 +1470,10 @@ mod tests {
         let path = m.session_file().unwrap().to_path_buf();
         // A file where the session directory should be makes the write fail.
         std::fs::write(&sessions, "").unwrap();
-        assert!(m.append_message(AgentMessage::user("first")).is_err());
+        m.append_message(AgentMessage::user("first")).unwrap();
         assert_eq!(m.entries().len(), 1);
+        assert!(m.take_save_error().is_some());
+        assert!(m.take_save_error().is_none(), "a failure is reported once");
 
         std::fs::remove_file(&sessions).unwrap();
         m.append_message(AgentMessage::user("second")).unwrap();

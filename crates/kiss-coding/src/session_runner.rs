@@ -712,10 +712,12 @@ impl AgentSession {
     /// Report a failed session-file write. The manager keeps the entries, so
     /// the run continues with them.
     fn report_save<T>(&self, result: anyhow::Result<T>) {
-        if let Err(error) = result {
-            (self.sink)(SessionEvent::SaveFailed {
-                error: format!("{error:#}"),
-            });
+        let error = match result {
+            Err(error) => Some(format!("{error:#}")),
+            Ok(_) => self.manager.lock().unwrap().take_save_error(),
+        };
+        if let Some(error) = error {
+            (self.sink)(SessionEvent::SaveFailed { error });
         }
     }
 

@@ -2655,8 +2655,10 @@ fn handle_command_event(
                 .find(|cell| matches!(cell, Cell::BashExecution { .. }))
             {
                 output.push_str(&chunk);
-                if output.len() > 50_000 {
-                    output.truncate(output.floor_char_boundary(50_000));
+                // While it runs, show the tail, as the finished result keeps.
+                if output.len() > kiss_sdk::shell::MAX_INLINE_BYTES {
+                    let start = output.ceil_char_boundary(output.len() - kiss_sdk::shell::MAX_INLINE_BYTES);
+                    output.drain(..start);
                 }
             }
         }
@@ -2665,6 +2667,17 @@ fn handle_command_event(
             file_search.refresh_all();
             refresh_git_branch(app, session);
             app.command = None;
+            // Show what the session recorded, including where the full
+            // output was saved when it was long.
+            if let Ok(result) = &result
+                && let Some(Cell::BashExecution { output, .. }) = app
+                    .cells
+                    .iter_mut()
+                    .rev()
+                    .find(|cell| matches!(cell, Cell::BashExecution { .. }))
+            {
+                output.clone_from(&result.output);
+            }
             match result {
                 Ok(result) if result.cancelled => {}
                 Ok(result) if result.exit_code != Some(0) => {

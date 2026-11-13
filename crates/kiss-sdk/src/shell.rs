@@ -16,7 +16,7 @@ use tokio_util::sync::CancellationToken;
 
 /// Bytes of output kept inline. Anything beyond this is written to a file and
 /// the caller is told where, so a `find /` cannot exhaust memory in the client.
-const MAX_INLINE_BYTES: usize = 64 * 1024;
+pub const MAX_INLINE_BYTES: usize = 64 * 1024;
 
 /// Callback receiving each newly read chunk of combined output.
 pub type UpdateSink = Arc<dyn Fn(String) + Send + Sync>;
