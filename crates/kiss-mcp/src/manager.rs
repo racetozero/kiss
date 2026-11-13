@@ -214,7 +214,10 @@ impl McpManager {
             let cached = cache.servers.get(name);
             let state = if server.disabled {
                 ServerState::Disabled
-            } else if matches!(*runtime, Runtime::Connected { .. }) {
+            } else if runtime
+                .client()
+                .is_ok_and(|client| !client.peer().is_transport_closed())
+            {
                 ServerState::Connected
             } else if matches!(*runtime, Runtime::Failed(_)) {
                 ServerState::Failed
@@ -559,6 +562,14 @@ impl McpManager {
             && runtime
                 .last_used()
                 .is_some_and(|last| last.elapsed() >= limit)
+        {
+            runtime.disconnect_client().await;
+        }
+        // A server whose process exited or whose stream closed is no longer
+        // connected, whatever the runtime last recorded: start it again.
+        if runtime
+            .client()
+            .is_ok_and(|client| client.peer().is_transport_closed())
         {
             runtime.disconnect_client().await;
         }
@@ -1067,6 +1078,68 @@ mod tests {
         );
         let description = crate::McpTool::new(manager).description();
         assert!(description.ends_with("\nServer `demo`: Team tickets and incidents"));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn a_server_whose_process_exited_is_started_again() {
+        // The fixture answers one tool list and then exits.
+        let script = r#"
+while IFS= read -r line; do
+  id=$(printf '%s' "$line" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
+  case "$line" in
+    *'"method":"initialize"'*)
+      printf '{"jsonrpc":"2.0","id":%s,"result":{"protocolVersion":"2025-11-25","capabilities":{"tools":{}},"serverInfo":{"name":"stdio-test","version":"1.0.0"}}}\n' "$id"
+      ;;
+    *'"method":"tools/list"'*)
+      printf '{"jsonrpc":"2.0","id":%s,"result":{"tools":[{"name":"echo","inputSchema":{"type":"object"}}]}}\n' "$id"
+      exit 0
+      ;;
+  esac
+done
+"#;
+        let temp = tempfile::tempdir().unwrap();
+        let server = ServerEntry {
+            command: Some("sh".to_string()),
+            args: vec!["-c".to_string(), script.to_string()],
+            ..Default::default()
+        };
+        let manager =
+            McpManager::with_paths(loaded(&temp, server), temp.path().join("cache.json"), None);
+        let cancel = CancellationToken::new();
+        assert_eq!(
+            manager
+                .list_tools(Some("demo"), &cancel)
+                .await
+                .unwrap()
+                .tools
+                .len(),
+            1
+        );
+        let mut closed = false;
+        for _ in 0..100 {
+            let runtime = manager.inner.runtimes["demo"].lock().await;
+            if runtime
+                .client()
+                .is_ok_and(|client| client.peer().is_transport_closed())
+            {
+                closed = true;
+                break;
+            }
+            drop(runtime);
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        assert!(closed, "the fixture process should have exited");
+        assert_eq!(
+            manager
+                .list_tools(Some("demo"), &cancel)
+                .await
+                .unwrap()
+                .tools
+                .len(),
+            1
+        );
+        manager.disconnect_all().await;
     }
 
     #[tokio::test]
