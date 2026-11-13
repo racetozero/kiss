@@ -280,6 +280,7 @@ impl ServerEntry {
 
     pub fn redacted(&self) -> Self {
         let mut copy = self.clone();
+        copy.url = copy.url.as_deref().map(redact_url);
         if copy.bearer_token.is_some() {
             copy.bearer_token = Some("[REDACTED]".to_string());
         }
@@ -346,16 +347,33 @@ fn secure_url(value: &str) -> bool {
 
 fn secret_name(name: &str) -> bool {
     let name = name.to_ascii_lowercase();
-    [
-        "authorization",
-        "cookie",
-        "key",
-        "token",
-        "secret",
-        "password",
-    ]
-    .iter()
-    .any(|part| name.contains(part))
+    ["auth", "cookie", "key", "token", "secret", "password"]
+        .iter()
+        .any(|part| name.contains(part))
+}
+
+/// `value` with the values of secret-looking query parameters replaced by
+/// `[REDACTED]`, for showing a server URL. A value that is not a URL is
+/// returned unchanged.
+pub fn redact_url(value: &str) -> String {
+    let Ok(mut url) = url::Url::parse(value) else {
+        return value.to_string();
+    };
+    let pairs = url
+        .query_pairs()
+        .map(|(name, value)| {
+            let value = if secret_name(&name) {
+                "[REDACTED]".into()
+            } else {
+                value.into_owned()
+            };
+            (name.into_owned(), value)
+        })
+        .collect::<Vec<_>>();
+    if !pairs.is_empty() {
+        url.query_pairs_mut().clear().extend_pairs(pairs);
+    }
+    url.to_string().replace("%5BREDACTED%5D", "[REDACTED]")
 }
 
 fn looks_secret(value: &str) -> bool {

@@ -38,7 +38,7 @@ pub async fn run(command: &McpCommand, trust_override: Option<bool>) -> Result<i
                     let transport = server
                         .url
                         .as_deref()
-                        .map(|url| format!("HTTP {url}"))
+                        .map(|url| format!("HTTP {}", config::redact_url(url)))
                         .unwrap_or_else(|| {
                             format!("stdio {}", server.command.as_deref().unwrap_or(""))
                         });

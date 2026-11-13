@@ -5724,33 +5724,6 @@ fn mcp_state_label(state: &McpPanelState) -> &'static str {
     }
 }
 
-fn redact_mcp_url(value: &str) -> String {
-    let Ok(mut url) = url::Url::parse(value) else {
-        return value.to_string();
-    };
-    let pairs = url
-        .query_pairs()
-        .map(|(name, value)| {
-            let lower = name.to_ascii_lowercase();
-            let secret = ["key", "token", "secret", "auth", "password"]
-                .iter()
-                .any(|part| lower.contains(part));
-            (
-                name.into_owned(),
-                if secret {
-                    "[REDACTED]".into()
-                } else {
-                    value.into_owned()
-                },
-            )
-        })
-        .collect::<Vec<_>>();
-    if !pairs.is_empty() {
-        url.query_pairs_mut().clear().extend_pairs(pairs);
-    }
-    url.to_string().replace("%5BREDACTED%5D", "[REDACTED]")
-}
-
 fn mcp_can_authenticate(server: &McpPanelServer) -> bool {
     server.entry.auth_mode() == Some(kiss_mcp::AuthMode::OAuth)
         || matches!(server.state, McpPanelState::NeedsAuthentication(_))
@@ -5777,7 +5750,7 @@ fn mcp_server_intro(theme: &Theme, server: &McpPanelServer, width: usize) -> Vec
     }
     if let Some(url) = &server.entry.url {
         lines.push(kiss_tui::text::truncate_to_width(
-            &format!("URL:     {}", redact_mcp_url(url)),
+            &format!("URL:     {}", kiss_mcp::config::redact_url(url)),
             width,
         ));
     } else if let Some(command) = &server.entry.command {
@@ -5861,7 +5834,7 @@ fn mcp_error_needs_authentication(error: &str) -> bool {
 fn concise_mcp_error(error: &str, server: &kiss_mcp::ServerEntry) -> String {
     let mut message = error.lines().next().unwrap_or(error).trim().to_string();
     if let Some(url) = &server.url {
-        message = message.replace(url, &redact_mcp_url(url));
+        message = message.replace(url, &kiss_mcp::config::redact_url(url));
     }
     message.chars().take(180).collect()
 }
@@ -9024,7 +8997,8 @@ mod tests {
 
     #[test]
     fn mcp_panel_redacts_url_credentials_and_offers_claude_style_actions() {
-        let redacted = redact_mcp_url("https://example.com/mcp?apiKey=secret&region=ca");
+        let redacted =
+            kiss_mcp::config::redact_url("https://example.com/mcp?apiKey=secret&region=ca");
         assert!(!redacted.contains("secret"));
         assert!(redacted.contains("region=ca"));
 
