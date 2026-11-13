@@ -496,63 +496,6 @@ async fn execute_tool_batch(
     }
 }
 
-#[cfg(feature = "native-tools")]
-async fn execute_parallel_tools(
-    prepared: Vec<PreparedToolCall>,
-    config: &AgentLoopConfig,
-    cancel: CancellationToken,
-    emit: &EventSink,
-) -> Vec<FinalizedCall> {
-    use futures::{StreamExt as _, stream};
-
-    let limit = config.max_concurrent_tools.max(1);
-    let mut finalized = stream::iter(prepared.into_iter().enumerate().map(|(index, prepared)| {
-        let config = config.clone();
-        let cancel = cancel.clone();
-        let emit = emit.clone();
-        async move {
-            let value = match prepared {
-                PreparedToolCall::Immediate(finalized) => finalized,
-                PreparedToolCall::Run {
-                    tool,
-                    tool_call,
-                    args,
-                } => {
-                    if cancel.is_cancelled() {
-                        cancelled_tool_call(tool_call)
-                    } else {
-                        let task_call = tool_call.clone();
-                        match tokio::spawn({
-                            let task_emit = emit.clone();
-                            async move {
-                                run_and_finalize(tool, task_call, args, &config, cancel, &task_emit)
-                                    .await
-                            }
-                        })
-                        .await
-                        {
-                            Ok(value) => value,
-                            // A panicking native tool task must not kill the loop.
-                            Err(join_error) => FinalizedCall::failed(
-                                tool_call,
-                                ToolResult::text(format!("tool task failed: {join_error}")),
-                            ),
-                        }
-                    }
-                }
-            };
-            emit_execution_end(&value, &emit);
-            (index, value)
-        }
-    }))
-    .buffer_unordered(limit)
-    .collect::<Vec<_>>()
-    .await;
-    finalized.sort_unstable_by_key(|(index, _)| *index);
-    finalized.into_iter().map(|(_, value)| value).collect()
-}
-
-#[cfg(not(feature = "native-tools"))]
 async fn execute_parallel_tools(
     prepared: Vec<PreparedToolCall>,
     config: &AgentLoopConfig,
@@ -568,17 +511,14 @@ async fn execute_parallel_tools(
         async move {
             let finalized = match prepared {
                 PreparedToolCall::Immediate(finalized) => finalized,
+                PreparedToolCall::Run { tool_call, .. } if cancel.is_cancelled() => {
+                    cancelled_tool_call(tool_call)
+                }
                 PreparedToolCall::Run {
                     tool,
                     tool_call,
                     args,
-                } => {
-                    if cancel.is_cancelled() {
-                        cancelled_tool_call(tool_call)
-                    } else {
-                        run_and_finalize(tool, tool_call, args, &config, cancel, &emit).await
-                    }
-                }
+                } => run_parallel_call(tool, tool_call, args, config, cancel, emit.clone()).await,
             };
             emit_execution_end(&finalized, &emit);
             (index, finalized)
@@ -590,6 +530,36 @@ async fn execute_parallel_tools(
         .await;
     finalized.sort_unstable_by_key(|(index, _)| *index);
     finalized.into_iter().map(|(_, value)| value).collect()
+}
+
+/// Run one call of a parallel batch. With native tools it runs on its own
+/// task, so a panicking tool fails only its call, not the loop.
+async fn run_parallel_call(
+    tool: DynTool,
+    tool_call: ToolCall,
+    args: Value,
+    config: AgentLoopConfig,
+    cancel: CancellationToken,
+    emit: EventSink,
+) -> FinalizedCall {
+    #[cfg(feature = "native-tools")]
+    {
+        let task_call = tool_call.clone();
+        tokio::spawn(async move {
+            run_and_finalize(tool, task_call, args, &config, cancel, &emit).await
+        })
+        .await
+        .unwrap_or_else(|join_error| {
+            FinalizedCall::failed(
+                tool_call,
+                ToolResult::text(format!("tool task failed: {join_error}")),
+            )
+        })
+    }
+    #[cfg(not(feature = "native-tools"))]
+    {
+        run_and_finalize(tool, tool_call, args, &config, cancel, &emit).await
+    }
 }
 
 fn cancelled_tool_call(tool_call: ToolCall) -> FinalizedCall {
