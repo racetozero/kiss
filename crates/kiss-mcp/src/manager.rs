@@ -319,19 +319,11 @@ impl McpManager {
             Value::Null => JsonObject::new(),
             _ => bail!("MCP tool arguments must be a JSON object"),
         };
-        let runtime = self.runtime(server_name)?;
-        let mut runtime = runtime.lock().await;
-        self.ensure_connected(server_name, &mut runtime).await?;
-        let client = runtime.client()?;
-        let request = client
-            .peer()
-            .call_tool(CallToolRequestParams::new(tool_name.to_string()).with_arguments(arguments));
-        let result =
-            wait_request(request, self.timeout(server_name), cancel, "MCP tool call").await?;
-        runtime.mark_used();
-        drop(runtime);
-        self.schedule_idle_disconnect(server_name);
-        Ok(result)
+        let params = CallToolRequestParams::new(tool_name.to_string()).with_arguments(arguments);
+        self.request(server_name, "MCP tool call", cancel, |peer| async move {
+            peer.call_tool(params).await
+        })
+        .await
     }
 
     pub async fn list_resources(
@@ -339,17 +331,14 @@ impl McpManager {
         server_name: &str,
         cancel: &CancellationToken,
     ) -> Result<Vec<CachedResource>> {
-        let runtime = self.runtime(server_name)?;
-        let mut runtime = runtime.lock().await;
-        self.ensure_connected(server_name, &mut runtime).await?;
-        let client = runtime.client()?;
-        let listed = wait_request(
-            client.peer().list_all_resources(),
-            self.timeout(server_name),
-            cancel,
-            "MCP resource list",
-        )
-        .await?;
+        let listed = self
+            .request(
+                server_name,
+                "MCP resource list",
+                cancel,
+                |peer| async move { peer.list_all_resources().await },
+            )
+            .await?;
         let resources = listed
             .into_iter()
             .map(|resource| CachedResource {
@@ -360,11 +349,8 @@ impl McpManager {
                 mime_type: resource.mime_type,
             })
             .collect::<Vec<_>>();
-        runtime.mark_used();
-        drop(runtime);
         self.update_cache(server_name, |cache| cache.resources = resources.clone())
             .await;
-        self.schedule_idle_disconnect(server_name);
         Ok(resources)
     }
 
@@ -374,22 +360,15 @@ impl McpManager {
         uri: &str,
         cancel: &CancellationToken,
     ) -> Result<Value> {
-        let runtime = self.runtime(server_name)?;
-        let mut runtime = runtime.lock().await;
-        self.ensure_connected(server_name, &mut runtime).await?;
-        let client = runtime.client()?;
-        let result = wait_request(
-            client
-                .peer()
-                .read_resource(ReadResourceRequestParams::new(uri)),
-            self.timeout(server_name),
-            cancel,
-            "MCP resource read",
-        )
-        .await?;
-        runtime.mark_used();
-        drop(runtime);
-        self.schedule_idle_disconnect(server_name);
+        let params = ReadResourceRequestParams::new(uri);
+        let result = self
+            .request(
+                server_name,
+                "MCP resource read",
+                cancel,
+                |peer| async move { peer.read_resource(params).await },
+            )
+            .await?;
         Ok(serde_json::to_value(result)?)
     }
 
@@ -398,17 +377,11 @@ impl McpManager {
         server_name: &str,
         cancel: &CancellationToken,
     ) -> Result<Vec<CachedPrompt>> {
-        let runtime = self.runtime(server_name)?;
-        let mut runtime = runtime.lock().await;
-        self.ensure_connected(server_name, &mut runtime).await?;
-        let client = runtime.client()?;
-        let listed = wait_request(
-            client.peer().list_all_prompts(),
-            self.timeout(server_name),
-            cancel,
-            "MCP prompt list",
-        )
-        .await?;
+        let listed = self
+            .request(server_name, "MCP prompt list", cancel, |peer| async move {
+                peer.list_all_prompts().await
+            })
+            .await?;
         let prompts = listed
             .into_iter()
             .map(|prompt| CachedPrompt {
@@ -419,11 +392,8 @@ impl McpManager {
                 arguments: serde_json::to_value(prompt.arguments).unwrap_or(Value::Null),
             })
             .collect::<Vec<_>>();
-        runtime.mark_used();
-        drop(runtime);
         self.update_cache(server_name, |cache| cache.prompts = prompts.clone())
             .await;
-        self.schedule_idle_disconnect(server_name);
         Ok(prompts)
     }
 
@@ -439,22 +409,15 @@ impl McpManager {
             Value::Null => JsonObject::new(),
             _ => bail!("MCP prompt arguments must be a JSON object"),
         };
-        let runtime = self.runtime(server_name)?;
-        let mut runtime = runtime.lock().await;
-        self.ensure_connected(server_name, &mut runtime).await?;
-        let client = runtime.client()?;
-        let result = wait_request(
-            client
-                .peer()
-                .get_prompt(GetPromptRequestParams::new(prompt_name).with_arguments(arguments)),
-            self.timeout(server_name),
-            cancel,
-            "MCP prompt request",
-        )
-        .await?;
-        runtime.mark_used();
-        drop(runtime);
-        self.schedule_idle_disconnect(server_name);
+        let params = GetPromptRequestParams::new(prompt_name).with_arguments(arguments);
+        let result = self
+            .request(
+                server_name,
+                "MCP prompt request",
+                cancel,
+                |peer| async move { peer.get_prompt(params).await },
+            )
+            .await?;
         Ok(serde_json::to_value(result)?)
     }
 
@@ -475,17 +438,11 @@ impl McpManager {
         server_name: &str,
         cancel: &CancellationToken,
     ) -> Result<Vec<CachedTool>> {
-        let runtime = self.runtime(server_name)?;
-        let mut runtime = runtime.lock().await;
-        self.ensure_connected(server_name, &mut runtime).await?;
-        let client = runtime.client()?;
-        let listed = wait_request(
-            client.peer().list_all_tools(),
-            self.timeout(server_name),
-            cancel,
-            "MCP tool list",
-        )
-        .await?;
+        let listed = self
+            .request(server_name, "MCP tool list", cancel, |peer| async move {
+                peer.list_all_tools().await
+            })
+            .await?;
         let server = &self.inner.config.config.mcp_servers[server_name];
         let tools = listed
             .into_iter()
@@ -498,12 +455,42 @@ impl McpManager {
                 input_schema: Value::Object((*tool.input_schema).clone()),
             })
             .collect::<Vec<_>>();
-        runtime.mark_used();
-        drop(runtime);
         self.update_cache(server_name, |cache| cache.tools = tools.clone())
             .await;
-        self.schedule_idle_disconnect(server_name);
         Ok(tools)
+    }
+
+    /// Send one request to a server: connect if needed, wait under the
+    /// server's timeout and `cancel`, then restart its idle timer.
+    async fn request<T, E, F>(
+        &self,
+        server_name: &str,
+        label: &str,
+        cancel: &CancellationToken,
+        call: impl FnOnce(rmcp::Peer<RoleClient>) -> F,
+    ) -> Result<T>
+    where
+        F: std::future::Future<Output = std::result::Result<T, E>>,
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        let runtime = self.runtime(server_name)?;
+        let mut runtime = runtime.lock().await;
+        self.ensure_connected(server_name, &mut runtime).await?;
+        let peer = runtime.client()?.peer().clone();
+        let result = wait_request(call(peer), self.timeout(server_name), cancel, label).await?;
+        runtime.mark_used();
+        drop(runtime);
+        self.schedule_idle_disconnect(server_name);
+        Ok(result)
+    }
+
+    /// How long a server may sit unused before it is disconnected: its
+    /// `idleTimeout` in minutes (10 by default), or never when its
+    /// lifecycle is "persistent".
+    fn idle_limit(&self, server_name: &str) -> Option<Duration> {
+        let server = &self.inner.config.config.mcp_servers[server_name];
+        (server.lifecycle.as_deref() != Some("persistent"))
+            .then(|| Duration::from_secs(server.idle_timeout.unwrap_or(10).saturating_mul(60)))
     }
 
     async fn update_cache(&self, server_name: &str, update: impl FnOnce(&mut ServerCache)) {
@@ -532,10 +519,11 @@ impl McpManager {
         if server.disabled {
             bail!("MCP server `{server_name}` is disabled")
         }
-        if runtime.last_used().is_some_and(|last| {
-            last.elapsed()
-                >= Duration::from_secs(server.idle_timeout.unwrap_or(10).saturating_mul(60))
-        }) {
+        if let Some(limit) = self.idle_limit(server_name)
+            && runtime
+                .last_used()
+                .is_some_and(|last| last.elapsed() >= limit)
+        {
             runtime.disconnect_client().await;
         }
         if matches!(runtime, Runtime::Connected { .. }) {
@@ -600,11 +588,9 @@ impl McpManager {
     }
 
     fn schedule_idle_disconnect(&self, server_name: &str) {
-        let server = &self.inner.config.config.mcp_servers[server_name];
-        if server.lifecycle.as_deref() == Some("persistent") {
+        let Some(delay) = self.idle_limit(server_name) else {
             return;
-        }
-        let delay = Duration::from_secs(server.idle_timeout.unwrap_or(10).saturating_mul(60));
+        };
         let manager = self.clone();
         let name = server_name.to_string();
         tokio::spawn(async move {
@@ -879,6 +865,23 @@ mod tests {
             sources: BTreeMap::new(),
             paths,
         }
+    }
+
+    #[test]
+    fn only_a_persistent_server_has_no_idle_limit() {
+        let temp = tempfile::tempdir().unwrap();
+        let limit = |lifecycle: Option<&str>| {
+            let server = ServerEntry {
+                command: Some("true".to_string()),
+                lifecycle: lifecycle.map(str::to_string),
+                idle_timeout: Some(2),
+                ..Default::default()
+            };
+            McpManager::with_paths(loaded(&temp, server), temp.path().join("cache.json"), None)
+                .idle_limit("demo")
+        };
+        assert_eq!(limit(None), Some(Duration::from_secs(120)));
+        assert_eq!(limit(Some("persistent")), None);
     }
 
     #[tokio::test]
