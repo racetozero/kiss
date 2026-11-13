@@ -2,7 +2,7 @@
 
 use crate::config::{AuthMode, LoadedConfig, ServerEntry};
 use crate::oauth;
-use anyhow::{Context as _, Result, bail};
+use anyhow::{Context as _, Result, anyhow, bail};
 use rmcp::model::{
     CallToolRequestParams, ClientInfo, GetPromptRequestParams, JsonObject,
     ReadResourceRequestParams,
@@ -27,6 +27,16 @@ const CACHE_VERSION: u32 = 1;
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(60);
 
 type Client = RunningService<RoleClient, ClientInfo>;
+
+/// The tools a list or search found. A server that could not answer is
+/// named in `unavailable` with the reason, so one broken server does not
+/// hide the tools of the others.
+#[derive(Debug, Clone, Default, Serialize, PartialEq)]
+pub struct ToolListing {
+    pub tools: Vec<CachedTool>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub unavailable: BTreeMap<String, String>,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -240,17 +250,35 @@ impl McpManager {
             .collect()
     }
 
+    /// The tools of one server, or of every enabled server. A named server
+    /// that fails is an error; when listing every server, a failing one is
+    /// reported in [`ToolListing::unavailable`] instead.
     pub async fn list_tools(
         &self,
         server_name: Option<&str>,
         cancel: &CancellationToken,
-    ) -> Result<Vec<CachedTool>> {
-        let names = self.server_names(server_name)?;
-        let mut tools = Vec::new();
+    ) -> Result<ToolListing> {
+        self.collect_tools(server_name, self.server_names(server_name)?, cancel)
+            .await
+    }
+
+    async fn collect_tools(
+        &self,
+        server_name: Option<&str>,
+        names: Vec<String>,
+        cancel: &CancellationToken,
+    ) -> Result<ToolListing> {
+        let mut listing = ToolListing::default();
         for name in names {
-            tools.extend(self.refresh_tools(&name, cancel).await?);
+            match self.refresh_tools(&name, cancel).await {
+                Ok(tools) => listing.tools.extend(tools),
+                Err(error) if server_name.is_none() && !cancel.is_cancelled() => {
+                    listing.unavailable.insert(name, format!("{error:#}"));
+                }
+                Err(error) => return Err(error),
+            }
         }
-        Ok(tools)
+        Ok(listing)
     }
 
     pub async fn search_tools(
@@ -258,28 +286,23 @@ impl McpManager {
         query: &str,
         server_name: Option<&str>,
         cancel: &CancellationToken,
-    ) -> Result<Vec<CachedTool>> {
-        let names = self.server_names(server_name)?;
-        let mut tools = Vec::new();
+    ) -> Result<ToolListing> {
+        let mut cached = Vec::new();
         let mut missing = Vec::new();
         {
             let cache = self.inner.cache.lock().await;
-            for name in names {
+            for name in self.server_names(server_name)? {
                 if let Some(server) = cache.servers.get(&name) {
-                    tools.extend(server.tools.clone());
+                    cached.extend(server.tools.clone());
                 } else {
                     missing.push(name);
                 }
             }
         }
-        for name in missing {
-            tools.extend(self.refresh_tools(&name, cancel).await?);
-        }
-        Ok(rank_search_results(
-            tools,
-            query,
-            &self.inner.config.config.mcp_servers,
-        ))
+        let mut listing = self.collect_tools(server_name, missing, cancel).await?;
+        cached.append(&mut listing.tools);
+        listing.tools = rank_search_results(cached, query, &self.inner.config.config.mcp_servers);
+        Ok(listing)
     }
 
     pub async fn describe_tool(
@@ -319,6 +342,13 @@ impl McpManager {
             Value::Null => JsonObject::new(),
             _ => bail!("MCP tool arguments must be a JSON object"),
         };
+        if let Some(server) = self.inner.config.config.mcp_servers.get(server_name)
+            && !tool_is_enabled(server, tool_name)
+        {
+            bail!(
+                "MCP tool `{server_name}/{tool_name}` is turned off by this server's includeTools or excludeTools setting. Call a tool that `list` shows, or change that setting in the MCP configuration."
+            )
+        }
         let params = CallToolRequestParams::new(tool_name.to_string()).with_arguments(arguments);
         self.request(server_name, "MCP tool call", cancel, |peer| async move {
             peer.call_tool(params).await
@@ -475,9 +505,15 @@ impl McpManager {
     {
         let runtime = self.runtime(server_name)?;
         let mut runtime = runtime.lock().await;
-        self.ensure_connected(server_name, &mut runtime).await?;
-        let peer = runtime.client()?.peer().clone();
-        let result = wait_request(call(peer), self.timeout(server_name), cancel, label).await?;
+        let outcome = match self.ensure_connected(server_name, &mut runtime).await {
+            Ok(()) => {
+                let peer = runtime.client()?.peer().clone();
+                wait_request(call(peer), self.timeout(server_name), cancel, label).await
+            }
+            Err(error) => Err(error),
+        };
+        let server = &self.inner.config.config.mcp_servers[server_name];
+        let result = outcome.map_err(|error| anyhow!(redact(server, &format!("{error:#}"))))?;
         runtime.mark_used();
         drop(runtime);
         self.schedule_idle_disconnect(server_name);
@@ -540,7 +576,7 @@ impl McpManager {
                 Ok(())
             }
             Err(error) => {
-                *runtime = Runtime::Failed(error.to_string());
+                *runtime = Runtime::Failed(redact(server, &error.to_string()));
                 Err(error)
             }
         }
@@ -753,6 +789,41 @@ fn tool_is_enabled(server: &ServerEntry, name: &str) -> bool {
         && !server.exclude_tools.iter().any(|item| item == name)
 }
 
+/// Hide in `text` the secret values a server's configuration expands
+/// (`${NAME}` references, `bearerTokenEnv`, the bearer token), so an error
+/// that quotes a URL or a header shows the reference, not the secret.
+fn redact(server: &ServerEntry, text: &str) -> String {
+    let config = serde_json::to_string(server).unwrap_or_default();
+    let mut secrets: Vec<(String, String)> = config
+        .split("${")
+        .skip(1)
+        .filter_map(|rest| rest.split_once('}'))
+        .map(|(name, _)| name)
+        .chain(server.bearer_token_env.as_deref())
+        .map(|name| {
+            (
+                format!("${{{name}}}"),
+                std::env::var(name).unwrap_or_default(),
+            )
+        })
+        .chain(
+            server
+                .bearer_token
+                .iter()
+                .map(|token| ("<bearer token>".to_string(), expand_env(token))),
+        )
+        // Short values such as `1` or `true` are not secrets, and replacing
+        // them would garble the message.
+        .filter(|(_, value)| value.len() >= 8)
+        .collect();
+    secrets.sort_by_key(|(_, value)| std::cmp::Reverse(value.len()));
+    secrets
+        .into_iter()
+        .fold(text.to_string(), |text, (name, value)| {
+            text.replace(&value, &name)
+        })
+}
+
 fn expand_env(value: &str) -> String {
     let mut output = String::with_capacity(value.len());
     let mut rest = value;
@@ -865,6 +936,47 @@ mod tests {
             sources: BTreeMap::new(),
             paths,
         }
+    }
+
+    #[tokio::test]
+    async fn an_excluded_tool_cannot_be_called_and_a_broken_server_does_not_fail_the_list() {
+        let temp = tempfile::tempdir().unwrap();
+        let server = ServerEntry {
+            command: Some(temp.path().join("missing-server").display().to_string()),
+            exclude_tools: vec!["echo".into()],
+            ..Default::default()
+        };
+        let manager =
+            McpManager::with_paths(loaded(&temp, server), temp.path().join("cache.json"), None);
+        let cancel = CancellationToken::new();
+        let error = manager
+            .call_tool("demo", "echo", Value::Null, &cancel)
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("excludeTools"), "{error}");
+
+        let listing = manager.list_tools(None, &cancel).await.unwrap();
+        assert!(listing.tools.is_empty());
+        assert!(listing.unavailable.contains_key("demo"), "{listing:?}");
+        assert!(manager.list_tools(Some("demo"), &cancel).await.is_err());
+    }
+
+    #[test]
+    fn errors_show_the_reference_instead_of_the_expanded_secret() {
+        let name = "KISS_MCP_REDACT_TEST_TOKEN";
+        // SAFETY: the variable name is unique to this test.
+        unsafe { std::env::set_var(name, "s3cr3t-value-123") };
+        let server = ServerEntry {
+            url: Some(format!("https://example.test/mcp?key=${{{name}}}")),
+            ..Default::default()
+        };
+        assert_eq!(
+            redact(
+                &server,
+                "error sending request for url (https://example.test/mcp?key=s3cr3t-value-123)"
+            ),
+            format!("error sending request for url (https://example.test/mcp?key=${{{name}}})")
+        );
     }
 
     #[test]
@@ -1017,7 +1129,11 @@ done
             Some(temp.path().join("oauth.json")),
         );
         let cancel = CancellationToken::new();
-        let tools = manager.list_tools(Some("demo"), &cancel).await.unwrap();
+        let tools = manager
+            .list_tools(Some("demo"), &cancel)
+            .await
+            .unwrap()
+            .tools;
         assert_eq!(tools[0].name, "echo");
         let result = manager
             .call_tool("demo", "echo", Value::Null, &cancel)
@@ -1150,7 +1266,11 @@ done
         assert_eq!(requests.load(Ordering::Relaxed), 0);
 
         let cancel = CancellationToken::new();
-        let tools = manager.list_tools(Some("demo"), &cancel).await.unwrap();
+        let tools = manager
+            .list_tools(Some("demo"), &cancel)
+            .await
+            .unwrap()
+            .tools;
         assert_eq!(tools[0].name, "echo");
         let called = manager
             .call_tool("demo", "echo", json!({"value": "hello"}), &cancel)

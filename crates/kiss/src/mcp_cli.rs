@@ -152,7 +152,7 @@ pub async fn run(command: &McpCommand, trust_override: Option<bool>) -> Result<i
             }
             let manager = McpManager::new(config::load(&cwd, trusted)?)?;
             let cancel = CancellationToken::new();
-            let tools = manager.list_tools(Some(name), &cancel).await?;
+            let tools = manager.list_tools(Some(name), &cancel).await?.tools;
             println!(
                 "Connected to MCP server `{name}`. Found {} tools.",
                 tools.len()

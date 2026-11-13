@@ -11,7 +11,7 @@ pub use config::{
     OAuthConfig, OAuthGrantType, ServerEntry,
 };
 pub use manager::{
-    CachedPrompt, CachedResource, CachedTool, McpManager, ServerState, ServerStatus,
+    CachedPrompt, CachedResource, CachedTool, McpManager, ServerState, ServerStatus, ToolListing,
     probe_oauth_challenge,
 };
 pub use oauth::{

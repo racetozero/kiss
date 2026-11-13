@@ -5960,9 +5960,9 @@ async fn check_mcp_server(
     )
     .await
     {
-        Ok(Ok(tools)) => {
+        Ok(Ok(listing)) => {
             server.state = McpPanelState::Connected;
-            server.tools = tools;
+            server.tools = listing.tools;
         }
         Ok(Err(error)) => {
             let message = format!("{error:#}");
