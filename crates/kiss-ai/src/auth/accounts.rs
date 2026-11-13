@@ -7,7 +7,7 @@
 //! `auth.json` entry into the active pool slot ("sync"), so refreshed tokens
 //! survive rotation. Both files are written under the shared auth lock.
 
-use super::{AuthEntry, AuthFile, read_auth_file_at, with_auth_lock, write_auth_file_at};
+use super::{AuthEntry, AuthFile, read_auth_file_at, write_auth_file_at};
 use anyhow::{Context as _, Result, bail};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
@@ -172,11 +172,8 @@ fn auth_path() -> Result<PathBuf> {
     super::auth_file_path().ok_or_else(|| anyhow::anyhow!("no home directory"))
 }
 
-fn read_accounts_at(path: &Path) -> AccountsFile {
-    std::fs::read_to_string(path)
-        .ok()
-        .and_then(|text| serde_json::from_str(&text).ok())
-        .unwrap_or_default()
+fn read_accounts_at(path: &Path) -> Result<AccountsFile> {
+    crate::config_file::read_json(path)
 }
 
 /// Called with the shared auth lock held. A prepared write is replayed before
@@ -190,7 +187,7 @@ pub(super) fn recover_at(auth_path: &Path) -> Result<()> {
     };
     let transaction: AccountsTransaction = serde_json::from_str(&text)
         .context("The pending account update is not valid JSON. Restore it from a valid backup before you change accounts.")?;
-    super::write_json_at(&accounts_path(auth_path), &transaction.accounts)?;
+    crate::config_file::write_private_json(&accounts_path(auth_path), &transaction.accounts)?;
     write_auth_file_at(auth_path, &transaction.auth)?;
     std::fs::remove_file(path)?;
     Ok(())
@@ -198,7 +195,7 @@ pub(super) fn recover_at(auth_path: &Path) -> Result<()> {
 
 fn commit_at(auth_path: &Path, auth: AuthFile, accounts: AccountsFile) -> Result<()> {
     let path = auth_path.with_file_name(".accounts-transaction.json");
-    super::write_json_at(&path, &AccountsTransaction { auth, accounts })?;
+    crate::config_file::write_private_json(&path, &AccountsTransaction { auth, accounts })?;
     recover_at(auth_path)
 }
 
@@ -245,8 +242,8 @@ fn capture_add(provider: &str, auth: &mut AuthFile, pool: &mut Pool) -> bool {
 
 /// Called under the auth lock before an unrelated credential write.
 pub(super) fn recover_add_at(auth_path: &Path) -> Result<()> {
-    let mut auth = read_auth_file_at(auth_path);
-    let mut file = read_accounts_at(&accounts_path(auth_path));
+    let mut auth = read_auth_file_at(auth_path)?;
+    let mut file = read_accounts_at(&accounts_path(auth_path))?;
     let mut changed = false;
     for (provider, pool) in &mut file.pools {
         changed |= capture_add(provider, &mut auth, pool);
@@ -282,11 +279,11 @@ fn update_at<T>(
     f: impl FnOnce(&mut AuthFile, &mut AccountsFile) -> Result<T>,
 ) -> Result<T> {
     let path = accounts_path(auth_path);
-    with_auth_lock(auth_path, || {
+    crate::config_file::with_lock(auth_path, || {
         recover_at(auth_path)?;
         recover_add_at(auth_path)?;
-        let mut auth = read_auth_file_at(auth_path);
-        let mut file = read_accounts_at(&path);
+        let mut auth = read_auth_file_at(auth_path)?;
+        let mut file = read_accounts_at(&path)?;
         sync(&auth, &mut file);
         let result = f(&mut auth, &mut file)?;
         commit_at(auth_path, auth, file)?;
@@ -314,6 +311,7 @@ fn info(provider: &str, pool: &Pool) -> PoolInfo {
 /// The provider's pool, or `None` when the provider has no pool.
 pub fn pool(provider: &str) -> Option<PoolInfo> {
     read_accounts_at(&accounts_path(&auth_path().ok()?))
+        .ok()?
         .pools
         .get(provider)
         .filter(|pool| !pool.accounts.is_empty())
@@ -326,6 +324,7 @@ pub fn pools() -> Vec<PoolInfo> {
         return Vec::new();
     };
     read_accounts_at(&accounts_path(&path))
+        .unwrap_or_default()
         .pools
         .iter()
         .filter(|(_, pool)| !pool.accounts.is_empty())
@@ -375,10 +374,10 @@ fn finish_add_at(
 ) -> Result<Option<AccountInfo>> {
     let _add_lock = lock_add_at(auth_path, provider, false)?;
     let path = accounts_path(auth_path);
-    let result = with_auth_lock(auth_path, || {
+    let result = crate::config_file::with_lock(auth_path, || {
         recover_at(auth_path)?;
-        let mut auth = read_auth_file_at(auth_path);
-        let mut file = read_accounts_at(&path);
+        let mut auth = read_auth_file_at(auth_path)?;
+        let mut file = read_accounts_at(&path)?;
         let pool = file.pools.entry(provider.to_string()).or_default();
         if matches!(pool.add_state, AddState::Ready) {
             // Keep finish_add compatible with callers and files from before
@@ -430,10 +429,10 @@ fn cancel_add_at(auth_path: &Path, provider: &str, owner: Option<u32>) -> Result
         }
         Err(error) => return Err(error),
     };
-    let result = with_auth_lock(auth_path, || {
+    let result = crate::config_file::with_lock(auth_path, || {
         recover_at(auth_path)?;
-        let mut auth = read_auth_file_at(auth_path);
-        let mut file = read_accounts_at(&accounts_path(auth_path));
+        let mut auth = read_auth_file_at(auth_path)?;
+        let mut file = read_accounts_at(&accounts_path(auth_path))?;
         if let Some(pool) = file.pools.get_mut(provider)
             && !matches!(pool.add_state, AddState::Ready)
             && owner.is_none_or(|expected| match pool.add_state {
@@ -690,13 +689,13 @@ mod tests {
     }
 
     fn active_secret(auth_path: &Path, provider: &str) -> String {
-        read_auth_file_at(auth_path).entries[provider]
+        read_auth_file_at(auth_path).unwrap().entries[provider]
             .access_token()
             .to_string()
     }
 
     fn pooled(auth_path: &Path, provider: &str) -> PoolInfo {
-        let file = read_accounts_at(&accounts_path(auth_path));
+        let file = read_accounts_at(&accounts_path(auth_path)).unwrap();
         info(provider, &file.pools[provider])
     }
 
@@ -752,12 +751,12 @@ mod tests {
     #[test]
     fn a_prepared_account_write_is_recovered_before_another_auth_write() {
         let (_directory, auth_path) = three_accounts();
-        let mut auth = read_auth_file_at(&auth_path);
-        let mut file = read_accounts_at(&accounts_path(&auth_path));
+        let mut auth = read_auth_file_at(&auth_path).unwrap();
+        let mut file = read_accounts_at(&accounts_path(&auth_path)).unwrap();
         file.pools.get_mut("openai-codex").unwrap().active = 1;
         auth.entries.insert("openai-codex".into(), oauth("two"));
         let journal = auth_path.with_file_name(".accounts-transaction.json");
-        super::super::write_json_at(
+        crate::config_file::write_private_json(
             &journal,
             &AccountsTransaction {
                 auth,
@@ -768,7 +767,8 @@ mod tests {
         // Only the first file of the pair was replaced before the process ended.
         let transaction: AccountsTransaction =
             serde_json::from_slice(&std::fs::read(&journal).unwrap()).unwrap();
-        super::super::write_json_at(&accounts_path(&auth_path), &transaction.accounts).unwrap();
+        crate::config_file::write_private_json(&accounts_path(&auth_path), &transaction.accounts)
+            .unwrap();
         login(&auth_path, "anthropic", "unrelated");
         assert_eq!(active_secret(&auth_path, "openai-codex"), "two");
         activate_at(&auth_path, "openai-codex", 0).unwrap();
@@ -915,9 +915,10 @@ mod tests {
         assert!(remove_at(&auth_path, "openai-codex", 5).is_err());
 
         assert!(forget_at(&auth_path, "openai-codex").unwrap());
-        assert!(read_auth_file_at(&auth_path).entries.is_empty());
+        assert!(read_auth_file_at(&auth_path).unwrap().entries.is_empty());
         assert!(
             read_accounts_at(&accounts_path(&auth_path))
+                .unwrap()
                 .pools
                 .is_empty()
         );

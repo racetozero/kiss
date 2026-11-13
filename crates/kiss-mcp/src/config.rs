@@ -1,12 +1,9 @@
 //! MCP configuration discovery, merge, validation, and safe writes.
 
 use anyhow::{Context as _, Result, bail};
-use fs2::FileExt as _;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs::{File, OpenOptions};
-use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -422,7 +419,7 @@ pub fn load_with_paths(paths: ConfigPaths, trusted_project: bool) -> Result<Load
                     .push(source.clone());
             }
         }
-        deep_merge(&mut merged, value);
+        kiss_ai::config_file::deep_merge(&mut merged, value);
     }
     let config: McpConfig = serde_json::from_value(merged).context("invalid merged MCP config")?;
     for (name, server) in &config.mcp_servers {
@@ -496,7 +493,7 @@ pub fn set_disabled(
 }
 
 pub fn write_scope(paths: &ConfigPaths, scope: ConfigScope, config: &McpConfig) -> Result<()> {
-    write_json_atomic(paths.write_path(scope), config)
+    write_config(paths.write_path(scope), config)
 }
 
 pub fn validate_server_name(name: &str) -> Result<()> {
@@ -588,71 +585,10 @@ fn strip_json_comments(text: &str) -> String {
     output
 }
 
-fn deep_merge(base: &mut Value, overlay: Value) {
-    match (base, overlay) {
-        (Value::Object(base), Value::Object(overlay)) => {
-            for (key, value) in overlay {
-                match base.get_mut(&key) {
-                    Some(slot) => deep_merge(slot, value),
-                    None => {
-                        base.insert(key, value);
-                    }
-                }
-            }
-        }
-        (slot, value) => *slot = value,
-    }
-}
-
-fn write_json_atomic(path: &Path, config: &McpConfig) -> Result<()> {
-    let parent = path
-        .parent()
-        .with_context(|| format!("MCP config path has no parent: {}", path.display()))?;
-    std::fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
-
-    let lock_path = path.with_extension("json.lock");
-    let lock = secure_open(&lock_path)?;
-    lock.lock_exclusive()
-        .with_context(|| format!("lock {}", lock_path.display()))?;
-
-    let temporary = path.with_extension(format!("json.tmp.{}", std::process::id()));
-    let result = (|| -> Result<()> {
-        let mut file = secure_create(&temporary)?;
-        serde_json::to_writer_pretty(&mut file, config)?;
-        file.write_all(b"\n")?;
-        file.sync_all()?;
-        std::fs::rename(&temporary, path).with_context(|| format!("replace {}", path.display()))?;
-        Ok(())
-    })();
-    let _ = std::fs::remove_file(&temporary);
-    let _ = fs2::FileExt::unlock(&lock);
-    result
-}
-
-fn secure_open(path: &Path) -> Result<File> {
-    let mut options = OpenOptions::new();
-    options.create(true).read(true).write(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt as _;
-        options.mode(0o600);
-    }
-    options
-        .open(path)
-        .with_context(|| format!("open {}", path.display()))
-}
-
-fn secure_create(path: &Path) -> Result<File> {
-    let mut options = OpenOptions::new();
-    options.create(true).truncate(true).write(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt as _;
-        options.mode(0o600);
-    }
-    options
-        .open(path)
-        .with_context(|| format!("create {}", path.display()))
+fn write_config(path: &Path, config: &McpConfig) -> Result<()> {
+    kiss_ai::config_file::with_lock(path, || {
+        kiss_ai::config_file::write_private_json(path, config)
+    })
 }
 
 pub fn all_source_paths(paths: &ConfigPaths, trusted_project: bool) -> BTreeSet<PathBuf> {
@@ -687,7 +623,7 @@ mod tests {
         let mut entry = stdio("global-command");
         entry.args = vec!["one".to_string()];
         global.mcp_servers.insert("demo".to_string(), entry);
-        write_json_atomic(&paths.kiss_global, &global).unwrap();
+        write_config(&paths.kiss_global, &global).unwrap();
         std::fs::create_dir_all(paths.shared_project.parent().unwrap()).unwrap();
         std::fs::write(
             &paths.shared_project,

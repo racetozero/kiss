@@ -8,6 +8,8 @@
 pub mod api;
 #[cfg(feature = "native")]
 pub mod auth;
+#[cfg(feature = "native")]
+pub mod config_file;
 pub mod event;
 #[cfg(feature = "native")]
 pub mod json_salvage;

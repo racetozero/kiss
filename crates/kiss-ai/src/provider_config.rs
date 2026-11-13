@@ -1,11 +1,9 @@
 //! Read and update the custom OpenAI-compatible provider catalog.
 
 use anyhow::{Context as _, Result, bail};
-use fs2::FileExt as _;
 use serde_json::{Map, Value, json};
 use std::collections::BTreeMap;
 use std::fmt;
-use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -260,57 +258,11 @@ fn read_catalog(path: &Path) -> Result<Value> {
 }
 
 fn update_catalog(path: &Path, update: impl FnOnce(&mut Value) -> Result<()>) -> Result<()> {
-    let parent = path
-        .parent()
-        .context("custom model catalog has no parent")?;
-    std::fs::create_dir_all(parent)
-        .with_context(|| format!("create provider directory {}", parent.display()))?;
-    let lock_path = parent.join(".models.json.lock");
-    let mut lock_options = std::fs::OpenOptions::new();
-    lock_options.read(true).write(true).create(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt as _;
-        lock_options.mode(0o600);
-    }
-    let lock = lock_options
-        .open(&lock_path)
-        .with_context(|| format!("open provider lock {}", lock_path.display()))?;
-    lock.lock_exclusive()?;
-
-    let result = (|| {
+    crate::config_file::with_lock(path, || {
         let mut root = read_catalog(path)?;
         update(&mut root)?;
-        let temporary = parent.join(format!(".models.json.tmp-{}", std::process::id()));
-        let write_result = (|| -> Result<()> {
-            let mut options = std::fs::OpenOptions::new();
-            options.write(true).create_new(true);
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::OpenOptionsExt as _;
-                options.mode(0o600);
-            }
-            let mut file = options.open(&temporary)?;
-            serde_json::to_writer_pretty(&mut file, &root)?;
-            file.write_all(b"\n")?;
-            file.sync_all()?;
-            std::fs::rename(&temporary, path)?;
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt as _;
-                std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
-            }
-            Ok(())
-        })();
-        if write_result.is_err() {
-            let _ = std::fs::remove_file(&temporary);
-        }
-        write_result
-    })();
-    let unlock_result = lock.unlock();
-    result?;
-    unlock_result?;
-    Ok(())
+        crate::config_file::write_private_json(path, &root)
+    })
 }
 
 #[cfg(test)]

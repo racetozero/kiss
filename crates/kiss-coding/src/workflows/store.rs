@@ -129,9 +129,7 @@ pub fn save(
         anyhow::bail!("{} already exists", path.display());
     }
 
-    let temporary = directory.join(format!(".{name}.js.tmp"));
-    std::fs::write(&temporary, source)?;
-    std::fs::rename(&temporary, &path)?;
+    kiss_ai::config_file::write_atomic(&path, source.as_bytes())?;
     Ok(path)
 }
 

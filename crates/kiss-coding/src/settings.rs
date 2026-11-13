@@ -336,23 +336,6 @@ fn read_json(path: &Path) -> Option<Value> {
     serde_json::from_str(&text).ok()
 }
 
-/// Deep-merge `overlay` onto `base` (objects merge, everything else replaces).
-fn deep_merge(base: &mut Value, overlay: Value) {
-    match (base, overlay) {
-        (Value::Object(base_map), Value::Object(overlay_map)) => {
-            for (k, v) in overlay_map {
-                match base_map.get_mut(&k) {
-                    Some(slot) => deep_merge(slot, v),
-                    None => {
-                        base_map.insert(k, v);
-                    }
-                }
-            }
-        }
-        (slot, v) => *slot = v,
-    }
-}
-
 fn merged_settings(mut global: Value, project: Option<Value>) -> Settings {
     let desktop_notifications = global
         .get("desktopNotifications")
@@ -401,7 +384,7 @@ fn merged_settings(mut global: Value, project: Option<Value>) -> Settings {
             combined.extend(entries.iter().cloned());
             project["defaultTools"] = Value::Array(combined);
         }
-        deep_merge(&mut global, project);
+        kiss_ai::config_file::deep_merge(&mut global, project);
     }
     let mut settings: Settings = serde_json::from_value(global).unwrap_or_default();
     // Subagents are a user-level authority choice. A repository must not turn
@@ -559,7 +542,7 @@ mod tests {
     fn deep_merge_nested() {
         let mut base =
             json!({"theme": "dark", "compaction": {"enabled": true, "reserveTokens": 16384}});
-        deep_merge(&mut base, json!({"compaction": {"reserveTokens": 8192}}));
+        kiss_ai::config_file::deep_merge(&mut base, json!({"compaction": {"reserveTokens": 8192}}));
         assert_eq!(base["theme"], "dark");
         assert_eq!(base["compaction"]["enabled"], true);
         assert_eq!(base["compaction"]["reserveTokens"], 8192);

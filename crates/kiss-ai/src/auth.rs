@@ -5,7 +5,6 @@ use crate::ResolvedCredential;
 use anyhow::{Context as _, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 use std::time::SystemTime;
@@ -242,21 +241,18 @@ pub fn auth_file_path() -> Option<PathBuf> {
     crate::paths::agent_dir().map(|dir| dir.join("auth.json"))
 }
 
-fn read_auth_file_at(path: &Path) -> AuthFile {
-    match std::fs::read_to_string(path) {
-        Ok(text) => {
-            let mut auth: AuthFile = serde_json::from_str(&text).unwrap_or_default();
-            // Logins saved under an old provider ID belong to the current ID.
-            // The next write saves them under the current ID.
-            for (old, new) in crate::registry::RENAMED_PROVIDER_IDS {
-                if let Some(entry) = auth.entries.remove(*old) {
-                    auth.entries.entry((*new).into()).or_insert(entry);
-                }
-            }
-            auth
+/// Read `auth.json`. An unreadable or invalid file is an error, so writers
+/// never replace logins they could not parse.
+fn read_auth_file_at(path: &Path) -> Result<AuthFile> {
+    let mut auth: AuthFile = crate::config_file::read_json(path)?;
+    // Logins saved under an old provider ID belong to the current ID.
+    // The next write saves them under the current ID.
+    for (old, new) in crate::registry::RENAMED_PROVIDER_IDS {
+        if let Some(entry) = auth.entries.remove(*old) {
+            auth.entries.entry((*new).into()).or_insert(entry);
         }
-        Err(_) => AuthFile::default(),
     }
+    Ok(auth)
 }
 
 fn auth_file_signature(path: &Path) -> Option<(u64, SystemTime)> {
@@ -271,7 +267,7 @@ fn read_auth_file_cached_at(path: &Path) -> AuthFile {
     if cache.path.as_deref() == Some(path) && cache.signature == signature {
         return cache.value.clone();
     }
-    let value = read_auth_file_at(path);
+    let value = read_auth_file_at(path).unwrap_or_default();
     cache.path = Some(path.to_path_buf());
     cache.signature = signature;
     cache.value = value.clone();
@@ -294,92 +290,19 @@ fn read_auth_file() -> AuthFile {
 }
 
 fn write_auth_file_at(path: &Path, auth: &AuthFile) -> Result<()> {
-    write_json_at(path, auth)?;
+    crate::config_file::write_private_json(path, auth)?;
     update_auth_cache(path, auth);
     Ok(())
-}
-
-/// Atomically replace a private (mode 600) JSON file.
-fn write_json_at<T: Serialize>(path: &Path, value: &T) -> Result<()> {
-    let parent = path
-        .parent()
-        .ok_or_else(|| anyhow::anyhow!("credential path has no parent"))?;
-    std::fs::create_dir_all(parent)
-        .with_context(|| format!("create credential directory {}", parent.display()))?;
-
-    let temp_name = format!(
-        ".{}.tmp-{}-{}",
-        path.file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or("credentials"),
-        std::process::id(),
-        chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
-    );
-    let temp_path = parent.join(temp_name);
-    let result = (|| -> Result<()> {
-        let mut options = std::fs::OpenOptions::new();
-        options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt as _;
-            options.mode(0o600);
-        }
-        let mut file = options
-            .open(&temp_path)
-            .with_context(|| format!("create temporary file {}", temp_path.display()))?;
-        let text = serde_json::to_string_pretty(value)?;
-        file.write_all(text.as_bytes())?;
-        file.write_all(b"\n")?;
-        file.sync_all()?;
-        std::fs::rename(&temp_path, path).with_context(|| format!("replace {}", path.display()))?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt as _;
-            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
-        }
-        Ok(())
-    })();
-    if result.is_err() {
-        let _ = std::fs::remove_file(&temp_path);
-    }
-    result
-}
-
-/// Run `f` while holding the credential lock beside `auth_path`. Every
-/// writer of `auth.json` and `accounts.json` takes this lock.
-fn with_auth_lock<T>(auth_path: &Path, f: impl FnOnce() -> Result<T>) -> Result<T> {
-    let parent = auth_path
-        .parent()
-        .ok_or_else(|| anyhow::anyhow!("auth path has no parent"))?;
-    std::fs::create_dir_all(parent)
-        .with_context(|| format!("create auth directory {}", parent.display()))?;
-    let lock_path = parent.join(".auth.json.lock");
-    let mut options = std::fs::OpenOptions::new();
-    options.read(true).write(true).create(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt as _;
-        options.mode(0o600);
-    }
-    let lock = options
-        .open(&lock_path)
-        .with_context(|| format!("open auth lock {}", lock_path.display()))?;
-    fs2::FileExt::lock_exclusive(&lock)
-        .with_context(|| format!("lock auth file {}", auth_path.display()))?;
-    let result = f()?;
-    fs2::FileExt::unlock(&lock)
-        .with_context(|| format!("unlock auth file {}", auth_path.display()))?;
-    Ok(result)
 }
 
 fn update_auth_file_at<T>(
     path: &Path,
     update: impl FnOnce(&mut AuthFile) -> Result<T>,
 ) -> Result<T> {
-    with_auth_lock(path, || {
+    crate::config_file::with_lock(path, || {
         accounts::recover_at(path)?;
         accounts::recover_add_at(path)?;
-        let mut auth = read_auth_file_at(path);
+        let mut auth = read_auth_file_at(path)?;
         let result = update(&mut auth)?;
         write_auth_file_at(path, &auth)?;
         Ok(result)
@@ -858,14 +781,14 @@ mod tests {
             r#"{"old":"one","detailed":{"key":"two"},"oauth":{"type":"oauth","access":"three","refresh":"four","expires":9,"accountId":"acct"}}"#,
         )
         .unwrap();
-        let auth = read_auth_file_at(&path);
+        let auth = read_auth_file_at(&path).unwrap();
         assert_eq!(auth.entries["old"].access_token(), "one");
         assert_eq!(auth.entries["detailed"].access_token(), "two");
         assert_eq!(auth.entries["oauth"].access_token(), "three");
 
         // An Azure login saved under the old provider ID belongs to `azure`.
         std::fs::write(&path, r#"{"azure-openai-responses":"old-azure"}"#).unwrap();
-        let auth = read_auth_file_at(&path);
+        let auth = read_auth_file_at(&path).unwrap();
         assert_eq!(auth.entries["azure"].access_token(), "old-azure");
         assert!(!auth.entries.contains_key("azure-openai-responses"));
         std::fs::write(
@@ -874,7 +797,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            read_auth_file_at(&path).entries["azure"].access_token(),
+            read_auth_file_at(&path).unwrap().entries["azure"].access_token(),
             "new-azure"
         );
     }
@@ -887,7 +810,7 @@ mod tests {
         auth.entries
             .insert("openai".into(), AuthEntry::Key("secret".into()));
         write_auth_file_at(&path, &auth).unwrap();
-        let saved = read_auth_file_at(&path);
+        let saved = read_auth_file_at(&path).unwrap();
         assert_eq!(saved.entries["openai"].access_token(), "secret");
         assert_eq!(
             std::fs::read_dir(path.parent().unwrap()).unwrap().count(),
@@ -921,6 +844,22 @@ mod tests {
     }
 
     #[test]
+    fn an_update_refuses_to_replace_an_auth_file_it_cannot_parse() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("auth.json");
+        let unknown = r#"{"openai":{"type":"from-a-newer-kiss"}}"#;
+        std::fs::write(&path, unknown).unwrap();
+        let error = update_auth_file_at(&path, |auth| {
+            auth.entries
+                .insert("anthropic".into(), AuthEntry::Key("key".into()));
+            Ok(())
+        })
+        .unwrap_err();
+        assert!(format!("{error:#}").contains("is not valid"), "{error:#}");
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), unknown);
+    }
+
+    #[test]
     fn locked_updates_do_not_lose_other_provider_entries() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("agent/auth.json");
@@ -939,7 +878,7 @@ mod tests {
                 });
             }
         });
-        let auth = read_auth_file_at(&path);
+        let auth = read_auth_file_at(&path).unwrap();
         assert_eq!(auth.entries.len(), 12);
         for index in 0..12 {
             assert_eq!(
@@ -1062,7 +1001,7 @@ mod tests {
         }
         write_auth_file_at(&path, &auth).unwrap();
         kiss_bench::measure("auth_read_30", 15, 100, "30_oauth_entries", || {
-            read_auth_file_at(&path).entries.len()
+            read_auth_file_at(&path).unwrap().entries.len()
         });
         read_auth_file_cached_at(&path);
         kiss_bench::measure("auth_cached_30", 15, 1_000, "30_oauth_entries", || {

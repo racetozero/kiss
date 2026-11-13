@@ -14,7 +14,6 @@ workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
 dirs.workspace = true
-fs2.workspace = true
 futures.workspace = true
 http.workspace = true
 kiss-agent.workspace = true

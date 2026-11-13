@@ -800,24 +800,9 @@ fn load_cache(path: &Path) -> Result<CacheFile> {
 }
 
 fn save_cache(path: &Path, cache: &CacheFile) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let temporary = path.with_extension(format!("json.tmp.{}", std::process::id()));
-    let mut options = std::fs::OpenOptions::new();
-    options.create(true).truncate(true).write(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt as _;
-        options.mode(0o600);
-    }
-    let mut output = options.open(&temporary)?;
-    serde_json::to_writer_pretty(&mut output, cache)?;
-    use std::io::Write as _;
-    output.write_all(b"\n")?;
-    output.sync_all()?;
-    std::fs::rename(temporary, path)?;
-    Ok(())
+    kiss_ai::config_file::with_lock(path, || {
+        kiss_ai::config_file::write_private_json(path, cache)
+    })
 }
 
 /// Keep the tools whose text contains every query word, best matches first.

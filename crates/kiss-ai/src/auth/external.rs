@@ -756,7 +756,7 @@ mod tests {
             .unwrap();
         let destination = home.join(".kiss/agent/auth.json");
         import_at(&source, &destination).unwrap();
-        let saved = super::super::read_auth_file_at(&destination);
+        let saved = super::super::read_auth_file_at(&destination).unwrap();
         assert_eq!(saved.entries.len(), 1);
         assert_eq!(saved.entries["openrouter"].access_token(), "router-value");
     }

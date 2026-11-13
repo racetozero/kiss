@@ -3,16 +3,13 @@
 use crate::config::{ClientRegistration, OAuthConfig, OAuthGrantType};
 use anyhow::{Context as _, Result, bail};
 use async_trait::async_trait;
-use fs2::FileExt as _;
 use rmcp::transport::auth::{
     AuthError, AuthorizationManager, AuthorizationMetadata, AuthorizationRequest,
     AuthorizationSession, ClientCredentialsConfig, CredentialStore, OAuthState, StoredCredentials,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs::{File, OpenOptions};
-use std::io::Write as _;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 const DEFAULT_REDIRECT_URI: &str = "http://127.0.0.1:3118/callback";
 
@@ -70,28 +67,9 @@ impl FileCredentialStore {
     }
 
     fn write(&self, credentials: &CredentialFile) -> Result<()> {
-        let parent = self
-            .path
-            .parent()
-            .context("credential path has no parent")?;
-        std::fs::create_dir_all(parent)?;
-        let lock_path = self.path.with_extension("json.lock");
-        let lock = secure_open(&lock_path)?;
-        lock.lock_exclusive()?;
-        let temporary = self
-            .path
-            .with_extension(format!("json.tmp.{}", std::process::id()));
-        let result = (|| -> Result<()> {
-            let mut output = secure_create(&temporary)?;
-            serde_json::to_writer_pretty(&mut output, credentials)?;
-            output.write_all(b"\n")?;
-            output.sync_all()?;
-            std::fs::rename(&temporary, &self.path)?;
-            Ok(())
-        })();
-        let _ = std::fs::remove_file(temporary);
-        let _ = fs2::FileExt::unlock(&lock);
-        result
+        kiss_ai::config_file::with_lock(&self.path, || {
+            kiss_ai::config_file::write_private_json(&self.path, credentials)
+        })
     }
 }
 
@@ -400,28 +378,6 @@ fn add_authorization_params(url: &str, params: &BTreeMap<String, String>) -> Res
         }
     }
     Ok(parsed.into())
-}
-
-fn secure_open(path: &Path) -> Result<File> {
-    let mut options = OpenOptions::new();
-    options.create(true).read(true).write(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt as _;
-        options.mode(0o600);
-    }
-    Ok(options.open(path)?)
-}
-
-fn secure_create(path: &Path) -> Result<File> {
-    let mut options = OpenOptions::new();
-    options.create(true).truncate(true).write(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt as _;
-        options.mode(0o600);
-    }
-    Ok(options.open(path)?)
 }
 
 #[cfg(test)]
