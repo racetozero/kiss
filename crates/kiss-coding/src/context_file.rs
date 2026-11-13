@@ -7,14 +7,14 @@ use kiss_agent::AgentMessage;
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 const MAX_FILE_MIB: u64 = 16;
 const MAX_FILE_BYTES: u64 = MAX_FILE_MIB * 1024 * 1024;
 
 pub(crate) struct ContextFile {
     directory: tempfile::TempDir,
-    path: PathBuf,
+    pub(crate) path: PathBuf,
     exported: Option<Vec<AgentMessage>>,
     bytes: Vec<u8>,
     last_error: Option<(String, u64)>,
@@ -55,10 +55,6 @@ impl ContextFile {
             last_error: None,
             input_hash: 0,
         })
-    }
-
-    pub(crate) fn path(&self) -> &Path {
-        &self.path
     }
 
     pub(crate) fn sync(&mut self, manager: &mut SessionManager) -> Result<bool> {
@@ -170,6 +166,7 @@ fn validate_messages(messages: &[AgentMessage]) -> Result<()> {
 mod tests {
     use super::*;
     use kiss_ai::{AssistantMessage, ContentBlock, ToolCall, ToolResultMessage};
+    use std::path::Path;
 
     #[test]
     fn context_file_rejects_invalid_edits_and_accepts_repair() {
@@ -224,16 +221,16 @@ mod tests {
             .unwrap(),
         ];
         for bytes in invalid {
-            std::fs::write(file.path(), &bytes).unwrap();
+            std::fs::write(file.path.as_path(), &bytes).unwrap();
             let error = file.sync(&mut manager).unwrap_err().to_string();
             assert!(error.contains("Use a JSON array"));
             assert!(error.contains("Repair the file"));
             assert_eq!(manager.build_session_context().messages, original);
-            assert_eq!(std::fs::read_to_string(file.path()).unwrap(), bytes);
+            assert_eq!(std::fs::read_to_string(file.path.as_path()).unwrap(), bytes);
             assert!(!file.sync(&mut manager).unwrap());
         }
         let valid = vec![AgentMessage::user("saved note"), call, result];
-        std::fs::write(file.path(), serde_json::to_vec(&valid).unwrap()).unwrap();
+        std::fs::write(file.path.as_path(), serde_json::to_vec(&valid).unwrap()).unwrap();
         assert!(file.sync(&mut manager).unwrap());
         assert_eq!(manager.build_session_context().messages, valid);
     }
@@ -253,16 +250,16 @@ mod tests {
         assert!(!file.sync(&mut manager).unwrap());
         let messages = manager.build_session_context().messages;
         // Formatting changes are accepted without a checkpoint.
-        std::fs::write(file.path(), serde_json::to_vec(&messages).unwrap()).unwrap();
+        std::fs::write(file.path.as_path(), serde_json::to_vec(&messages).unwrap()).unwrap();
         assert!(!file.sync(&mut manager).unwrap());
         assert_eq!(manager.entries().len(), 2);
         let exported: Vec<AgentMessage> =
-            serde_json::from_slice(&std::fs::read(file.path()).unwrap()).unwrap();
+            serde_json::from_slice(&std::fs::read(file.path.as_path()).unwrap()).unwrap();
         assert_eq!(exported, messages);
         // Empty history still retains messages added after the export.
         let current_task = AgentMessage::user("current task");
         manager.append_message(current_task.clone()).unwrap();
-        std::fs::write(file.path(), "[]").unwrap();
+        std::fs::write(file.path.as_path(), "[]").unwrap();
         assert!(file.sync(&mut manager).unwrap());
         assert_eq!(manager.build_session_context().messages.len(), 1);
         assert_eq!(manager.build_session_context().messages[0], current_task);
@@ -278,7 +275,7 @@ mod tests {
         let mut file = ContextFile::new().unwrap();
         file.sync(&mut manager).unwrap();
         std::fs::write(
-            file.path(),
+            file.path.as_path(),
             serde_json::to_vec(&vec![AgentMessage::user("stale edit")]).unwrap(),
         )
         .unwrap();
@@ -288,7 +285,7 @@ mod tests {
             .unwrap();
         assert!(!file.sync(&mut manager).unwrap());
         let exported: Vec<AgentMessage> =
-            serde_json::from_slice(&std::fs::read(file.path()).unwrap()).unwrap();
+            serde_json::from_slice(&std::fs::read(file.path.as_path()).unwrap()).unwrap();
         assert_eq!(exported, manager.build_session_context().messages);
         assert_eq!(manager.entries().len(), 3);
     }
@@ -301,7 +298,7 @@ mod tests {
         file.sync(&mut manager).unwrap();
         std::fs::OpenOptions::new()
             .write(true)
-            .open(file.path())
+            .open(file.path.as_path())
             .unwrap()
             .set_len(MAX_FILE_BYTES + 1)
             .unwrap();

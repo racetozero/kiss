@@ -119,6 +119,30 @@ impl Usage {
         self.cost.cache_write += other.cost.cache_write;
         self.cost.total += other.cost.total;
     }
+
+    /// The usage added since `before` was read from the same running total.
+    pub fn saturating_sub(&self, before: &Usage) -> Usage {
+        Usage {
+            input: self.input.saturating_sub(before.input),
+            output: self.output.saturating_sub(before.output),
+            cache_read: self.cache_read.saturating_sub(before.cache_read),
+            cache_write: self.cache_write.saturating_sub(before.cache_write),
+            cache_write_1h: self.cache_write_1h.saturating_sub(before.cache_write_1h),
+            cache_read_available: self.cache_read_available,
+            reasoning: self
+                .reasoning
+                .map(|after| after.saturating_sub(before.reasoning.unwrap_or_default())),
+            total_tokens: self.total_tokens.saturating_sub(before.total_tokens),
+            cost: Cost {
+                input: (self.cost.input - before.cost.input).max(0.0),
+                output: (self.cost.output - before.cost.output).max(0.0),
+                cache_read: (self.cost.cache_read - before.cost.cache_read).max(0.0),
+                cache_write: (self.cost.cache_write - before.cost.cache_write).max(0.0),
+                total: (self.cost.total - before.cost.total).max(0.0),
+                total_from_provider: self.cost.total_from_provider,
+            },
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]

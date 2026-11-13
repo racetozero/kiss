@@ -61,13 +61,7 @@ impl AgentTool for FindTool {
                 .compile_matcher();
 
             let mut results: Vec<String> = Vec::new();
-            let mut walker = ignore::WalkBuilder::new(&search_path);
-            walker
-                .hidden(true)
-                .git_ignore(true)
-                .git_global(true)
-                .require_git(false);
-            let walker = walker.build();
+            let walker = super::search_walker(&search_path).build();
             for entry in walker {
                 if cancel.is_cancelled() || results.len() >= limit {
                     break;

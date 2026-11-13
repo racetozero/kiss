@@ -3038,7 +3038,7 @@ mod ephemeral_tests {
             .unwrap()
             .as_ref()
             .unwrap()
-            .path()
+            .path
             .to_path_buf();
         let child = session
             .create_subagent_session("task", "/root/task", ForkTurns::None, None, None)
@@ -3050,7 +3050,7 @@ mod ephemeral_tests {
             .unwrap()
             .as_ref()
             .unwrap()
-            .path()
+            .path
             .to_path_buf();
         assert_ne!(path, child_path);
         assert!(child_path.is_file());
@@ -3066,7 +3066,7 @@ mod ephemeral_tests {
             .unwrap()
             .as_ref()
             .unwrap()
-            .path()
+            .path
             .to_path_buf();
         assert_ne!(new_path, child_path);
         let mut settings = session.settings();

@@ -50,7 +50,7 @@ pub(crate) async fn run_child_turn(
             run.await;
         }
     }
-    let usage = usage_delta(child.totals(), usage_before);
+    let usage = child.totals().saturating_sub(&usage_before);
     if let Some(parent) = parent.upgrade() {
         let model = child.model();
         parent.record_usage("subagent", &model.provider, &model.id, usage);
@@ -61,28 +61,5 @@ pub(crate) async fn run_child_turn(
         result,
         error,
         usage,
-    }
-}
-
-fn usage_delta(after: Usage, before: Usage) -> Usage {
-    Usage {
-        input: after.input.saturating_sub(before.input),
-        output: after.output.saturating_sub(before.output),
-        cache_read: after.cache_read.saturating_sub(before.cache_read),
-        cache_write: after.cache_write.saturating_sub(before.cache_write),
-        cache_write_1h: after.cache_write_1h.saturating_sub(before.cache_write_1h),
-        cache_read_available: after.cache_read_available,
-        reasoning: after
-            .reasoning
-            .map(|after| after.saturating_sub(before.reasoning.unwrap_or_default())),
-        total_tokens: after.total_tokens.saturating_sub(before.total_tokens),
-        cost: kiss_ai::Cost {
-            input: (after.cost.input - before.cost.input).max(0.0),
-            output: (after.cost.output - before.cost.output).max(0.0),
-            cache_read: (after.cost.cache_read - before.cost.cache_read).max(0.0),
-            cache_write: (after.cost.cache_write - before.cost.cache_write).max(0.0),
-            total: (after.cost.total - before.cost.total).max(0.0),
-            total_from_provider: after.cost.total_from_provider,
-        },
     }
 }

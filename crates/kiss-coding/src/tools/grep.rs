@@ -139,13 +139,7 @@ fn run_grep(
     };
 
     let paths = Mutex::new(Vec::new());
-    let mut walker = ignore::WalkBuilder::new(search_path);
-    walker
-        .hidden(true)
-        .git_ignore(true)
-        .git_global(true)
-        .require_git(false);
-    walker.build_parallel().run(|| {
+    super::search_walker(search_path).build_parallel().run(|| {
         let cancel = cancel.clone();
         let paths = &paths;
         let glob_matcher = &glob_matcher;
