@@ -315,7 +315,24 @@ impl Editor {
         }
     }
 
-    /// Delete word backwards (Ctrl+W / Alt+Backspace).
+    /// Delete word forwards (Alt+D / Alt+Delete / Ctrl+Delete).
+    pub fn delete_word_forward(&mut self) {
+        self.leave_history_navigation();
+        let (_, col) = self.state.cursor;
+        let target = word_right(&self.state.lines[self.state.cursor.0], col);
+        if target == col {
+            self.delete_forward();
+            return;
+        }
+        self.push_undo();
+        let line = self.current_line();
+        let start = grapheme_byte_offset(line, col);
+        let end = grapheme_byte_offset(line, target);
+        let killed: String = line.drain(start..end).collect();
+        self.kill_ring.push(killed);
+    }
+
+    /// Delete word backwards (Ctrl+W / Alt+Backspace / Ctrl+Backspace).
     pub fn delete_word_back(&mut self) {
         self.leave_history_navigation();
         let (_, col) = self.state.cursor;
@@ -416,11 +433,24 @@ impl Editor {
                 self.newline()
             }
             (Key::Backspace, false, false, _) => self.backspace(),
-            (Key::Backspace, _, true, _) | (Key::Char('w'), true, _, _) => self.delete_word_back(),
+            (Key::Backspace, ..) | (Key::Char('w'), true, _, _) => self.delete_word_back(),
+            (Key::Delete, true, ..)
+            | (Key::Delete, _, true, _)
+            | (Key::Char('d'), false, true, _) => self.delete_word_forward(),
             (Key::Delete, ..) => self.delete_forward(),
             (Key::Up, ..) => self.history_up_or_cursor(key),
             (Key::Down, ..) => self.history_down_or_cursor(key),
             (Key::Left | Key::Right | Key::Home | Key::End, ..) => self.move_cursor(key),
+            // Terminal.app, iTerm2's Natural Text Editing preset, and Ghostty
+            // send Option+Left/Right as the readline word motions ESC b / ESC f.
+            (Key::Char('b'), false, true, _) => {
+                let (row, col) = self.state.cursor;
+                self.state.cursor.1 = word_left(&self.state.lines[row], col);
+            }
+            (Key::Char('f'), false, true, _) => {
+                let (row, col) = self.state.cursor;
+                self.state.cursor.1 = word_right(&self.state.lines[row], col);
+            }
             (Key::Char('a'), true, ..) => self.state.cursor.1 = 0,
             (Key::Char('e'), true, ..) => {
                 let row = self.state.cursor.0;
@@ -716,6 +746,64 @@ mod tests {
         assert_eq!(e.text(), "foo bar_baz ");
         e.yank();
         assert_eq!(e.text(), "foo bar_baz qux");
+    }
+
+    #[test]
+    fn option_arrows_move_by_word_in_every_macos_encoding() {
+        // CSI 1;3, ESC-prefixed CSI, and the readline ESC b / ESC f motions.
+        for (left, right) in [
+            (&b"\x1b[1;3D"[..], &b"\x1b[1;3C"[..]),
+            (b"\x1b\x1b[D", b"\x1b\x1b[C"),
+            (b"\x1bb", b"\x1bf"),
+        ] {
+            let mut e = editor();
+            e.insert("foo bar baz");
+            let mut decoder = crate::keys::InputDecoder::default();
+            let mut events = Vec::new();
+            decoder.feed(left, &mut events);
+            decoder.feed(left, &mut events);
+            for event in events.drain(..) {
+                e.handle_event(&event);
+            }
+            assert_eq!(e.cursor().1, 4, "{left:?}"); // start of bar
+            decoder.feed(right, &mut events);
+            for event in events.drain(..) {
+                e.handle_event(&event);
+            }
+            assert_eq!(e.cursor().1, 7, "{right:?}"); // end of bar
+            assert_eq!(e.text(), "foo bar baz", "{left:?}");
+        }
+    }
+
+    #[test]
+    fn kitty_protocol_word_deletes_and_command_arrows_edit_like_macos() {
+        let feed = |e: &mut Editor, wire: &[u8]| {
+            let mut decoder = crate::keys::InputDecoder::default();
+            let mut events = Vec::new();
+            decoder.feed(wire, &mut events);
+            for event in &events {
+                e.handle_event(event);
+            }
+        };
+        let mut e = editor();
+        e.insert("foo bar baz");
+        feed(&mut e, b"\x1b[1;9D"); // Command+Left
+        assert_eq!(e.cursor().1, 0);
+        feed(&mut e, b"\x1b[1;9C"); // Command+Right
+        assert_eq!(e.cursor().1, 11);
+        feed(&mut e, b"\x1b[127;3u"); // Option+Backspace
+        assert_eq!(e.text(), "foo bar ");
+        feed(&mut e, b"\x1b[127;5u"); // Ctrl+Backspace
+        assert_eq!(e.text(), "foo ");
+
+        for wire in [&b"\x1bd"[..], b"\x1b[3;3~", b"\x1b[3;5~"] {
+            let mut e = editor();
+            e.insert("foo bar baz");
+            e.state_cursor_to(0, 3);
+            feed(&mut e, wire);
+            assert_eq!(e.text(), "foo baz", "{wire:?}");
+            assert_eq!(e.cursor().1, 3, "{wire:?}");
+        }
     }
 
     #[test]

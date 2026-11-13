@@ -223,6 +223,24 @@ impl InputDecoder {
                     3,
                 ))
             }
+            // Alt+arrow from terminals that prefix the whole sequence with ESC,
+            // for example ESC ESC [D for Option+Left. Without this, `[D` would
+            // reach the editor as text.
+            0x1b if buf.len() > 2 && matches!(buf[2], b'[' | b'O') => {
+                let inner = InputDecoder {
+                    buffer: buf[1..].to_vec(),
+                    escape_since: None,
+                };
+                let (event, consumed) = inner.try_decode()?;
+                let event = event.map(|e| match e {
+                    InputEvent::Key(mut k) => {
+                        k.alt = true;
+                        InputEvent::Key(k)
+                    }
+                    other => other,
+                });
+                Some((event, consumed + 1))
+            }
             // Alt+key: ESC then a normal byte.
             _ => {
                 let (event, consumed) = self.decode_plain_at(1)?;
@@ -325,6 +343,7 @@ impl InputDecoder {
         }
 
         let mut event = KeyEvent::default();
+        let mut command = false;
         // Modifier encoding: CSI 1;<mods> X or CSI <num>;<mods> ~
         let parts: Vec<&str> = params.split(';').collect();
         let modifier_parts = parts.get(1).map(|part| part.split(':').collect::<Vec<_>>());
@@ -341,10 +360,16 @@ impl InputDecoder {
             event.shift = m & 1 != 0;
             event.alt = m & 2 != 0;
             event.ctrl = m & 4 != 0;
+            // Kitty reports macOS Command as Super (8).
+            command = m & 8 != 0;
         }
         event.key = match final_byte {
             b'A' => Key::Up,
             b'B' => Key::Down,
+            // Command+Left/Right go to the line start or end, as in macOS
+            // text fields.
+            b'C' if command => Key::End,
+            b'D' if command => Key::Home,
             b'C' => Key::Right,
             b'D' => Key::Left,
             b'H' => Key::Home,
@@ -393,6 +418,8 @@ impl InputDecoder {
                     Some('\t') => Key::Tab,
                     Some('\r') | Some('\u{e046}') => Key::Enter,
                     Some('\x1b') => Key::Escape,
+                    // Modified Backspace, such as Option+Backspace (CSI 127;3u).
+                    Some('\x7f') => Key::Backspace,
                     // Kitty reports F13-F35 as private-use code points.
                     Some(c @ '\u{e020}'..='\u{e036}') => Key::F((c as u32 - 0xe020 + 13) as u8),
                     // Other functional keys, such as keypad and modifier

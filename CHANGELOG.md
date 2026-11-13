@@ -4,6 +4,14 @@
 
 ### Fixed
 
+- `Option+Left` and `Option+Right` now move the cursor one word in the editor
+  on macOS. Terminal.app, iTerm2's Natural Text Editing preset, and Ghostty
+  send these keys as `Esc b` and `Esc f`, which KISS used to ignore. Terminals
+  that send `Esc Esc [D` no longer insert `[D` as text.
+- In terminals that use the kitty keyboard protocol, such as kitty, Ghostty,
+  and WezTerm, `Option+Backspace` and `Ctrl+Backspace` now delete the word
+  before the cursor, and `Command+Left` and `Command+Right` move to the start
+  and end of the line. They used to do nothing or move one character.
 - `Esc` now stops a `!command` that ignores SIGTERM, or whose child keeps
   running. KISS kills the whole process group and stops waiting for output.
 - A Mermaid diagram in a reply no longer ends KISS. Class diagrams with
@@ -12,6 +20,11 @@
 - A Mermaid diagram that does not fit the terminal keeps its source and says
   how many columns it needs. A diagram with a syntax error says how to fix it
   or how to turn Mermaid rendering off.
+
+### Added
+
+- `Alt+D`, `Alt+Delete`, and `Ctrl+Delete` delete the word after the cursor,
+  as in pi, Claude Code, Codex, and opencode.
 
 ### Changed
 
