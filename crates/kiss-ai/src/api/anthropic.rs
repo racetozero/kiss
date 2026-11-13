@@ -373,6 +373,15 @@ fn handle_event(event: &SseEvent, builder: &mut PartialBuilder, state: &mut Deco
             if state.openrouter {
                 super::apply_openrouter_cost(&mut builder.message.usage, &data["usage"]);
             }
+            // A refusal is not a finished answer. Report it as an error, as
+            // the Chat Completions adapter does for content_filter.
+            if let Some(reason @ ("refusal" | "sensitive")) =
+                builder.message.raw_stop_reason.as_deref()
+            {
+                return Flow::Error(format!(
+                    "Provider stop_reason: {reason}. The model declined to answer this request"
+                ));
+            }
             Flow::Continue
         }
         "message_stop" => Flow::Done,
@@ -752,6 +761,22 @@ mod tests {
         assert_eq!(builder.message.usage.cache_write_1h, 2);
         assert_eq!(builder.message.usage.output, 7);
         assert!(builder.message.usage.cache_read_available);
+    }
+
+    #[test]
+    fn a_refusal_ends_the_stream_as_an_error() {
+        let model = model(OpenAICompat::default());
+        let (sink, _stream) = crate::EventStream::channel();
+        let mut builder = PartialBuilder::new(&model, sink);
+        let flow = handle_event(
+            &SseEvent {
+                event: Some("message_delta".into()),
+                data: json!({"delta": {"stop_reason": "refusal"}}).to_string(),
+            },
+            &mut builder,
+            &mut DecodeState::default(),
+        );
+        assert!(matches!(flow, Flow::Error(message) if message.contains("refusal")));
     }
 
     #[tokio::test]
