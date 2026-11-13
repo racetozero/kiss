@@ -321,8 +321,11 @@ fn summary_prompt(
 }
 
 /// Generate a structured summary with the LLM. One-off prompt: fresh session
-/// id and no cache writes wanted, so it's a plain request.
+/// id and no cache writes wanted, so it's a plain request sent through
+/// `request`, the session's transport.
+#[allow(clippy::too_many_arguments)]
 pub async fn generate_summary(
+    request: &kiss_agent::StreamFn,
     model: &Model,
     credential: Option<kiss_ai::ResolvedCredential>,
     conversation_text: &str,
@@ -352,9 +355,7 @@ pub async fn generate_summary(
         cancel,
         ..Default::default()
     };
-    let message = kiss_ai::stream_simple(model, &context, &options)
-        .result()
-        .await;
+    let message = request(model, &context, &options).result().await;
     if let Some(error) = summary_failure(&message) {
         anyhow::bail!(error);
     }

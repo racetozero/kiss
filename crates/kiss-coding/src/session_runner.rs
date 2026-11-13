@@ -810,6 +810,7 @@ impl AgentSession {
             let credential = self.resolve_credential(&model.provider).await;
             let serialized = compaction::serialize_agent_messages(&abandoned_messages);
             let result = compaction::generate_summary(
+                &self.request_fn(),
                 &model,
                 credential,
                 &serialized,
@@ -1200,16 +1201,26 @@ impl AgentSession {
                 })
             })
         }));
-        if let Some(stream_fn) = self.stream_fn.lock().unwrap().clone() {
-            config.stream_fn = stream_fn;
-        }
+        config.stream_fn = self.request_fn();
+        config
+    }
+
+    /// How this session sends every model request (turns, summaries, cache
+    /// warming): the installed transport, or the provider, with account
+    /// failover on rate limits.
+    fn request_fn(&self) -> StreamFn {
+        let transport = self
+            .stream_fn
+            .lock()
+            .unwrap()
+            .clone()
+            .unwrap_or_else(|| Arc::new(kiss_ai::stream_simple));
         let sink = self.sink.clone();
-        config.stream_fn = crate::account_failover::wrap(
-            config.stream_fn,
+        crate::account_failover::wrap(
+            transport,
             self.registry.clone(),
             Arc::new(move |switch| sink(SessionEvent::AccountSwitched(switch))),
-        );
-        config
+        )
     }
 
     fn sync_context_file(&self) -> bool {
@@ -1909,13 +1920,9 @@ impl AgentSession {
                     cancel: cancel.clone(),
                     ..Default::default()
                 };
-                let stream_fn = session
-                    .stream_fn
-                    .lock()
-                    .unwrap()
-                    .clone()
-                    .unwrap_or_else(|| Arc::new(kiss_ai::stream_simple));
-                let warmed = stream_fn(&model, &context, &options).result().await;
+                let warmed = session.request_fn()(&model, &context, &options)
+                    .result()
+                    .await;
                 if matches!(warmed.stop_reason, StopReason::Error | StopReason::Aborted) {
                     return;
                 }
@@ -2078,7 +2085,9 @@ impl AgentSession {
         } else {
             None
         };
+        let request = self.request_fn();
         let local_future = compaction::generate_summary(
+            &request,
             &model,
             credential.clone(),
             &serialized,
