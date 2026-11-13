@@ -6061,22 +6061,7 @@ fn start_mcp_authentication(
     server: McpPanelServer,
     command_tx: &mpsc::UnboundedSender<CommandEvent>,
 ) {
-    let Some(url) = server.entry.url.clone() else {
-        app.cells.push(Cell::Error(format!(
-            "MCP server {} uses stdio and does not use OAuth",
-            server.name
-        )));
-        return;
-    };
-    if let Some(provider) = server.entry.auth_provider() {
-        app.cells.push(Cell::Error(format!(
-            "MCP server {} uses your {provider} login and has no separate sign-in. Run /login {provider} instead",
-            server.name
-        )));
-        return;
-    }
     let name = server.name.clone();
-    let oauth = server.entry.oauth.clone().unwrap_or_default();
     let Some(cancel) = begin_command(app, format!("authenticating MCP server {name}")) else {
         return;
     };
@@ -6084,19 +6069,12 @@ fn start_mcp_authentication(
     let tx = CommandTask::new(app, command_tx);
     tokio::spawn(async move {
         let result: Result<String> = async {
-            if oauth.grant_type == kiss_mcp::OAuthGrantType::ClientCredentials {
-                kiss_mcp::login_client_credentials(&name, &url, &oauth).await?;
+            let Some(pending) =
+                crate::auth_flow::begin_mcp_login(&name, &server.entry, "/login", &cancel).await?
+            else {
                 return Ok(format!("authenticated MCP server {name}"));
-            }
-            let challenge = tokio::select! {
-                result = tokio::time::timeout(
-                    Duration::from_secs(15),
-                    kiss_mcp::probe_oauth_challenge(&server.entry),
-                ) => result.context("MCP OAuth discovery timed out")??,
-                _ = cancel.cancelled() => anyhow::bail!("cancelled"),
             };
-            let pending = kiss_mcp::begin_login(&name, &url, &oauth, challenge.as_deref()).await?;
-            let listener = crate::mcp_cli::callback_listener(&pending.redirect_uri)
+            let listener = crate::auth_flow::callback_listener(&pending.redirect_uri)
                 .await?
                 .context("MCP OAuth redirect is not local. Use `kiss mcp login --no-browser`")?;
             let opened = crate::auth_flow::open_browser(&pending.authorization_url);
@@ -6106,7 +6084,7 @@ fn start_mcp_authentication(
                 opened,
             });
             let callback = tokio::select! {
-                result = crate::mcp_cli::receive_callback(listener, &pending.redirect_uri) => result?,
+                result = crate::auth_flow::receive_callback(listener, &pending.redirect_uri) => result?,
                 _ = cancel.cancelled() => anyhow::bail!("cancelled"),
             };
             kiss_mcp::finish_login(pending, &callback).await?;

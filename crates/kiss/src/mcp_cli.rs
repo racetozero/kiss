@@ -8,8 +8,6 @@ use kiss_mcp::config::{
 use kiss_mcp::{McpManager, ServerEntry};
 use serde::Serialize;
 use std::io::Write as _;
-use std::time::Duration;
-use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 use tokio_util::sync::CancellationToken;
 
 pub async fn run(command: &McpCommand, trust_override: Option<bool>) -> Result<i32> {
@@ -298,24 +296,12 @@ fn apply_server_args(
 
 async fn login(loaded: &kiss_mcp::LoadedConfig, name: &str, no_browser: bool) -> Result<()> {
     let server = http_server(loaded, name)?;
-    if let Some(provider) = server.auth_provider() {
-        bail!(
-            "MCP server `{name}` uses your `{provider}` login and has no separate OAuth sign-in. Run kiss login {provider} instead"
-        )
-    }
-    let url = server.url.as_deref().context("MCP URL is missing")?;
-    let oauth = server.oauth.clone().unwrap_or_default();
-    if oauth.grant_type == OAuthGrantType::ClientCredentials {
-        return kiss_mcp::login_client_credentials(name, url, &oauth).await;
-    }
-
-    let challenge = tokio::time::timeout(
-        Duration::from_secs(15),
-        kiss_mcp::probe_oauth_challenge(server),
-    )
-    .await
-    .context("MCP OAuth discovery timed out")??;
-    let pending = kiss_mcp::begin_login(name, url, &oauth, challenge.as_deref()).await?;
+    let Some(pending) =
+        crate::auth_flow::begin_mcp_login(name, server, "kiss login", &CancellationToken::new())
+            .await?
+    else {
+        return Ok(());
+    };
     println!("Open this URL to sign in:\n{}", pending.authorization_url);
 
     if no_browser {
@@ -323,11 +309,11 @@ async fn login(loaded: &kiss_mcp::LoadedConfig, name: &str, no_browser: bool) ->
         return kiss_mcp::finish_login(pending, &callback).await;
     }
 
-    if let Some(listener) = callback_listener(&pending.redirect_uri).await? {
+    if let Some(listener) = crate::auth_flow::callback_listener(&pending.redirect_uri).await? {
         if !crate::auth_flow::open_browser(&pending.authorization_url) {
             eprintln!("The browser did not open. Open the URL manually.");
         }
-        let callback = receive_callback(listener, &pending.redirect_uri).await?;
+        let callback = crate::auth_flow::receive_callback(listener, &pending.redirect_uri).await?;
         kiss_mcp::finish_login(pending, &callback).await
     } else {
         if !crate::auth_flow::open_browser(&pending.authorization_url) {
@@ -348,53 +334,6 @@ fn http_server<'a>(loaded: &'a kiss_mcp::LoadedConfig, name: &str) -> Result<&'a
         bail!("MCP server `{name}` is a stdio server and does not use OAuth")
     }
     Ok(server)
-}
-
-pub(crate) async fn callback_listener(
-    redirect_uri: &str,
-) -> Result<Option<tokio::net::TcpListener>> {
-    let uri = url::Url::parse(redirect_uri)?;
-    let Some(host) = uri.host_str() else {
-        return Ok(None);
-    };
-    if !matches!(host, "localhost" | "127.0.0.1" | "::1") {
-        return Ok(None);
-    }
-    let port = uri
-        .port_or_known_default()
-        .context("OAuth redirect URI has no port")?;
-    let address = if host == "::1" {
-        format!("[::1]:{port}")
-    } else {
-        format!("127.0.0.1:{port}")
-    };
-    Ok(Some(tokio::net::TcpListener::bind(address).await?))
-}
-
-pub(crate) async fn receive_callback(
-    listener: tokio::net::TcpListener,
-    redirect_uri: &str,
-) -> Result<String> {
-    let (mut socket, _) = tokio::time::timeout(Duration::from_secs(600), listener.accept())
-        .await
-        .context("MCP OAuth callback timed out")??;
-    let mut buffer = vec![0_u8; 16 * 1024];
-    let length = socket.read(&mut buffer).await?;
-    let request =
-        std::str::from_utf8(&buffer[..length]).context("invalid OAuth callback request")?;
-    let target = request
-        .lines()
-        .next()
-        .and_then(|line| line.split_whitespace().nth(1))
-        .context("invalid OAuth callback request line")?;
-    let base = url::Url::parse(redirect_uri)?;
-    let callback = base.join(target)?.to_string();
-    socket
-        .write_all(
-            b"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nConnection: close\r\n\r\n<!doctype html><title>KISS MCP login</title><p>Login is complete. You can close this page.</p>",
-        )
-        .await?;
-    Ok(callback)
 }
 
 fn prompt_line(prompt: &str) -> Result<String> {
