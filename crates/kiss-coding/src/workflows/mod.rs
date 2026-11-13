@@ -18,8 +18,8 @@ pub use store::{SaveLocation, SavedWorkflow, discover, save};
 // Re-exported so the terminal renders workflow state without depending on
 // `kiss-workflow` directly.
 pub use kiss_workflow::{
-    AgentId, AgentOutcome, AgentSnapshot, AgentStatus, Journal, PhaseSnapshot, RunSnapshot,
-    RunStatus, Script,
+    AgentId, AgentOutcome, AgentSnapshot, AgentStatus, PhaseSnapshot, RunSnapshot, RunStatus,
+    Script,
 };
 
 use crate::session_runner::{AgentSession, WorkflowTurnStatus};
@@ -29,6 +29,7 @@ use serde_json::Value;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
+use tokio_util::sync::CancellationToken;
 
 /// Identifies one run within a session.
 pub type RunId = u64;
@@ -79,10 +80,14 @@ impl RunRecord {
     pub fn restart_agent(&self, agent: kiss_workflow::AgentId) {
         self.workflow.restart_agent(agent);
     }
+}
 
-    /// Results worth reusing if this run is started again.
-    pub fn journal(&self) -> Journal {
-        self.workflow.journal()
+/// The text a finished run reports: a string as is, anything else as JSON.
+pub fn report_text(value: Value) -> String {
+    match value {
+        Value::String(text) => text,
+        Value::Null => "The workflow returned nothing.".to_string(),
+        other => serde_json::to_string_pretty(&other).unwrap_or_else(|_| other.to_string()),
     }
 }
 
@@ -180,10 +185,6 @@ impl WorkflowRuntime {
         }
     }
 
-    pub(crate) fn limits(&self) -> Limits {
-        Limits::default()
-    }
-
     /// Ask the user to approve a run.
     ///
     /// This is a cost gate rather than a permission gate: one run can start
@@ -208,15 +209,15 @@ impl WorkflowRuntime {
     /// as soon as it is approved, rather than after its first agent answers.
     pub fn prepare(
         &self,
+        plan: &WorkflowPlan,
         script: Script,
         args: Value,
-        journal: Journal,
     ) -> anyhow::Result<Arc<RunRecord>> {
         let parent = self
             .parent
             .upgrade()
             .ok_or_else(|| anyhow::anyhow!("the parent session has closed"))?;
-        let limits = self.limits();
+        let limits = Limits::default();
         let runner = Arc::new(runner::SessionAgentRunner::new(
             self.parent.clone(),
             limits.max_concurrency,
@@ -228,12 +229,10 @@ impl WorkflowRuntime {
             .unwrap_or_default();
 
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
-        let name = script.meta().name.clone();
-        let description = script.meta().description.clone();
+        let name = plan.name.clone();
+        let description = plan.description.clone();
         let source: Arc<str> = Arc::from(script.source());
-        let workflow = Arc::new(Workflow::with_journal(
-            script, args, cwd, runner, limits, journal,
-        ));
+        let workflow = Arc::new(Workflow::new(script, args, cwd, runner, limits));
         let record = Arc::new(RunRecord {
             id,
             name,
@@ -280,12 +279,25 @@ impl WorkflowRuntime {
     }
 
     /// Run a prepared workflow to completion.
-    pub async fn run(&self, record: &Arc<RunRecord>) -> Result<Value, String> {
-        record
+    /// Run a prepared workflow until it ends. Cancelling `stop` stops it,
+    /// so an interrupted turn or command leaves no child agents working.
+    pub async fn run(
+        &self,
+        record: &Arc<RunRecord>,
+        stop: CancellationToken,
+    ) -> Result<Value, String> {
+        let stopping = record.clone();
+        let guard = tokio::spawn(async move {
+            stop.cancelled().await;
+            stopping.stop();
+        });
+        let outcome = record
             .workflow
             .run()
             .await
-            .map_err(|error| error.to_string())
+            .map_err(|error| error.to_string());
+        guard.abort();
+        outcome
     }
 
     pub fn get(&self, id: RunId) -> Option<Arc<RunRecord>> {

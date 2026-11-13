@@ -1302,9 +1302,9 @@ impl AgentSession {
         }
         if prompt_mode == PromptMode::Workflow
             && self.workflows_enabled()
-            && let Some(runtime) = self.workflows.get()
+            && self.workflows.get().is_some()
         {
-            let limits = runtime.limits();
+            let limits = kiss_workflow::Limits::default();
             let size = self.settings.lock().unwrap().workflows.size;
             system_prompt.push_str("\n\n");
             system_prompt.push_str(&crate::workflows::authoring_prompt(

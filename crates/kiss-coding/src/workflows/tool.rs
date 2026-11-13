@@ -99,7 +99,7 @@ impl AgentTool for RunWorkflowTool {
 
         let workflow_name = plan.name.clone();
 
-        if self.0.approve(plan).await == ApprovalDecision::Cancel {
+        if self.0.approve(plan.clone()).await == ApprovalDecision::Cancel {
             self.0
                 .emit_outcome(None, workflow_name, WorkflowTurnStatus::Cancelled);
             return Ok(ToolResult::text(
@@ -108,18 +108,8 @@ impl AgentTool for RunWorkflowTool {
             ));
         }
 
-        let record = self.0.prepare(script, Value::Null, Default::default())?;
-
-        // Stopping the turn stops the run, so an interrupted turn does not
-        // leave child agents working in the background.
-        let stopping = record.clone();
-        let guard_cancel = cancel.clone();
-        let guard = tokio::spawn(async move {
-            guard_cancel.cancelled().await;
-            stopping.stop();
-        });
-        let outcome = self.0.run(&record).await;
-        guard.abort();
+        let record = self.0.prepare(&plan, script, Value::Null)?;
+        let outcome = self.0.run(&record, cancel.clone()).await;
 
         let snapshot = record.snapshot();
         let summary = format!(
@@ -141,8 +131,7 @@ impl AgentTool for RunWorkflowTool {
                     WorkflowTurnStatus::Stopped,
                 );
                 Ok(ToolResult::text(format!(
-                    "The user stopped this workflow after {summary}. Completed results are kept, \
-                     so relaunching the same script reuses them."
+                    "The user stopped this workflow after {summary}."
                 )))
             }
             Ok(value) => {
@@ -151,13 +140,9 @@ impl AgentTool for RunWorkflowTool {
                     record.name.clone(),
                     WorkflowTurnStatus::Completed,
                 );
-                let report = match value {
-                    Value::String(text) => text,
-                    Value::Null => "The workflow returned nothing.".to_string(),
-                    other => serde_json::to_string_pretty(&other)?,
-                };
                 Ok(ToolResult::text(format!(
-                    "{report}\n\n[workflow: {summary}]"
+                    "{}\n\n[workflow: {summary}]",
+                    super::report_text(value)
                 )))
             }
             Err(error) => {

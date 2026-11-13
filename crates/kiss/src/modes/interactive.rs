@@ -5413,13 +5413,13 @@ fn start_saved_workflow(
         let decision = tokio::select! {
             biased;
             _ = cancel.cancelled() => kiss_coding::workflows::ApprovalDecision::Cancel,
-            decision = runtime.approve(plan) => decision,
+            decision = runtime.approve(plan.clone()) => decision,
         };
         if decision == kiss_coding::workflows::ApprovalDecision::Cancel {
             let _ = command_tx.send(CommandEvent::CommandFinished);
             return;
         }
-        let record = match runtime.prepare(script, args, Default::default()) {
+        let record = match runtime.prepare(&plan, script, args) {
             Ok(record) => record,
             Err(error) => {
                 let _ = command_tx.send(CommandEvent::WorkflowFinished {
@@ -5430,17 +5430,10 @@ fn start_saved_workflow(
             }
         };
         let _ = command_tx.send(CommandEvent::WorkflowStarted(record.clone()));
-        let stopping = record.clone();
-        let stop_guard = tokio::spawn(async move {
-            cancel.cancelled().await;
-            stopping.stop();
-        });
-        let result = runtime.run(&record).await.map(|value| match value {
-            serde_json::Value::String(text) => text,
-            serde_json::Value::Null => "The workflow returned nothing.".to_string(),
-            other => serde_json::to_string_pretty(&other).unwrap_or_else(|_| other.to_string()),
-        });
-        stop_guard.abort();
+        let result = runtime
+            .run(&record, cancel)
+            .await
+            .map(kiss_coding::workflows::report_text);
         let _ = command_tx.send(CommandEvent::WorkflowFinished { name, result });
     });
 }
