@@ -7044,9 +7044,12 @@ fn start_login_method(
                         value: String::new(),
                     });
                 }
-                Err(error) => app.cells.push(Cell::Error(format!(
-                    "could not start Anthropic login: {error:#}"
-                ))),
+                Err(error) => {
+                    cancel_account_add(app);
+                    app.cells.push(Cell::Error(format!(
+                        "could not start Anthropic login: {error:#}"
+                    )));
+                }
             }
         }
         LoginMethod::ManualOAuth if provider == "openrouter" => {
@@ -7067,9 +7070,12 @@ fn start_login_method(
                         value: String::new(),
                     });
                 }
-                Err(error) => app.cells.push(Cell::Error(format!(
-                    "could not start OpenRouter login: {error:#}"
-                ))),
+                Err(error) => {
+                    cancel_account_add(app);
+                    app.cells.push(Cell::Error(format!(
+                        "could not start OpenRouter login: {error:#}"
+                    )));
+                }
             }
         }
         LoginMethod::GoogleApplicationDefault => {
@@ -7096,10 +7102,13 @@ fn start_login_method(
                 ))),
             }
         }
-        _ => app.cells.push(Cell::Error(format!(
-            "{} is not available for {provider}",
-            method.label()
-        ))),
+        _ => {
+            cancel_account_add(app);
+            app.cells.push(Cell::Error(format!(
+                "{} is not available for {provider}",
+                method.label()
+            )));
+        }
     }
 }
 
