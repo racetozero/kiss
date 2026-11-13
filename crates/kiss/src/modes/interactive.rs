@@ -4264,11 +4264,42 @@ fn set_session_title(app: &mut App, title: Option<String>) {
 }
 
 /// Reset what belongs to the previous session after the active session changes.
-fn sync_session_state(app: &mut App, session: &Arc<kiss_coding::AgentSession>) {
+/// What the transcript shows after the session changes.
+#[derive(Clone, Copy, PartialEq)]
+enum Transcript {
+    /// Rebuild it from the new session's history.
+    Rebuild,
+    /// Start it empty, as after /new or a fork from a message.
+    Empty,
+}
+
+/// Reset everything that belonged to the previous session after
+/// `replace_manager`, `new_session` or a fork: the title, the transcript,
+/// the git branch, the thinking border, and any recap or side answer.
+fn adopt_session(app: &mut App, session: &Arc<kiss_coding::AgentSession>, transcript: Transcript) {
     let title = session.manager.lock().unwrap().session_name();
     set_session_title(app, title);
     app.title_generation_pending = false;
     app.idle_status = ProgramStatus::Idle;
+    app.cells = match transcript {
+        Transcript::Rebuild => session_cells(session),
+        Transcript::Empty => Vec::new(),
+    };
+    app.cell_render_cache.clear();
+    if let Some(job) = app.recap_job.take() {
+        job.cancel.cancel();
+    }
+    app.recap_request_id = app.recap_request_id.wrapping_add(1);
+    app.recap = None;
+    if let Some(BtwPanel {
+        state: BtwState::Answering(cancel),
+        ..
+    }) = app.btw_panel.take()
+    {
+        cancel.cancel();
+    }
+    update_thinking_border(app, session.thinking_level());
+    refresh_git_branch(app, session);
 }
 
 fn maybe_generate_session_title(
@@ -6442,9 +6473,7 @@ fn apply_picker_selection(
                     .fork_active_branch(selected_id.as_deref(), false);
                 match fork.and_then(|manager| session.replace_manager(manager)) {
                     Ok(()) => {
-                        sync_session_state(app, session);
-                        app.cells.clear();
-                        app.cell_render_cache.clear();
+                        adopt_session(app, session, Transcript::Empty);
                         app.editor.set_text(&text);
                         app.cells
                             .push(Cell::Notice("forked to a new session".into()));
@@ -6817,16 +6846,12 @@ fn switch_session(app: &mut App, session: &Arc<kiss_coding::AgentSession>, recor
     };
     match result.and_then(|manager| session.replace_manager(manager)) {
         Ok(()) => {
-            sync_session_state(app, session);
-            app.cells = session_cells(session);
-            app.cell_render_cache.clear();
+            adopt_session(app, session, Transcript::Rebuild);
             app.cells.push(Cell::Notice(format!(
                 "resumed {} session {}",
                 record.source.name(),
                 record.id
             )));
-            update_thinking_border(app, session.thinking_level());
-            refresh_git_branch(app, session);
         }
         Err(error) => app
             .cells
@@ -7694,12 +7719,9 @@ fn run_slash_command(
             };
             match fork.and_then(|manager| session.replace_manager(manager)) {
                 Ok(()) => {
-                    sync_session_state(app, session);
-                    app.cells = session_cells(session);
-                    app.cell_render_cache.clear();
+                    adopt_session(app, session, Transcript::Rebuild);
                     app.cells
                         .push(Cell::Notice("cloned to a new session".into()));
-                    refresh_git_branch(app, session);
                 }
                 Err(error) => app
                     .cells
@@ -7828,11 +7850,8 @@ fn run_slash_command(
         )),
         "new" => match session.new_session() {
             Ok(()) => {
-                sync_session_state(app, session);
-                app.cells.clear();
-                app.cell_render_cache.clear();
+                adopt_session(app, session, Transcript::Empty);
                 app.cells.push(Cell::Notice("started a new session".into()));
-                refresh_git_branch(app, session);
             }
             Err(error) => app
                 .cells
@@ -8090,14 +8109,11 @@ fn import_session(
         .and_then(|manager| session.replace_manager(manager))
     {
         Ok(()) => {
-            sync_session_state(app, session);
-            app.cells = session_cells(session);
-            app.cell_render_cache.clear();
+            adopt_session(app, session, Transcript::Rebuild);
             app.cells.push(Cell::Notice(format!(
                 "imported {} into a new Kiss session",
                 shorten_path(&source.display().to_string())
             )));
-            update_thinking_border(app, session.thinking_level());
         }
         Err(error) => app
             .cells
