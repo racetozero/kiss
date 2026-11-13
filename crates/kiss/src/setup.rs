@@ -6,6 +6,7 @@ use anyhow::{Context as _, Result};
 use kiss_agent::DynTool;
 use kiss_ai::{Model, Registry, ThinkingLevel};
 use kiss_coding::context_files;
+use kiss_coding::model_choice::{self, ModelRequest};
 use kiss_coding::session::manager::SessionManager;
 use kiss_coding::session_runner::{AgentSession, SessionEventSink};
 use kiss_coding::settings::Settings;
@@ -156,21 +157,21 @@ pub fn enabled_models(args: &Args, settings: &Settings, registry: &Registry) -> 
     }
 }
 
+fn model_request(args: &Args) -> ModelRequest<'_> {
+    ModelRequest {
+        pattern: args.model.as_deref(),
+        provider: args.provider.as_deref(),
+        api_key_given: args.api_key.is_some(),
+        import_external_credentials: true,
+    }
+}
+
 pub fn resolve_model(
     args: &Args,
     settings: &Settings,
     registry: &Registry,
 ) -> Result<(Model, Option<ThinkingLevel>)> {
-    kiss_coding::model_choice::choose(
-        &kiss_coding::model_choice::ModelRequest {
-            pattern: args.model.as_deref(),
-            provider: args.provider.as_deref(),
-            api_key_given: args.api_key.is_some(),
-            import_external_credentials: true,
-        },
-        settings,
-        registry,
-    )?
+    model_choice::choose(&model_request(args), settings, registry)?
     .context(
         "no model available: set an API key (e.g. ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY) or pass --model/--api-key",
     )
@@ -227,24 +228,12 @@ pub async fn build_startup(
         })
         .await;
 
-    let (model, cli_thinking, needs_login) = startup_model(
+    let (model, pattern_thinking, needs_login) = startup_model(
         args,
         &registry,
         interactive,
         resolve_model(args, &settings, &registry),
     )?;
-    let thinking = args
-        .thinking
-        .as_deref()
-        .and_then(ThinkingLevel::parse)
-        .or(cli_thinking)
-        .or_else(|| {
-            settings
-                .default_thinking_level
-                .as_deref()
-                .and_then(ThinkingLevel::parse)
-        })
-        .unwrap_or(ThinkingLevel::Off);
 
     // Session.
     let dir = session_dir(args, &settings);
@@ -268,17 +257,14 @@ pub async fn build_startup(
         manager.append_session_info(name)?;
     }
 
-    // Session context may override model/thinking (resumed sessions).
-    let (model, thinking) = if args.model.is_none() {
-        let (saved_model, saved_thinking) = manager.session_settings();
-        let restored_model = saved_model
-            .as_ref()
-            .and_then(|(p, id)| registry.resolve(id, Some(p)).map(|(m, _)| m))
-            .unwrap_or(model);
-        (restored_model, saved_thinking.unwrap_or(thinking))
-    } else {
-        (model, thinking)
-    };
+    let (model, thinking) = model_choice::for_session(
+        &model_request(args),
+        args.thinking.as_deref().and_then(ThinkingLevel::parse),
+        (model, pattern_thinking),
+        &manager,
+        &settings,
+        &registry,
+    );
 
     let enabled_models = enabled_models(args, &settings, &registry);
 

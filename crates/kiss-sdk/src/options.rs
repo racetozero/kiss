@@ -12,6 +12,7 @@ use crate::tools::{build_tools, select_tool_names};
 use anyhow::{Context as _, Result};
 use kiss_agent::{DynTool, StreamFn};
 use kiss_ai::{Model, Registry, ThinkingLevel};
+use kiss_coding::model_choice::{self, ModelRequest};
 use kiss_coding::session::manager::SessionManager;
 use kiss_coding::session_runner::{AgentSession, SessionEventSink};
 use kiss_coding::settings::Settings;
@@ -208,17 +209,9 @@ impl SessionOptions {
         };
 
         let registry = Registry::load(self.models_file.as_deref());
-        let (model, pattern_thinking) = self.resolve_model(&settings, &registry)?;
-        let thinking = self
-            .thinking_level
-            .or(pattern_thinking)
-            .or_else(|| {
-                settings
-                    .default_thinking_level
-                    .as_deref()
-                    .and_then(ThinkingLevel::parse)
-            })
-            .unwrap_or(ThinkingLevel::Off);
+        let chosen = model_choice::choose(&self.model_request(), &settings, &registry)?.context(
+            "no model available: pass `model`, or configure a credential such as ANTHROPIC_API_KEY",
+        )?;
 
         let context = if self.no_context_files {
             Vec::new()
@@ -261,19 +254,14 @@ impl SessionOptions {
             manager.append_session_info(name)?;
         }
 
-        // A resumed session may name a model the caller did not ask for.
-        let (model, thinking) = if self.model.is_none() {
-            let (saved_model, saved_thinking) = manager.session_settings();
-            let restored = saved_model
-                .as_ref()
-                .and_then(|(provider, id)| {
-                    registry.resolve(id, Some(provider)).map(|(model, _)| model)
-                })
-                .unwrap_or(model);
-            (restored, saved_thinking.unwrap_or(thinking))
-        } else {
-            (model, thinking)
-        };
+        let (model, thinking) = model_choice::for_session(
+            &self.model_request(),
+            self.thinking_level,
+            chosen,
+            &manager,
+            &settings,
+            &registry,
+        );
 
         let api_key_override = self
             .api_key
@@ -340,24 +328,13 @@ impl SessionOptions {
         Ok(Some(kiss_mcp::McpManager::new(loaded)?))
     }
 
-    fn resolve_model(
-        &self,
-        settings: &Settings,
-        registry: &Registry,
-    ) -> Result<(Model, Option<ThinkingLevel>)> {
-        kiss_coding::model_choice::choose(
-            &kiss_coding::model_choice::ModelRequest {
-                pattern: self.model.as_deref(),
-                provider: self.provider.as_deref(),
-                api_key_given: self.api_key.is_some(),
-                import_external_credentials: false,
-            },
-            settings,
-            registry,
-        )?
-        .context(
-            "no model available: pass `model`, or configure a credential such as ANTHROPIC_API_KEY",
-        )
+    fn model_request(&self) -> ModelRequest<'_> {
+        ModelRequest {
+            pattern: self.model.as_deref(),
+            provider: self.provider.as_deref(),
+            api_key_given: self.api_key.is_some(),
+            import_external_credentials: false,
+        }
     }
 
     fn open_manager(&self, cwd: &Path, settings: &Settings) -> Result<SessionManager> {
@@ -407,14 +384,15 @@ mod tests {
 
     #[test]
     fn a_missing_model_pattern_is_an_error_naming_the_pattern() {
+        let directory = tempfile::tempdir().unwrap();
         let options = SessionOptions {
+            cwd: directory.path().to_path_buf(),
             model: Some("definitely/not-a-model".into()),
             ..Default::default()
         };
-        let registry = Registry::from_builtin();
-        let error = options
-            .resolve_model(&Settings::default(), &registry)
-            .unwrap_err();
+        let Err(error) = options.build(Arc::new(|_| {})) else {
+            panic!("a model pattern that matches nothing must fail the build");
+        };
         assert!(
             error.to_string().contains("definitely/not-a-model"),
             "{error}"
