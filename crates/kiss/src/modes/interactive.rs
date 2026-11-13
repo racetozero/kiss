@@ -4746,6 +4746,24 @@ fn open_model_picker(
     });
 }
 
+/// The key bound to `action`, written as help text writes keys
+/// ("Ctrl+Shift+P"), or "unbound".
+fn key_label(keybindings: &Keybindings, action: Action) -> String {
+    let Some(key) = keybindings.key_for(action) else {
+        return "unbound".into();
+    };
+    key.to_string()
+        .split('+')
+        .map(|part| {
+            let mut chars = part.chars();
+            chars.next().map_or_else(String::new, |first| {
+                first.to_uppercase().chain(chars).collect()
+            })
+        })
+        .collect::<Vec<_>>()
+        .join("+")
+}
+
 fn save_default_hint(keybindings: &Keybindings) -> String {
     match keybindings.key_for(Action::SaveDefault) {
         Some(key) => format!("{key} or shift+enter"),
@@ -7509,9 +7527,22 @@ fn run_slash_command(
     match name {
         "quit" | "exit" => return Flow::Quit,
         "help" | "hotkeys" => {
-            app.cells.push(Cell::Notice(
-                "Input\n  Enter send · Shift+Enter or Alt+Enter newline · Ctrl+W delete previous word · / commands and skills · $ skills · @ files · ! shell · !! shell outside context\nModels and effort\n  Shift+Tab effort · Ctrl+L select model · Ctrl+P next model · Ctrl+Shift+P previous model\nSession\n  Ctrl+D exit · Esc cancel · Ctrl+C interrupt or clear · double Esc tree\nDisplay and queues\n  Ctrl+O tools · Ctrl+T thinking · Ctrl+X copy · Ctrl+Enter follow-up · Alt+Up dequeue\nWorkflows\n  /workflow <prompt> runs one task as a workflow · /workflows browses runs\n  arrows select · Enter open · Esc back · j/k scroll · f filter · p pause · x stop · r restart · s save".into(),
-            ));
+            // Rebindable actions show the key keybindings.json gives them.
+            let key = |action| key_label(&app.keybindings, action);
+            app.cells.push(Cell::Notice(format!(
+                "Input\n  Enter send · {} or Alt+Enter newline · Ctrl+W delete previous word · / commands and skills · $ skills · @ files · ! shell · !! shell outside context\nModels and effort\n  {} effort · {} select model · {} next model · {} previous model\nSession\n  {} exit · Esc cancel · Ctrl+C interrupt or clear · double Esc tree\nDisplay and queues\n  {} tools · {} thinking · {} copy · {} follow-up · {} dequeue\nWorkflows\n  /workflow <prompt> runs one task as a workflow · /workflows browses runs\n  arrows select · Enter open · Esc back · j/k scroll · f filter · p pause · x stop · r restart · s save",
+                key(Action::Newline),
+                key(Action::CycleThinking),
+                key(Action::SelectModel),
+                key(Action::CycleModel),
+                key(Action::CycleModelBackward),
+                key(Action::Quit),
+                key(Action::ExpandTools),
+                key(Action::ToggleThinking),
+                key(Action::CopyLastResponse),
+                key(Action::QueueFollowUp),
+                key(Action::Dequeue),
+            )));
         }
         "model" => {
             if rest.is_empty()
@@ -8390,6 +8421,17 @@ mod tests {
     use super::*;
     use clap::Parser as _;
     use kiss_coding::settings::{CompactionMode, ReasoningEffortMode};
+
+    #[test]
+    fn help_names_the_bound_keys() {
+        let keybindings = Keybindings::default();
+        assert_eq!(key_label(&keybindings, Action::ExpandTools), "Ctrl+R");
+        assert_eq!(
+            key_label(&keybindings, Action::CycleModelBackward),
+            "Ctrl+Shift+P"
+        );
+        assert_eq!(key_label(&keybindings, Action::OpenTree), "unbound");
+    }
 
     #[test]
     fn a_setting_row_value_is_its_position() {
