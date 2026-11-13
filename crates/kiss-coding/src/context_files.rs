@@ -58,6 +58,18 @@ pub struct SystemPromptFiles {
     pub append: Option<String>,
 }
 
+impl SystemPromptFiles {
+    /// The text appended to the system prompt: the caller's `extra` (a CLI
+    /// flag or SDK option), then `APPEND_SYSTEM.md`.
+    pub fn append_after(&self, extra: Option<&str>) -> Option<String> {
+        match (extra, self.append.as_deref()) {
+            (Some(first), Some(second)) => Some(format!("{first}\n\n{second}")),
+            (Some(value), None) | (None, Some(value)) => Some(value.to_string()),
+            (None, None) => None,
+        }
+    }
+}
+
 /// `SYSTEM.md` and `APPEND_SYSTEM.md`, from the project's `.kiss/` when the
 /// project is trusted, otherwise from the agent directory.
 pub fn system_prompt_files(cwd: &Path, project_trusted: bool) -> SystemPromptFiles {

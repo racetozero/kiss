@@ -240,13 +240,8 @@ impl SessionOptions {
             settings.default_tools.as_deref(),
         )?;
         let files = context_files::system_prompt_files(&cwd, trusted);
+        let append = files.append_after(self.append_system_prompt.as_deref());
         let custom = self.system_prompt.clone().or(files.replace);
-        let append = match (&self.append_system_prompt, &files.append) {
-            (Some(first), Some(second)) => Some(format!("{first}\n\n{second}")),
-            (Some(value), None) => Some(value.clone()),
-            (None, Some(value)) => Some(value.clone()),
-            (None, None) => None,
-        };
         let system_prompt = build_system_prompt(&SystemPromptOptions {
             custom_prompt: custom.as_deref(),
             append: append.as_deref(),

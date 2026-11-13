@@ -8342,19 +8342,8 @@ fn reload_interactive(
         }
     };
 
-    let patterns = {
-        let command_line = Args::split_csv(&args.models);
-        if command_line.is_empty() {
-            reloaded.settings.enabled_models.clone().unwrap_or_default()
-        } else {
-            command_line
-        }
-    };
-    resources.enabled_models = if patterns.is_empty() {
-        Vec::new()
-    } else {
-        session.registry.match_patterns(&patterns)
-    };
+    resources.enabled_models =
+        crate::setup::enabled_models(args, &reloaded.settings, &session.registry);
     resources.skills = reloaded.skills;
     resources.prompt_templates = reloaded.prompt_templates;
     resources.context_file_paths = reloaded.context_file_paths;

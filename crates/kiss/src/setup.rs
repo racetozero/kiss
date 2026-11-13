@@ -115,13 +115,8 @@ pub fn reload_runtime(args: &Args, cwd: &std::path::Path) -> Result<ReloadedRunt
 
     let files = context_files::system_prompt_files(cwd, trusted);
     let (tool_names, mcp) = configured_tools(args, cwd, trusted, &settings)?;
+    let append = files.append_after(args.append_system_prompt.as_deref());
     let custom = args.system_prompt.clone().or(files.replace);
-    let append = match (&args.append_system_prompt, &files.append) {
-        (Some(first), Some(second)) => Some(format!("{first}\n\n{second}")),
-        (Some(value), None) => Some(value.clone()),
-        (None, Some(value)) => Some(value.clone()),
-        (None, None) => None,
-    };
     let system_prompt = build_system_prompt(&SystemPromptOptions {
         custom_prompt: custom.as_deref(),
         append: append.as_deref(),
@@ -140,6 +135,22 @@ pub fn reload_runtime(args: &Args, cwd: &std::path::Path) -> Result<ReloadedRunt
         tools,
         system_prompt,
     })
+}
+
+/// The models Ctrl+P cycles through: `--models`, else the enabledModels
+/// setting; none when neither names any.
+pub fn enabled_models(args: &Args, settings: &Settings, registry: &Registry) -> Vec<Model> {
+    let patterns = Args::split_csv(&args.models);
+    let patterns = if patterns.is_empty() {
+        settings.enabled_models.clone().unwrap_or_default()
+    } else {
+        patterns
+    };
+    if patterns.is_empty() {
+        Vec::new()
+    } else {
+        registry.match_patterns(&patterns)
+    }
 }
 
 pub fn resolve_model(
@@ -190,11 +201,14 @@ pub async fn build_startup(
     sink: SessionEventSink,
 ) -> Result<Startup> {
     let cwd = std::env::current_dir()?;
-    let trusted = args.project_trusted(&cwd);
-    let mut settings = Settings::load(&cwd, trusted);
-    if args.experimental_context_file {
-        settings.override_for_run(|settings| settings.experimental_context_file = true);
-    }
+    let ReloadedRuntime {
+        settings,
+        skills,
+        prompt_templates,
+        context_file_paths,
+        tools,
+        system_prompt,
+    } = reload_runtime(args, &cwd)?;
 
     let mut registry = Registry::load(None);
     let radius_selected = args.provider.as_deref() == Some("radius")
@@ -244,51 +258,6 @@ pub async fn build_startup(
         })
         .unwrap_or(ThinkingLevel::Off);
 
-    // Resources.
-    let context = if args.no_context_files {
-        Vec::new()
-    } else {
-        context_files::discover(&cwd)
-    };
-    let skill_paths: Vec<PathBuf> = args.skills.iter().map(PathBuf::from).collect();
-    let skills = if args.no_skills {
-        kiss_coding::skills::discover(&cwd, false, &skill_paths)
-            .into_iter()
-            .filter(|s| {
-                skill_paths
-                    .iter()
-                    .any(|p| s.file_path.starts_with(p) || &s.file_path == p)
-            })
-            .collect()
-    } else {
-        kiss_coding::skills::discover(&cwd, trusted, &skill_paths)
-    };
-    let template_paths: Vec<PathBuf> = args.prompt_templates.iter().map(PathBuf::from).collect();
-    let prompt_templates = if args.no_prompt_templates {
-        Vec::new()
-    } else {
-        kiss_coding::prompts::discover(&cwd, trusted, &template_paths)
-    };
-
-    // System prompt.
-    let files = context_files::system_prompt_files(&cwd, trusted);
-    let (tool_names, mcp) = configured_tools(args, &cwd, trusted, &settings)?;
-    let custom = args.system_prompt.clone().or(files.replace);
-    let append = match (&args.append_system_prompt, &files.append) {
-        (Some(a), Some(b)) => Some(format!("{a}\n\n{b}")),
-        (Some(a), None) => Some(a.clone()),
-        (None, Some(b)) => Some(b.clone()),
-        (None, None) => None,
-    };
-    let system_prompt = build_system_prompt(&SystemPromptOptions {
-        custom_prompt: custom.as_deref(),
-        append: append.as_deref(),
-        selected_tools: &tool_names,
-        cwd: &cwd.display().to_string(),
-        context_files: &context,
-        skills: &skills,
-    });
-
     // Session.
     let dir = session_dir(args, &settings);
     let manager = if args.no_session {
@@ -323,20 +292,7 @@ pub async fn build_startup(
         (model, thinking)
     };
 
-    let tools = build_tools(&tool_names, &cwd, &settings, mcp.as_ref());
-    let enabled_models = {
-        let patterns = Args::split_csv(&args.models);
-        let patterns = if patterns.is_empty() {
-            settings.enabled_models.clone().unwrap_or_default()
-        } else {
-            patterns
-        };
-        if patterns.is_empty() {
-            Vec::new()
-        } else {
-            registry.match_patterns(&patterns)
-        }
-    };
+    let enabled_models = enabled_models(args, &settings, &registry);
 
     let api_key_override = args
         .api_key
@@ -379,7 +335,7 @@ pub async fn build_startup(
         settings,
         skills,
         prompt_templates,
-        context_file_paths: context.into_iter().map(|c| c.path).collect(),
+        context_file_paths,
         enabled_models,
         initial_message,
         needs_login,
