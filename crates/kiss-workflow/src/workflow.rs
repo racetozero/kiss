@@ -48,7 +48,20 @@ impl Workflow {
     /// A stopped run is not an error: it returns whatever the script had
     /// produced, so completed work is not thrown away.
     pub async fn run(&self) -> Result<Json, RunError> {
+        // A caller may drop this future before the script ends. The run then
+        // stops its agents and ends as stopped instead of staying running.
+        struct EndIfDropped<'a>(Option<&'a RunState>);
+        impl Drop for EndIfDropped<'_> {
+            fn drop(&mut self) {
+                if let Some(state) = self.0 {
+                    state.stop();
+                    state.finish(RunStatus::Stopped, None);
+                }
+            }
+        }
+        let mut guard = EndIfDropped(Some(&self.state));
         let result = self.interp.run().await;
+        guard.0 = None;
         match &result {
             Ok(_) => self.state.finish(RunStatus::Completed, None),
             Err(error) if self.state.stop_token().is_cancelled() => {
@@ -469,6 +482,39 @@ mod tests {
         workflow.stop();
         let result = workflow.run().await.unwrap();
         assert_eq!(result, Json::Null);
+        assert_eq!(workflow.snapshot().status, RunStatus::Stopped);
+    }
+
+    #[tokio::test]
+    async fn a_dropped_run_ends_as_stopped() {
+        struct NeverRunner;
+
+        #[async_trait::async_trait]
+        impl AgentRunner for NeverRunner {
+            async fn run_agent(
+                &self,
+                _request: AgentRequest,
+                cancel: CancellationToken,
+            ) -> AgentOutcome {
+                cancel.cancelled().await;
+                AgentOutcome::Stopped
+            }
+
+            fn tokens_used(&self, _index: AgentId) -> u64 {
+                0
+            }
+        }
+
+        let workflow = Workflow::new(
+            Script::parse(&script("return await agent('check')")).unwrap(),
+            Json::Null,
+            "/repo".into(),
+            Arc::new(NeverRunner),
+            Limits::default(),
+        );
+        let dropped =
+            tokio::time::timeout(std::time::Duration::from_millis(50), workflow.run()).await;
+        assert!(dropped.is_err(), "the run should still be waiting");
         assert_eq!(workflow.snapshot().status, RunStatus::Stopped);
     }
 
