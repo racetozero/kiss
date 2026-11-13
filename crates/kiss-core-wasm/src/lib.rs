@@ -15,7 +15,6 @@ use kiss_agent::{
 use kiss_ai::{AssistantMessage, Model, StopReason, UserMessage};
 use serde::Serialize;
 use std::cell::{Cell, RefCell};
-use std::collections::HashSet;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -38,7 +37,6 @@ struct AgentState {
     max_history_messages: usize,
     messages: Vec<AgentMessage>,
     tools: Vec<DynTool>,
-    tool_names: HashSet<String>,
     steering: Arc<Mutex<Vec<AgentMessage>>>,
     follow_up: Arc<Mutex<Vec<AgentMessage>>>,
     lifecycle: Lifecycle,
@@ -60,7 +58,11 @@ impl AgentState {
     }
 
     fn view(&self) -> AgentStateView {
-        let mut tools = self.tool_names.iter().cloned().collect::<Vec<_>>();
+        let mut tools = self
+            .tools
+            .iter()
+            .map(|tool| tool.name().to_string())
+            .collect::<Vec<_>>();
         tools.sort();
         AgentStateView {
             model: self.model.clone(),
@@ -119,7 +121,6 @@ impl KissAgent {
                 max_history_messages,
                 messages,
                 tools: Vec::new(),
-                tool_names: HashSet::new(),
                 steering: Arc::new(Mutex::new(Vec::new())),
                 follow_up: Arc::new(Mutex::new(Vec::new())),
                 lifecycle: Lifecycle::Idle,
@@ -148,7 +149,11 @@ impl KissAgent {
                 "KISS_LIMIT: at most {MAX_TOOL_COUNT} tools may be registered"
             )));
         }
-        if !state.tool_names.insert(definition.name.clone()) {
+        if state
+            .tools
+            .iter()
+            .any(|tool| tool.name() == definition.name)
+        {
             return Err(js_error(format!(
                 "KISS_INVALID_TOOL: duplicate tool {}",
                 definition.name
@@ -402,7 +407,6 @@ impl KissAgent {
             cancel.cancel();
         }
         state.tools.clear();
-        state.tool_names.clear();
         if let Ok(mut queue) = state.steering.lock() {
             queue.clear();
         }
@@ -462,7 +466,6 @@ impl Drop for KissAgent {
                 cancel.cancel();
             }
             state.tools.clear();
-            state.tool_names.clear();
         }
         self.release_model();
     }
