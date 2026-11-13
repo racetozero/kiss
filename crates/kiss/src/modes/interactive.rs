@@ -647,8 +647,8 @@ enum InputLayer {
 }
 
 impl App {
-    /// Whether anything is working: a run, a command, a side answer, a
-    /// recap, a title, a workflow or a loop job.
+    /// Whether this screen is waiting on work: a run, a command, a side
+    /// answer, a recap or a title. The spinner runs and no recap starts.
     fn busy(&self, session: &kiss_coding::AgentSession) -> bool {
         session.is_running()
             || self.command.is_some()
@@ -658,6 +658,12 @@ impl App {
                 .is_some_and(|panel| matches!(panel.state, BtwState::Answering(_)))
             || self.recap_job.is_some()
             || self.title_generation_pending
+    }
+
+    /// `busy`, or background work the terminal host should show as working:
+    /// a workflow run or a loop job, which may sleep for hours between steps.
+    fn working(&self, session: &kiss_coding::AgentSession) -> bool {
+        self.busy(session)
             || session
                 .workflows()
                 .is_some_and(|runtime| runtime.active().is_some())
@@ -1810,10 +1816,10 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
                 dirty = true;
             }
             Some(event) = command_rx.recv() => {
-                handle_command_event(&mut app, event, &mut resources, &mut file_search, &session);
+                handle_command_event(&mut app, event, &mut file_search, &session);
                 for _ in 1..MAX_READY_EVENTS_PER_TICK {
                     let Ok(event) = command_rx.try_recv() else { break };
-                    handle_command_event(&mut app, event, &mut resources, &mut file_search, &session);
+                    handle_command_event(&mut app, event, &mut file_search, &session);
                 }
                 dirty = true;
             }
@@ -1916,7 +1922,7 @@ fn terminal_host_state(app: &App, session: &kiss_coding::AgentSession) -> Progra
     if let Some((kind, message)) = blocked {
         return ProgramStatus::Blocked(kind, message);
     }
-    if app.busy(session) {
+    if app.working(session) {
         ProgramStatus::Working
     } else {
         app.idle_status
@@ -2258,7 +2264,7 @@ const FEATURED_ACCOUNT_PROVIDERS: &[&str] = &[
 
 const ADD_ACCOUNT: usize = usize::MAX;
 
-fn run_accounts_command(app: &mut App, resources: &mut InteractiveResources, arguments: &str) {
+fn run_accounts_command(app: &mut App, arguments: &str) {
     let parts = arguments.split_whitespace().collect::<Vec<_>>();
     let (action, rest) = match parts.first().copied() {
         None | Some("list") => (AccountAction::Manage, &parts[parts.len().min(1)..]),
@@ -2282,13 +2288,7 @@ fn run_accounts_command(app: &mut App, resources: &mut InteractiveResources, arg
             start_account_add(app, provider, label);
         }
         (AccountAction::Use | AccountAction::Remove, Some(index)) => {
-            apply_account_action(
-                app,
-                resources,
-                provider,
-                index,
-                action == AccountAction::Use,
-            );
+            apply_account_action(app, provider, index, action == AccountAction::Use);
         }
         _ => open_accounts_picker(app, provider, action),
     }
@@ -2437,33 +2437,21 @@ fn start_account_add(app: &mut App, provider: &str, label: Option<String>) {
 }
 
 /// Refresh what depends on a provider's credentials after a login, logout
-/// or account switch: Cursor's model list comes from the account, and a
-/// Copilot account lists the models it may use.
-fn credentials_changed(app: &mut App, resources: &mut InteractiveResources, provider: &str) {
+/// or account switch: Cursor's model list comes from the account. A Copilot
+/// account's allowed models need nothing here, because `ModelAccess` reads
+/// them for every model list.
+fn credentials_changed(app: &mut App, provider: &str) {
     if provider == "cursor" {
         app.model_catalog = None;
-    }
-    if provider == "github-copilot"
-        && let Some(ids) = kiss_ai::auth::stored_oauth_model_ids(provider)
-    {
-        resources
-            .enabled_models
-            .retain(|model| model.provider != provider || ids.contains(&model.id));
     }
 }
 
 /// Make account `index` active (`activate`) or remove it.
-fn apply_account_action(
-    app: &mut App,
-    resources: &mut InteractiveResources,
-    provider: &str,
-    index: usize,
-    activate: bool,
-) {
+fn apply_account_action(app: &mut App, provider: &str, index: usize, activate: bool) {
     use kiss_ai::auth::accounts;
     let result = if activate {
         accounts::activate(provider, index).map(|account| {
-            credentials_changed(app, resources, provider);
+            credentials_changed(app, provider);
             format!(
                 "{provider}: account {} ({}) is active",
                 index + 1,
@@ -2539,14 +2527,13 @@ fn format_duration_secs(seconds: u64) -> String {
 fn handle_command_event(
     app: &mut App,
     event: CommandEvent,
-    resources: &mut InteractiveResources,
     file_search: &mut FileSearchService,
     session: &Arc<kiss_coding::AgentSession>,
 ) {
     match event {
         CommandEvent::ForCommand { id, event } => {
             if app.command.as_ref().is_some_and(|command| command.id == id) {
-                handle_command_event(app, *event, resources, file_search, session);
+                handle_command_event(app, *event, file_search, session);
             }
         }
         CommandEvent::CommandFinished => app.command = None,
@@ -2587,7 +2574,7 @@ fn handle_command_event(
             app.command = None;
             match result {
                 Ok(()) => {
-                    credentials_changed(app, resources, &provider);
+                    credentials_changed(app, &provider);
                     app.cells
                         .push(Cell::Notice(format!("logged in to {provider}")));
                     complete_account_add(app, &provider, true);
@@ -2657,7 +2644,8 @@ fn handle_command_event(
                 output.push_str(&chunk);
                 // While it runs, show the tail, as the finished result keeps.
                 if output.len() > kiss_sdk::shell::MAX_INLINE_BYTES {
-                    let start = output.ceil_char_boundary(output.len() - kiss_sdk::shell::MAX_INLINE_BYTES);
+                    let start =
+                        output.ceil_char_boundary(output.len() - kiss_sdk::shell::MAX_INLINE_BYTES);
                     output.drain(..start);
                 }
             }
@@ -3634,7 +3622,7 @@ fn handle_input(
             return Flow::Continue;
         }
         InputLayer::SecretPrompt => {
-            return handle_secret_prompt(app, session, resources, event, command_tx);
+            return handle_secret_prompt(app, session, event, command_tx);
         }
         // The progress view owns the keyboard while it is open, so that `x`,
         // `p`, and the arrow keys steer the run rather than the editor.
@@ -3926,7 +3914,6 @@ fn handle_input(
 fn handle_secret_prompt(
     app: &mut App,
     session: &Arc<kiss_coding::AgentSession>,
-    resources: &mut InteractiveResources,
     event: &InputEvent,
     command_tx: &mpsc::UnboundedSender<CommandEvent>,
 ) -> Flow {
@@ -3975,7 +3962,7 @@ fn handle_secret_prompt(
                         SecretPromptKind::ApiKey(provider) => {
                             match kiss_ai::auth::store_api_key(&provider, key) {
                                 Ok(()) => {
-                                    credentials_changed(app, resources, &provider);
+                                    credentials_changed(app, &provider);
                                     app.cells.push(Cell::Notice(format!(
                                         "saved API key for {provider}"
                                     )));
@@ -6596,17 +6583,13 @@ fn apply_picker_selection(
         PickerKind::Accounts(provider, action) => match (value, action) {
             (ADD_ACCOUNT, _) => start_account_add(app, &provider, None),
             (index, AccountAction::Manage) => open_account_actions(app, &provider, index),
-            (index, action) => apply_account_action(
-                app,
-                resources,
-                &provider,
-                index,
-                action == AccountAction::Use,
-            ),
+            (index, action) => {
+                apply_account_action(app, &provider, index, action == AccountAction::Use)
+            }
         },
         PickerKind::AccountActions(provider, index) => {
             if value < 2 {
-                apply_account_action(app, resources, &provider, index, value == 0);
+                apply_account_action(app, &provider, index, value == 0);
             }
             open_accounts_picker(app, &provider, AccountAction::Manage);
         }
@@ -6619,7 +6602,7 @@ fn apply_picker_selection(
                     LoginChoice::External(source) => {
                         match kiss_ai::auth::external::import(source) {
                             Ok(()) => {
-                                credentials_changed(app, resources, &provider);
+                                credentials_changed(app, &provider);
                                 app.cells.push(Cell::Notice(format!(
                                     "imported {provider} credentials from {}",
                                     source.application
@@ -6639,7 +6622,7 @@ fn apply_picker_selection(
         }
         PickerKind::Logout(providers) => {
             if let Some(provider) = providers.get(value) {
-                credentials_changed(app, resources, provider);
+                credentials_changed(app, provider);
                 match kiss_ai::auth::remove_api_key(provider) {
                     Ok(true) => app.cells.push(Cell::Notice(format!(
                         "removed stored credentials for {provider}"
@@ -7829,7 +7812,7 @@ fn run_slash_command(
             }
         }
         "trust" => open_trust_picker(app, session),
-        "accounts" => run_accounts_command(app, resources, &rest),
+        "accounts" => run_accounts_command(app, &rest),
         "login" => {
             // A login in flight may belong to an account add. It must finish
             // first, or its credential would replace the active account.
@@ -7855,7 +7838,7 @@ fn run_slash_command(
             if rest.is_empty() {
                 open_logout_picker(app);
             } else {
-                credentials_changed(app, resources, rest);
+                credentials_changed(app, rest);
                 match kiss_ai::auth::remove_api_key(rest) {
                     Ok(true) => app.cells.push(Cell::Notice(format!(
                         "removed stored credentials for {rest}"
@@ -8941,7 +8924,6 @@ mod tests {
     fn voice_result_edits_draft_without_sending() {
         let mut app = test_app();
         let session = synthetic_session();
-        let mut resources = test_resources();
         let (tx, _) = mpsc::unbounded_channel();
         let mut search = FileSearchService::new(tx);
         app.editor.set_text("before ");
@@ -8955,7 +8937,6 @@ mod tests {
                 generation: 0,
                 result: Ok("hello".into()),
             },
-            &mut resources,
             &mut search,
             &session,
         );
@@ -8968,7 +8949,6 @@ mod tests {
                 generation: 0,
                 result: Ok("old".into()),
             },
-            &mut resources,
             &mut search,
             &session,
         );
@@ -9215,7 +9195,6 @@ mod tests {
                     result: Ok(Arc::new(registry.clone())),
                     pattern: pattern.map(str::to_owned),
                 },
-                &mut resources,
                 &mut file_search,
                 &session,
             );
@@ -9253,7 +9232,7 @@ mod tests {
                 let event = rx
                     .try_recv()
                     .expect("cached model list must be ready without waiting for discovery");
-                handle_command_event(&mut app, event, &mut resources, &mut file_search, &session);
+                handle_command_event(&mut app, event, &mut file_search, &session);
                 assert!(app.command.is_none());
                 let picker = app.picker.as_ref().unwrap();
                 let PickerKind::Model(models) = &picker.kind else {
@@ -9268,7 +9247,6 @@ mod tests {
                     provider: "cursor".into(),
                     result: Ok(()),
                 },
-                &mut resources,
                 &mut file_search,
                 &session,
             );
@@ -9282,7 +9260,6 @@ mod tests {
                     result: Err("discovery failed".into()),
                     pattern: None,
                 },
-                &mut resources,
                 &mut file_search,
                 &session,
             );
@@ -9325,7 +9302,6 @@ mod tests {
                 session_id: session_id.clone(),
                 result: Ok("Fix login flow".into()),
             },
-            &mut resources,
             &mut file_search,
             &session,
         );
@@ -9342,7 +9318,6 @@ mod tests {
                 session_id,
                 result: Ok("Late automatic title".into()),
             },
-            &mut resources,
             &mut file_search,
             &session,
         );
@@ -9388,7 +9363,6 @@ mod tests {
     async fn a_command_task_that_ends_without_a_result_frees_the_slot() {
         let session = synthetic_session();
         let mut app = test_app();
-        let mut resources = test_resources();
         let (command_tx, mut command_rx) = mpsc::unbounded_channel();
         assert!(begin_uncancellable_command(&mut app, "working".into()));
         let task = CommandTask::new(&app, &command_tx);
@@ -9397,7 +9371,7 @@ mod tests {
         let event = command_rx.recv().await.expect("release");
         let (file_tx, _file_rx) = mpsc::unbounded_channel();
         let mut file_search = FileSearchService::new(file_tx);
-        handle_command_event(&mut app, event, &mut resources, &mut file_search, &session);
+        handle_command_event(&mut app, event, &mut file_search, &session);
         assert!(app.command.is_none());
         assert!(begin_uncancellable_command(&mut app, "next".into()));
     }
@@ -9426,7 +9400,7 @@ mod tests {
 
         let (file_tx, _file_rx) = mpsc::unbounded_channel();
         let mut file_search = FileSearchService::new(file_tx);
-        handle_command_event(&mut app, event, &mut resources, &mut file_search, &session);
+        handle_command_event(&mut app, event, &mut file_search, &session);
         assert!(app.command.is_none());
         assert!(
             matches!(app.cells.last(), Some(Cell::Error(error)) if error.starts_with("update failed:") && error.contains("not available in debug builds"))
@@ -10929,12 +10903,11 @@ mod tests {
     fn apply_command_event(
         app: &mut App,
         session: &Arc<kiss_coding::AgentSession>,
-        resources: &mut InteractiveResources,
         event: CommandEvent,
     ) {
         let (search_tx, _search_rx) = mpsc::unbounded_channel();
         let mut search = FileSearchService::new(search_tx);
-        handle_command_event(app, event, resources, &mut search, session);
+        handle_command_event(app, event, &mut search, session);
     }
 
     fn visible_frame(app: &mut App, session: &Arc<kiss_coding::AgentSession>) -> String {
@@ -11139,7 +11112,6 @@ mod tests {
         apply_command_event(
             &mut app,
             &session,
-            &mut resources,
             CommandEvent::ShellFinished(Err("cancelled".into())),
         );
         start_shell_passthrough(&mut app, &session, "sleep 32".into(), &tx);
@@ -11152,7 +11124,6 @@ mod tests {
         let mut app = test_app();
         let directory = tempfile::tempdir().unwrap();
         let session = test_session(kiss_coding::SessionManager::in_memory(directory.path()));
-        let mut resources = test_resources();
         let (tx, mut rx) = mpsc::unbounded_channel();
         start_shell_passthrough(&mut app, &session, "sleep 30".into(), &tx);
         assert!(cancel_command(&mut app));
@@ -11162,7 +11133,7 @@ mod tests {
             .await
             .expect("the cancelled command must report completion")
             .unwrap();
-        apply_command_event(&mut app, &session, &mut resources, event);
+        apply_command_event(&mut app, &session, event);
         let frame = visible_frame(&mut app, &session);
         assert!(frame.contains("running !sleep 31 (esc"), "{frame}");
         cancel_command(&mut app);
@@ -11216,14 +11187,14 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-        apply_command_event(&mut app, &session, &mut resources, started);
+        apply_command_event(&mut app, &session, started);
         run_command_for_test(&mut app, &session, &mut resources, "new");
         std::fs::write(directory.path().join("release-shell"), "").unwrap();
         let finished = tokio::time::timeout(Duration::from_secs(2), rx.recv())
             .await
             .unwrap()
             .unwrap();
-        apply_command_event(&mut app, &session, &mut resources, finished);
+        apply_command_event(&mut app, &session, finished);
         let messages = session
             .manager
             .lock()
@@ -11242,11 +11213,9 @@ mod tests {
     fn a_workflow_report_on_an_idle_session_joins_the_history_without_a_queue() {
         let mut app = test_app();
         let session = synthetic_session();
-        let mut resources = test_resources();
         apply_command_event(
             &mut app,
             &session,
-            &mut resources,
             CommandEvent::WorkflowFinished {
                 name: "audit".into(),
                 result: Ok("all clear".into()),
@@ -11263,13 +11232,11 @@ mod tests {
     async fn a_background_mcp_check_does_not_end_a_running_command() {
         let mut app = test_app();
         let session = synthetic_session();
-        let mut resources = test_resources();
         let (tx, _rx) = mpsc::unbounded_channel();
         start_shell_passthrough(&mut app, &session, "sleep 30".into(), &tx);
         apply_command_event(
             &mut app,
             &session,
-            &mut resources,
             CommandEvent::McpServerChecked(Box::new(McpPanelServer {
                 name: "example".into(),
                 entry: Default::default(),

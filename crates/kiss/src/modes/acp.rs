@@ -186,8 +186,13 @@ impl KissAcpAgent {
             return Ok(session);
         }
         let reference = id.to_string();
-        let path = SessionManager::resolve_reference(&self.session_directory(), &reference)
-            .map_err(|_| {
+        // ACP names sessions by exact id, never by path or prefix.
+        let path = SessionManager::list_all(&self.session_directory())
+            .map_err(internal_error)?
+            .into_iter()
+            .find(|listing| listing.id == reference)
+            .map(|listing| listing.path)
+            .ok_or_else(|| {
                 agent_client_protocol::Error::resource_not_found(Some(reference.clone()))
             })?;
         let stored_cwd = SessionManager::open(&path)
@@ -920,8 +925,13 @@ fn forward_event(
         AgentEvent::MessageEnd {
             message: AgentMessage::Assistant(message),
         } => {
+            // The last assistant message decides the outcome, so a failed
+            // attempt that a retry then answered is not an error.
             match prompt_stop_reason(message.stop_reason, message.error_message.as_deref()) {
-                Ok(reason) => *stop_reason = reason,
+                Ok(reason) => {
+                    *stop_reason = reason;
+                    *prompt_error = None;
+                }
                 Err(error) => *prompt_error = Some(error),
             }
             Ok(())
