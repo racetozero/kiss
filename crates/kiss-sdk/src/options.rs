@@ -193,20 +193,7 @@ impl SessionOptions {
         std::fs::create_dir_all(&cwd)
             .with_context(|| format!("create working directory {}", cwd.display()))?;
 
-        let trusted = trust::resolve(
-            &cwd,
-            if self.trust_project_files {
-                Some(true)
-            } else if self.ignore_project_files {
-                Some(false)
-            } else {
-                None
-            },
-        );
-        let settings = match &self.settings {
-            Some(settings) => settings.clone(),
-            None => Settings::load(&cwd, trusted),
-        };
+        let (trusted, settings) = self.trust_and_settings();
 
         let registry = Registry::load(self.models_file.as_deref());
         let chosen = model_choice::choose(&self.model_request(), &settings, &registry)?.context(
@@ -326,6 +313,35 @@ impl SessionOptions {
             return Ok(None);
         }
         Ok(Some(kiss_mcp::McpManager::new(loaded)?))
+    }
+
+    /// The folder new and resumed sessions of these options are saved in:
+    /// `session_dir`, else the sessionDir setting read under the same project
+    /// trust that `build` uses.
+    pub fn sessions_directory(&self) -> PathBuf {
+        let (_, settings) = self.trust_and_settings();
+        kiss_coding::session_dir(
+            self.session_dir.as_deref().and_then(Path::to_str),
+            &settings,
+        )
+    }
+
+    fn trust_and_settings(&self) -> (bool, Settings) {
+        let trusted = trust::resolve(
+            &self.cwd,
+            if self.trust_project_files {
+                Some(true)
+            } else if self.ignore_project_files {
+                Some(false)
+            } else {
+                None
+            },
+        );
+        let settings = match &self.settings {
+            Some(settings) => settings.clone(),
+            None => Settings::load(&self.cwd, trusted),
+        };
+        (trusted, settings)
     }
 
     fn model_request(&self) -> ModelRequest<'_> {

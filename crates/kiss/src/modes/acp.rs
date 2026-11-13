@@ -187,7 +187,7 @@ impl KissAcpAgent {
         }
         let reference = id.to_string();
         // ACP names sessions by exact id, never by path or prefix.
-        let path = SessionManager::list_all(&self.session_directory())
+        let path = SessionManager::list_all(&self.options.sessions_directory())
             .map_err(internal_error)?
             .into_iter()
             .find(|listing| listing.id == reference)
@@ -215,18 +215,6 @@ impl KissAcpAgent {
         Ok(session)
     }
 
-    /// The folder the SDK writes this agent's sessions to, so listing and
-    /// loading find them.
-    fn session_directory(&self) -> PathBuf {
-        kiss_coding::session_dir(
-            self.options
-                .session_dir
-                .as_deref()
-                .and_then(std::path::Path::to_str),
-            &kiss_coding::Settings::load(&self.options.cwd, false),
-        )
-    }
-
     fn list_sessions(
         &self,
         request: ListSessionsRequest,
@@ -240,7 +228,7 @@ impl KissAcpAgent {
             return Err(agent_client_protocol::Error::invalid_params()
                 .data("session list cwd must be an absolute path"));
         }
-        let directory = self.session_directory();
+        let directory = self.options.sessions_directory();
         let listings = match request.cwd.as_deref() {
             Some(cwd) => SessionManager::list(cwd, &directory),
             None => SessionManager::list_all(&directory),
@@ -318,7 +306,7 @@ impl KissAcpAgent {
         }
         drop(active);
 
-        let path = SessionManager::list_all(&self.session_directory())
+        let path = SessionManager::list_all(&self.options.sessions_directory())
             .map_err(internal_error)?
             .into_iter()
             .find(|listing| listing.id == id.to_string())
