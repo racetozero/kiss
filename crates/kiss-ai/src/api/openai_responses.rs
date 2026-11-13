@@ -209,7 +209,6 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
                 request = request.header("user-agent", concat!("kiss/", env!("CARGO_PKG_VERSION")));
             }
             request = request
-                .bearer_auth(&api_key)
                 .header("OpenAI-Beta", "responses=experimental")
                 .header("accept", "text/event-stream");
             if let Some(account_id) = codex_account_id.as_deref() {
@@ -221,17 +220,10 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
                     .header("x-client-request-id", session_id);
             }
         }
-        ResponsesProvider::AzureOpenAi => {
-            if credential.is_bearer() {
-                request = request.bearer_auth(&api_key);
-            } else {
-                request = request.header("api-key", &api_key);
-            }
-        }
-        ResponsesProvider::OpenAi | ResponsesProvider::Other => {
-            request = request.bearer_auth(&api_key);
-        }
+        ResponsesProvider::AzureOpenAi | ResponsesProvider::OpenAi | ResponsesProvider::Other => {}
     }
+    let (auth_name, auth_value) = auth_header(provider, credential.is_bearer(), &api_key);
+    request = request.header(auth_name, auth_value);
     request = apply_provider_headers(request, model, context, options);
 
     let response = tokio::select! {
@@ -439,6 +431,16 @@ fn websocket_url(model: &Model, response_url: &str) -> anyhow::Result<String> {
     Ok(url.to_string())
 }
 
+/// The header that carries the credential, for HTTP and WebSocket alike:
+/// Azure takes an API key in `api-key`, everything else a bearer token.
+fn auth_header(provider: ResponsesProvider, bearer: bool, api_key: &str) -> (&'static str, String) {
+    if provider == ResponsesProvider::AzureOpenAi && !bearer {
+        ("api-key", api_key.to_string())
+    } else {
+        ("authorization", format!("Bearer {api_key}"))
+    }
+}
+
 fn insert_websocket_header(
     headers: &mut tokio_tungstenite::tungstenite::http::HeaderMap,
     name: &str,
@@ -479,11 +481,12 @@ async fn connect_websocket(
     for (name, value) in &model.headers {
         insert_websocket_header(request.headers_mut(), name, value)?;
     }
-    insert_websocket_header(
-        request.headers_mut(),
-        "authorization",
-        &format!("Bearer {api_key}"),
-    )?;
+    let bearer = options
+        .credential
+        .as_ref()
+        .is_none_or(crate::ResolvedCredential::is_bearer);
+    let (auth_name, auth_value) = auth_header(ResponsesProvider::for_model(model), bearer, api_key);
+    insert_websocket_header(request.headers_mut(), auth_name, &auth_value)?;
     if codex {
         if !account_id.is_empty() {
             insert_websocket_header(request.headers_mut(), "chatgpt-account-id", account_id)?;
@@ -1369,6 +1372,22 @@ pub(crate) fn build_request(model: &Model, context: &Context, options: &StreamOp
 
 #[cfg(test)]
 mod request_tests {
+    #[test]
+    fn azure_api_keys_use_the_api_key_header_on_every_transport() {
+        assert_eq!(
+            super::auth_header(ResponsesProvider::AzureOpenAi, false, "k"),
+            ("api-key", "k".to_string())
+        );
+        assert_eq!(
+            super::auth_header(ResponsesProvider::AzureOpenAi, true, "t"),
+            ("authorization", "Bearer t".to_string())
+        );
+        assert_eq!(
+            super::auth_header(ResponsesProvider::OpenAi, false, "k"),
+            ("authorization", "Bearer k".to_string())
+        );
+    }
+
     use super::*;
     use base64::Engine as _;
     use std::collections::BTreeMap;
@@ -2017,7 +2036,13 @@ mod request_tests {
 
         let (path, headers) = headers_rx.await.unwrap();
         assert_eq!(path, expected_path);
-        assert_eq!(headers["authorization"], "Bearer sk-test");
+        // Azure takes an API key in api-key on the WebSocket too, as on HTTP.
+        if api == "azure-openai-responses" {
+            assert_eq!(headers["api-key"], "sk-test");
+            assert!(!headers.contains_key("authorization"));
+        } else {
+            assert_eq!(headers["authorization"], "Bearer sk-test");
+        }
         assert!(!headers.contains_key("chatgpt-account-id"));
         assert!(!headers.contains_key("originator"));
         assert!(!headers.contains_key("openai-beta"));
