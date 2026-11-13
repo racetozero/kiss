@@ -73,6 +73,7 @@ pub struct PartialBuilder {
     pub message: AssistantMessage,
     sink: EventSink,
     /// Raw argument text per tool-call content index.
+    /// Tool calls still receiving arguments: content index and raw JSON.
     tool_args: Vec<(usize, String)>,
     started: bool,
     cost_multiplier: f64,
@@ -249,12 +250,11 @@ impl PartialBuilder {
         structured_args: Option<serde_json::Value>,
         complete: bool,
     ) {
-        let raw = self
-            .tool_args
-            .iter()
-            .find(|(i, _)| *i == idx)
-            .map(|(_, r)| r.clone())
-            .unwrap_or_default();
+        let Some(position) = self.tool_args.iter().position(|(i, _)| *i == idx) else {
+            // Already finished: a provider can send a second end event.
+            return;
+        };
+        let (_, raw) = self.tool_args.remove(position);
         if let Some(ContentBlock::ToolCall(tc)) = self.message.content.get_mut(idx) {
             let empty = || serde_json::Value::Object(Default::default());
             tc.arguments = match structured_args {
@@ -279,16 +279,9 @@ impl PartialBuilder {
         }
     }
 
-    /// Close any content block that never got its end event (stream cut off).
+    /// Close any tool call that never got its end event (stream cut off).
     pub fn close_open_blocks(&mut self) {
-        let open_tools: Vec<usize> = self
-            .tool_args
-            .iter()
-            .filter(|(i, _)| {
-                matches!(self.message.content.get(*i), Some(ContentBlock::ToolCall(tc)) if tc.arguments_error.is_none() && tc.arguments.as_object().is_some_and(|o| o.is_empty()))
-            })
-            .map(|(i, _)| *i)
-            .collect();
+        let open_tools: Vec<usize> = self.tool_args.iter().map(|(i, _)| *i).collect();
         for idx in open_tools {
             self.finalize_tool_call(idx, None, false);
         }
@@ -536,6 +529,28 @@ mod provider_header_tests {
         );
         let seconds = retry_after_seconds(&headers).unwrap();
         assert!((598..=601).contains(&seconds), "{seconds}");
+    }
+
+    #[tokio::test]
+    async fn a_finished_tool_call_without_arguments_ends_once() {
+        let model: Model = serde_json::from_value(serde_json::json!({
+            "id": "m", "name": "m", "api": "openai-completions", "provider": "test",
+            "baseUrl": "https://example.com", "reasoning": false, "input": ["text"],
+            "contextWindow": 1000, "maxTokens": 100,
+            "cost": {"input": 0.0, "output": 0.0, "cacheRead": 0.0, "cacheWrite": 0.0}
+        }))
+        .unwrap();
+        let (sink, mut stream) = crate::EventStream::channel();
+        let mut builder = PartialBuilder::new(&model, sink);
+        let idx = builder.begin_tool_call("call_1".into(), "now".into());
+        builder.append_tool_args(idx, "{}");
+        builder.end_tool_call(idx, None);
+        builder.finish(StopReason::ToolUse, &model);
+        let mut ends = 0;
+        while let Some(event) = stream.next().await {
+            ends += usize::from(matches!(event, AssistantEvent::ToolCallEnd { .. }));
+        }
+        assert_eq!(ends, 1);
     }
 
     #[test]
