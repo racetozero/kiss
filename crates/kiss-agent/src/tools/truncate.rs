@@ -5,6 +5,20 @@
 pub const DEFAULT_MAX_LINES: usize = 2000;
 pub const DEFAULT_MAX_BYTES: usize = 50 * 1024;
 pub const GREP_MAX_LINE_LENGTH: usize = 500;
+/// Most text a tool backed by another program (an MCP server, a web page)
+/// may put in one content block.
+pub const EXTERNAL_MAX_BYTES: usize = 100_000;
+
+/// Keep the start of external text within [`EXTERNAL_MAX_BYTES`] on a
+/// character boundary, and say which `source` was cut.
+pub fn limit_external_text(mut text: String, source: &str) -> String {
+    if text.len() <= EXTERNAL_MAX_BYTES {
+        return text;
+    }
+    text.truncate(text.floor_char_boundary(EXTERNAL_MAX_BYTES));
+    text.push_str(&format!("\n\n[{source} output was truncated by KISS.]"));
+    text
+}
 
 #[derive(Debug, Clone, PartialEq, Default, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]

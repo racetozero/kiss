@@ -8,8 +8,6 @@ use rmcp::model::ContentBlock as McpContent;
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
-const MAX_TEXT_BYTES: usize = 100_000;
-
 #[derive(Clone)]
 pub struct McpTool {
     manager: McpManager,
@@ -229,14 +227,8 @@ fn convert_content(content: Vec<McpContent>) -> Result<Vec<KissContent>> {
     Ok(converted)
 }
 
-fn limit_text(mut text: String) -> String {
-    if text.len() <= MAX_TEXT_BYTES {
-        return text;
-    }
-    let end = text.floor_char_boundary(MAX_TEXT_BYTES);
-    text.truncate(end);
-    text.push_str("\n\n[MCP output was truncated by KISS.]\n");
-    text
+fn limit_text(text: String) -> String {
+    kiss_agent::tools::truncate::limit_external_text(text, "MCP")
 }
 
 #[cfg(test)]
@@ -245,7 +237,7 @@ mod tests {
 
     #[test]
     fn text_limit_keeps_utf8_valid() {
-        let text = "é".repeat(MAX_TEXT_BYTES);
+        let text = "é".repeat(kiss_agent::tools::truncate::EXTERNAL_MAX_BYTES);
         let limited = limit_text(text);
         assert!(limited.is_char_boundary(limited.len()));
         assert!(limited.contains("truncated"));

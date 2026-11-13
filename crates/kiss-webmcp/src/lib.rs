@@ -19,7 +19,6 @@ use url::Url;
 
 const DEFAULT_CDP_PORT: u16 = 9222;
 const CALL_TIMEOUT: Duration = Duration::from_secs(60);
-const MAX_TEXT_BYTES: usize = 100_000;
 
 #[derive(Debug, Clone, Default)]
 pub struct WebMcpConfig {
@@ -862,14 +861,8 @@ fn untrusted_result(value: &impl Serialize) -> Result<ToolResult> {
     })
 }
 
-fn limit_text(mut text: String) -> String {
-    if text.len() <= MAX_TEXT_BYTES {
-        return text;
-    }
-    let end = text.floor_char_boundary(MAX_TEXT_BYTES);
-    text.truncate(end);
-    text.push_str("\n\n[WebMCP output was truncated by KISS.]");
-    text
+fn limit_text(text: String) -> String {
+    kiss_agent::tools::truncate::limit_external_text(text, "WebMCP")
 }
 
 #[cfg(test)]
