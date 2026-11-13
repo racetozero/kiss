@@ -188,9 +188,13 @@ impl KissAcpAgent {
         // With --no-session nothing is saved, so no saved file may be
         // opened and appended to either.
         if self.options.session == SessionSource::InMemory {
-            return Err(agent_client_protocol::Error::resource_not_found(Some(
-                id.to_string(),
-            )));
+            return Err(
+                agent_client_protocol::Error::resource_not_found(Some(id.to_string())).data(
+                    format!(
+                        "session {id} cannot be loaded because kiss acp runs with --no-session, which saves and opens no session files. Restart kiss acp without --no-session to load saved sessions."
+                    ),
+                ),
+            );
         }
         let reference = id.to_string();
         // ACP names sessions by exact id, never by path or prefix.
