@@ -108,6 +108,7 @@ pub fn for_session(
                 .and_then(ThinkingLevel::parse)
         })
         .unwrap_or(ThinkingLevel::Off);
+    let thinking = model.clamp_thinking_level(thinking);
     (model, thinking)
 }
 
@@ -160,5 +161,26 @@ mod tests {
             (model.provider.as_str(), thinking),
             ("openai", ThinkingLevel::Low)
         );
+
+        // The saved level is moved to one the named model supports.
+        let plain = registry
+            .all()
+            .iter()
+            .find(|model| !model.reasoning)
+            .unwrap()
+            .clone();
+        let named = ModelRequest {
+            pattern: Some(&plain.id),
+            ..request(None)
+        };
+        let (_, thinking) = for_session(
+            &named,
+            None,
+            (plain.clone(), None),
+            &manager,
+            &settings,
+            &registry,
+        );
+        assert_eq!(thinking, ThinkingLevel::Off);
     }
 }

@@ -749,8 +749,6 @@ impl AgentSession {
         Ok(())
     }
 
-    /// Report a failed session-file write. The manager keeps the entries, so
-    /// the run continues with them.
     /// Save the result of a shell command the user ran in session
     /// `session_id`. It is dropped when that session was replaced meanwhile.
     /// While a run is active it waits and is saved when the run ends, so it
@@ -775,6 +773,16 @@ impl AgentSession {
     /// Save the user shell results that waited for a run to end. A run that
     /// started again in the meantime keeps them waiting.
     fn flush_user_shell(&self) {
+        // This runs from ActivePhase's drop. During a panic a poisoned lock
+        // would panic again and abort the process, so do nothing then.
+        if std::thread::panicking()
+            || self
+                .pending_user_shell
+                .lock()
+                .map_or(true, |pending| pending.is_empty())
+        {
+            return;
+        }
         let mut manager = self.manager.lock().unwrap();
         if *self.phase.lock().unwrap() != RunPhase::Idle {
             return;
@@ -790,6 +798,8 @@ impl AgentSession {
         self.report_save(saved);
     }
 
+    /// Report a failed session-file write. The manager keeps the entries, so
+    /// the run continues with them.
     fn report_save<T>(&self, result: anyhow::Result<T>) {
         let error = match result {
             Err(error) => Some(format!("{error:#}")),
