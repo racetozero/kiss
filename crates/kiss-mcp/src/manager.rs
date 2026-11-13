@@ -109,14 +109,63 @@ struct ServerCache {
 
 enum Runtime {
     Disconnected,
-    /// `active` counts calls in flight; the connection is idle only when
-    /// there are none.
     Connected {
         client: Client,
-        last_used: Instant,
-        active: usize,
+        usage: Arc<ConnectionUse>,
     },
     Failed(String),
+}
+
+/// How one connection is used, shared with the calls in flight on it, so a
+/// call that ends or is dropped updates it without the server's lock.
+struct ConnectionUse {
+    active: std::sync::atomic::AtomicUsize,
+    last_used: std::sync::Mutex<Instant>,
+}
+
+impl ConnectionUse {
+    fn new() -> Arc<Self> {
+        Arc::new(Self {
+            active: Default::default(),
+            last_used: std::sync::Mutex::new(Instant::now()),
+        })
+    }
+
+    fn touch(&self) {
+        *self.last_used.lock().unwrap() = Instant::now();
+    }
+}
+
+/// One call in flight. Dropping it, when the call ends or its future is
+/// dropped, counts the call out and restarts the idle timer.
+struct InFlight {
+    usage: Arc<ConnectionUse>,
+    manager: McpManager,
+    server_name: String,
+}
+
+impl InFlight {
+    fn start(usage: Arc<ConnectionUse>, manager: &McpManager, server_name: &str) -> Self {
+        usage
+            .active
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        usage.touch();
+        Self {
+            usage,
+            manager: manager.clone(),
+            server_name: server_name.to_string(),
+        }
+    }
+}
+
+impl Drop for InFlight {
+    fn drop(&mut self) {
+        self.usage
+            .active
+            .fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+        self.usage.touch();
+        self.manager.schedule_idle_disconnect(&self.server_name);
+    }
 }
 
 impl Runtime {
@@ -146,27 +195,12 @@ impl Runtime {
     /// How long the connection has had no call in flight.
     fn idle_for(&self) -> Option<Duration> {
         match self {
-            Self::Connected {
-                last_used,
-                active: 0,
-                ..
-            } => Some(last_used.elapsed()),
+            Self::Connected { usage, .. }
+                if usage.active.load(std::sync::atomic::Ordering::SeqCst) == 0 =>
+            {
+                Some(usage.last_used.lock().unwrap().elapsed())
+            }
             _ => None,
-        }
-    }
-
-    /// Count a call in or out. Either way the connection was just used.
-    fn track_call(&mut self, starting: bool) {
-        if let Self::Connected {
-            last_used, active, ..
-        } = self
-        {
-            *last_used = Instant::now();
-            *active = if starting {
-                *active + 1
-            } else {
-                active.saturating_sub(1)
-            };
         }
     }
 }
@@ -531,19 +565,22 @@ impl McpManager {
         let runtime = self.runtime(server_name)?;
         // Hold the server's lock only to connect and to count the call, so
         // calls to one server run in parallel and status never waits on one.
-        let peer = {
+        let (peer, _in_flight) = {
             let mut guard = runtime.lock().await;
             self.ensure_connected(server_name, &mut guard)
                 .await
                 .map_err(hide_secrets)?;
-            let peer = guard.client()?.peer().clone();
-            guard.track_call(true);
-            peer
+            let Runtime::Connected { client, usage } = &*guard else {
+                bail!("MCP client is not connected");
+            };
+            (
+                client.peer().clone(),
+                InFlight::start(usage.clone(), self, server_name),
+            )
         };
-        let outcome = wait_request(call(peer), self.timeout(server_name), cancel, label).await;
-        runtime.lock().await.track_call(false);
-        self.schedule_idle_disconnect(server_name);
-        outcome.map_err(hide_secrets)
+        wait_request(call(peer), self.timeout(server_name), cancel, label)
+            .await
+            .map_err(hide_secrets)
     }
 
     /// How long a server may sit unused before it is disconnected: its
@@ -602,8 +639,7 @@ impl McpManager {
             Ok(client) => {
                 *runtime = Runtime::Connected {
                     client,
-                    last_used: Instant::now(),
-                    active: 0,
+                    usage: ConnectionUse::new(),
                 };
                 self.schedule_idle_disconnect(server_name);
                 Ok(())
@@ -1414,6 +1450,20 @@ done
             .await
             .unwrap_err();
         assert!(error.to_string().contains("cancelled"));
+        // A call whose future is dropped still counts itself out.
+        let dropped = tokio::time::timeout(
+            Duration::from_millis(20),
+            manager.call_tool("demo", "slow", Value::Null, &CancellationToken::new()),
+        )
+        .await;
+        assert!(dropped.is_err());
+        assert!(
+            manager.inner.runtimes["demo"]
+                .lock()
+                .await
+                .idle_for()
+                .is_some()
+        );
         assert!(requests.load(Ordering::Relaxed) > 0);
         manager.disconnect_all().await;
         fixture_cancel.cancel();
