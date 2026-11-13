@@ -357,11 +357,7 @@ impl KissAcpAgent {
                         agent_client_protocol::Error::invalid_params()
                             .data(format!("unknown or unavailable model: {value}"))
                     })?;
-                let thinking = model.clamp_thinking_level(session.agent.thinking_level());
                 session.agent.set_model(model);
-                if thinking != session.agent.thinking_level() {
-                    session.agent.set_thinking_level(thinking);
-                }
             }
             "thought_level" => {
                 let value = value.to_string();

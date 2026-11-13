@@ -2608,7 +2608,7 @@ fn handle_command_event(
                     session.set_model(model);
                     if let Some(thinking) = thinking {
                         session.set_thinking_level(thinking);
-                        update_thinking_border(app, thinking);
+                        update_thinking_border(app, session.thinking_level());
                     }
                 } else {
                     open_model_picker_with_filter(app, &registry, pattern.as_deref());
@@ -6474,7 +6474,7 @@ fn apply_picker_selection(
         PickerKind::Thinking => {
             if let Some(level) = ThinkingLevel::ALL.get(value).copied() {
                 session.set_thinking_level(level);
-                update_thinking_border(app, level);
+                update_thinking_border(app, session.thinking_level());
                 if save_default {
                     resources.settings.default_thinking_level = Some(level.as_str().into());
                     save_interactive_settings(app, session, resources);
@@ -6796,7 +6796,7 @@ fn apply_settings_selection(
                 .next_thinking_level(session.thinking_level());
             session.set_thinking_level(next);
             resources.settings.default_thinking_level = Some(next.as_str().into());
-            update_thinking_border(app, next);
+            update_thinking_border(app, session.thinking_level());
         }
         SettingRow::Theme => {
             let next = if app.theme.name == "light" {
@@ -7559,7 +7559,7 @@ fn run_slash_command(
                     session.set_model(model);
                     if let Some(thinking) = thinking {
                         session.set_thinking_level(thinking);
-                        update_thinking_border(app, thinking);
+                        update_thinking_border(app, session.thinking_level());
                     }
                 } else {
                     app.cells.push(Cell::Error(format!(
@@ -7578,11 +7578,17 @@ fn run_slash_command(
                     .push(Cell::Notice("this model has no thinking levels".into()));
             } else if let Some(level) = ThinkingLevel::parse(&rest) {
                 session.set_thinking_level(level);
-                update_thinking_border(app, level);
-                app.cells.push(Cell::Notice(format!(
-                    "thinking level set to {}",
-                    level.as_str()
-                )));
+                let applied = session.thinking_level();
+                update_thinking_border(app, applied);
+                app.cells.push(Cell::Notice(if applied == level {
+                    format!("thinking level set to {}", level.as_str())
+                } else {
+                    format!(
+                        "this model does not support thinking level {}, so it is set to {}",
+                        level.as_str(),
+                        applied.as_str()
+                    )
+                }));
             } else {
                 app.cells.push(Cell::Error(format!(
                     "invalid thinking level: {rest}. Use off, minimal, low, medium, high, xhigh, or max"

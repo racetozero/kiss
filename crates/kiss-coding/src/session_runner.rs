@@ -801,7 +801,10 @@ impl AgentSession {
         }
     }
 
+    /// Switch the model. A thinking level the new model does not support
+    /// moves to the nearest one it does, and that change is recorded too.
     pub fn set_model(&self, model: Model) {
+        let thinking = model.clamp_thinking_level(self.thinking_level());
         self.prefix_changed();
         let saved = self
             .manager
@@ -814,9 +817,15 @@ impl AgentSession {
             model_id: model.id.clone(),
         });
         *self.model.lock().unwrap() = model;
+        if thinking != self.thinking_level() {
+            self.set_thinking_level(thinking);
+        }
     }
 
+    /// Set the thinking level, moved to the nearest level the current model
+    /// supports.
     pub fn set_thinking_level(&self, level: ThinkingLevel) {
+        let level = self.model().clamp_thinking_level(level);
         let saved = self
             .manager
             .lock()
