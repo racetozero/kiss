@@ -83,6 +83,11 @@ pub enum SessionEvent {
     },
     /// A pooled account hit its rate limit and the request moved to the
     /// next account. `index` is zero-based; `total` is the pool size.
+    /// The session file could not be written. The entries stay in the live
+    /// session and the next successful write saves them.
+    SaveFailed {
+        error: String,
+    },
     AccountSwitched(kiss_ai::auth::accounts::AccountSwitch),
 }
 
@@ -424,8 +429,20 @@ impl AgentSession {
         *self.totals.lock().unwrap()
     }
 
-    pub(crate) fn record_subagent_usage(&self, usage: Usage) {
+    /// Count usage that no session message carries (side requests, child
+    /// agents, cache warming, remote compaction) and save it, so a resumed
+    /// session shows the same totals.
+    pub(crate) fn record_usage(&self, kind: &str, provider: &str, model: &str, usage: Usage) {
+        if usage == Usage::default() {
+            return;
+        }
         self.totals.lock().unwrap().add(&usage);
+        let saved = self
+            .manager
+            .lock()
+            .unwrap()
+            .append_usage(kind, provider, model, usage, None);
+        self.report_save(saved);
     }
 
     pub fn run_phase(&self) -> RunPhase {
@@ -707,12 +724,24 @@ impl AgentSession {
         Ok(())
     }
 
+    /// Report a failed session-file write. The manager keeps the entries, so
+    /// the run continues with them.
+    fn report_save<T>(&self, result: anyhow::Result<T>) {
+        if let Err(error) = result {
+            (self.sink)(SessionEvent::SaveFailed {
+                error: format!("{error:#}"),
+            });
+        }
+    }
+
     pub fn set_model(&self, model: Model) {
         self.cache_warm_cancel.lock().unwrap().cancel();
-        {
-            let mut m = self.manager.lock().unwrap();
-            let _ = m.append_model_change(&model.provider, &model.id);
-        }
+        let saved = self
+            .manager
+            .lock()
+            .unwrap()
+            .append_model_change(&model.provider, &model.id);
+        self.report_save(saved);
         (self.sink)(SessionEvent::ModelChanged {
             provider: model.provider.clone(),
             model_id: model.id.clone(),
@@ -721,11 +750,12 @@ impl AgentSession {
     }
 
     pub fn set_thinking_level(&self, level: ThinkingLevel) {
-        let _ = self
+        let saved = self
             .manager
             .lock()
             .unwrap()
             .append_thinking_level_change(level);
+        self.report_save(saved);
         *self.thinking.lock().unwrap() = level;
     }
 
@@ -881,7 +911,8 @@ impl AgentSession {
         // Other code holds the manager lock while it reads the phase, so this
         // must not hold the phase lock while it takes the manager lock.
         drop(phase);
-        let _ = self.manager.lock().unwrap().append_message(message);
+        let saved = self.manager.lock().unwrap().append_message(message);
+        self.report_save(saved);
     }
 
     /// Drain both queues back to the caller (Escape restores to editor).
@@ -1390,6 +1421,7 @@ impl AgentSession {
 
     async fn run_ephemeral(
         self: &Arc<Self>,
+        kind: &str,
         system_prompt: String,
         prompt: String,
         tools: Vec<DynTool>,
@@ -1420,15 +1452,16 @@ impl AgentSession {
             sink,
         )
         .await;
-        if cancel.is_cancelled() {
-            anyhow::bail!("request cancelled");
-        }
-
         let mut usage = Usage::default();
         for message in &messages {
             if let AgentMessage::Assistant(assistant) = message {
                 usage.add(&assistant.usage);
             }
+        }
+        let model = self.model();
+        self.record_usage(kind, &model.provider, &model.id, usage);
+        if cancel.is_cancelled() {
+            anyhow::bail!("request cancelled");
         }
         let assistant = messages.iter().rev().find_map(|message| match message {
             AgentMessage::Assistant(assistant) => Some(assistant),
@@ -1450,7 +1483,6 @@ impl AgentSession {
         if text.trim().is_empty() {
             anyhow::bail!("the provider returned an empty answer");
         }
-        self.totals.lock().unwrap().add(&usage);
         Ok(EphemeralResponse { text, usage })
     }
 
@@ -1481,6 +1513,7 @@ impl AgentSession {
             .cloned()
             .collect();
         self.run_ephemeral(
+            "btw",
             "Answer the side question from the supplied session context. This is a read-only request. Use the read tool only when a file is needed. Do not propose or perform edits. Give no more than 150 words or 600 characters. Use no more than five bullets. Return only the answer.".into(),
             prompt,
             read_tools,
@@ -1502,6 +1535,7 @@ impl AgentSession {
         }
         let response = self
             .run_ephemeral(
+            "title",
                 format!(
                     "Write a one-line title for this task, no more than {SESSION_TITLE_MAX_CHARS} characters. Aim for fewer than five words and start with an imperative verb. Keep ticket IDs and code terms unchanged. Match the user's language. Return the title in sentence case without quotes, Markdown, or ending punctuation."
                 ),
@@ -1536,6 +1570,7 @@ impl AgentSession {
             .map(|recap| format!("\n\nPrevious recap:\n{recap}"))
             .unwrap_or_default();
         self.run_ephemeral(
+            "recap",
             "Summarize the supplied coding session in one plain-text line of at most 120 characters. State what was done and the next action when one is clear. Do not use a prefix, Markdown, or a newline. Return only the recap.".into(),
             format!("Session transcript:\n{transcript}{previous}"),
             Vec::new(),
@@ -1630,12 +1665,13 @@ impl AgentSession {
         prompt_mode: PromptMode,
     ) {
         let cancel = active.cancel.clone();
-        {
+        let saved: anyhow::Result<()> = {
             let mut manager = self.manager.lock().unwrap();
-            for prompt in prompts {
-                let _ = manager.append_message(prompt);
-            }
-        }
+            prompts
+                .into_iter()
+                .try_for_each(|prompt| manager.append_message(prompt).map(drop))
+        };
+        self.report_save(saved);
         // The prompts were persisted above. Context includes them, so run as a
         // continuation without a second prompt list.
         self.run_turns(None, prompt_mode, &cancel).await;
@@ -1795,7 +1831,9 @@ impl AgentSession {
                         (Some(crate::session::entry::SessionEntry::Message { message: last, .. }), m) if last == m
                     );
                     if !duplicate {
-                        let _ = manager.append_message(message.clone());
+                        let saved = manager.append_message(message.clone());
+                        drop(manager);
+                        self.report_save(saved);
                     }
                 }
             }
@@ -1923,13 +1961,11 @@ impl AgentSession {
                 if matches!(warmed.stop_reason, StopReason::Error | StopReason::Aborted) {
                     return;
                 }
-                session.totals.lock().unwrap().add(&warmed.usage);
-                let _ = session.manager.lock().unwrap().append_usage(
+                session.record_usage(
                     "cache_warm",
                     &warmed.provider,
                     warmed.response_model.as_deref().unwrap_or(&warmed.model),
                     warmed.usage,
-                    None,
                 );
             }
         });
@@ -2119,27 +2155,25 @@ impl AgentSession {
                 let mut summarized_all = plan.to_summarize.clone();
                 summarized_all.extend(plan.turn_prefix.clone());
                 let (read, modified) = extract_file_ops(&summarized_all);
-                {
-                    let mut totals = self.totals.lock().unwrap();
-                    if let Some(u) = &result.local_usage {
-                        totals.add(u);
-                    }
-                    if let Some(u) = &result.remote_usage {
-                        totals.add(u);
-                    }
+                // The compaction entry saves the local summary's usage.
+                if let Some(u) = &result.local_usage {
+                    self.totals.lock().unwrap().add(u);
                 }
                 let details = merge_compaction_details(
                     file_ops_details(&read, &modified),
                     result.remote_details,
                 );
-                let mut manager = self.manager.lock().unwrap();
-                let _ = manager.append_compaction(
+                let saved = self.manager.lock().unwrap().append_compaction(
                     result.summary.clone(),
                     plan.tokens_before,
                     plan.kept.clone(),
                     result.local_usage,
                     Some(details),
                 );
+                self.report_save(saved);
+                if let Some(usage) = result.remote_usage {
+                    self.record_usage("remote_compaction", &model.provider, &model.id, usage);
+                }
                 (self.sink)(SessionEvent::CompactionEnd {
                     summary: result.summary,
                     tokens_before: plan.tokens_before,
@@ -2555,6 +2589,41 @@ mod ephemeral_tests {
     /// A transient stream error can end a response after it starts a tool call.
     /// The retry and every later prompt must still send each call with exactly
     /// one result; OpenAI rejects the request otherwise.
+    #[tokio::test]
+    async fn side_request_usage_survives_a_resume() {
+        let session = AgentSession::new(
+            SessionManager::in_memory(Path::new("/test")),
+            Vec::new(),
+            Registry::load(None),
+            Settings::default(),
+            "test".into(),
+            openai_model(),
+            ThinkingLevel::Off,
+            None,
+            Arc::new(|_| {}),
+        );
+        session.set_stream_fn(Some(Arc::new(|_, _, _| {
+            let mut message =
+                kiss_ai::AssistantMessage::empty("openai-responses", "openai", "gpt-test");
+            message.content = vec![kiss_ai::ContentBlock::text("an answer")];
+            message.usage.input = 120;
+            message.usage.output = 7;
+            message.stop_reason = StopReason::Stop;
+            let (sink, stream) = kiss_ai::EventStream::channel();
+            sink.done(message);
+            stream
+        })));
+        session
+            .answer_btw("what changed?", CancellationToken::new())
+            .await
+            .unwrap();
+        assert_eq!(session.totals().input, 120);
+        assert_eq!(
+            session.manager.lock().unwrap().usage_totals(),
+            session.totals()
+        );
+    }
+
     #[tokio::test]
     async fn a_retried_stream_error_leaves_no_unanswered_tool_call() {
         let session = AgentSession::new(

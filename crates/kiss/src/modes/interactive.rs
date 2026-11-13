@@ -2138,6 +2138,11 @@ fn handle_session_event(
                 .push(format!("verified workflow{run} `{name}` {result}"));
         }
         SessionEvent::Iterative { .. } => {}
+        SessionEvent::SaveFailed { error } => {
+            app.cells.push(Cell::Error(format!(
+                "could not save the session file: {error}. The conversation continues, and kiss saves it again with the next message"
+            )));
+        }
         SessionEvent::AccountSwitched(switch) => {
             app.cells.push(Cell::Notice(format!(
                 "{}: {} hit its rate limit (ready again in {}); switched to account {}/{} ({})",

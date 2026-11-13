@@ -852,14 +852,20 @@ mod tests {
     #[test]
     fn one_line_fields_delete_like_the_editor() {
         let mut text = String::from("foo bar");
-        assert!(edit_single_line(&mut text, &KeyEvent::parse("alt+backspace").unwrap()));
+        assert!(edit_single_line(
+            &mut text,
+            &KeyEvent::parse("alt+backspace").unwrap()
+        ));
         assert_eq!(text, "foo ");
         edit_single_line(&mut text, &KeyEvent::char('é'));
         edit_single_line(&mut text, &KeyEvent::parse("backspace").unwrap());
         assert_eq!(text, "foo ");
         assert!(edit_single_line(&mut text, &KeyEvent::ctrl('u')));
         assert!(text.is_empty());
-        assert!(!edit_single_line(&mut text, &KeyEvent::parse("up").unwrap()));
+        assert!(!edit_single_line(
+            &mut text,
+            &KeyEvent::parse("up").unwrap()
+        ));
     }
 
     #[test]

@@ -89,7 +89,7 @@ pub fn assistant_event_json(event: &AssistantEvent) -> Value {
 pub fn session_event_json(event: &SessionEvent) -> Option<Value> {
     Some(match event {
         // The SDK emits agent_settled after awaiting the whole prompt itself.
-        SessionEvent::PromptEnd { .. } => return None,
+        SessionEvent::PromptEnd { .. } | SessionEvent::SaveFailed { .. } => return None,
         SessionEvent::Agent(agent_event) => match agent_event.as_ref() {
             AgentEvent::AgentStart => json!({"type": "agent_start"}),
             AgentEvent::AgentEnd { messages } => json!({"type": "agent_end", "messages": messages}),

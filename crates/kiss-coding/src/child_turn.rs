@@ -52,7 +52,8 @@ pub(crate) async fn run_child_turn(
     }
     let usage = usage_delta(child.totals(), usage_before);
     if let Some(parent) = parent.upgrade() {
-        parent.record_subagent_usage(usage);
+        let model = child.model();
+        parent.record_usage("subagent", &model.provider, &model.id, usage);
     }
     let (status, result, error) = turn_outcome(child);
     ChildTurnOutcome {
