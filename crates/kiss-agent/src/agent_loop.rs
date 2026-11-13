@@ -362,10 +362,13 @@ fn fail_tool_batch(tool_calls: &[ToolCall], reason: &str, emit: &EventSink) -> E
             tool_name: tc.name.clone(),
             args: tc.arguments.clone(),
         });
-        let result = ToolResult::text(format!(
-            "Tool call \"{}\" was not executed: {reason}",
-            tc.name
-        ));
+        let result = ToolResult {
+            is_error: true,
+            ..ToolResult::text(format!(
+                "Tool call \"{}\" was not executed: {reason}",
+                tc.name
+            ))
+        };
         emit(AgentEvent::ToolExecutionEnd {
             tool_call_id: tc.id.clone(),
             tool_name: tc.name.clone(),
