@@ -90,7 +90,6 @@ struct App {
     command_menu: Option<CommandCompletion>,
     file_menu: Option<FileCompletion>,
     file_search_request: Option<u64>,
-    file_search_pending: bool,
     /// The `/resume` browser. It owns the keyboard while it is open.
     session_picker: Option<SessionPicker>,
     secret_prompt: Option<SecretPrompt>,
@@ -119,8 +118,6 @@ struct App {
     workflow_view: Option<WorkflowView>,
     /// The open `/jobs` loop and autoresearch view, if any.
     job_view: Option<JobView>,
-    /// Bumped whenever a workflow run changes, so the frame is marked dirty.
-    workflow_version: u64,
     /// Runtime-verified workflow results waiting for the end of this turn.
     workflow_outcomes: Vec<String>,
     /// `/accounts add` in progress: provider and optional label. The next
@@ -457,7 +454,6 @@ enum CommandEvent {
     },
     /// A saved workflow passed its cost prompt and is ready to show.
     WorkflowStarted(Arc<kiss_coding::workflows::RunRecord>),
-    /// A saved workflow was cancelled before it made a run record.
     VoiceFinished {
         generation: u64,
         result: std::result::Result<String, String>,
@@ -606,6 +602,25 @@ enum InputLayer {
 }
 
 impl App {
+    /// Whether anything is working: a run, a command, a side answer, a
+    /// recap, a title, a workflow or a loop job.
+    fn busy(&self, session: &kiss_coding::AgentSession) -> bool {
+        session.is_running()
+            || self.command.is_some()
+            || self
+                .btw_panel
+                .as_ref()
+                .is_some_and(|panel| matches!(panel.state, BtwState::Answering(_)))
+            || self.recap_job.is_some()
+            || self.title_generation_pending
+            || session
+                .workflows()
+                .is_some_and(|runtime| runtime.active().is_some())
+            || session
+                .iterative_jobs()
+                .is_some_and(|runtime| runtime.has_queued_or_running())
+    }
+
     fn input_layer(&self) -> InputLayer {
         let blocking_picker = matches!(
             self.picker.as_ref().map(|picker| &picker.kind),
@@ -1008,7 +1023,7 @@ impl App {
                 if let Some(position) = menu.list.position_label() {
                     lines.push(self.theme.fg("dim", &format!("  {position}")));
                 }
-            } else if self.file_menu.is_some() || self.file_search_pending {
+            } else if self.file_menu.is_some() || self.file_search_request.is_some() {
                 let mut rows = self
                     .file_menu
                     .as_mut()
@@ -1018,10 +1033,10 @@ impl App {
                 rows.resize(FILE_MENU_ROWS, String::new());
                 lines.extend(rows);
                 let status = match &mut self.file_menu {
-                    Some(menu) if !self.file_search_pending && menu.values.is_empty() => {
+                    Some(menu) if !self.file_search_request.is_some() && menu.values.is_empty() => {
                         "No matching files".to_string()
                     }
-                    Some(menu) if !self.file_search_pending => format!(
+                    Some(menu) if !self.file_search_request.is_some() => format!(
                         "{}↑↓ select · tab insert · esc close{}",
                         menu.list
                             .position_label()
@@ -1250,16 +1265,13 @@ fn idle_recap_deadline(
     session: &kiss_coding::AgentSession,
     settings: &kiss_coding::Settings,
 ) -> Option<Instant> {
+    // A recap appears in the transcript, so it waits until the editor has
+    // focus and nothing is working.
     (settings.auto_recap_enabled()
         && app.idle_recap_armed
-        && !session.is_running()
-        && app.recap_job.is_none()
-        && app.btw_panel.is_none()
-        && app.picker.is_none()
-        && app.session_picker.is_none()
-        && app.secret_prompt.is_none()
-        && app.command.is_none())
-    .then(|| app.last_user_activity + AUTO_RECAP_IDLE)
+        && !app.busy(session)
+        && app.input_layer() == InputLayer::Editor)
+        .then(|| app.last_user_activity + AUTO_RECAP_IDLE)
 }
 
 fn session_has_conversation(session: &Arc<kiss_coding::AgentSession>) -> bool {
@@ -1597,7 +1609,6 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
         command_menu: None,
         file_menu: None,
         file_search_request: None,
-        file_search_pending: false,
         session_picker: None,
         secret_prompt: None,
         command: None,
@@ -1621,7 +1632,6 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
         webmcp_manager: webmcp_manager(&settings.webmcp),
         workflow_view: None,
         job_view: None,
-        workflow_version: 0,
         workflow_outcomes: Vec::new(),
         pending_account_add: None,
     };
@@ -1690,11 +1700,7 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
         let resize_deadline = resize_state
             .next_deadline()
             .unwrap_or_else(|| Instant::now() + Duration::from_secs(86_400));
-        let render_is_active = session.is_running()
-            || app.command.is_some()
-            || app.btw_panel.is_some()
-            || app.recap_job.is_some()
-            || app.title_generation_pending;
+        let render_is_active = app.busy(&session);
         let recap_deadline = idle_recap_deadline(&app, &session, &resources.settings);
         let recap_at =
             recap_deadline.unwrap_or_else(|| Instant::now() + Duration::from_secs(86_400));
@@ -1861,21 +1867,7 @@ fn terminal_host_state(app: &App, session: &kiss_coding::AgentSession) -> Progra
     if let Some((kind, message)) = blocked {
         return ProgramStatus::Blocked(kind, message);
     }
-    let working = session.is_running()
-        || app.command.is_some()
-        || app
-            .btw_panel
-            .as_ref()
-            .is_some_and(|panel| matches!(panel.state, BtwState::Answering(_)))
-        || app.recap_job.is_some()
-        || app.title_generation_pending
-        || session
-            .workflows()
-            .is_some_and(|runtime| runtime.active().is_some())
-        || session
-            .iterative_jobs()
-            .is_some_and(|runtime| runtime.has_queued_or_running());
-    if working {
+    if app.busy(session) {
         ProgramStatus::Working
     } else {
         app.idle_status
@@ -2128,9 +2120,9 @@ fn handle_session_event(
                 level.as_str()
             )));
         }
-        SessionEvent::Workflow { run: _, version } => {
-            app.workflow_version = version;
-        }
+        // Every session event marks the frame dirty, which is all a
+        // workflow progress update needs.
+        SessionEvent::Workflow { .. } => {}
         SessionEvent::WorkflowOutcome { run, name, status } => {
             let run = run.map(|id| format!(" run {id}")).unwrap_or_default();
             let result = match status {
@@ -3152,7 +3144,6 @@ fn reset_file_search(app: &mut App, file_search: &mut FileSearchService) {
     file_search.cancel();
     app.file_menu = None;
     app.file_search_request = None;
-    app.file_search_pending = false;
 }
 
 fn sync_file_menu(
@@ -3176,7 +3167,6 @@ fn sync_file_menu(
     };
     let ticket = file_search.search(query);
     app.file_search_request = Some(ticket.request_id);
-    app.file_search_pending = true;
 }
 
 fn apply_file_search_result(app: &mut App, result: FileSearchResult) {
@@ -3186,7 +3176,6 @@ fn apply_file_search_result(app: &mut App, result: FileSearchResult) {
         return;
     }
     app.file_search_request = None;
-    app.file_search_pending = false;
     // An empty result keeps the menu open with a "No matching files" row, so
     // the menu does not close and open again while the user types a name.
     let items = result
@@ -3240,7 +3229,7 @@ fn handle_file_menu_key(
             menu.list.move_selection(1);
             true
         }
-        Key::Tab | Key::Enter if app.file_search_pending => true,
+        Key::Tab | Key::Enter if app.file_search_request.is_some() => true,
         Key::Tab | Key::Enter if !key.ctrl && !key.alt && !key.shift => {
             let selected = menu.list.current().map(|item| item.value);
             let prefix = menu.prefix.clone();
@@ -3645,7 +3634,7 @@ fn handle_input(
 
     if let InputEvent::Key(key) = event
         && key.key == Key::Escape
-        && app.file_search_pending
+        && app.file_search_request.is_some()
     {
         reset_file_search(app, file_search);
         return Flow::Continue;
@@ -3865,10 +3854,6 @@ fn handle_input(
     Flow::Continue
 }
 
-/// The keyword or phrase in a typed prompt that asks for a workflow.
-///
-/// Matching is on whole words, so `myworkflow`, `workflow_name`, and a path
-/// such as `src/workflows/run.rs` do not start one by accident.
 fn handle_secret_prompt(
     app: &mut App,
     session: &Arc<kiss_coding::AgentSession>,
@@ -8394,7 +8379,6 @@ mod tests {
             command_menu: None,
             file_menu: None,
             file_search_request: None,
-            file_search_pending: false,
             session_picker: None,
             secret_prompt: None,
             command: None,
@@ -8418,7 +8402,6 @@ mod tests {
             webmcp_manager: webmcp_manager(&Default::default()),
             workflow_view: None,
             job_view: None,
-            workflow_version: 0,
             workflow_outcomes: Vec::new(),
             pending_account_add: None,
         }
@@ -9805,7 +9788,7 @@ mod tests {
         let menu = app.file_menu.as_ref().expect("old file menu");
         assert_eq!(menu.prefix, "@alpha");
         assert!(menu.values.iter().any(|value| value.path == "alpha.rs"));
-        assert!(app.file_search_pending);
+        assert!(app.file_search_request.is_some());
         assert!(handle_file_menu_key(
             &mut app,
             &session,
@@ -9880,7 +9863,6 @@ mod tests {
         let mut app = test_app();
         app.editor.set_text("read @new");
         app.file_search_request = Some(2);
-        app.file_search_pending = true;
 
         apply_file_search_result(
             &mut app,
@@ -9898,7 +9880,7 @@ mod tests {
 
         assert!(app.file_menu.is_none());
         assert_eq!(app.file_search_request, Some(2));
-        assert!(app.file_search_pending);
+        assert!(app.file_search_request.is_some());
     }
 
     #[test]
