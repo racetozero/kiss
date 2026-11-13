@@ -893,18 +893,23 @@ impl AgentSession {
     }
 
     pub fn queue_steering(&self, message: AgentMessage) {
-        self.steering.lock().unwrap().push_back(QueuedPrompt {
-            message,
-            mode: PromptMode::Ordinary,
-        });
-        self.emit_queues();
+        self.enqueue(&self.steering, message);
     }
 
     pub fn queue_follow_up(&self, message: AgentMessage) {
-        self.follow_up.lock().unwrap().push_back(QueuedPrompt {
+        self.enqueue(&self.follow_up, message);
+    }
+
+    /// Queue under the phase lock, as [`ActivePhase::take_queued`] reads the
+    /// queues under it, so a message cannot slip in after a finishing run
+    /// found the queues empty.
+    fn enqueue(&self, queue: &Mutex<VecDeque<QueuedPrompt>>, message: AgentMessage) {
+        let phase = self.phase.lock().unwrap();
+        queue.lock().unwrap().push_back(QueuedPrompt {
             message,
             mode: PromptMode::Ordinary,
         });
+        drop(phase);
         self.emit_queues();
     }
 
@@ -912,6 +917,9 @@ impl AgentSession {
     /// session delivers it as a follow-up. An idle session adds it to history,
     /// so that a later prompt sees it without an extra model turn.
     pub fn add_for_next_turn(&self, message: AgentMessage) {
+        // The manager lock comes before the phase lock, and holding both
+        // keeps a run from starting between the check and the append.
+        let mut manager = self.manager.lock().unwrap();
         let phase = self.phase.lock().unwrap();
         if *phase != RunPhase::Idle {
             self.follow_up.lock().unwrap().push_back(QueuedPrompt {
@@ -919,13 +927,13 @@ impl AgentSession {
                 mode: PromptMode::Ordinary,
             });
             drop(phase);
+            drop(manager);
             self.emit_queues();
             return;
         }
-        // Other code holds the manager lock while it reads the phase, so this
-        // must not hold the phase lock while it takes the manager lock.
         drop(phase);
-        let saved = self.manager.lock().unwrap().append_message(message);
+        let saved = manager.append_message(message);
+        drop(manager);
         self.report_save(saved);
     }
 

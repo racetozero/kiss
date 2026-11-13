@@ -301,7 +301,8 @@ impl SubagentRuntime {
             state.error = None;
             state.turn
         };
-        let _ = record.session.reclaim_queued();
+        // Messages sent to the previous turn after it ended stay queued, so
+        // the new turn delivers them instead of dropping them.
         let info = record.snapshot();
         self.signal_activity();
         self.start_turn(record, turn, prompt);
