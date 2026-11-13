@@ -11,11 +11,11 @@ use kiss_coding::session_runner::SessionEvent;
 use std::io::Read;
 use std::sync::Arc;
 
-pub use kiss_sdk::events::session_event_json as event_json;
+use kiss_sdk::events::session_event_json;
 
 pub async fn run(args: &Args) -> Result<i32> {
     let sink = Arc::new(move |event: SessionEvent| {
-        if let Some(value) = event_json(&event) {
+        if let Some(value) = session_event_json(&event) {
             println!("{value}");
         }
     });
@@ -42,33 +42,4 @@ pub async fn run(args: &Args) -> Result<i32> {
         .prompt_with_mode(vec![kiss_agent::AgentMessage::user(prompt)], prompt_mode)
         .await;
     Ok(0)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use kiss_coding::session_runner::WorkflowTurnStatus;
-    use serde_json::json;
-
-    #[test]
-    fn this_mode_uses_the_shared_encoder() {
-        // If the two encoders ever diverge, a client written against
-        // `--mode json` would silently disagree with one written against RPC.
-        let event = event_json(&SessionEvent::WorkflowOutcome {
-            run: None,
-            name: "audit".into(),
-            status: WorkflowTurnStatus::Cancelled,
-        })
-        .expect("workflow outcome event");
-
-        assert_eq!(
-            event,
-            json!({
-                "type": "workflow_outcome",
-                "run": null,
-                "name": "audit",
-                "status": "cancelled"
-            })
-        );
-    }
 }

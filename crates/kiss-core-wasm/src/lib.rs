@@ -4,7 +4,6 @@
 //! agent/tool loop and conversation history live inside WebAssembly. JavaScript
 //! supplies only explicit model and tool capabilities.
 
-mod events;
 mod host;
 mod tool;
 mod types;

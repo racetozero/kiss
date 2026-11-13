@@ -1,4 +1,3 @@
-use crate::events::agent_event_json;
 use crate::types::{
     HostModelEvent, HostModelResponse, MAX_MODEL_RESPONSE_BYTES, MAX_TOOL_RESULT_BYTES,
     ModelRequest, ToolInvocationContext, ToolResultContent, ToolResultInput,
@@ -7,6 +6,7 @@ use futures::FutureExt as _;
 use futures::channel::oneshot;
 use futures::future::{Either, select};
 use js_sys::{Function, Promise};
+use kiss_agent::event_json::{agent_event_json, agent_settled};
 use kiss_agent::{AgentEvent, ToolResult, ToolUpdateSink};
 use kiss_ai::{
     AssistantEvent, AssistantMessage, ContentBlock, Context, EventStream, Model, StopReason,
@@ -102,7 +102,7 @@ pub fn emit_settled(callback_id: Option<u32>) {
     };
     let callback = CALLBACKS.with_borrow(|callbacks| callbacks.events.get(&callback_id).cloned());
     if let Some(callback) = callback
-        && let Ok(value) = to_js(&serde_json::json!({"type": "agent_settled"}))
+        && let Ok(value) = to_js(&agent_settled())
     {
         let _ = callback.call1(&JsValue::NULL, &value);
     }

@@ -10,141 +10,16 @@
 //! and treats `message_end.message` as authoritative. Sending the snapshot on
 //! every token would multiply the bytes on the wire by the length of the reply.
 
-use kiss_agent::AgentEvent;
-use kiss_ai::AssistantEvent;
+pub use kiss_agent::event_json::{agent_event_json, agent_settled, assistant_event_json};
 use kiss_coding::session_runner::{SessionEvent, WorkflowTurnStatus};
 use serde_json::{Value, json};
-
-/// Encode one streaming assistant delta.
-pub fn assistant_event_json(event: &AssistantEvent) -> Value {
-    match event {
-        AssistantEvent::Start { .. } => json!({"type": "start"}),
-        AssistantEvent::TextStart { content_index, .. } => {
-            json!({"type": "text_start", "contentIndex": content_index})
-        }
-        AssistantEvent::TextDelta {
-            content_index,
-            delta,
-            ..
-        } => {
-            json!({"type": "text_delta", "contentIndex": content_index, "delta": delta})
-        }
-        AssistantEvent::TextEnd {
-            content_index,
-            content,
-            ..
-        } => {
-            json!({"type": "text_end", "contentIndex": content_index, "content": content})
-        }
-        AssistantEvent::ThinkingStart { content_index, .. } => {
-            json!({"type": "thinking_start", "contentIndex": content_index})
-        }
-        AssistantEvent::ThinkingDelta {
-            content_index,
-            delta,
-            ..
-        } => {
-            json!({"type": "thinking_delta", "contentIndex": content_index, "delta": delta})
-        }
-        AssistantEvent::ThinkingEnd {
-            content_index,
-            content,
-            ..
-        } => {
-            json!({"type": "thinking_end", "contentIndex": content_index, "content": content})
-        }
-        AssistantEvent::ToolCallStart {
-            content_index,
-            tool_call,
-        } => {
-            json!({
-                "type": "toolcall_start", "contentIndex": content_index,
-                "id": tool_call.id, "toolName": tool_call.name,
-            })
-        }
-        AssistantEvent::ToolCallDelta {
-            content_index,
-            delta,
-            ..
-        } => {
-            json!({"type": "toolcall_delta", "contentIndex": content_index, "delta": delta})
-        }
-        AssistantEvent::ToolCallEnd {
-            content_index,
-            tool_call,
-            ..
-        } => {
-            json!({"type": "toolcall_end", "contentIndex": content_index, "toolCall": tool_call})
-        }
-        AssistantEvent::Done { reason, message } => {
-            json!({"type": "done", "reason": reason, "message": message})
-        }
-        AssistantEvent::Error { reason, message } => {
-            json!({"type": "error", "reason": reason, "error": message})
-        }
-    }
-}
 
 /// Encode one harness event, or `None` when it has no public form.
 pub fn session_event_json(event: &SessionEvent) -> Option<Value> {
     Some(match event {
         // The SDK emits agent_settled after awaiting the whole prompt itself.
         SessionEvent::PromptEnd { .. } | SessionEvent::SaveFailed { .. } => return None,
-        SessionEvent::Agent(agent_event) => match agent_event.as_ref() {
-            AgentEvent::AgentStart => json!({"type": "agent_start"}),
-            AgentEvent::AgentEnd { messages } => json!({"type": "agent_end", "messages": messages}),
-            AgentEvent::TurnStart => json!({"type": "turn_start"}),
-            AgentEvent::TurnEnd {
-                message,
-                tool_results,
-            } => {
-                json!({"type": "turn_end", "message": message, "toolResults": tool_results})
-            }
-            AgentEvent::MessageStart { message } => {
-                json!({"type": "message_start", "message": message})
-            }
-            AgentEvent::MessageUpdate {
-                assistant_event, ..
-            } => {
-                json!({
-                    "type": "message_update",
-                    "assistantMessageEvent": assistant_event_json(assistant_event.as_ref()),
-                })
-            }
-            AgentEvent::MessageEnd { message } => {
-                json!({"type": "message_end", "message": message})
-            }
-            AgentEvent::ToolExecutionStart {
-                tool_call_id,
-                tool_name,
-                args,
-            } => {
-                json!({
-                    "type": "tool_execution_start", "toolCallId": tool_call_id,
-                    "toolName": tool_name, "args": args,
-                })
-            }
-            AgentEvent::ToolExecutionUpdate {
-                tool_call_id,
-                tool_name,
-                args,
-                partial,
-            } => json!({
-                "type": "tool_execution_update", "toolCallId": tool_call_id, "toolName": tool_name,
-                "args": args,
-                "partialResult": {"content": partial.content, "details": partial.details},
-            }),
-            AgentEvent::ToolExecutionEnd {
-                tool_call_id,
-                tool_name,
-                result,
-                is_error,
-            } => json!({
-                "type": "tool_execution_end", "toolCallId": tool_call_id, "toolName": tool_name,
-                "result": {"content": result.content, "details": result.details},
-                "isError": is_error,
-            }),
-        },
+        SessionEvent::Agent(agent_event) => agent_event_json(agent_event),
         SessionEvent::QueueUpdate {
             steering,
             follow_up,
@@ -210,13 +85,6 @@ pub fn session_event_json(event: &SessionEvent) -> Option<Value> {
     })
 }
 
-/// Emitted by the SDK once a prompt run has fully settled: no retry, no
-/// automatic compaction, and no queued message remains. A client uses it to
-/// know the agent is idle again.
-pub fn agent_settled() -> Value {
-    json!({"type": "agent_settled"})
-}
-
 /// Emitted while a direct `bash` *command* streams output. `id` is the
 /// correlation id of the originating request, so a client can tell two
 /// concurrent commands apart. This is distinct from `tool_execution_update`,
@@ -238,6 +106,7 @@ pub fn event_lag(skipped: u64) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use kiss_ai::AssistantEvent;
 
     #[test]
     fn workflow_outcomes_have_a_controller_owned_json_event() {

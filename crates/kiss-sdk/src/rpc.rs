@@ -23,7 +23,7 @@
 //! One writer task owns the output side, so responses and events never
 //! interleave halfway through a line.
 
-use crate::protocol::{ProtocolError, Response, decode_request};
+use crate::protocol::{Response, decode_request};
 use crate::session::Session;
 use futures::{SinkExt as _, StreamExt as _};
 use std::net::SocketAddr;
@@ -168,18 +168,9 @@ async fn serve_websocket_connection(
         };
         let Some(message) = message else { break };
         match message? {
-            Message::Text(text) => {
-                // A client may pack several commands into one message.
-                for line in text.split('\n') {
-                    let line = line.trim_end_matches('\r');
-                    if line.trim().is_empty() {
-                        continue;
-                    }
-                    dispatch(&session, line, &lines_tx);
-                }
-            }
+            Message::Text(text) => dispatch_message(&session, &text, &lines_tx),
             Message::Binary(bytes) => match std::str::from_utf8(&bytes) {
-                Ok(text) => dispatch(&session, text.trim(), &lines_tx),
+                Ok(text) => dispatch_message(&session, text, &lines_tx),
                 Err(error) => {
                     let _ = lines_tx.send(error_line("parse", error));
                 }
@@ -223,13 +214,14 @@ fn error_line(command: &str, error: impl std::fmt::Display) -> String {
     format!(r#"{{"type":"response","command":"{command}","success":false,"error":{message}}}"#)
 }
 
-/// A parse failure that should be reported rather than closing the connection.
-#[allow(dead_code)]
-fn is_recoverable(error: &ProtocolError) -> bool {
-    matches!(
-        error,
-        ProtocolError::Json(_) | ProtocolError::MissingType | ProtocolError::UnknownCommand(_)
-    )
+/// Dispatch every command in one WebSocket message. A client may pack
+/// several commands into one message, one per JSON line.
+fn dispatch_message(session: &Arc<Session>, text: &str, lines_tx: &mpsc::UnboundedSender<String>) {
+    let mut buffer = crate::client::LineBuffer::new();
+    let lines = buffer.push(text);
+    for line in lines.iter().chain(buffer.finish().as_ref()) {
+        dispatch(session, line, lines_tx);
+    }
 }
 
 #[cfg(test)]

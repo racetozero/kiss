@@ -12,14 +12,20 @@
 use crate::protocol::{Command, Incoming, ProtocolError, Request, decode_line};
 
 /// Correlates outgoing commands with incoming responses.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Client {
     next_id: u64,
 }
 
+impl Default for Client {
+    fn default() -> Self {
+        Client { next_id: 1 }
+    }
+}
+
 impl Client {
     pub fn new() -> Self {
-        Client { next_id: 1 }
+        Client::default()
     }
 
     /// Turn a command into `(id, line)`.
@@ -30,9 +36,8 @@ impl Client {
         let id = format!("c{}", self.next_id);
         self.next_id += 1;
         let request = Request::with_id(id.clone(), command);
-        // Serialization of a closed enum of plain data cannot fail.
         let line = serde_json::to_string(&request)
-            .unwrap_or_else(|error| format!(r#"{{"type":"ping","__encodeError":"{error}"}}"#));
+            .expect("a command is plain data, so it always serializes");
         (id, line)
     }
 

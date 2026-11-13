@@ -3,6 +3,7 @@
 
 pub mod agent_loop;
 pub mod config;
+pub mod event_json;
 pub mod events;
 pub mod message;
 pub mod tool;
