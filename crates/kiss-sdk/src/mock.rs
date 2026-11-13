@@ -48,6 +48,45 @@ pub struct MockScript {
 }
 
 impl MockScript {
+    /// Read the script form the language bindings take: a list of turns,
+    /// each a list of `{"text": ...}` or `{"toolCall": {"id"?, "name",
+    /// "arguments"?}}` pieces.
+    pub fn from_json(value: &Value) -> Result<Self, String> {
+        let turns = value
+            .as_array()
+            .ok_or("the script must be a list of turns")?;
+        let mut script = MockScript::default();
+        for turn in turns {
+            let pieces = turn
+                .as_array()
+                .ok_or("each turn must be a list of pieces")?;
+            let mut built = Vec::new();
+            for piece in pieces {
+                if let Some(text) = piece.get("text").and_then(Value::as_str) {
+                    built.push(MockTurn::Text(text.to_string()));
+                } else if let Some(call) = piece.get("toolCall") {
+                    built.push(MockTurn::ToolCall {
+                        id: call
+                            .get("id")
+                            .and_then(Value::as_str)
+                            .unwrap_or("call_1")
+                            .to_string(),
+                        name: call
+                            .get("name")
+                            .and_then(Value::as_str)
+                            .ok_or("a toolCall needs a name")?
+                            .to_string(),
+                        arguments: call.get("arguments").cloned().unwrap_or_else(|| json!({})),
+                    });
+                } else {
+                    return Err("each piece must have a 'text' or 'toolCall' key".into());
+                }
+            }
+            script.turns.push(built);
+        }
+        Ok(script)
+    }
+
     /// A provider that answers every request with the same text.
     pub fn text(text: impl Into<String>) -> Self {
         MockScript {

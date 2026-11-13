@@ -9,7 +9,7 @@
 use kiss_sdk::{Command, SessionOptions, SessionSource};
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
-use serde_json::{Value, json};
+use serde_json::Value;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -116,7 +116,7 @@ impl MockProvider {
     #[napi(factory)]
     pub async fn start(directory: String, script_json: String) -> Result<Self> {
         let value: Value = serde_json::from_str(&script_json).map_err(napi_error)?;
-        let script = mock_script_from_json(value)?;
+        let script = kiss_sdk::mock::MockScript::from_json(&value).map_err(napi_error)?;
         let provider = kiss_sdk::mock::MockProvider::start(directory, script)
             .await
             .map_err(napi_error)?;
@@ -165,18 +165,7 @@ fn options_from_json(value: Value) -> Result<SessionOptions> {
             .transpose()
     };
 
-    let session = match string("session").as_deref() {
-        None | Some("in-memory") => SessionSource::InMemory,
-        Some("create") => SessionSource::Create,
-        Some("continue") => SessionSource::ContinueRecent,
-        Some(path) if path.starts_with("open:") => {
-            SessionSource::Open(PathBuf::from(&path["open:".len()..]))
-        }
-        Some(path) if path.starts_with("fork:") => {
-            SessionSource::Fork(PathBuf::from(&path["fork:".len()..]))
-        }
-        Some(other) => return Err(napi_error(format!("invalid session source {other:?}"))),
-    };
+    let session = SessionSource::parse(string("session").as_deref()).map_err(napi_error)?;
 
     let thinking_level = string("thinkingLevel")
         .map(|level| {
@@ -220,42 +209,4 @@ fn options_from_json(value: Value) -> Result<SessionOptions> {
             .unwrap_or(1024),
         ..Default::default()
     })
-}
-
-#[cfg(feature = "mock")]
-fn mock_script_from_json(value: Value) -> Result<kiss_sdk::mock::MockScript> {
-    use kiss_sdk::mock::{MockScript, MockTurn};
-    let turns = value
-        .as_array()
-        .ok_or_else(|| napi_error("the script must be an array of turns"))?;
-    let mut script = MockScript::default();
-    for turn in turns {
-        let pieces = turn
-            .as_array()
-            .ok_or_else(|| napi_error("each turn must be an array"))?;
-        let mut built = Vec::new();
-        for piece in pieces {
-            if let Some(text) = piece.get("text").and_then(Value::as_str) {
-                built.push(MockTurn::Text(text.to_string()));
-            } else if let Some(call) = piece.get("toolCall") {
-                built.push(MockTurn::ToolCall {
-                    id: call
-                        .get("id")
-                        .and_then(Value::as_str)
-                        .unwrap_or("call_1")
-                        .to_string(),
-                    name: call
-                        .get("name")
-                        .and_then(Value::as_str)
-                        .ok_or_else(|| napi_error("a toolCall needs a name"))?
-                        .to_string(),
-                    arguments: call.get("arguments").cloned().unwrap_or_else(|| json!({})),
-                });
-            } else {
-                return Err(napi_error("each piece needs text or toolCall"));
-            }
-        }
-        script.turns.push(built);
-    }
-    Ok(script)
 }

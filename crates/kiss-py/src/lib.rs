@@ -214,7 +214,8 @@ impl MockProvider {
         directory: String,
         script: &Bound<'py, PyAny>,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let script = mock_script_from_json(py_to_json(script)?)?;
+        let script = kiss_sdk::mock::MockScript::from_json(&py_to_json(script)?)
+            .map_err(PyValueError::new_err)?;
         future_into_py(py, async move {
             let provider = kiss_sdk::mock::MockProvider::start(&directory, script)
                 .await
@@ -248,54 +249,6 @@ impl MockProvider {
     fn stop(&mut self) {
         self.inner = None;
     }
-}
-
-/// Translate the JSON script description into the Rust script type.
-///
-/// The description is a list of turns. Each turn is a list of pieces, and each
-/// piece is either `{"text": "..."}` or
-/// `{"toolCall": {"id": ..., "name": ..., "arguments": {...}}}`.
-#[cfg(feature = "mock")]
-fn mock_script_from_json(value: serde_json::Value) -> PyResult<kiss_sdk::mock::MockScript> {
-    use kiss_sdk::mock::{MockScript, MockTurn};
-    let turns = value
-        .as_array()
-        .ok_or_else(|| PyValueError::new_err("the script must be a list of turns"))?;
-    let mut script = MockScript::default();
-    for turn in turns {
-        let pieces = turn
-            .as_array()
-            .ok_or_else(|| PyValueError::new_err("each turn must be a list of pieces"))?;
-        let mut built = Vec::new();
-        for piece in pieces {
-            if let Some(text) = piece.get("text").and_then(|value| value.as_str()) {
-                built.push(MockTurn::Text(text.to_string()));
-            } else if let Some(call) = piece.get("toolCall") {
-                built.push(MockTurn::ToolCall {
-                    id: call
-                        .get("id")
-                        .and_then(|value| value.as_str())
-                        .unwrap_or("call_1")
-                        .to_string(),
-                    name: call
-                        .get("name")
-                        .and_then(|value| value.as_str())
-                        .ok_or_else(|| PyValueError::new_err("a toolCall needs a name"))?
-                        .to_string(),
-                    arguments: call
-                        .get("arguments")
-                        .cloned()
-                        .unwrap_or(serde_json::Value::Object(Default::default())),
-                });
-            } else {
-                return Err(PyValueError::new_err(
-                    "each piece must have a 'text' or 'toolCall' key",
-                ));
-            }
-        }
-        script.turns.push(built);
-    }
-    Ok(script)
 }
 
 /// Build session options from the keyword arguments the Python wrapper passes.
@@ -351,23 +304,8 @@ fn options_from_dict(options: &Bound<'_, PyDict>) -> PyResult<SessionOptions> {
         built.event_capacity = value.extract()?;
     }
 
-    built.session = match get_optional_string(options, "session")?.as_deref() {
-        None | Some("in-memory") => SessionSource::InMemory,
-        Some("create") => SessionSource::Create,
-        Some("continue") => SessionSource::ContinueRecent,
-        Some(path) if path.starts_with("open:") => {
-            SessionSource::Open(PathBuf::from(&path["open:".len()..]))
-        }
-        Some(path) if path.starts_with("fork:") => {
-            SessionSource::Fork(PathBuf::from(&path["fork:".len()..]))
-        }
-        Some(other) => {
-            return Err(PyValueError::new_err(format!(
-                "session must be 'in-memory', 'create', 'continue', 'open:<path>', or \
-                 'fork:<path>', got {other:?}"
-            )));
-        }
-    };
+    built.session = SessionSource::parse(get_optional_string(options, "session")?.as_deref())
+        .map_err(PyValueError::new_err)?;
 
     Ok(built)
 }

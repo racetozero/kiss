@@ -40,6 +40,31 @@ pub enum SessionSource {
     Fork(PathBuf),
 }
 
+impl SessionSource {
+    /// Parse the session option the language bindings take: `in-memory`
+    /// (also when absent), `create`, `continue`, `open:<path>`, or
+    /// `fork:<path>`.
+    pub fn parse(spec: Option<&str>) -> Result<Self, String> {
+        Ok(match spec {
+            None | Some("in-memory") => SessionSource::InMemory,
+            Some("create") => SessionSource::Create,
+            Some("continue") => SessionSource::ContinueRecent,
+            Some(spec) if let Some(path) = spec.strip_prefix("open:") => {
+                SessionSource::Open(PathBuf::from(path))
+            }
+            Some(spec) if let Some(path) = spec.strip_prefix("fork:") => {
+                SessionSource::Fork(PathBuf::from(path))
+            }
+            Some(other) => {
+                return Err(format!(
+                    "session must be 'in-memory', 'create', 'continue', 'open:<path>', or \
+                     'fork:<path>', got {other:?}"
+                ));
+            }
+        })
+    }
+}
+
 // Keep the public `Eq` bound from earlier SDK releases. Session entries come
 // from JSON-compatible history, where non-finite floating-point costs are not
 // valid values.
