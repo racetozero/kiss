@@ -6549,12 +6549,9 @@ fn apply_picker_selection(
             }) = selected
             {
                 let text = visible_user_text(&user.content.as_text());
-                let fork = session
-                    .manager
-                    .lock()
-                    .unwrap()
-                    .fork_active_branch(selected_id.as_deref(), false);
-                match fork.and_then(|manager| session.replace_manager(manager)) {
+                match session.replace_manager(|current| {
+                    current.fork_active_branch(selected_id.as_deref(), false)
+                }) {
                     Ok(()) => {
                         adopt_session(app, session, Transcript::Empty);
                         app.editor.set_text(&text);
@@ -6913,19 +6910,19 @@ fn apply_settings_selection(
 }
 
 fn switch_session(app: &mut App, session: &Arc<kiss_coding::AgentSession>, record: &SessionRecord) {
-    let result = match &record.source {
+    let result = session.replace_manager(|current| match &record.source {
         SessionSource::Kiss(path) => kiss_coding::SessionManager::open(path),
-        source => session_sources::import(source).and_then(|messages| {
+        source => {
+            let messages = session_sources::import(source)?;
             if messages.is_empty() {
                 anyhow::bail!("session has no user or assistant text");
             }
-            let session_dir = session.manager.lock().unwrap().session_dir().to_path_buf();
-            let mut manager = kiss_coding::SessionManager::create(&record.cwd, Some(session_dir))?;
+            let mut manager = current.create_sibling_in(&record.cwd)?;
             manager.append_messages_with_session_info(messages, &record.title)?;
             Ok(manager)
-        }),
-    };
-    match result.and_then(|manager| session.replace_manager(manager)) {
+        }
+    });
+    match result {
         Ok(()) => {
             adopt_session(app, session, Transcript::Rebuild);
             app.cells.push(Cell::Notice(format!(
@@ -7803,11 +7800,9 @@ fn run_slash_command(
                 app.cells.push(Cell::Notice("nothing to clone yet".into()));
                 return Flow::Continue;
             }
-            let fork = {
-                let manager = session.manager.lock().unwrap();
-                manager.fork_active_branch(manager.leaf_id(), true)
-            };
-            match fork.and_then(|manager| session.replace_manager(manager)) {
+            match session
+                .replace_manager(|current| current.fork_active_branch(current.leaf_id(), true))
+            {
                 Ok(()) => {
                     adopt_session(app, session, Transcript::Rebuild);
                     app.cells
@@ -8174,13 +8169,7 @@ fn import_session(
     session: &Arc<kiss_coding::AgentSession>,
     source: &std::path::Path,
 ) {
-    let (fallback_cwd, session_dir) = {
-        let manager = session.manager.lock().unwrap();
-        (
-            manager.cwd().to_path_buf(),
-            manager.session_dir().to_path_buf(),
-        )
-    };
+    let fallback_cwd = session.manager.lock().unwrap().cwd().to_path_buf();
     let imported_cwd = kiss_coding::SessionManager::open(source)
         .ok()
         .map(|manager| PathBuf::from(&manager.header().cwd))
@@ -8191,9 +8180,7 @@ fn import_session(
         ));
         fallback_cwd
     });
-    match kiss_coding::SessionManager::fork_from(source, &cwd, Some(session_dir))
-        .and_then(|manager| session.replace_manager(manager))
-    {
+    match session.replace_manager(|current| current.fork_like(source, &cwd)) {
         Ok(()) => {
             adopt_session(app, session, Transcript::Rebuild);
             app.cells.push(Cell::Notice(format!(
@@ -10573,7 +10560,7 @@ mod tests {
         assert!(exported.is_file());
 
         let replacement = session.manager.lock().unwrap().create_sibling().unwrap();
-        session.replace_manager(replacement).unwrap();
+        session.replace_manager(|_| Ok(replacement)).unwrap();
         assert_ne!(session.manager.lock().unwrap().session_id(), expected_id);
         run_command_for_test(
             &mut app,

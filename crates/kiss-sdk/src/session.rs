@@ -636,7 +636,7 @@ impl Session {
     fn replace_manager(&self, manager: kiss_coding::SessionManager) -> Result<(), SdkErrorText> {
         let _lifecycle = self.ensure_open()?;
         self.inner
-            .replace_manager(manager)
+            .replace_manager(|_| Ok(manager))
             .map_err(|error| SdkErrorText(format!("{error:#}")))
     }
 

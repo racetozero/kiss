@@ -229,13 +229,28 @@ impl SessionManager {
     }
 
     pub fn create_sibling(&self) -> Result<Self> {
+        self.create_sibling_in(&self.cwd.clone())
+    }
+
+    /// A new, empty session for `cwd` stored like this one: in the same
+    /// folder when this one is saved, in memory when it is not.
+    pub fn create_sibling_in(&self, cwd: &Path) -> Result<Self> {
         if self.is_persisted() {
-            Self::create(&self.cwd, Some(self.session_dir.clone()))
+            Self::create(cwd, Some(self.session_dir.clone()))
         } else {
-            let mut manager = Self::in_memory(&self.cwd);
+            let mut manager = Self::in_memory(cwd);
             manager.session_dir = self.session_dir.clone();
             Ok(manager)
         }
+    }
+
+    /// Fork the session at `source` into a new session for `cwd`, stored
+    /// like this one.
+    pub fn fork_like(&self, source: &Path, cwd: &Path) -> Result<Self> {
+        let origin = Self::open(source)?;
+        let mut manager = self.create_sibling_in(cwd)?;
+        manager.adopt(&origin, source)?;
+        Ok(manager)
     }
 
     /// Create a child session in the same working directory and session store.
@@ -254,13 +269,18 @@ impl SessionManager {
     pub fn fork_from(source: &Path, cwd: &Path, session_dir: Option<PathBuf>) -> Result<Self> {
         let origin = Self::open(source)?;
         let mut manager = Self::create(cwd, session_dir)?;
-        manager.header.parent_session = Some(source.display().to_string());
-        for entry in &origin.entries {
-            manager.insert_entry(entry.clone());
-        }
-        manager.leaf_id = origin.leaf_id.clone();
-        manager.rewrite_file()?;
+        manager.adopt(&origin, source)?;
         Ok(manager)
+    }
+
+    /// Take every entry of `origin`, read from `source`, into this new session.
+    fn adopt(&mut self, origin: &Self, source: &Path) -> Result<()> {
+        self.header.parent_session = Some(source.display().to_string());
+        for entry in &origin.entries {
+            self.insert_entry(entry.clone());
+        }
+        self.leaf_id = origin.leaf_id.clone();
+        self.rewrite_file()
     }
 
     /// Copy one active branch into a new session file.
