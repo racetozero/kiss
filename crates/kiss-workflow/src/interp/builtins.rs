@@ -211,24 +211,6 @@ impl Interp {
             .clone()
             .unwrap_or_else(|| format!("{phase} {}", index + 1));
 
-        // A remembered result from an earlier run of the same script is reused,
-        // but only while this position's prompt still matches.
-        let remembered = self
-            .journal
-            .lock()
-            .ok()
-            .and_then(|journal| journal.take_matching(index, &prompt));
-        if let Some(AgentOutcome::Done(value)) = remembered {
-            self.state.register_agent(index, label, prompt);
-            self.state
-                .agent_finished(index, AgentStatus::Reused, Some(summarize(&value)), None, 0);
-            return Ok(Value::from_json(&value));
-        }
-        // Anything after a position that no longer matches is stale too.
-        if let Ok(mut journal) = self.journal.lock() {
-            journal.invalidate_from(index);
-        }
-
         let mut cancel = self.state.register_agent(index, label, prompt.clone());
 
         // Wait for a free slot, then for the run to be unpaused. Taking the
@@ -289,9 +271,6 @@ impl Interp {
                     None,
                     tokens,
                 );
-                if let Ok(mut journal) = self.journal.lock() {
-                    journal.record(index, &prompt, &outcome);
-                }
                 Ok(Value::from_json(value))
             }
             AgentOutcome::Stopped => {

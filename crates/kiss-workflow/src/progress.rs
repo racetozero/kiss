@@ -45,8 +45,6 @@ pub enum AgentStatus {
     Completed,
     Failed,
     Stopped,
-    /// Replayed from a previous run rather than started again.
-    Reused,
     /// The user asked for a new attempt, and the active call is stopping.
     Restarting,
 }
@@ -66,7 +64,6 @@ impl AgentStatus {
             AgentStatus::Completed => "completed",
             AgentStatus::Failed => "failed",
             AgentStatus::Stopped => "stopped",
-            AgentStatus::Reused => "reused",
             AgentStatus::Restarting => "restarting",
         }
     }

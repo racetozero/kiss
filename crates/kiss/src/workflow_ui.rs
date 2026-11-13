@@ -506,7 +506,7 @@ fn agent_color(status: AgentStatus) -> &'static str {
     match status {
         AgentStatus::Queued => "dim",
         AgentStatus::Running | AgentStatus::Restarting => "accent",
-        AgentStatus::Completed | AgentStatus::Reused => "success",
+        AgentStatus::Completed => "success",
         AgentStatus::Failed => "error",
         AgentStatus::Stopped => "warning",
     }
@@ -518,7 +518,6 @@ fn agent_marker(status: AgentStatus) -> &'static str {
         AgentStatus::Running => "●",
         AgentStatus::Restarting => "↻",
         AgentStatus::Completed => "✔",
-        AgentStatus::Reused => "↺",
         AgentStatus::Failed => "✗",
         AgentStatus::Stopped => "◯",
     }

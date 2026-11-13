@@ -2,7 +2,7 @@
 
 use crate::interp::{Interp, RunError};
 use crate::progress::{RunSnapshot, RunState, RunStatus};
-use crate::runner::{AgentId, AgentRunner, Journal, Limits};
+use crate::runner::{AgentId, AgentRunner, Limits};
 use crate::script::Script;
 use serde_json::Value as Json;
 use std::sync::Arc;
@@ -28,30 +28,10 @@ impl Workflow {
         runner: Arc<dyn AgentRunner>,
         limits: Limits,
     ) -> Workflow {
-        Workflow::with_journal(script, args, cwd, runner, limits, Journal::default())
-    }
-
-    /// Build a run that reuses results from an earlier run of the same script.
-    pub fn with_journal(
-        script: Script,
-        args: Json,
-        cwd: String,
-        runner: Arc<dyn AgentRunner>,
-        limits: Limits,
-        journal: Journal,
-    ) -> Workflow {
         let limits = limits.sanitized();
         let script = Arc::new(script);
         let state = RunState::new(script.declared_phases());
-        let interp = Interp::new(
-            script.clone(),
-            state.clone(),
-            runner,
-            limits,
-            args,
-            cwd,
-            journal,
-        );
+        let interp = Interp::new(script.clone(), state.clone(), runner, limits, args, cwd);
         Workflow {
             script,
             state,
@@ -80,11 +60,6 @@ impl Workflow {
                 .finish(RunStatus::Failed, Some(error.to_string())),
         }
         result
-    }
-
-    /// Results worth keeping if this run is launched again.
-    pub fn journal(&self) -> Journal {
-        self.interp.journal()
     }
 
     pub fn snapshot(&self) -> Arc<RunSnapshot> {
@@ -475,85 +450,6 @@ mod tests {
     }
 
     // ----- resume -----------------------------------------------------------
-
-    #[tokio::test]
-    async fn a_relaunched_run_reuses_results_up_to_the_first_changed_prompt() {
-        let first_source = script(
-            "const a = await agent('step one')\n\
-             const b = await agent('step two')\n\
-             const c = await agent('step three')\n\
-             return [a, b, c]",
-        );
-        let runner = FakeRunner::shared();
-        let workflow = Workflow::new(
-            Script::parse(&first_source).unwrap(),
-            Json::Null,
-            "/repo".into(),
-            runner.clone(),
-            Limits::default(),
-        );
-        workflow.run().await.unwrap();
-        assert_eq!(runner.calls.load(Ordering::SeqCst), 3);
-        let journal = workflow.journal();
-        assert_eq!(journal.len(), 3);
-
-        // The second agent's prompt changes, so it and everything after it run
-        // again while the first is replayed.
-        let edited_source = script(
-            "const a = await agent('step one')\n\
-             const b = await agent('step two, revised')\n\
-             const c = await agent('step three')\n\
-             return [a, b, c]",
-        );
-        let second_runner = FakeRunner::shared();
-        let resumed = Workflow::with_journal(
-            Script::parse(&edited_source).unwrap(),
-            Json::Null,
-            "/repo".into(),
-            second_runner.clone(),
-            Limits::default(),
-            journal,
-        );
-        resumed.run().await.unwrap();
-        assert_eq!(second_runner.calls.load(Ordering::SeqCst), 2);
-        assert_eq!(second_runner.prompts(), ["step two, revised", "step three"]);
-
-        let snapshot = resumed.snapshot();
-        let statuses: Vec<_> = snapshot.phases[0]
-            .agents
-            .iter()
-            .map(|agent| agent.status)
-            .collect();
-        assert_eq!(statuses[0], crate::progress::AgentStatus::Reused);
-        assert_eq!(statuses[1], crate::progress::AgentStatus::Completed);
-    }
-
-    #[tokio::test]
-    async fn an_unchanged_relaunch_starts_no_agents_at_all() {
-        let source = script("const a = await agent('one')\nreturn a");
-        let first = Workflow::new(
-            Script::parse(&source).unwrap(),
-            Json::Null,
-            "/repo".into(),
-            FakeRunner::shared(),
-            Limits::default(),
-        );
-        let original = first.run().await.unwrap();
-
-        let runner = FakeRunner::shared();
-        let again = Workflow::with_journal(
-            Script::parse(&source).unwrap(),
-            Json::Null,
-            "/repo".into(),
-            runner.clone(),
-            Limits::default(),
-            first.journal(),
-        );
-        assert_eq!(again.run().await.unwrap(), original);
-        assert_eq!(runner.calls.load(Ordering::SeqCst), 0);
-    }
-
-    // ----- control ----------------------------------------------------------
 
     #[tokio::test]
     async fn stopping_a_run_ends_it_without_losing_finished_work() {

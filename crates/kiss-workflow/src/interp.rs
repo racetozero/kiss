@@ -13,7 +13,7 @@
 use crate::ast::{BinOp, Expr, ExprId, FnBody, FnId, LogOp, Pos, Span, Stmt, TemplatePart, UnOp};
 use crate::lexer::Symbol;
 use crate::progress::RunState;
-use crate::runner::{AgentRunner, Journal, Limits};
+use crate::runner::{AgentRunner, Limits};
 use crate::script::{Global, Script};
 use crate::value::{Builtin, Value};
 use futures::future::BoxFuture;
@@ -132,7 +132,6 @@ pub(crate) struct Interp {
     steps: AtomicU64,
     next_index: AtomicU32,
     permits: Arc<Semaphore>,
-    journal: Mutex<Journal>,
 }
 
 impl Interp {
@@ -143,7 +142,6 @@ impl Interp {
         limits: Limits,
         args: Json,
         cwd: String,
-        journal: Journal,
     ) -> Interp {
         Interp {
             script,
@@ -155,15 +153,7 @@ impl Interp {
             steps: AtomicU64::new(0),
             next_index: AtomicU32::new(0),
             permits: Arc::new(Semaphore::new(limits.max_concurrency)),
-            journal: Mutex::new(journal),
         }
-    }
-
-    pub(crate) fn journal(&self) -> Journal {
-        self.journal
-            .lock()
-            .map(|journal| journal.clone())
-            .unwrap_or_default()
     }
 
     /// Run the script body and return the value it returns.

@@ -60,6 +60,6 @@ mod workflow;
 pub use crate::diagnostic::Diagnostic;
 pub use crate::interp::RunError;
 pub use crate::progress::{AgentSnapshot, AgentStatus, PhaseSnapshot, RunSnapshot, RunStatus};
-pub use crate::runner::{AgentId, AgentOutcome, AgentRequest, AgentRunner, Journal, Limits};
+pub use crate::runner::{AgentId, AgentOutcome, AgentRequest, AgentRunner, Limits};
 pub use crate::script::{Meta, Script};
 pub use crate::workflow::Workflow;
