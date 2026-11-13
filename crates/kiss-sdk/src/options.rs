@@ -84,7 +84,12 @@ pub struct SessionOptions {
     pub settings: Option<Settings>,
     /// Load project-local skills, prompt templates, and MCP configuration.
     /// Off by default because those files can execute project-controlled code.
+    /// When neither this nor `ignore_project_files` is set, a saved trust
+    /// decision for the folder applies.
     pub trust_project_files: bool,
+    /// Never load project-local files, even when the folder is saved as
+    /// trusted. `trust_project_files` wins when both are set.
+    pub ignore_project_files: bool,
     /// Skip discovery of `AGENTS.md` and similar context files.
     pub no_context_files: bool,
     /// How many events the broadcast channel buffers per subscriber.
@@ -111,6 +116,7 @@ impl std::fmt::Debug for SessionOptions {
             .field("session_dir", &self.session_dir)
             .field("session_name", &self.session_name)
             .field("trust_project_files", &self.trust_project_files)
+            .field("ignore_project_files", &self.ignore_project_files)
             .field("no_context_files", &self.no_context_files)
             .field("event_capacity", &self.event_capacity)
             .field("stream_fn", &self.stream_fn.is_some())
@@ -139,6 +145,7 @@ impl Default for SessionOptions {
             session_name: None,
             settings: None,
             trust_project_files: false,
+            ignore_project_files: false,
             no_context_files: false,
             event_capacity: 1024,
             stream_fn: None,
@@ -160,12 +167,16 @@ impl SessionOptions {
         std::fs::create_dir_all(&cwd)
             .with_context(|| format!("create working directory {}", cwd.display()))?;
 
-        let trusted = self.trust_project_files
-            || trust::resolve_non_interactive(
-                &cwd,
-                None,
-                Settings::load(&cwd, false).default_project_trust,
-            );
+        let trusted = trust::resolve(
+            &cwd,
+            if self.trust_project_files {
+                Some(true)
+            } else if self.ignore_project_files {
+                Some(false)
+            } else {
+                None
+            },
+        );
         let settings = match &self.settings {
             Some(settings) => settings.clone(),
             None => Settings::load(&cwd, trusted),
@@ -203,7 +214,7 @@ impl SessionOptions {
             &mut tool_names,
             settings.default_tools.as_deref(),
         )?;
-        let files = context_files::system_prompt_files(&cwd);
+        let files = context_files::system_prompt_files(&cwd, trusted);
         let custom = self.system_prompt.clone().or(files.replace);
         let append = match (&self.append_system_prompt, &files.append) {
             (Some(first), Some(second)) => Some(format!("{first}\n\n{second}")),

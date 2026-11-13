@@ -11,7 +11,6 @@ use kiss_coding::session_runner::{AgentSession, SessionEventSink};
 use kiss_coding::settings::Settings;
 use kiss_coding::skills::Skill;
 use kiss_coding::system_prompt::{SystemPromptOptions, build_system_prompt};
-use kiss_coding::trust;
 use kiss_mcp::McpManager;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -83,15 +82,7 @@ fn configured_tools(
 
 /// Reload the file-backed inputs used by an existing interactive session.
 pub fn reload_runtime(args: &Args, cwd: &std::path::Path) -> Result<ReloadedRuntime> {
-    let cli_trust = if args.approve {
-        Some(true)
-    } else if args.no_approve {
-        Some(false)
-    } else {
-        None
-    };
-    let bootstrap = Settings::load(cwd, false);
-    let trusted = trust::resolve_non_interactive(cwd, cli_trust, bootstrap.default_project_trust);
+    let trusted = args.project_trusted(cwd);
     let mut settings = Settings::load(cwd, trusted);
     if args.experimental_context_file {
         settings.override_for_run(|settings| settings.experimental_context_file = true);
@@ -122,7 +113,7 @@ pub fn reload_runtime(args: &Args, cwd: &std::path::Path) -> Result<ReloadedRunt
         kiss_coding::prompts::discover(cwd, trusted, &template_paths)
     };
 
-    let files = context_files::system_prompt_files(cwd);
+    let files = context_files::system_prompt_files(cwd, trusted);
     let (tool_names, mcp) = configured_tools(args, cwd, trusted, &settings)?;
     let custom = args.system_prompt.clone().or(files.replace);
     let append = match (&args.append_system_prompt, &files.append) {
@@ -283,18 +274,7 @@ pub async fn build_startup(
     sink: SessionEventSink,
 ) -> Result<Startup> {
     let cwd = std::env::current_dir()?;
-    let cli_trust = if args.approve {
-        Some(true)
-    } else if args.no_approve {
-        Some(false)
-    } else {
-        None
-    };
-    // Interactive trust prompting is handled by the caller before this via
-    // saved decisions. Default flow matches non-interactive resolution.
-    let bootstrap_settings = Settings::load(&cwd, false);
-    let trusted =
-        trust::resolve_non_interactive(&cwd, cli_trust, bootstrap_settings.default_project_trust);
+    let trusted = args.project_trusted(&cwd);
     let mut settings = Settings::load(&cwd, trusted);
     if args.experimental_context_file {
         settings.override_for_run(|settings| settings.experimental_context_file = true);
@@ -375,7 +355,7 @@ pub async fn build_startup(
     };
 
     // System prompt.
-    let files = context_files::system_prompt_files(&cwd);
+    let files = context_files::system_prompt_files(&cwd, trusted);
     let (tool_names, mcp) = configured_tools(args, &cwd, trusted, &settings)?;
     let custom = args.system_prompt.clone().or(files.replace);
     let append = match (&args.append_system_prompt, &files.append) {

@@ -497,6 +497,23 @@ pub struct Args {
 }
 
 impl Args {
+    /// The per-run trust choice: `--approve` wins over `--no-approve`, and
+    /// `None` means neither flag was given.
+    pub fn trust_override(&self) -> Option<bool> {
+        if self.approve {
+            Some(true)
+        } else if self.no_approve {
+            Some(false)
+        } else {
+            None
+        }
+    }
+
+    /// Whether this run loads project-local resources from `cwd`.
+    pub fn project_trusted(&self, cwd: &std::path::Path) -> bool {
+        kiss_coding::trust::resolve(cwd, self.trust_override())
+    }
+
     pub fn split_csv(value: &Option<String>) -> Vec<String> {
         value
             .as_deref()

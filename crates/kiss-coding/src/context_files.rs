@@ -58,24 +58,44 @@ pub struct SystemPromptFiles {
     pub append: Option<String>,
 }
 
-pub fn system_prompt_files(cwd: &Path) -> SystemPromptFiles {
-    let read = |p: PathBuf| std::fs::read_to_string(p).ok();
-    let global = kiss_ai::paths::agent_dir();
-    let project = cwd.join(".kiss");
-
-    let replace = read(project.join("SYSTEM.md"))
-        .or_else(|| global.as_ref().and_then(|g| read(g.join("SYSTEM.md"))));
-    let append = read(project.join("APPEND_SYSTEM.md")).or_else(|| {
-        global
-            .as_ref()
-            .and_then(|g| read(g.join("APPEND_SYSTEM.md")))
-    });
-    SystemPromptFiles { replace, append }
+/// `SYSTEM.md` and `APPEND_SYSTEM.md`, from the project's `.kiss/` when the
+/// project is trusted, otherwise from the agent directory.
+pub fn system_prompt_files(cwd: &Path, project_trusted: bool) -> SystemPromptFiles {
+    let dirs: Vec<PathBuf> = project_trusted
+        .then(|| cwd.join(".kiss"))
+        .into_iter()
+        .chain(kiss_ai::paths::agent_dir())
+        .collect();
+    let read = |name: &str| {
+        dirs.iter()
+            .find_map(|dir| std::fs::read_to_string(dir.join(name)).ok())
+    };
+    SystemPromptFiles {
+        replace: read("SYSTEM.md"),
+        append: read("APPEND_SYSTEM.md"),
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_untrusted_project_cannot_replace_the_system_prompt() {
+        let project = tempfile::tempdir().unwrap();
+        std::fs::create_dir(project.path().join(".kiss")).unwrap();
+        std::fs::write(project.path().join(".kiss/SYSTEM.md"), "project prompt").unwrap();
+        assert_eq!(
+            system_prompt_files(project.path(), true).replace.as_deref(),
+            Some("project prompt")
+        );
+        assert_ne!(
+            system_prompt_files(project.path(), false)
+                .replace
+                .as_deref(),
+            Some("project prompt")
+        );
+    }
 
     #[cfg(unix)]
     #[test]

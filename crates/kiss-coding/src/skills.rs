@@ -169,6 +169,23 @@ fn scan_dir(dir: &Path, include_root_md: bool, out: &mut Vec<Skill>) {
     }
 }
 
+/// `.agents/skills` in `cwd` and each parent up to the git root. The home
+/// directory's own `.agents/skills` belongs to the user, not the project.
+pub fn project_agents_skill_dirs(cwd: &Path) -> Vec<PathBuf> {
+    let home = dirs::home_dir();
+    let mut found = Vec::new();
+    for dir in cwd.ancestors() {
+        if home.as_deref() == Some(dir) {
+            break;
+        }
+        found.push(dir.join(".agents/skills"));
+        if dir.join(".git").exists() {
+            break;
+        }
+    }
+    found
+}
+
 /// Discover skills from every location pi checks (kiss equivalents).
 pub fn discover(cwd: &Path, project_trusted: bool, extra_paths: &[PathBuf]) -> Vec<Skill> {
     let mut out: Vec<Skill> = Vec::new();
@@ -180,12 +197,8 @@ pub fn discover(cwd: &Path, project_trusted: bool, extra_paths: &[PathBuf]) -> V
     }
     if project_trusted {
         scan_dir(&cwd.join(".kiss/skills"), true, &mut out);
-        // .agents/skills in cwd and ancestors up to a git root.
-        for dir in cwd.ancestors() {
-            scan_dir(&dir.join(".agents/skills"), false, &mut out);
-            if dir.join(".git").exists() {
-                break;
-            }
+        for dir in project_agents_skill_dirs(cwd) {
+            scan_dir(&dir, false, &mut out);
         }
     }
     for path in extra_paths {

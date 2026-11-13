@@ -134,7 +134,7 @@ async fn run_command(args: &Args, command: &Command) -> anyhow::Result<i32> {
         }
         Command::Doctor { summary } => doctor::run(*summary).await,
         Command::Update => update::run().await,
-        Command::Mcp { command } => mcp_cli::run(command).await,
+        Command::Mcp { command } => mcp_cli::run(command, args.trust_override()).await,
         Command::Provider { command } => provider_cli::run(command),
         Command::Login {
             provider,

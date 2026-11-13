@@ -12,7 +12,7 @@ use std::time::Duration;
 use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 use tokio_util::sync::CancellationToken;
 
-pub async fn run(command: &McpCommand) -> Result<i32> {
+pub async fn run(command: &McpCommand, trust_override: Option<bool>) -> Result<i32> {
     let cwd = std::env::current_dir()?;
     let loaded = config::load(&cwd, true)?;
     match command {
@@ -138,7 +138,21 @@ pub async fn run(command: &McpCommand) -> Result<i32> {
             }
         }
         McpCommand::Test { name } => {
-            let manager = McpManager::new(loaded)?;
+            // Testing starts the server, so a project's own servers run only
+            // when the project is trusted.
+            let trusted = kiss_coding::trust::resolve(&cwd, trust_override);
+            if !trusted
+                && loaded.config.mcp_servers.contains_key(name)
+                && !config::load(&cwd, false)?
+                    .config
+                    .mcp_servers
+                    .contains_key(name)
+            {
+                anyhow::bail!(
+                    "MCP server `{name}` comes from this project's configuration, and this project is not trusted. Run `kiss --approve mcp test {name}` to start it once, or trust the project with /trust in kiss."
+                );
+            }
+            let manager = McpManager::new(config::load(&cwd, trusted)?)?;
             let cancel = CancellationToken::new();
             let tools = manager.list_tools(Some(name), &cancel).await?;
             println!(

@@ -1498,7 +1498,7 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
         prompt_templates,
         context_file_paths,
         enabled_models,
-        saved_workflows: discover_saved_workflows(&session),
+        saved_workflows: discover_saved_workflows(&session, args),
     };
 
     let theme = match settings.theme.as_deref() {
@@ -6068,20 +6068,7 @@ fn open_mcp_picker(
     command_tx: &mpsc::UnboundedSender<CommandEvent>,
 ) {
     let cwd = session.manager.lock().unwrap().cwd().to_path_buf();
-    let cli_trust = if args.approve {
-        Some(true)
-    } else if args.no_approve {
-        Some(false)
-    } else {
-        None
-    };
-    let bootstrap = kiss_coding::Settings::load(&cwd, false);
-    let trusted = kiss_coding::trust::resolve_non_interactive(
-        &cwd,
-        cli_trust,
-        bootstrap.default_project_trust,
-    );
-    let loaded = match kiss_mcp::config::load(&cwd, trusted) {
+    let loaded = match kiss_mcp::config::load(&cwd, args.project_trusted(&cwd)) {
         Ok(loaded) => loaded,
         Err(error) => {
             app.cells.push(Cell::Error(format!(
@@ -8485,16 +8472,10 @@ async fn share_session_async(
 /// Saved workflows for this project and this user.
 fn discover_saved_workflows(
     session: &Arc<kiss_coding::AgentSession>,
+    args: &Args,
 ) -> Vec<kiss_coding::workflows::SavedWorkflow> {
     let cwd = session.manager.lock().unwrap().cwd().to_path_buf();
-    // A project workflow feeds child agents instructions, so it loads under the
-    // same trust rule as project skills and prompts.
-    let trusted = kiss_coding::trust::resolve_non_interactive(
-        &cwd,
-        None,
-        session.settings().default_project_trust,
-    );
-    kiss_coding::workflows::discover(&cwd, trusted)
+    kiss_coding::workflows::discover(&cwd, args.project_trusted(&cwd))
 }
 
 fn reload_interactive(
@@ -8533,7 +8514,7 @@ fn reload_interactive(
     app.webmcp_manager = webmcp_manager(&reloaded.settings.webmcp);
     resources.settings = reloaded.settings.clone();
     session.reload_runtime(reloaded.settings, reloaded.system_prompt, reloaded.tools);
-    resources.saved_workflows = discover_saved_workflows(session);
+    resources.saved_workflows = discover_saved_workflows(session, args);
 
     let theme = if resources.settings.theme.as_deref() == Some("light") {
         Theme::light()

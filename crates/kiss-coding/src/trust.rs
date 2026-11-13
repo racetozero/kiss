@@ -18,15 +18,24 @@ pub fn trust_file_path() -> Option<PathBuf> {
 
 fn read_trust_file() -> TrustFile {
     trust_file_path()
-        .and_then(|p| std::fs::read_to_string(p).ok())
-        .and_then(|t| serde_json::from_str(&t).ok())
+        .and_then(|path| kiss_ai::config_file::read_json(&path).ok())
         .unwrap_or_default()
+}
+
+/// The project paths that load only when the project is trusted: `.kiss/`
+/// (settings, skills, prompts, workflows, MCP config and SYSTEM.md),
+/// `.mcp.json`, and `.agents/skills` in the folder and its parents up to the
+/// git root. Every loader of a project-local resource must be listed here.
+pub fn gated_paths(cwd: &Path) -> Vec<PathBuf> {
+    let mut paths = vec![cwd.join(".kiss"), cwd.join(".mcp.json")];
+    paths.extend(crate::skills::project_agents_skill_dirs(cwd));
+    paths
 }
 
 /// Does this project directory carry project-local resources that need a
 /// trust decision at all?
 pub fn has_project_resources(cwd: &Path) -> bool {
-    cwd.join(".kiss").is_dir() || cwd.join(".agents/skills").is_dir()
+    gated_paths(cwd).iter().any(|path| path.exists())
 }
 
 /// Saved decision for `cwd` or any ancestor.
@@ -41,22 +50,32 @@ pub fn saved_decision(cwd: &Path) -> Option<bool> {
 }
 
 pub fn save_decision(path: &Path, trusted: bool) -> anyhow::Result<()> {
-    let file_path = trust_file_path().ok_or_else(|| anyhow::anyhow!("no home directory"))?;
-    if let Some(parent) = file_path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let mut file = read_trust_file();
-    file.decisions.insert(path.display().to_string(), trusted);
-    std::fs::write(&file_path, serde_json::to_string_pretty(&file)?)?;
-    Ok(())
+    let file_path = trust_file_path().ok_or_else(|| anyhow::anyhow!(
+        "The trust decision cannot be saved because the home directory is unknown. Set HOME, then try again."
+    ))?;
+    kiss_ai::config_file::with_lock(&file_path, || {
+        let mut file: TrustFile = kiss_ai::config_file::read_json(&file_path)?;
+        file.decisions.insert(path.display().to_string(), trusted);
+        kiss_ai::config_file::write_atomic(
+            &file_path,
+            serde_json::to_string_pretty(&file)?.as_bytes(),
+        )
+    })
 }
 
-/// Resolve trust non-interactively (print/json modes and CLI overrides).
-pub fn resolve_non_interactive(
-    cwd: &Path,
-    cli_override: Option<bool>,
-    default: ProjectTrustDefault,
-) -> bool {
+/// Whether to load project-local resources for `cwd`. `run_override` is a
+/// per-run choice such as `--approve` (`Some(true)`) or `--no-approve`
+/// (`Some(false)`); without one, a saved decision applies, then the user's
+/// `defaultProjectTrust` setting (never a project's own setting).
+pub fn resolve(cwd: &Path, run_override: Option<bool>) -> bool {
+    decide(
+        cwd,
+        run_override,
+        crate::Settings::load(cwd, false).default_project_trust,
+    )
+}
+
+fn decide(cwd: &Path, cli_override: Option<bool>, default: ProjectTrustDefault) -> bool {
     if let Some(explicit) = cli_override {
         return explicit;
     }
@@ -69,4 +88,26 @@ pub fn resolve_non_interactive(
         return true; // nothing project-local to gate
     }
     matches!(default, ProjectTrustDefault::Always)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_trust_gated_project_file_needs_a_decision() {
+        let empty = tempfile::tempdir().unwrap();
+        assert!(!has_project_resources(empty.path()));
+
+        let mcp_only = tempfile::tempdir().unwrap();
+        std::fs::write(mcp_only.path().join(".mcp.json"), "{}").unwrap();
+        assert!(has_project_resources(mcp_only.path()));
+
+        let repo = tempfile::tempdir().unwrap();
+        std::fs::create_dir(repo.path().join(".git")).unwrap();
+        std::fs::create_dir_all(repo.path().join(".agents/skills")).unwrap();
+        let nested = repo.path().join("crates/app");
+        std::fs::create_dir_all(&nested).unwrap();
+        assert!(has_project_resources(&nested));
+    }
 }
