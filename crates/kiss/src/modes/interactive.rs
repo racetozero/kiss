@@ -5202,6 +5202,53 @@ fn decision_model_detail(
     }
 }
 
+/// The rows of `/settings`, in display order. A row's picker value is its
+/// position here.
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum SettingRow {
+    ThinkingLevel,
+    Theme,
+    ThinkingBlocks,
+    Transport,
+    SteeringDelivery,
+    FollowUpDelivery,
+    AutoCompaction,
+    AutomaticRetry,
+    StartupDetails,
+    DefaultProjectTrust,
+    SkillCommands,
+    MermaidRendering,
+    AutomaticRecap,
+    Subagents,
+    DynamicWorkflows,
+    CompactionMethod,
+    DynamicReasoning,
+    DesktopNotifications,
+}
+
+impl SettingRow {
+    const ALL: [SettingRow; 18] = [
+        SettingRow::ThinkingLevel,
+        SettingRow::Theme,
+        SettingRow::ThinkingBlocks,
+        SettingRow::Transport,
+        SettingRow::SteeringDelivery,
+        SettingRow::FollowUpDelivery,
+        SettingRow::AutoCompaction,
+        SettingRow::AutomaticRetry,
+        SettingRow::StartupDetails,
+        SettingRow::DefaultProjectTrust,
+        SettingRow::SkillCommands,
+        SettingRow::MermaidRendering,
+        SettingRow::AutomaticRecap,
+        SettingRow::Subagents,
+        SettingRow::DynamicWorkflows,
+        SettingRow::CompactionMethod,
+        SettingRow::DynamicReasoning,
+        SettingRow::DesktopNotifications,
+    ];
+}
+
 fn settings_picker(
     app: &App,
     session: &Arc<kiss_coding::AgentSession>,
@@ -5213,12 +5260,12 @@ fn settings_picker(
         SelectItem {
             label: "Thinking level".into(),
             detail: Some(session.thinking_level().as_str().into()),
-            value: 0,
+            value: SettingRow::ThinkingLevel as usize,
         },
         SelectItem {
             label: "Theme".into(),
             detail: Some(theme.into()),
-            value: 1,
+            value: SettingRow::Theme as usize,
         },
         SelectItem {
             label: "Thinking blocks".into(),
@@ -5227,22 +5274,22 @@ fn settings_picker(
             } else {
                 "visible".into()
             }),
-            value: 2,
+            value: SettingRow::ThinkingBlocks as usize,
         },
         SelectItem {
             label: "Transport".into(),
             detail: Some(format_transport(settings.transport).into()),
-            value: 3,
+            value: SettingRow::Transport as usize,
         },
         SelectItem {
             label: "Steering delivery".into(),
             detail: Some(format_queue_mode(settings.steering_mode).into()),
-            value: 4,
+            value: SettingRow::SteeringDelivery as usize,
         },
         SelectItem {
             label: "Follow-up delivery".into(),
             detail: Some(format_queue_mode(settings.follow_up_mode).into()),
-            value: 5,
+            value: SettingRow::FollowUpDelivery as usize,
         },
         SelectItem {
             label: "Auto compaction".into(),
@@ -5254,12 +5301,12 @@ fn settings_picker(
                 }
                 .into(),
             ),
-            value: 6,
+            value: SettingRow::AutoCompaction as usize,
         },
         SelectItem {
             label: "Automatic retry".into(),
             detail: Some(if settings.retry.enabled { "on" } else { "off" }.into()),
-            value: 7,
+            value: SettingRow::AutomaticRetry as usize,
         },
         SelectItem {
             label: "Startup details".into(),
@@ -5271,7 +5318,7 @@ fn settings_picker(
                 }
                 .into(),
             ),
-            value: 8,
+            value: SettingRow::StartupDetails as usize,
         },
         SelectItem {
             label: "Default project trust".into(),
@@ -5283,7 +5330,7 @@ fn settings_picker(
                 }
                 .into(),
             ),
-            value: 9,
+            value: SettingRow::DefaultProjectTrust as usize,
         },
         SelectItem {
             label: "Skill slash commands".into(),
@@ -5295,12 +5342,12 @@ fn settings_picker(
                 }
                 .into(),
             ),
-            value: 10,
+            value: SettingRow::SkillCommands as usize,
         },
         SelectItem {
             label: "Mermaid rendering".into(),
             detail: Some(settings.markdown.mermaid.as_str().into()),
-            value: 11,
+            value: SettingRow::MermaidRendering as usize,
         },
         SelectItem {
             label: "Automatic recap".into(),
@@ -5312,7 +5359,7 @@ fn settings_picker(
                 }
                 .into(),
             ),
-            value: 12,
+            value: SettingRow::AutomaticRecap as usize,
         },
         SelectItem {
             label: "Subagents".into(),
@@ -5324,7 +5371,7 @@ fn settings_picker(
                 }
                 .into(),
             ),
-            value: 13,
+            value: SettingRow::Subagents as usize,
         },
         SelectItem {
             label: "Dynamic workflows".into(),
@@ -5335,7 +5382,7 @@ fn settings_picker(
             } else {
                 "off".into()
             }),
-            value: 14,
+            value: SettingRow::DynamicWorkflows as usize,
         },
         SelectItem {
             label: "Compaction method".into(),
@@ -5344,7 +5391,7 @@ fn settings_picker(
                 "summary",
                 session,
             )),
-            value: 15,
+            value: SettingRow::CompactionMethod as usize,
         },
         SelectItem {
             label: "Dynamic reasoning".into(),
@@ -5353,7 +5400,7 @@ fn settings_picker(
                 "fixed",
                 session,
             )),
-            value: 16,
+            value: SettingRow::DynamicReasoning as usize,
         },
         SelectItem {
             label: "Desktop notifications".into(),
@@ -5362,7 +5409,7 @@ fn settings_picker(
             } else {
                 "off".into()
             }),
-            value: 17,
+            value: SettingRow::DesktopNotifications as usize,
         },
     ];
     Picker {
@@ -6718,8 +6765,11 @@ fn apply_settings_selection(
     resources: &mut InteractiveResources,
     value: usize,
 ) {
-    match value {
-        0 => {
+    let Some(row) = SettingRow::ALL.get(value).copied() else {
+        return;
+    };
+    match row {
+        SettingRow::ThinkingLevel => {
             let next = session
                 .model()
                 .next_thinking_level(session.thinking_level());
@@ -6727,7 +6777,7 @@ fn apply_settings_selection(
             resources.settings.default_thinking_level = Some(next.as_str().into());
             update_thinking_border(app, next);
         }
-        1 => {
+        SettingRow::Theme => {
             let next = if app.theme.name == "light" {
                 "dark"
             } else {
@@ -6737,11 +6787,11 @@ fn apply_settings_selection(
             app.apply_theme(Theme::named(Some(next)));
             update_thinking_border(app, session.thinking_level());
         }
-        2 => {
+        SettingRow::ThinkingBlocks => {
             resources.settings.hide_thinking_block.toggle();
             app.hide_thinking = resources.settings.hide_thinking_block;
         }
-        3 => {
+        SettingRow::Transport => {
             resources.settings.transport = match resources.settings.transport {
                 Transport::Auto => Transport::Sse,
                 Transport::Sse => Transport::WebSocket,
@@ -6749,22 +6799,22 @@ fn apply_settings_selection(
                 Transport::WebSocketCached => Transport::Auto,
             };
         }
-        4 => {
+        SettingRow::SteeringDelivery => {
             resources.settings.steering_mode = match resources.settings.steering_mode {
                 QueueMode::All => QueueMode::OneAtATime,
                 QueueMode::OneAtATime => QueueMode::All,
             };
         }
-        5 => {
+        SettingRow::FollowUpDelivery => {
             resources.settings.follow_up_mode = match resources.settings.follow_up_mode {
                 QueueMode::All => QueueMode::OneAtATime,
                 QueueMode::OneAtATime => QueueMode::All,
             };
         }
-        6 => resources.settings.compaction.enabled.toggle(),
-        7 => resources.settings.retry.enabled.toggle(),
-        8 => resources.settings.quiet_startup.toggle(),
-        9 => {
+        SettingRow::AutoCompaction => resources.settings.compaction.enabled.toggle(),
+        SettingRow::AutomaticRetry => resources.settings.retry.enabled.toggle(),
+        SettingRow::StartupDetails => resources.settings.quiet_startup.toggle(),
+        SettingRow::DefaultProjectTrust => {
             resources.settings.default_project_trust =
                 match resources.settings.default_project_trust {
                     kiss_coding::settings::ProjectTrustDefault::Ask => {
@@ -6778,11 +6828,11 @@ fn apply_settings_selection(
                     }
                 };
         }
-        10 => {
+        SettingRow::SkillCommands => {
             resources.settings.enable_skill_commands =
                 Some(!resources.settings.enable_skill_commands.unwrap_or(true));
         }
-        11 => {
+        SettingRow::MermaidRendering => {
             resources.settings.markdown.mermaid = match resources.settings.markdown.mermaid {
                 MermaidRendering::Streaming => MermaidRendering::Final,
                 MermaidRendering::Final => MermaidRendering::Off,
@@ -6790,11 +6840,13 @@ fn apply_settings_selection(
             };
             app.mermaid_mode = mermaid_mode(resources.settings.markdown.mermaid);
         }
-        12 => set_auto_recap(app, resources, !resources.settings.auto_recap_enabled()),
-        13 => {
+        SettingRow::AutomaticRecap => {
+            set_auto_recap(app, resources, !resources.settings.auto_recap_enabled())
+        }
+        SettingRow::Subagents => {
             resources.settings.subagents.enabled.toggle();
         }
-        14 => {
+        SettingRow::DynamicWorkflows => {
             if !resources.settings.subagents.enabled {
                 // Workflows are built on child agents, so this row cannot be
                 // turned on by itself.
@@ -6804,7 +6856,7 @@ fn apply_settings_selection(
             }
             resources.settings.workflows.enabled.toggle();
         }
-        15 => {
+        SettingRow::CompactionMethod => {
             let Some(mode) = resources
                 .settings
                 .compaction
@@ -6819,7 +6871,7 @@ fn apply_settings_selection(
             };
             resources.settings.compaction.mode = mode;
         }
-        16 => {
+        SettingRow::DynamicReasoning => {
             let Some(mode) = resources
                 .settings
                 .reasoning_effort
@@ -6834,8 +6886,7 @@ fn apply_settings_selection(
             };
             resources.settings.reasoning_effort.mode = mode;
         }
-        17 => resources.settings.desktop_notifications.toggle(),
-        _ => return,
+        SettingRow::DesktopNotifications => resources.settings.desktop_notifications.toggle(),
     }
     save_interactive_settings(app, session, resources);
 }
@@ -8337,6 +8388,13 @@ mod tests {
     use super::*;
     use clap::Parser as _;
     use kiss_coding::settings::{CompactionMode, ReasoningEffortMode};
+
+    #[test]
+    fn a_setting_row_value_is_its_position() {
+        for (position, row) in SettingRow::ALL.iter().enumerate() {
+            assert_eq!(*row as usize, position, "{row:?}");
+        }
+    }
     use std::path::PathBuf;
 
     fn test_app() -> App {
@@ -9372,10 +9430,20 @@ mod tests {
 
         let picker = app.picker.as_mut().expect("settings picker");
         picker.list.set_filter("automatic".into());
-        assert!(picker.list.select_value(12));
+        assert!(
+            picker
+                .list
+                .select_value(SettingRow::AutomaticRecap as usize)
+        );
 
         resources.settings.auto_recap = Some(false);
-        reopen_settings_picker(&mut app, &session, &resources, "automatic".into(), 12);
+        reopen_settings_picker(
+            &mut app,
+            &session,
+            &resources,
+            "automatic".into(),
+            SettingRow::AutomaticRecap as usize,
+        );
 
         let picker = app.picker.as_mut().expect("rebuilt settings picker");
         assert_eq!(picker.list.filter(), "automatic");
@@ -9475,7 +9543,11 @@ mod tests {
 
         open_settings_picker(&mut app, &session, &resources);
         let picker = app.picker.as_mut().expect("settings picker");
-        assert!(picker.list.select_value(16));
+        assert!(
+            picker
+                .list
+                .select_value(SettingRow::DynamicReasoning as usize)
+        );
         assert_eq!(picker.list.current().unwrap().label, "Dynamic reasoning");
         assert_eq!(
             picker.list.current().unwrap().detail.as_deref(),
@@ -9491,7 +9563,11 @@ mod tests {
         for (enabled, expected) in [(false, "off"), (true, "on · unavailable in this session")] {
             resources.settings.desktop_notifications = enabled;
             let mut picker = settings_picker(&app, &session, &resources);
-            assert!(picker.list.select_value(17));
+            assert!(
+                picker
+                    .list
+                    .select_value(SettingRow::DesktopNotifications as usize)
+            );
             let item = picker.list.current().unwrap();
             assert_eq!(item.label, "Desktop notifications");
             assert_eq!(item.detail.as_deref(), Some(expected));
@@ -9506,7 +9582,7 @@ mod tests {
 
         open_settings_picker(&mut app, &session, &resources);
         let picker = app.picker.as_mut().expect("settings picker");
-        assert!(picker.list.select_value(13));
+        assert!(picker.list.select_value(SettingRow::Subagents as usize));
         assert_eq!(picker.list.current().unwrap().label, "Subagents");
         assert_eq!(
             picker.list.current().unwrap().detail.as_deref(),
@@ -9514,7 +9590,13 @@ mod tests {
         );
 
         resources.settings.subagents.enabled = true;
-        reopen_settings_picker(&mut app, &session, &resources, String::new(), 13);
+        reopen_settings_picker(
+            &mut app,
+            &session,
+            &resources,
+            String::new(),
+            SettingRow::Subagents as usize,
+        );
         let picker = app.picker.as_mut().unwrap();
         assert_eq!(picker.list.current().map(|item| item.value), Some(13));
         assert_eq!(picker.list.current().unwrap().detail.as_deref(), Some("on"));
