@@ -241,7 +241,11 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
     let response = match response {
         Ok(r) => r,
         Err(e) => {
-            builder.fail(format!("request failed: {e}"), false, model);
+            builder.fail(
+                format!("request failed: {}", super::with_causes(&e)),
+                false,
+                model,
+            );
             return;
         }
     };
@@ -276,7 +280,7 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
                 }
             }
             Some(Err(e)) => {
-                builder.fail(format!("stream error: {e}"), false, model);
+                builder.fail(super::stream_error(super::with_causes(&e)), false, model);
                 return;
             }
             None => break,
@@ -298,7 +302,11 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
             }
         }
     }
-    builder.fail("response stream ended before completion", false, model);
+    builder.fail(
+        super::stream_error("the response ended before it completed"),
+        false,
+        model,
+    );
 }
 
 pub fn response_url(model: &Model) -> anyhow::Result<String> {

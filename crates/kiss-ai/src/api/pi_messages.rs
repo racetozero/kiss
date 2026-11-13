@@ -54,7 +54,11 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
     let response = match response {
         Ok(response) => response,
         Err(error) => {
-            builder.fail(format!("request failed: {error}"), false, model);
+            builder.fail(
+                format!("request failed: {}", super::with_causes(&error)),
+                false,
+                model,
+            );
             return;
         }
     };
@@ -99,7 +103,7 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
         }
     }
     builder.fail(
-        "gateway stream ended without a terminal event",
+        super::stream_error("the gateway response ended without a terminal event"),
         false,
         model,
     );

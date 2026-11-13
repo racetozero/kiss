@@ -47,7 +47,11 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
     let mut response = match response {
         Ok(response) => response,
         Err(error) => {
-            builder.fail(format!("Bedrock request failed: {error}"), false, model);
+            builder.fail(
+                format!("Bedrock request failed: {}", super::with_causes(&error)),
+                false,
+                model,
+            );
             return;
         }
     };
@@ -172,7 +176,11 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
             builder.fail(error, false, model);
         }
         Some(reason) => builder.finish(reason, model),
-        None => builder.fail("Bedrock stream ended without a stop reason", false, model),
+        None => builder.fail(
+            super::stream_error("the Bedrock response ended without a stop reason"),
+            false,
+            model,
+        ),
     }
 }
 

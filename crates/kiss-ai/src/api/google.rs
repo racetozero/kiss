@@ -61,7 +61,11 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
     let response = match response {
         Ok(r) => r,
         Err(e) => {
-            builder.fail(format!("request failed: {e}"), false, model);
+            builder.fail(
+                format!("request failed: {}", super::with_causes(&e)),
+                false,
+                model,
+            );
             return;
         }
     };
@@ -92,7 +96,7 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
                 }
             }
             Some(Err(e)) => {
-                builder.fail(format!("stream error: {e}"), false, model);
+                builder.fail(super::stream_error(super::with_causes(&e)), false, model);
                 return;
             }
             None => break,
@@ -121,7 +125,7 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
         // stream was cut off.
         None => {
             builder.fail(
-                "stream error: the response ended before the provider sent a finish reason",
+                super::stream_error("the response ended before the provider sent a finish reason"),
                 false,
                 model,
             );

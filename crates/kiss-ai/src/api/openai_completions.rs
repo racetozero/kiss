@@ -98,7 +98,11 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
     let response = match response {
         Ok(r) => r,
         Err(e) => {
-            builder.fail(format!("request failed: {e}"), false, model);
+            builder.fail(
+                format!("request failed: {}", super::with_causes(&e)),
+                false,
+                model,
+            );
             return;
         }
     };
@@ -136,7 +140,7 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
                 }
             }
             Some(Err(e)) => {
-                builder.fail(format!("stream error: {e}"), false, model);
+                builder.fail(super::stream_error(super::with_causes(&e)), false, model);
                 return;
             }
             None => break,
@@ -259,7 +263,11 @@ fn finish(
     let has_tools = !state.tool_map.is_empty();
     builder.message.raw_stop_reason = state.finish_reason.clone();
     if finish_reason_required && state.finish_reason.is_none() {
-        builder.fail("Stream ended without finish_reason", false, model);
+        builder.fail(
+            super::stream_error("the response ended without a finish_reason"),
+            false,
+            model,
+        );
         return;
     }
     let failure = match state.finish_reason.as_deref() {

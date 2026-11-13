@@ -19,6 +19,29 @@ use crate::model::Model;
 use crate::types::{AssistantMessage, ContentBlock, Cost, StopReason, ToolCall, Usage};
 use crate::types::{Context, Message};
 
+/// The text of a stream that broke or ended early. Session retry treats a
+/// message that starts this way as transient, so every adapter uses it.
+pub(crate) fn stream_error(detail: impl std::fmt::Display) -> String {
+    format!("stream error: {detail}")
+}
+
+/// An error followed by each cause in its source chain. A transport error
+/// often says only "error sending request"; the cause, such as "connection
+/// refused", is what the user and the retry rule need.
+pub(crate) fn with_causes(error: &(dyn std::error::Error + 'static)) -> String {
+    let mut text = error.to_string();
+    let mut source = error.source();
+    while let Some(cause) = source {
+        let cause_text = cause.to_string();
+        if !text.contains(&cause_text) {
+            text.push_str(": ");
+            text.push_str(&cause_text);
+        }
+        source = cause.source();
+    }
+    text
+}
+
 /// Read a failed HTTP response into `HTTP <status>: <body>`. A 429 also
 /// carries the provider's reset hint as ` (retry-after: Ns)` so account
 /// failover can record when the rate-limited account becomes usable again.
@@ -533,6 +556,15 @@ pub fn apply_provider_headers(
 
 #[cfg(test)]
 mod provider_header_tests {
+    #[test]
+    fn an_error_shows_each_cause_once() {
+        let error = anyhow::anyhow!("connection refused").context("error sending request");
+        assert_eq!(
+            super::with_causes(error.as_ref()),
+            "error sending request: connection refused"
+        );
+    }
+
     use super::*;
 
     #[test]
