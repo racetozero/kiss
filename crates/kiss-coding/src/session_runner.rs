@@ -1283,22 +1283,7 @@ impl AgentSession {
         if self.settings().experimental_context_file
             && let Some(file) = self.context_file.lock().unwrap().as_ref()
         {
-            system_prompt.push_str(&format!(
-                "\n\nExperimental context file: {}\n\
-                 This JSON array contains your live KISS conversation, without system instructions. \
-                 Use your normal file tools to edit it. Changes apply after the tool batch and before the next model request. \
-                 New user messages, your current answer, and tool results are added automatically. \
-                 Keep important task instructions, exact facts, progress, and next steps. Replace stale output with useful notes. \
-                 Keep complete assistant tool-call/result groups, or replace the whole group with a user note. \
-                 A user note has the form {{\"role\":\"user\",\"content\":\"Notes here\",\"timestamp\":0}}. \
-                 Preserve fields of messages you keep, including image and reasoning data. \
-                 The file must be a valid JSON array at most 16 MiB. Invalid edits leave the live conversation unchanged; repair the file after an error. \
-                 Read only the parts you need, because the conversation is already in your context. \
-                 Your model context window is {} tokens. Manage the file before it fills; automatic compaction remains an emergency fallback. \
-                 Batch edits: changing early text can require the provider to process all later text again. \
-                 The full session record remains separate from this editable file.",
-                file.path().display(), model.context_window
-            ));
+            system_prompt.push_str(&file.instructions(model.context_window));
         }
         if self.subagents_enabled() {
             system_prompt.push_str("\n\n");

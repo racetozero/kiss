@@ -9,7 +9,8 @@ use std::hash::{Hash, Hasher};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
-const MAX_FILE_BYTES: u64 = 16 * 1024 * 1024;
+const MAX_FILE_MIB: u64 = 16;
+const MAX_FILE_BYTES: u64 = MAX_FILE_MIB * 1024 * 1024;
 
 pub(crate) struct ContextFile {
     directory: tempfile::TempDir,
@@ -21,6 +22,28 @@ pub(crate) struct ContextFile {
 }
 
 impl ContextFile {
+    /// What the model must know to edit the file, for the system prompt.
+    pub(crate) fn instructions(&self, context_window: u64) -> String {
+        format!(
+            "\n\nExperimental context file: {}\n\
+             This JSON array contains your live KISS conversation, without system instructions. \
+             Use your normal file tools to edit it. Changes apply after the tool batch and before the next model request. \
+             New user messages, your current answer, and tool results are added automatically. \
+             Keep important task instructions, exact facts, progress, and next steps. Replace stale output with useful notes. \
+             Keep complete assistant tool-call/result groups, or replace the whole group with a user note. \
+             A user note has the form {{\"role\":\"user\",\"content\":\"Notes here\",\"timestamp\":0}}. \
+             Preserve fields of messages you keep, including image and reasoning data. \
+             The file must be a valid JSON array at most {} MiB. Invalid edits leave the live conversation unchanged; repair the file after an error. \
+             Read only the parts you need, because the conversation is already in your context. \
+             Your model context window is {} tokens. Manage the file before it fills; automatic compaction remains an emergency fallback. \
+             Batch edits: changing early text can require the provider to process all later text again. \
+             The full session record remains separate from this editable file.",
+            self.path.display(),
+            MAX_FILE_MIB,
+            context_window
+        )
+    }
+
     pub(crate) fn new() -> Result<Self> {
         let directory = tempfile::Builder::new().prefix("kiss-context-").tempdir()?;
         let path = directory.path().join("context.json");
@@ -46,7 +69,7 @@ impl ContextFile {
             }
             Err(error) => {
                 let error = format!(
-                    "Context file update failed for {}: {error:#}. Use a JSON array of KISS messages, at most 16 MiB, with complete tool call/result groups and unique call IDs. Repair the file or write [] to discard the exported history. New messages stay in the live context.",
+                    "Context file update failed for {}: {error:#}. Use a JSON array of KISS messages, at most {MAX_FILE_MIB} MiB, with complete tool call/result groups and unique call IDs. Repair the file or write [] to discard the exported history. New messages stay in the live context.",
                     self.path.display()
                 );
                 if self.last_error.as_ref() == Some(&(error.clone(), self.input_hash)) {
@@ -75,7 +98,7 @@ impl ContextFile {
                 self.input_hash = hash.finish();
             }
             if edited_bytes.len() as u64 > MAX_FILE_BYTES {
-                bail!("the edited file exceeds 16 MiB");
+                bail!("the edited file exceeds {MAX_FILE_MIB} MiB");
             }
             if edited_bytes != self.bytes {
                 file_changed = true;
