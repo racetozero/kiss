@@ -225,6 +225,7 @@ fn normalize_session_title(text: &str) -> Option<String> {
 }
 
 pub struct AgentSession {
+    /// Lock order: take `manager` before `phase`, never the other way.
     pub manager: Mutex<SessionManager>,
     pub registry: Arc<Registry>,
     base_tools: Mutex<Vec<DynTool>>,
@@ -657,25 +658,26 @@ impl AgentSession {
     /// Switch the active session without appending synthetic history.
     /// Refuse replacement while a prompt or compaction is active.
     pub fn replace_manager(&self, manager: SessionManager) -> anyhow::Result<()> {
-        self.replace_manager_with(|| Ok(manager))
+        self.replace_manager_with(|_| Ok(manager))
     }
 
     /// Start a sibling session after admission, preserving the storage mode.
     pub fn new_session(&self) -> anyhow::Result<()> {
-        self.replace_manager_with(|| self.manager.lock().unwrap().create_sibling())
+        self.replace_manager_with(SessionManager::create_sibling)
     }
 
     fn replace_manager_with(
         &self,
-        create: impl FnOnce() -> anyhow::Result<SessionManager>,
+        create: impl FnOnce(&SessionManager) -> anyhow::Result<SessionManager>,
     ) -> anyhow::Result<()> {
-        let _phase = self.phase.lock().unwrap();
-        if *_phase != RunPhase::Idle {
+        let mut current = self.manager.lock().unwrap();
+        let phase = self.phase.lock().unwrap();
+        if *phase != RunPhase::Idle {
             anyhow::bail!(
                 "The session has an active prompt. Abort it or wait for it to finish before you replace the session."
             );
         }
-        let manager = create()?;
+        let manager = create(&current)?;
         self.cache_warm_cancel.lock().unwrap().cancel();
         *self.context_file.lock().unwrap() = None;
         if let Some(runtime) = self.subagents.get() {
@@ -697,7 +699,9 @@ impl AgentSession {
         if let Some(thinking) = saved_thinking {
             *self.thinking.lock().unwrap() = thinking;
         }
-        *self.manager.lock().unwrap() = manager;
+        *current = manager;
+        drop(phase);
+        drop(current);
         *self.context_usage_cache.lock().unwrap() = None;
         *self.totals.lock().unwrap() = totals;
         Ok(())
