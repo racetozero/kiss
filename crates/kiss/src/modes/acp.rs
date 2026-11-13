@@ -185,6 +185,13 @@ impl KissAcpAgent {
         if let Ok(session) = self.session(id) {
             return Ok(session);
         }
+        // With --no-session nothing is saved, so no saved file may be
+        // opened and appended to either.
+        if self.options.session == SessionSource::InMemory {
+            return Err(agent_client_protocol::Error::resource_not_found(Some(
+                id.to_string(),
+            )));
+        }
         let reference = id.to_string();
         // ACP names sessions by exact id, never by path or prefix.
         let path = SessionManager::list_all(&self.options.sessions_directory())
@@ -397,7 +404,7 @@ impl KissAcpAgent {
                 .delete(SessionDeleteCapabilities::new());
         }
         let capabilities = AgentCapabilities::new()
-            .load_session(true)
+            .load_session(self.options.session != SessionSource::InMemory)
             .prompt_capabilities(PromptCapabilities::new().image(true).embedded_context(true))
             .mcp_capabilities(McpCapabilities::new().http(true))
             .session_capabilities(session_capabilities);
@@ -648,12 +655,15 @@ impl ConnectTo<Client> for KissAcpAgent {
 }
 
 pub async fn run(args: &Args) -> Result<i32> {
-    let mut options = super::rpc::options_from_args(args)?;
-    options.session = if args.no_session {
-        SessionSource::InMemory
-    } else {
-        SessionSource::Create
+    // An ACP client chooses sessions itself, so --session, --fork and
+    // --continue do not apply and must not be resolved.
+    let args = Args {
+        session: None,
+        fork: None,
+        continue_recent: false,
+        ..args.clone()
     };
+    let options = super::rpc::options_from_args(&args)?;
     KissAcpAgent::new(options).connect_to(Stdio::new()).await?;
     Ok(0)
 }
@@ -850,11 +860,14 @@ fn replay_history(
             AgentMessage::Assistant(assistant) => {
                 for block in &assistant.content {
                     if let Some(content) = output_content(block) {
-                        send_update(
-                            connection,
-                            session_id,
-                            SessionUpdate::AgentMessageChunk(ContentChunk::new(content)),
-                        )?;
+                        // Replay reasoning the way the live stream sends it.
+                        let chunk = ContentChunk::new(content);
+                        let update = if matches!(block, KissContentBlock::Thinking { .. }) {
+                            SessionUpdate::AgentThoughtChunk(chunk)
+                        } else {
+                            SessionUpdate::AgentMessageChunk(chunk)
+                        };
+                        send_update(connection, session_id, update)?;
                     }
                 }
             }
@@ -1063,12 +1076,7 @@ fn tool_path(args: &Value, cwd: &Path) -> Option<PathBuf> {
         .get("path")
         .or_else(|| args.get("filePath"))
         .and_then(Value::as_str)?;
-    let path = PathBuf::from(path);
-    Some(if path.is_absolute() {
-        path
-    } else {
-        cwd.join(path)
-    })
+    Some(kiss_agent::tools::path::resolve(cwd, path))
 }
 
 fn tool_locations(args: &Value, cwd: &Path) -> Vec<ToolCallLocation> {
@@ -1236,7 +1244,7 @@ mod tests {
                     .send_request(InitializeRequest::new(ProtocolVersion::V1))
                     .block_task()
                     .await?;
-                assert!(initialized.agent_capabilities.load_session);
+                assert!(!initialized.agent_capabilities.load_session);
                 assert!(initialized.agent_capabilities.prompt_capabilities.image);
                 assert!(
                     initialized
