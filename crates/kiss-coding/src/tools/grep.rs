@@ -74,10 +74,12 @@ impl AgentTool for GrepTool {
         let ignore_case = args["ignoreCase"].as_bool().unwrap_or(false);
         let literal = args["literal"].as_bool().unwrap_or(false);
         let context = args["context"].as_f64().unwrap_or(0.0) as usize;
+        // A limit below 1 means 1.
         let limit = args["limit"]
             .as_f64()
             .map(|v| v as usize)
-            .unwrap_or(DEFAULT_LIMIT);
+            .unwrap_or(DEFAULT_LIMIT)
+            .max(1);
         let cwd = self.cwd.clone();
 
         // File walking + searching is sync CPU/IO work. Run it off the async
@@ -124,6 +126,8 @@ fn run_grep(
     let glob_matcher = match glob {
         Some(g) => {
             let mut builder = globset::GlobSetBuilder::new();
+            // Globs are relative to `path`; a leading `./` names that folder.
+            let g = g.trim_start_matches("./");
             let normalized = if g.contains('/') {
                 g.to_string()
             } else {
@@ -179,14 +183,21 @@ fn run_grep(
     let chunk_size = paths.len().div_ceil(worker_count.max(1));
     let chunks = if worker_count <= 1 {
         vec![search_grep_chunk(
-            &matcher, &paths, cwd, context, limit, &cancel,
+            &matcher,
+            &paths,
+            cwd,
+            context,
+            limit + 1,
+            &cancel,
         )]
     } else {
         std::thread::scope(|scope| {
             paths
                 .chunks(chunk_size)
                 .map(|paths| {
-                    scope.spawn(|| search_grep_chunk(&matcher, paths, cwd, context, limit, &cancel))
+                    scope.spawn(|| {
+                        search_grep_chunk(&matcher, paths, cwd, context, limit + 1, &cancel)
+                    })
                 })
                 .collect::<Vec<_>>()
                 .into_iter()
@@ -198,10 +209,22 @@ fn run_grep(
     let mut output_lines = Vec::new();
     let mut selected_matches = 0usize;
     let mut lines_truncated = false;
+    // Only a match past the limit proves that the limit cut results off.
+    let mut limit_reached = false;
+    let mut last_match: Option<(String, u64)> = None;
     'chunks: for chunk in chunks {
         for record in chunk.records {
             if record.is_match && selected_matches >= limit {
+                limit_reached = true;
                 break 'chunks;
+            }
+            // After the last selected match, keep only its trailing context.
+            if selected_matches >= limit
+                && last_match.as_ref().is_none_or(|(path, line)| {
+                    *path != record.path || record.line_number > line + context as u64
+                })
+            {
+                continue;
             }
             let separator = if record.is_match { ':' } else { '-' };
             output_lines.push(format!(
@@ -211,9 +234,7 @@ fn run_grep(
             lines_truncated |= record.was_truncated;
             if record.is_match {
                 selected_matches += 1;
-                if selected_matches >= limit {
-                    break 'chunks;
-                }
+                last_match = Some((record.path.clone(), record.line_number));
             }
         }
     }
@@ -223,7 +244,7 @@ fn run_grep(
     let joined = output_lines.join("\n");
     let truncation = truncate_head(&joined, DEFAULT_MAX_LINES, DEFAULT_MAX_BYTES);
     let mut output = truncation.content.clone();
-    if selected_matches >= limit {
+    if limit_reached {
         output.push_str(&format!(
             "\n\n[Match limit of {limit} reached. Narrow the pattern or raise limit.]"
         ));
@@ -232,7 +253,7 @@ fn run_grep(
         output.push_str("\n\n[Output truncated. Narrow the search or use a more specific path.]");
     }
     let details = json!({
-        "matchLimitReached": if selected_matches >= limit { Some(limit) } else { None },
+        "matchLimitReached": if limit_reached { Some(limit) } else { None },
         "linesTruncated": lines_truncated,
         "truncation": if truncation.truncated { Some(&truncation) } else { None },
     });
@@ -343,6 +364,61 @@ mod tests {
         let text = r.output_text();
         assert!(text.contains("a.rs"));
         assert!(!text.contains("b.txt"));
+    }
+
+    #[tokio::test]
+    async fn limit_notice_needs_a_match_past_the_limit() {
+        let dir = setup();
+        let tool = GrepTool {
+            cwd: dir.path().to_path_buf(),
+        };
+        let run = |args: Value| {
+            let tool = &tool;
+            async move {
+                tool.execute("1", args, CancellationToken::new(), None)
+                    .await
+                    .unwrap()
+            }
+        };
+        // Exactly two matches.
+        let exact = run(json!({"pattern": "needle", "limit": 2})).await;
+        assert!(
+            !exact.output_text().contains("limit"),
+            "{}",
+            exact.output_text()
+        );
+        assert!(exact.details["matchLimitReached"].is_null());
+        let cut = run(json!({"pattern": "needle", "limit": 1})).await;
+        assert!(cut.output_text().contains("[Match limit of 1 reached"));
+        // A limit below 1 means 1.
+        let zero = run(json!({"pattern": "needle", "limit": 0})).await;
+        assert_eq!(zero.output_text().matches("needle").count(), 1);
+    }
+
+    #[tokio::test]
+    async fn glob_is_relative_to_path_and_ignores_a_leading_dot_slash() {
+        let dir = setup();
+        std::fs::create_dir_all(dir.path().join("repo/migrations/main")).unwrap();
+        std::fs::write(dir.path().join("repo/migrations/main/a.js"), "needle\n").unwrap();
+        let tool = GrepTool {
+            cwd: dir.path().to_path_buf(),
+        };
+        for glob in ["migrations/main/*.js", "./migrations/main/*.js"] {
+            let r = tool
+                .execute(
+                    "1",
+                    json!({"pattern": "needle", "path": "repo", "glob": glob}),
+                    CancellationToken::new(),
+                    None,
+                )
+                .await
+                .unwrap();
+            assert!(
+                r.output_text().contains("a.js:1:"),
+                "{glob}: {}",
+                r.output_text()
+            );
+        }
     }
 
     #[tokio::test]

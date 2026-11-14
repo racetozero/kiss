@@ -25,14 +25,59 @@
 - A Mermaid diagram that does not fit the terminal keeps its source and says
   how many columns it needs. A diagram with a syntax error says how to fix it
   or how to turn Mermaid rendering off.
+- Requests no longer ask for more output than the context window has room
+  for. KISS leaves 15% of the input, and at least 4,096 tokens, unused, so
+  OpenRouter no longer rejects models whose output limit is close to the
+  window, as in Pi v1.5.1.
+- The grep tool ignores a leading `./` in `glob`. The grep, find, and ls tools
+  report a limit only when more results exist, and a limit below 1 means 1.
+- The edit tool keeps the line endings of untouched lines in files with mixed
+  CRLF and LF, or lone CR, line endings.
+- A bash command that timed out only because a background process kept
+  writing now reports the shell's exit code, and the timeout still stops
+  the background process.
+- Prompt template arguments keep apostrophes inside words (`doesn't`), keep
+  a quote with no closing match as text, and accept `\"` inside `"..."`.
+- A stream reported as "cut short after the reply had begun" is retried.
+- OpenAI Responses requests with the `openai` session affinity format send the
+  documented `session-id` header.
+- Anthropic subscription requests report Claude Code 2.1.322.
 
 ### Added
 
 - `Alt+D`, `Alt+Delete`, and `Ctrl+Delete` delete the word after the cursor,
   as in pi, Claude Code, Codex, and opencode.
+- Anthropic message threads: with an API key on `api.anthropic.com`, each
+  request sends only the new messages and continues from the previous reply.
+  KISS sends the full request when earlier context changed, for example after
+  compaction, and when the server rejects the thread. Set
+  `compat.supportsMessageThreads` in `models.json` to turn threads on for a
+  gateway that forwards the `thread` field, or off. Cache warming does not
+  use threads.
+- When `--session` or `/resume` opens a session whose folder no longer exists,
+  KISS asks to continue in the current folder (it asks again next time), fork
+  the session into the current folder as a new session, or cancel. Print and
+  JSON modes stop with an error that names `--fork`.
+- `kiss auth login <provider>` and `kiss auth logout <provider>`, as in Pi.
+- The `qwen-token-plan-individual-cn` provider, with
+  `QWEN_TOKEN_PLAN_CN_API_KEY`.
+- `models.json` compat keys `promptCacheKeyMode` (`auto`, `enabled`,
+  `disabled`), `requiresNonNullAssistantContent`, and
+  `requiresToolsWithToolHistory`.
 
 ### Changed
 
+- Updated the Pi baseline and model catalog to v1.5.2. Added Claude Fable 5.2
+  and Kimi K3.1 on Amazon Bedrock. Claude Sonnet 5 requests omit
+  temperature. Azure GPT-6 and GPT-6.1 models have a 1,050,000-token window
+  and long-context prices.
+- Each provider's default model is now Pi's default, for example
+  `claude-opus-5-5` for `anthropic` and `gemini-4-argon` for `google`. Many
+  providers used their first catalog model.
+- `cacheWarming` now defaults to `idle`: KISS also keeps a prompt cache warm
+  for up to 30 minutes between runs when a refresh is expected to pay for
+  itself. Set `"cacheWarming": "streaming"` for the previous behavior.
+- `/login` and `/logout` list Radius and OpenRouter first, marked with `✦`.
 - Building KISS from source now needs Rust 1.100 or newer. Every workspace
   crate declares `rust-version = "1.100"`, so an older toolchain gets a clear
   version error instead of unstable-API errors.

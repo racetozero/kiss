@@ -268,8 +268,8 @@ pub enum ProjectTrustDefault {
 #[serde(rename_all = "lowercase")]
 pub enum CacheWarmingMode {
     Off,
-    #[default]
     Streaming,
+    #[default]
     Idle,
 }
 
@@ -762,7 +762,7 @@ mod tests {
         assert_eq!(s.reasoning_effort.mode, ReasoningEffortMode::Fixed);
         assert_eq!(s.retry.max_retries, 3);
         assert_eq!(s.retry.max_agent_delay_ms, 60_000);
-        assert_eq!(s.cache_warming, CacheWarmingMode::Streaming);
+        assert_eq!(s.cache_warming, CacheWarmingMode::Idle);
         assert!(!s.subagents.enabled);
         assert_eq!(s.steering_mode, QueueMode::OneAtATime);
         assert!(s.auto_recap_enabled());
@@ -780,13 +780,13 @@ mod tests {
                     }
                 }
             },
-            "cacheWarming": "idle"
+            "cacheWarming": "streaming"
         }))
         .unwrap();
         let override_settings = &settings.compaction.model_overrides["anthropic/claude-opus-4-8"];
         assert_eq!(override_settings.reserve_tokens, Some(1000));
         assert_eq!(override_settings.keep_recent_tokens, Some(2000));
-        assert_eq!(settings.cache_warming, CacheWarmingMode::Idle);
+        assert_eq!(settings.cache_warming, CacheWarmingMode::Streaming);
     }
 
     #[test]

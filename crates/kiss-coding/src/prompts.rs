@@ -98,19 +98,30 @@ pub fn discover(
 }
 
 /// Expand `$1..$n`, `$@`/`$ARGUMENTS`, and `${n:-default}` in the body.
-/// Split command arguments on whitespace. Single or double quotes group
-/// words, and an empty quoted string (`""` or `''`) is kept as an argument.
+/// Split command arguments on whitespace, as Pi's `parseCommandArgs`.
+/// Single or double quotes group words, and an empty quoted string (`""` or
+/// `''`) is kept as an argument. A quote opens only at the start of an
+/// argument, so an apostrophe inside a word (`doesn't`) stays text. A quote
+/// with no closing match is kept as text. Inside quotes, a backslash before
+/// the open quote character gives that character.
 pub fn parse_args(input: &str) -> Vec<String> {
+    let chars: Vec<char> = input.chars().collect();
     let mut args = Vec::new();
     let mut current = String::new();
     let mut has_token = false;
-    let mut quote: Option<char> = None;
-    for c in input.chars() {
+    let mut quote: Option<(char, usize)> = None;
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
         match quote {
-            Some(open) if c == open => quote = None,
+            Some((open, _)) if c == '\\' && chars.get(i + 1) == Some(&open) => {
+                current.push(open);
+                i += 1;
+            }
+            Some((open, _)) if c == open => quote = None,
             Some(_) => current.push(c),
-            None if c == '"' || c == '\'' => {
-                quote = Some(c);
+            None if (c == '"' || c == '\'') && !has_token => {
+                quote = Some((c, i));
                 has_token = true;
             }
             None if c.is_whitespace() => {
@@ -124,6 +135,16 @@ pub fn parse_args(input: &str) -> Vec<String> {
                 has_token = true;
             }
         }
+        if let Some((open, start)) = quote
+            && i == chars.len() - 1
+        {
+            // Unclosed quote: keep the quote character as text and parse the
+            // rest normally.
+            quote = None;
+            current = open.to_string();
+            i = start;
+        }
+        i += 1;
     }
     if has_token {
         args.push(current);
@@ -206,6 +227,20 @@ pub fn expand(body: &str, args: &[&str]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn apostrophes_unclosed_quotes_and_escaped_quotes_are_text() {
+        assert_eq!(parse_args("it doesn't work"), ["it", "doesn't", "work"]);
+        assert_eq!(
+            parse_args("say \"unclosed here"),
+            ["say", "\"unclosed", "here"]
+        );
+        assert_eq!(
+            parse_args(r#""say \"hi\"" 'it\'s'"#),
+            [r#"say "hi""#, "it's"]
+        );
+        assert_eq!(parse_args("a'b c"), ["a'b", "c"]);
+    }
 
     #[test]
     fn quoted_arguments_group_words_and_keep_empty_values() {

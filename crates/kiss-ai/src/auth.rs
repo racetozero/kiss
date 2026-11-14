@@ -208,6 +208,7 @@ pub fn env_var_names(provider: &str) -> &'static [&'static str] {
         "qwen-token-plan" => &["QWEN_TOKEN_PLAN_API_KEY"],
         "qwen-token-plan-cn" => &["QWEN_TOKEN_PLAN_CN_API_KEY"],
         "qwen-token-plan-individual" => &["QWEN_TOKEN_PLAN_API_KEY"],
+        "qwen-token-plan-individual-cn" => &["QWEN_TOKEN_PLAN_CN_API_KEY"],
         "radius" => &["RADIUS_API_KEY"],
         "snowflake-cortex" => &["SNOWFLAKE_PAT", "SNOWFLAKE_TOKEN"],
         "together" => &["TOGETHER_API_KEY"],

@@ -23,7 +23,7 @@
           }
         ]
       },
-      "contextWindow": 131072,
+      "contextWindow": 1048576,
       "maxTokens": 65536,
       "inputLimits": {
         "maxRequestBytes": 20971520,
@@ -57,7 +57,7 @@
           }
         ]
       },
-      "contextWindow": 131072,
+      "contextWindow": 1048576,
       "maxTokens": 65536,
       "inputLimits": {
         "maxRequestBytes": 20971520,

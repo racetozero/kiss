@@ -248,7 +248,7 @@ async fn build_request(
         .as_ref()
         .filter(|prompt| !prompt.trim().is_empty())
         .map(|prompt| vec![SystemContentBlock::Text(prompt.clone())]);
-    let max_tokens = options.max_tokens.unwrap_or(model.max_tokens);
+    let max_tokens = super::request_max_tokens(model, context, options);
     let inference = InferenceConfiguration::builder()
         .max_tokens(i32::try_from(max_tokens)?)
         .set_temperature(options.temperature.map(|temperature| temperature as f32))

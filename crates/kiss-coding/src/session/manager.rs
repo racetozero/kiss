@@ -1123,6 +1123,20 @@ impl SessionManager {
         &self.cwd
     }
 
+    /// The stored working directory of a saved session, when that folder no
+    /// longer exists (for example after the project folder was renamed).
+    pub fn missing_cwd(&self) -> Option<&Path> {
+        (self.file.is_some() && !self.cwd.as_os_str().is_empty() && !self.cwd.exists())
+            .then_some(self.cwd.as_path())
+    }
+
+    /// Run this session in `cwd` without changing the stored working
+    /// directory, so the next open asks again. Use [`Self::fork_from`] to
+    /// move the session to `cwd` for good.
+    pub fn continue_in(&mut self, cwd: &Path) {
+        self.cwd = cwd.to_path_buf();
+    }
+
     pub fn session_dir(&self) -> &Path {
         &self.session_dir
     }
@@ -1312,6 +1326,38 @@ mod tests {
         assert_eq!(totals.input, 30);
         assert_eq!(totals.cache_read, 80);
         assert!(totals.cache_read_available);
+    }
+
+    #[test]
+    fn a_session_whose_folder_is_gone_can_continue_or_fork_elsewhere() {
+        let dir = tempfile::tempdir().unwrap();
+        let old = dir.path().join("renamed-away");
+        std::fs::create_dir_all(&old).unwrap();
+        let sessions = dir.path().join("sessions");
+        let mut original = SessionManager::create(&old, Some(sessions.clone())).unwrap();
+        original.append_message(AgentMessage::user("one")).unwrap();
+        let path = original.session_file().unwrap().to_path_buf();
+        assert_eq!(SessionManager::open(&path).unwrap().missing_cwd(), None);
+        std::fs::remove_dir(&old).unwrap();
+
+        let here = dir.path().join("here");
+        std::fs::create_dir_all(&here).unwrap();
+        let mut reopened = SessionManager::open(&path).unwrap();
+        assert_eq!(reopened.missing_cwd(), Some(old.as_path()));
+        reopened.continue_in(&here);
+        assert_eq!(reopened.cwd(), here);
+        reopened.append_message(AgentMessage::user("two")).unwrap();
+        // Continue does not store the choice.
+        assert_eq!(
+            SessionManager::open(&path).unwrap().missing_cwd(),
+            Some(old.as_path())
+        );
+
+        let fork = SessionManager::fork_from(&path, &here, Some(sessions)).unwrap();
+        assert_ne!(fork.session_id(), reopened.session_id());
+        assert_eq!(fork.cwd(), here);
+        assert_eq!(fork.build_session_context().messages.len(), 2);
+        assert_eq!(fork.missing_cwd(), None);
     }
 
     #[test]

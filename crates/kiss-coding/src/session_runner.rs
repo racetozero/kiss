@@ -2024,6 +2024,8 @@ impl AgentSession {
                     session_id: Some(session_id.clone()),
                     transport: settings.transport,
                     cancel: cancel.clone(),
+                    // A replay must not replace the conversation's Anthropic thread.
+                    disable_continuation: true,
                     ..Default::default()
                 };
                 let warmed = session.request_fn()(&model, &context, &options)
@@ -2506,6 +2508,8 @@ fn is_transient(error: &str) -> bool {
             "stream was interrupted",
             "stream disconnected before completion",
             "pending stream has been canceled",
+            // A gateway relaying a dropped upstream Anthropic stream.
+            "cut short after the reply had begun",
             "http2 stream failed",
             "http/2 stream failed",
         ]
@@ -3403,6 +3407,9 @@ mod ephemeral_tests {
             "stream disconnected before completion: stream closed before response.completed"
         ));
         assert!(is_transient("The pending stream has been canceled"));
+        assert!(is_transient(
+            "Claude Code's stream from Anthropic was cut short after the reply had begun"
+        ));
         assert!(is_transient("Provider finish_reason: error (server error)"));
         assert!(!is_transient(
             "request req_5030 failed: invalid tool schema"

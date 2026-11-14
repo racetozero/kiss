@@ -1306,7 +1306,8 @@ pub(crate) fn build_request(model: &Model, context: &Context, options: &StreamOp
             .and_then(|compat| compat.supports_max_output_tokens)
             .unwrap_or(true)
     {
-        body["max_output_tokens"] = json!(options.max_tokens.unwrap_or(model.max_tokens).max(16));
+        body["max_output_tokens"] =
+            json!(super::request_max_tokens(model, context, options).max(16));
     }
     if let Some(system) = &context.system_prompt {
         body["instructions"] = json!(system);
@@ -1353,7 +1354,13 @@ pub(crate) fn build_request(model: &Model, context: &Context, options: &StreamOp
     if let Some(choice) = &options.tool_choice {
         body["tool_choice"] = choice.openai_responses_value();
     }
-    if let Some(session) = &options.session_id {
+    if let Some(session) = &options.session_id
+        && model
+            .compat
+            .as_ref()
+            .and_then(|compat| compat.prompt_cache_key_mode)
+            != Some(crate::PromptCacheKeyMode::Disabled)
+    {
         body["prompt_cache_key"] = json!(session);
     }
     let level_params = model
@@ -1407,7 +1414,7 @@ mod request_tests {
             input: vec!["text".into()],
             cost: Default::default(),
             prompt_cache: None,
-            context_window: 1000,
+            context_window: 200_000,
             max_tokens: 100,
             compat: None,
             thinking_level_map: BTreeMap::new(),
@@ -1455,6 +1462,23 @@ mod request_tests {
         assert_eq!(body["parallel_tool_calls"], true);
         assert_eq!(body["store"], false);
         assert_eq!(body["max_output_tokens"], 100);
+    }
+
+    #[test]
+    fn disabled_prompt_cache_key_mode_omits_the_cache_key() {
+        let mut model = model("openai-responses", "https://proxy.invalid/v1");
+        let options = StreamOptions {
+            session_id: Some("session-one".into()),
+            ..Default::default()
+        };
+        let body = build_request(&model, &Context::default(), &options);
+        assert_eq!(body["prompt_cache_key"], "session-one");
+        model.compat = Some(crate::OpenAICompat {
+            prompt_cache_key_mode: Some(crate::PromptCacheKeyMode::Disabled),
+            ..Default::default()
+        });
+        let body = build_request(&model, &Context::default(), &options);
+        assert!(body.get("prompt_cache_key").is_none());
     }
 
     #[test]

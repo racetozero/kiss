@@ -44,15 +44,20 @@ impl AgentTool for FindTool {
     ) -> anyhow::Result<ToolResult> {
         let pattern = args["pattern"].as_str().unwrap_or_default().to_string();
         let search_path = resolve(&self.cwd, args["path"].as_str().unwrap_or("."));
+        // A limit below 1 means 1.
         let limit = args["limit"]
             .as_f64()
             .map(|v| v as usize)
-            .unwrap_or(DEFAULT_LIMIT);
+            .unwrap_or(DEFAULT_LIMIT)
+            .max(1);
 
         let result = tokio::task::spawn_blocking(move || {
             if !search_path.exists() {
                 anyhow::bail!("Path not found: {}", search_path.display());
             }
+            // On Windows `\` separates paths, so `src\**\*.ts` means `src/**/*.ts`.
+            // Elsewhere `\` escapes a glob character.
+            let pattern = if cfg!(windows) { pattern.replace('\\', "/") } else { pattern };
             let normalized = if pattern.contains('/') { pattern.clone() } else { format!("**/{pattern}") };
             let glob = globset::GlobBuilder::new(&normalized)
                 .literal_separator(true)
@@ -63,7 +68,8 @@ impl AgentTool for FindTool {
             let mut results: Vec<String> = Vec::new();
             let walker = super::search_walker(&search_path).build();
             for entry in walker {
-                if cancel.is_cancelled() || results.len() >= limit {
+                // One result past the limit tells "exactly N" from "more than N".
+                if cancel.is_cancelled() || results.len() > limit {
                     break;
                 }
                 let Ok(entry) = entry else { continue };
@@ -80,7 +86,8 @@ impl AgentTool for FindTool {
             if results.is_empty() {
                 return Ok(ToolResult::text("No files found"));
             }
-            let limit_reached = results.len() >= limit;
+            let limit_reached = results.len() > limit;
+            results.truncate(limit);
             let joined = results.join("\n");
             let truncation = truncate_head(&joined, DEFAULT_MAX_LINES, DEFAULT_MAX_BYTES);
             let mut output = truncation.content.clone();
@@ -103,6 +110,40 @@ mod tests {
     use super::*;
     use futures::{StreamExt as _, stream};
     use std::time::Instant;
+
+    #[tokio::test]
+    async fn limit_notice_needs_a_result_past_the_limit() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.rs"), "").unwrap();
+        std::fs::write(dir.path().join("b.rs"), "").unwrap();
+        let tool = FindTool {
+            cwd: dir.path().to_path_buf(),
+        };
+        let run = |limit: u64| {
+            let tool = &tool;
+            async move {
+                tool.execute(
+                    "1",
+                    json!({"pattern": "*.rs", "limit": limit}),
+                    CancellationToken::new(),
+                    None,
+                )
+                .await
+                .unwrap()
+            }
+        };
+        let exact = run(2).await;
+        assert!(
+            !exact.output_text().contains("limit"),
+            "{}",
+            exact.output_text()
+        );
+        let cut = run(1).await;
+        assert!(cut.output_text().contains("[Result limit of 1 reached.]"));
+        assert_eq!(cut.output_text().matches(".rs").count(), 1);
+        let zero = run(0).await;
+        assert_eq!(zero.output_text().matches(".rs").count(), 1);
+    }
 
     #[tokio::test]
     async fn glob_find_respects_gitignore() {

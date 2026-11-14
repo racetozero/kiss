@@ -256,9 +256,37 @@
       },
       "type": "chat"
     },
+    "chat:moonshotai/Kimi-K3.1-Pro": {
+      "id": "moonshotai/Kimi-K3.1-Pro",
+      "name": "Kimi K3.1 Pro",
+      "api": "openai-completions",
+      "provider": "baseten",
+      "baseUrl": "https://inference.baseten.co/v1",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 2, "output": 10, "cacheRead": 0.2, "cacheWrite": 0 },
+      "contextWindow": 1000000,
+      "maxTokens": 262144,
+      "compat": {
+        "supportsStrictMode": true,
+        "supportsStore": false,
+        "supportsDeveloperRole": false,
+        "supportsReasoningEffort": false,
+        "supportsUsageInStreaming": true,
+        "maxTokensField": "max_tokens",
+        "sendSessionAffinityHeaders": true,
+        "supportsLongCacheRetention": false
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      },
+      "type": "chat"
+    },
     "chat:nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B": {
       "id": "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B",
-      "name": "Nemotron Ultra",
+      "name": "Nemotron 3 Ultra",
       "api": "openai-completions",
       "provider": "baseten",
       "baseUrl": "https://inference.baseten.co/v1",

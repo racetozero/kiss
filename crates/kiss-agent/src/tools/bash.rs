@@ -230,7 +230,12 @@ impl AgentTool for BashTool {
         let mut cancelled = false;
         let mut timed_out = false;
 
-        let deadline = timeout.map(|t| tokio::time::Instant::now() + Duration::from_secs_f64(t));
+        let group = child.id();
+        let started = tokio::time::Instant::now();
+        let deadline = timeout.map(|t| started + Duration::from_secs_f64(t));
+        // Set when the shell exits while background processes it started
+        // still hold the output pipes open.
+        let mut shell_exit: Option<(Option<i32>, Duration)> = None;
 
         loop {
             let mut output_error = None;
@@ -255,20 +260,23 @@ impl AgentTool for BashTool {
                         Err(_) => stderr_open = false,
                     }
                 }
+                status = child.wait(), if shell_exit.is_none() => {
+                    shell_exit = Some((status.ok().and_then(|s| s.code()), started.elapsed()));
+                }
                 _ = cancel.cancelled() => {
                     cancelled = true;
-                    super::shell::kill_group(&mut child);
+                    super::shell::kill_group(&mut child, group);
                     break;
                 }
                 _ = timeout_sleep => {
                     timed_out = true;
-                    super::shell::kill_group(&mut child);
+                    super::shell::kill_group(&mut child, group);
                     break;
                 }
                 else => break,
             }
             if let Some(error) = output_error {
-                super::shell::kill_group(&mut child);
+                super::shell::kill_group(&mut child, group);
                 let _ = child.wait().await;
                 return Err(error);
             }
@@ -287,8 +295,10 @@ impl AgentTool for BashTool {
             }
         }
 
-        let status = child.wait().await.ok();
-        let exit_code = status.and_then(|s| s.code());
+        let exit_code = match shell_exit {
+            Some((code, _)) => code,
+            None => child.wait().await.ok().and_then(|s| s.code()),
+        };
 
         output.finish()?;
         let truncation = output.truncation();
@@ -338,13 +348,16 @@ impl AgentTool for BashTool {
             anyhow::bail!("{}", with_status("Command aborted"));
         }
         if timed_out {
-            anyhow::bail!(
-                "{}",
-                with_status(&format!(
-                    "Command timed out after {} seconds",
-                    timeout.unwrap_or(0.0)
-                ))
-            );
+            let mut status = format!("Command timed out after {} seconds", timeout.unwrap_or(0.0));
+            if let Some((Some(code), after)) = shell_exit {
+                // Both facts matter: the command's real result, and that its
+                // background processes kept writing until the timeout.
+                status.push_str(&format!(
+                    ". The shell exited with code {code} after {:.1} seconds, but background processes it started kept writing output until the timeout.",
+                    after.as_secs_f64()
+                ));
+            }
+            anyhow::bail!("{}", with_status(&status));
         }
         if let Some(code) = exit_code
             && code != 0
@@ -529,6 +542,36 @@ mod tests {
         let text = format!("{err:#}");
         assert!(text.contains("boom"));
         assert!(text.contains("exited with code 3"));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn timeout_after_the_shell_exited_reports_its_exit_code() {
+        let marker = tempfile::tempdir().unwrap();
+        let alive = marker.path().join("alive");
+        let command = format!(
+            "(while true; do echo tick; touch {}; sleep 0.1; done) & exit 3",
+            alive.display()
+        );
+        let err = tool()
+            .execute(
+                "1",
+                json!({"command": command, "timeout": 1}),
+                CancellationToken::new(),
+                None,
+            )
+            .await
+            .unwrap_err();
+        let text = format!("{err:#}");
+        assert!(
+            text.contains("Command timed out after 1 seconds. The shell exited with code 3 after"),
+            "{text}"
+        );
+        // The group kill still reached the background loop.
+        std::thread::sleep(Duration::from_millis(300));
+        std::fs::remove_file(&alive).ok();
+        std::thread::sleep(Duration::from_millis(300));
+        assert!(!alive.exists());
     }
 
     #[tokio::test]

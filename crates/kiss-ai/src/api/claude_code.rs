@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 use sha2::{Digest as _, Sha256};
 use std::path::PathBuf;
 
-pub const VERSION: &str = "2.1.280";
+pub const VERSION: &str = "2.1.322";
 pub const ENTRYPOINT: &str = "sdk-cli";
 const CCH_PLACEHOLDER: &str = "cch=00000";
 const CCH_SEED: u64 = 0x4d65_9218_e32a_3268;
@@ -44,6 +44,10 @@ fn first_user_prompt(context: &Context) -> String {
 }
 
 pub fn version_fingerprint(context: &Context) -> String {
+    fingerprint(context, VERSION)
+}
+
+fn fingerprint(context: &Context, version: &str) -> String {
     // pi-black runs in JavaScript, where string indexes address UTF-16 code
     // units. Preserve that behavior for prompts that contain non-BMP text.
     // TextEncoder replaces a selected unpaired surrogate with U+FFFD.
@@ -55,7 +59,7 @@ pub fn version_fingerprint(context: &Context) -> String {
             None => '0',
         })
         .collect();
-    let digest = Sha256::digest(format!("59cf53e54c78{selected}{VERSION}").as_bytes());
+    let digest = Sha256::digest(format!("59cf53e54c78{selected}{version}").as_bytes());
     format!("{:02x}{:02x}", digest[0], digest[1])[..3].to_string()
 }
 
@@ -230,7 +234,7 @@ mod tests {
     #[test]
     fn recovered_prompt_fingerprint_matches() {
         assert_eq!(
-            version_fingerprint(&context("Reply with exactly: PROBE_OK")),
+            fingerprint(&context("Reply with exactly: PROBE_OK"), "2.1.280"),
             "022"
         );
     }
@@ -238,18 +242,18 @@ mod tests {
     #[test]
     fn prompt_fingerprint_uses_javascript_utf16_indexes() {
         assert_eq!(
-            version_fingerprint(&context("😀Reply with exactly: PROBE_OK")),
+            fingerprint(&context("😀Reply with exactly: PROBE_OK"), "2.1.280"),
             "739"
         );
         assert_eq!(
-            version_fingerprint(&context("abcd😀efghijklmnopqrstuvw")),
+            fingerprint(&context("abcd😀efghijklmnopqrstuvw"), "2.1.280"),
             "721"
         );
     }
 
     #[test]
     fn short_prompt_fingerprint_uses_zero_for_missing_indexes() {
-        assert_eq!(version_fingerprint(&context("short")), "6a5");
+        assert_eq!(fingerprint(&context("short"), "2.1.280"), "6a5");
     }
 
     #[test]

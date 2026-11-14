@@ -24,7 +24,6 @@ mod voice;
 mod workflow_ui;
 
 use args::{Args, Command};
-use clap::Parser;
 use kiss_ai::auth::{LoginMethod, login_methods};
 use std::io::{IsTerminal as _, Write as _};
 use std::process::ExitCode;
@@ -41,7 +40,7 @@ static ALLOCATOR: mimalloc::MiMalloc = mimalloc::MiMalloc;
 // from such a handler, so an early exit leaves empty `.profraw` files and the
 // release PGO training step fails. See rust-lang/rust#77553.
 fn main() -> ExitCode {
-    let args = match Args::try_parse() {
+    let args = match Args::try_parse_cli(std::env::args_os()) {
         Ok(args) => args,
         Err(err) => {
             // clap prints `--help` and `--version` on stdout, errors on stderr.

@@ -59,6 +59,27 @@ pub struct OpenAICompat {
     pub allow_empty_signature: Option<bool>,
     pub send_session_affinity_headers: Option<bool>,
     pub session_affinity_format: Option<String>,
+    /// `prompt_cache_key` on OpenAI Chat Completions and Responses: `auto`
+    /// (each API's default), `enabled` (always while caching), or
+    /// `disabled` (never).
+    pub prompt_cache_key_mode: Option<PromptCacheKeyMode>,
+    /// Send `""` instead of `null` as the content of an assistant message
+    /// that has only tool calls (OpenAI Chat Completions).
+    pub requires_non_null_assistant_content: Option<bool>,
+    /// Send `"tools": []` when a request has no tools but the history has
+    /// tool calls, as some proxies in front of Anthropic require.
+    pub requires_tools_with_tool_history: Option<bool>,
+    /// Use Anthropic message threads. The default is on for the `anthropic`
+    /// provider on `api.anthropic.com`.
+    pub supports_message_threads: Option<bool>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PromptCacheKeyMode {
+    Auto,
+    Enabled,
+    Disabled,
 }
 
 impl OpenAICompat {
@@ -103,6 +124,18 @@ impl OpenAICompat {
             session_affinity_format: override_values
                 .session_affinity_format
                 .or(self.session_affinity_format),
+            prompt_cache_key_mode: override_values
+                .prompt_cache_key_mode
+                .or(self.prompt_cache_key_mode),
+            requires_non_null_assistant_content: override_values
+                .requires_non_null_assistant_content
+                .or(self.requires_non_null_assistant_content),
+            requires_tools_with_tool_history: override_values
+                .requires_tools_with_tool_history
+                .or(self.requires_tools_with_tool_history),
+            supports_message_threads: override_values
+                .supports_message_threads
+                .or(self.supports_message_threads),
         }
     }
 }

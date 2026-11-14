@@ -46,13 +46,21 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
     let bearer = federated || crate::auth::is_bearer_access_token(&model.provider, &api_key);
     let base_url = provider_base_url(model, &api_key);
     let url = format!("{}/v1/messages", base_url.trim_end_matches('/'));
+    // Message threads. The Claude Code request form that subscription OAuth
+    // uses rewrites the system prompt of every request, so it sends none.
+    let thread_session = options
+        .session_id
+        .as_deref()
+        .filter(|_| !oauth && !options.disable_continuation)
+        .filter(|_| super::anthropic_threads::supported(model));
+    let mut betas = String::new();
     let mut request = http_client()
         .post(&url)
         .header("anthropic-version", "2023-06-01")
         .header("content-type", "application/json");
     if oauth {
         let serialized = match super::claude_code::serialize_request(
-            body,
+            body.clone(),
             context,
             options.session_id.as_deref(),
         ) {
@@ -89,13 +97,16 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
             request = request.header("x-claude-code-session-id", session_id);
         }
     } else {
-        request = request.json(&body);
         let mut beta_features = beta_features(model, false, options.fast_mode);
         if federated {
             beta_features.insert(0, "oauth-2025-04-20");
         }
+        if thread_session.is_some() {
+            beta_features.push(super::anthropic_threads::BETA);
+        }
+        betas = beta_features.join(",");
         if !beta_features.is_empty() {
-            request = request.header("anthropic-beta", beta_features.join(","));
+            request = request.header("anthropic-beta", &betas);
         }
     }
     request = if oauth {
@@ -110,16 +121,59 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
     }
     request = apply_provider_headers(request, model, context, options);
 
-    let response = tokio::select! {
-        r = request.send() => r,
-        _ = options.cancel.cancelled() => {
-            builder.fail("Request aborted", true, model);
-            return;
+    // The request with a `thread` field, when one is sent.
+    let mut thread = thread_session
+        .and_then(|session| super::anthropic_threads::prepare(model, session, &body, &betas));
+    let send = async |payload: &Value| {
+        let request = request
+            .try_clone()
+            .expect("Anthropic requests have a buffered body");
+        let request = if oauth {
+            request
+        } else {
+            request.json(payload)
+        };
+        tokio::select! {
+            r = request.send() => Some(r),
+            _ = options.cancel.cancelled() => None,
         }
     };
+    let mut response = send(thread.as_ref().unwrap_or(&body)).await;
+    // A thread rejection (never a started stream) is resent once in full: as
+    // a new thread when the old one cannot be continued, or without `thread`
+    // when the endpoint cannot use threads.
+    if let (Some(session), Some(Ok(rejected))) = (thread_session, &response)
+        && thread.is_some()
+        && rejected.status() == reqwest::StatusCode::BAD_REQUEST
+    {
+        let Some(Ok(rejected)) = response.take() else {
+            unreachable!("the response was checked above");
+        };
+        let status = rejected.status();
+        let text = rejected.text().await.unwrap_or_default();
+        match super::anthropic_threads::fallback(status.as_u16(), &text) {
+            Some(super::anthropic_threads::Fallback::NewThread) => {
+                thread = Some(super::anthropic_threads::create(&body));
+                response = send(thread.as_ref().unwrap_or(&body)).await;
+            }
+            Some(super::anthropic_threads::Fallback::WithoutThread) => {
+                thread = None;
+                response = send(&body).await;
+                super::anthropic_threads::turn_off(session);
+            }
+            None => {
+                builder.fail(
+                    format!("HTTP {status}: {}", crate::truncate_err(&text)),
+                    false,
+                    model,
+                );
+                return;
+            }
+        }
+    }
     let response = match response {
-        Ok(r) => r,
-        Err(e) => {
+        Some(Ok(r)) => r,
+        Some(Err(e)) => {
             builder.fail(
                 format!("request failed: {}", super::with_causes(&e)),
                 false,
@@ -127,11 +181,30 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
             );
             return;
         }
+        None => {
+            builder.fail("Request aborted", true, model);
+            return;
+        }
     };
     if !response.status().is_success() {
         builder.fail(super::http_error(response).await, false, model);
         return;
     }
+    // After a clean reply to a thread request, the next request of the
+    // session can continue from it. A reply from a fallback model
+    // (`response_model`) is not stored by the server.
+    let record_thread = |message: &crate::types::AssistantMessage| {
+        if let Some(session) = thread_session
+            && thread.is_some()
+            && let Some(reply_id) = &message.response_id
+            && message.response_model.is_none()
+        {
+            let content = assistant_blocks(model, message);
+            let reply =
+                (!content.is_empty()).then(|| json!({"role": "assistant", "content": content}));
+            super::anthropic_threads::record(model, session, &body, &betas, reply, reply_id);
+        }
+    };
 
     let mut parser = SseParser::new();
     let mut events: Vec<SseEvent> = Vec::new();
@@ -156,7 +229,7 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
                     match handle_event(&event, &mut builder, &mut state) {
                         Flow::Continue => {}
                         Flow::Done => {
-                            builder.finish(state.stop_reason, model);
+                            builder.finish_with(state.stop_reason, model, record_thread);
                             return;
                         }
                         Flow::Error(msg) => {
@@ -179,7 +252,7 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
         match handle_event(&event, &mut builder, &mut state) {
             Flow::Continue => {}
             Flow::Done => {
-                builder.finish(state.stop_reason, model);
+                builder.finish_with(state.stop_reason, model, record_thread);
                 return;
             }
             Flow::Error(msg) => {
@@ -192,7 +265,7 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
     // message_stop. Without even a stop reason the reply was cut off, and
     // finishing would hand the agent a half-written tool call.
     if builder.message.raw_stop_reason.is_some() {
-        builder.finish(state.stop_reason, model);
+        builder.finish_with(state.stop_reason, model, record_thread);
     } else {
         builder.fail(
             super::stream_error("the response ended before the provider sent a stop reason"),
@@ -449,7 +522,7 @@ fn beta_features(model: &Model, oauth: bool, fast_mode: bool) -> Vec<&'static st
 fn build_request(model: &Model, context: &Context, options: &StreamOptions) -> Value {
     let mut body = json!({
         "model": model.id,
-        "max_tokens": options.max_tokens.unwrap_or(model.max_tokens),
+        "max_tokens": super::request_max_tokens(model, context, options),
         "stream": true,
     });
     if options.fast_mode && model.supports_fast_mode() {
@@ -494,7 +567,7 @@ fn build_request(model: &Model, context: &Context, options: &StreamOptions) -> V
     } else if model.reasoning
         && let Some(budget) = thinking_budget(
             options.reasoning,
-            options.max_tokens.unwrap_or(model.max_tokens),
+            super::request_max_tokens(model, context, options),
         )
     {
         body["thinking"] = json!({"type": "enabled", "budget_tokens": budget});
@@ -537,43 +610,7 @@ fn build_request(model: &Model, context: &Context, options: &StreamOptions) -> V
                 messages.push(json!({"role": "user", "content": content}));
             }
             Message::Assistant(assistant) => {
-                let mut content: Vec<Value> = Vec::new();
-                for block in &assistant.content {
-                    match block {
-                        ContentBlock::Text { text, .. } => {
-                            if !text.is_empty() {
-                                content.push(json!({"type": "text", "text": text}));
-                            }
-                        }
-                        ContentBlock::Thinking {
-                            thinking,
-                            thinking_signature,
-                            redacted,
-                        } => {
-                            if *redacted {
-                                if let Some(sig) = thinking_signature {
-                                    content.push(json!({"type": "redacted_thinking", "data": sig}));
-                                }
-                            } else if let Some(sig) = thinking_signature {
-                                content.push(json!({"type": "thinking", "thinking": thinking, "signature": sig}));
-                            } else if compat
-                                .and_then(|compat| compat.allow_empty_signature)
-                                .unwrap_or(false)
-                            {
-                                content.push(json!({"type": "thinking", "thinking": thinking, "signature": ""}));
-                            }
-                        }
-                        ContentBlock::ToolCall(tc) => {
-                            content.push(json!({
-                                "type": "tool_use",
-                                "id": super::anthropic_tool_id(&tc.id),
-                                "name": tc.name,
-                                "input": tc.arguments,
-                            }));
-                        }
-                        ContentBlock::Image { .. } => {}
-                    }
-                }
+                let content = assistant_blocks(model, assistant);
                 if !content.is_empty() {
                     if managed_effort
                         && assistant.api == "anthropic-messages"
@@ -662,6 +699,51 @@ fn build_request(model: &Model, context: &Context, options: &StreamOptions) -> V
 
     body["messages"] = Value::Array(messages);
     body
+}
+
+/// An assistant message's content blocks as Anthropic Messages sends them.
+fn assistant_blocks(model: &Model, assistant: &crate::types::AssistantMessage) -> Vec<Value> {
+    let compat = model.compat.as_ref();
+    let mut content: Vec<Value> = Vec::new();
+    for block in &assistant.content {
+        match block {
+            ContentBlock::Text { text, .. } => {
+                if !text.is_empty() {
+                    content.push(json!({"type": "text", "text": text}));
+                }
+            }
+            ContentBlock::Thinking {
+                thinking,
+                thinking_signature,
+                redacted,
+            } => {
+                if *redacted {
+                    if let Some(sig) = thinking_signature {
+                        content.push(json!({"type": "redacted_thinking", "data": sig}));
+                    }
+                } else if let Some(sig) = thinking_signature {
+                    content
+                        .push(json!({"type": "thinking", "thinking": thinking, "signature": sig}));
+                } else if compat
+                    .and_then(|compat| compat.allow_empty_signature)
+                    .unwrap_or(false)
+                {
+                    content
+                        .push(json!({"type": "thinking", "thinking": thinking, "signature": ""}));
+                }
+            }
+            ContentBlock::ToolCall(tc) => {
+                content.push(json!({
+                    "type": "tool_use",
+                    "id": super::anthropic_tool_id(&tc.id),
+                    "name": tc.name,
+                    "input": tc.arguments,
+                }));
+            }
+            ContentBlock::Image { .. } => {}
+        }
+    }
+    content
 }
 
 const ERROR_TOOL_IMAGE_PLACEHOLDER: &str = "(image attached after the tool results)";
@@ -826,6 +908,121 @@ mod tests {
         assert!(!head.contains("claude-cli"), "{head}");
     }
 
+    #[tokio::test]
+    async fn message_threads_continue_and_resend_a_rejected_continue_as_a_new_thread() {
+        use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+        crate::stream::ensure_tls_crypto_provider();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let reply = |id: &str| {
+            let events = [
+                json!({"type": "message_start", "message": {"id": id, "model": "claude-test", "usage": {"input_tokens": 5, "output_tokens": 0}}}),
+                json!({"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}}),
+                json!({"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "hello"}}),
+                json!({"type": "content_block_stop", "index": 0}),
+                json!({"type": "message_delta", "delta": {"stop_reason": "end_turn"}, "usage": {"output_tokens": 1}}),
+                json!({"type": "message_stop"}),
+            ];
+            let body: String = events
+                .iter()
+                .map(|event| {
+                    format!(
+                        "event: {}\ndata: {event}\n\n",
+                        event["type"].as_str().unwrap()
+                    )
+                })
+                .collect();
+            format!(
+                "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                body.len()
+            )
+        };
+        let rejected = {
+            let body = json!({"type": "error", "error": {"type": "invalid_request_error", "message": "thread expired", "details": {"error_code": "thread_not_found"}}}).to_string();
+            format!(
+                "HTTP/1.1 400 Bad Request\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                body.len()
+            )
+        };
+        let responses = vec![reply("msg_1"), rejected, reply("msg_2")];
+        let server = tokio::spawn(async move {
+            let mut bodies = Vec::new();
+            for response in responses {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                let mut request = Vec::new();
+                let mut buffer = [0; 8192];
+                let body_start = loop {
+                    let read = socket.read(&mut buffer).await.unwrap();
+                    request.extend_from_slice(&buffer[..read]);
+                    if let Some(at) = request.windows(4).position(|w| w == b"\r\n\r\n") {
+                        break at + 4;
+                    }
+                };
+                let head = String::from_utf8_lossy(&request[..body_start]).to_ascii_lowercase();
+                let length: usize = head
+                    .lines()
+                    .find_map(|line| line.strip_prefix("content-length: "))
+                    .unwrap()
+                    .trim()
+                    .parse()
+                    .unwrap();
+                while request.len() < body_start + length {
+                    let read = socket.read(&mut buffer).await.unwrap();
+                    request.extend_from_slice(&buffer[..read]);
+                }
+                assert!(
+                    head.contains(super::super::anthropic_threads::BETA),
+                    "{head}"
+                );
+                bodies.push(serde_json::from_slice::<Value>(&request[body_start..]).unwrap());
+                socket.write_all(response.as_bytes()).await.unwrap();
+            }
+            bodies
+        });
+        let mut model = model(OpenAICompat {
+            supports_message_threads: Some(true),
+            ..Default::default()
+        });
+        model.base_url = format!("http://{address}");
+        let options = StreamOptions {
+            credential: Some(crate::ResolvedCredential::api_key("key")),
+            session_id: Some("threads-end-to-end".into()),
+            ..Default::default()
+        };
+        let user = |text: &str| {
+            Message::User(UserMessage {
+                content: UserContent::Text(text.into()),
+                timestamp: 0,
+            })
+        };
+        let mut context = Context {
+            system_prompt: Some("system".into()),
+            messages: vec![user("hi")],
+            ..Default::default()
+        };
+        let first = crate::stream_simple(&model, &context, &options)
+            .result()
+            .await;
+        assert_eq!(first.response_id.as_deref(), Some("msg_1"), "{first:?}");
+        context.messages.push(Message::Assistant(first));
+        context.messages.push(user("next"));
+        let second = crate::stream_simple(&model, &context, &options)
+            .result()
+            .await;
+        assert_eq!(second.response_id.as_deref(), Some("msg_2"), "{second:?}");
+
+        let bodies = server.await.unwrap();
+        assert_eq!(bodies[0]["thread"], json!({"type": "create"}));
+        assert_eq!(
+            bodies[1]["thread"],
+            json!({"type": "continue", "previous_message_id": "msg_1"})
+        );
+        assert_eq!(bodies[1]["messages"].as_array().unwrap().len(), 1);
+        assert!(bodies[1].get("system").is_none());
+        assert_eq!(bodies[2]["thread"], json!({"type": "create"}));
+        assert_eq!(bodies[2]["messages"].as_array().unwrap().len(), 3);
+    }
+
     #[test]
     fn error_tool_result_images_follow_the_tool_results() {
         let tool_result = |id: &str, is_error: bool| {
@@ -930,6 +1127,52 @@ mod tests {
             &StreamOptions::default(),
         );
         assert_eq!(body["messages"][0]["content"][0]["signature"], "");
+    }
+
+    #[test]
+    fn a_managed_effort_conversation_continues_its_thread() {
+        use super::super::anthropic_threads::{prepare, record};
+        let model = model(OpenAICompat {
+            supports_mid_convo_effort: Some(true),
+            force_adaptive_thinking: Some(true),
+            ..Default::default()
+        });
+        let options = StreamOptions {
+            reasoning: crate::ThinkingLevel::High,
+            ..Default::default()
+        };
+        let user = |text: &str| {
+            Message::User(UserMessage {
+                content: UserContent::Text(text.into()),
+                timestamp: 1,
+            })
+        };
+        let mut context = Context {
+            system_prompt: Some("system".into()),
+            messages: vec![user("first")],
+            ..Default::default()
+        };
+        let first = build_request(&model, &context, &options);
+        let mut reply = AssistantMessage::empty("anthropic-messages", "anthropic", "claude-test");
+        reply.content.push(ContentBlock::text("answer"));
+        reply.provider_thinking_level = Some(adaptive_effort(&model, options.reasoning));
+        let blocks = assistant_blocks(&model, &reply);
+        let session = "threads-managed-effort";
+        record(
+            &model,
+            session,
+            &first,
+            "betas",
+            Some(json!({"role": "assistant", "content": blocks})),
+            "msg_1",
+        );
+        context.messages.push(Message::Assistant(reply));
+        context.messages.push(user("next"));
+        let second = build_request(&model, &context, &options);
+        let sent = prepare(&model, session, &second, "betas").unwrap();
+        assert_eq!(sent["thread"]["type"], "continue", "{second:#}");
+        // The new user message and its effort marker.
+        assert_eq!(sent["messages"].as_array().unwrap().len(), 2);
     }
 
     #[test]

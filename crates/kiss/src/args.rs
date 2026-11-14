@@ -321,6 +321,8 @@ pub enum Command {
     /// Show credential sources without showing secrets.
     Auth {
         /// `import`, or a provider to show. By default, show all Pi providers.
+        /// `kiss auth login <provider>` and `kiss auth logout <provider>` are
+        /// `kiss login` and `kiss logout`.
         action_or_provider: Option<String>,
 
         /// Provider to import when the first argument is `import`.
@@ -497,6 +499,24 @@ pub struct Args {
 }
 
 impl Args {
+    /// Parse the command line. `kiss auth login …` and `kiss auth logout …`
+    /// mean `kiss login …` and `kiss logout …`, as in Pi.
+    pub fn try_parse_cli<I, T>(argv: I) -> Result<Self, clap::Error>
+    where
+        I: IntoIterator<Item = T>,
+        T: Into<std::ffi::OsString>,
+    {
+        let mut argv: Vec<std::ffi::OsString> = argv.into_iter().map(Into::into).collect();
+        if argv.get(1).is_some_and(|arg| arg == "auth")
+            && argv
+                .get(2)
+                .is_some_and(|arg| arg == "login" || arg == "logout")
+        {
+            argv.remove(1);
+        }
+        Self::try_parse_from(argv)
+    }
+
     /// The per-run trust choice: `--approve` wins over `--no-approve`, and
     /// `None` means neither flag was given.
     pub fn trust_override(&self) -> Option<bool> {
@@ -564,6 +584,26 @@ mod tests {
         assert!(
             Args::try_parse_from(["kiss", "login", "anthropic", "--account-label", "x"]).is_err()
         );
+    }
+
+    #[test]
+    fn auth_login_and_logout_are_login_and_logout() {
+        let args =
+            Args::try_parse_cli(["kiss", "auth", "login", "radius", "--no-browser"]).unwrap();
+        assert!(matches!(
+            args.command,
+            Some(Command::Login { provider, device_auth: true, .. }) if provider == "radius"
+        ));
+        let args = Args::try_parse_cli(["kiss", "auth", "logout", "openrouter"]).unwrap();
+        assert!(matches!(
+            args.command,
+            Some(Command::Logout { provider }) if provider == "openrouter"
+        ));
+        let args = Args::try_parse_cli(["kiss", "auth", "anthropic"]).unwrap();
+        assert!(matches!(
+            args.command,
+            Some(Command::Auth { action_or_provider: Some(provider), .. }) if provider == "anthropic"
+        ));
     }
 
     #[test]

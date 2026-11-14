@@ -41,10 +41,12 @@ impl AgentTool for LsTool {
         _on_update: Option<ToolUpdateSink>,
     ) -> anyhow::Result<ToolResult> {
         let path = resolve(&self.cwd, args["path"].as_str().unwrap_or("."));
+        // A limit of 0 would list nothing and report "(empty directory)", so it means 1.
         let limit = args["limit"]
             .as_f64()
             .map(|v| v as usize)
-            .unwrap_or(DEFAULT_LIMIT);
+            .unwrap_or(DEFAULT_LIMIT)
+            .max(1);
         if !path.exists() {
             anyhow::bail!("Path not found: {}", path.display());
         }
@@ -106,5 +108,23 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(r.output_text(), "zdir/\nafile.txt");
+    }
+
+    #[tokio::test]
+    async fn a_limit_below_one_lists_one_entry() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.txt"), "").unwrap();
+        std::fs::write(dir.path().join("b.txt"), "").unwrap();
+        let tool = LsTool {
+            cwd: dir.path().to_path_buf(),
+        };
+        let r = tool
+            .execute("1", json!({"limit": 0}), CancellationToken::new(), None)
+            .await
+            .unwrap();
+        assert!(
+            r.output_text()
+                .starts_with("a.txt\n\n[Entry limit of 1 reached (2 total).]")
+        );
     }
 }

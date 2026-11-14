@@ -26,7 +26,11 @@
       "contextWindow": 1000000,
       "maxTokens": 128000,
       "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
-      "compat": { "forceAdaptiveThinking": true, "supportsTemperature": false },
+      "compat": {
+        "forceAdaptiveThinking": true,
+        "supportsTemperature": false,
+        "supportsMidConvoEffort": true
+      },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -196,7 +200,7 @@
     },
     "chat:deepseek-v4-pro": {
       "id": "deepseek-v4-pro",
-      "name": "DeepSeek V4 Pro (New)",
+      "name": "DeepSeek V4 Pro",
       "api": "openai-completions",
       "provider": "opencode-go",
       "baseUrl": "https://opencode.ai/inference/go/openai/v1",
@@ -374,6 +378,39 @@
       },
       "type": "chat"
     },
+    "chat:hy4": {
+      "id": "hy4",
+      "name": "Hy4",
+      "api": "openai-completions",
+      "provider": "opencode-go",
+      "baseUrl": "https://opencode.ai/inference/go/openai/v1",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 0.834, "output": 2.501, "cacheRead": 0.042, "cacheWrite": 0 },
+      "contextWindow": 1048576,
+      "maxTokens": 65536,
+      "compat": {
+        "supportsStore": false,
+        "supportsDeveloperRole": false,
+        "supportsStrictMode": true,
+        "maxTokensField": "max_tokens"
+      },
+      "thinkingLevelMap": {
+        "off": "none",
+        "minimal": null,
+        "low": null,
+        "medium": null,
+        "high": "high",
+        "xhigh": null,
+        "max": null
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      },
+      "type": "chat"
+    },
     "chat:hy4-preview": {
       "id": "hy4-preview",
       "name": "Hy4 preview",
@@ -531,6 +568,30 @@
         "supportsDeveloperRole": false,
         "supportsStrictMode": true,
         "maxTokensField": "max_tokens"
+      },
+      "type": "chat"
+    },
+    "chat:longcat-2.5-free": {
+      "id": "longcat-2.5-free",
+      "name": "LongCat 2.5 Free",
+      "api": "openai-completions",
+      "provider": "opencode-go",
+      "baseUrl": "https://opencode.ai/inference/go/openai/v1",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 1000000,
+      "maxTokens": 262144,
+      "compat": {
+        "supportsStore": false,
+        "supportsDeveloperRole": false,
+        "supportsStrictMode": true,
+        "maxTokensField": "max_tokens"
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       },
       "type": "chat"
     },

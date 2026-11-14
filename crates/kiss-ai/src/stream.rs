@@ -109,6 +109,10 @@ pub struct StreamOptions {
     /// by default.
     pub transport: Transport,
     pub cancel: CancellationToken,
+    /// Do not use or record server-side continuation state, such as
+    /// Anthropic message threads. Replays such as cache warming set it, so
+    /// they do not replace the state of the real conversation.
+    pub disable_continuation: bool,
 }
 
 #[cfg(feature = "native")]

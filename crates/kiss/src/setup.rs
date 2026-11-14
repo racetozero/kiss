@@ -198,6 +198,32 @@ fn startup_model(
     resolved.map(|(model, thinking)| (model, thinking, false))
 }
 
+/// How to open a session whose stored working directory is gone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MissingCwdChoice {
+    /// Run it in the current directory once; the next open asks again.
+    Continue,
+    /// Copy it into the current directory as a new session.
+    Fork,
+    Cancel,
+}
+
+/// The choices for a session whose stored working directory is gone.
+pub fn missing_cwd_choices(cwd: &std::path::Path) -> [(MissingCwdChoice, String); 3] {
+    let cwd = kiss_ai::paths::abbreviate_home(&cwd.display().to_string());
+    [
+        (
+            MissingCwdChoice::Continue,
+            format!("Continue in {cwd} (asks again next time)"),
+        ),
+        (
+            MissingCwdChoice::Fork,
+            format!("Fork into {cwd} (new session ID, original kept)"),
+        ),
+        (MissingCwdChoice::Cancel, "Cancel".to_string()),
+    ]
+}
+
 pub fn session_dir(args: &Args, settings: &Settings) -> PathBuf {
     kiss_coding::session_dir(args.session_dir.as_deref(), settings)
 }
@@ -247,7 +273,17 @@ pub async fn build_startup(
     let manager = if args.no_session {
         SessionManager::in_memory(&cwd)
     } else if let Some(reference) = &args.session {
-        SessionManager::open(&SessionManager::resolve_reference(&dir, reference)?)?
+        let path = SessionManager::resolve_reference(&dir, reference)?;
+        let manager = SessionManager::open(&path)?;
+        // Interactive mode asks to continue or fork when the screen starts.
+        if let Some(stored) = manager.missing_cwd().filter(|_| !interactive) {
+            anyhow::bail!(
+                "The session's working directory {} no longer exists. Current working directory: {}. Run kiss --session {reference} in interactive mode to continue or fork it here, or run kiss --fork {reference} to copy it here as a new session.",
+                stored.display(),
+                cwd.display()
+            );
+        }
+        manager
     } else if let Some(reference) = &args.fork {
         SessionManager::fork_from(
             &SessionManager::resolve_reference(&dir, reference)?,
@@ -342,7 +378,8 @@ mod tests {
             ("openai-codex", "gpt-6.1-sol"),
             ("fireworks", "accounts/fireworks/models/kimi-k3"),
             ("together", "moonshotai/Kimi-K3"),
-            ("opencode-go", "kimi-k3"),
+            ("opencode-go", "kimi-k3.1-pro"),
+            ("anthropic", "claude-opus-5-5"),
         ] {
             assert_eq!(registry.provider_default(provider).unwrap().id, id);
         }

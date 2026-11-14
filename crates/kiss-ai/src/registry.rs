@@ -8,7 +8,7 @@ use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::Path;
 
-/// Generated model data verified against `@earendil-works/pi-ai` 1.4.0.
+/// Generated model data verified against `@earendil-works/pi-ai` 1.5.2.
 const BUILTIN_PROVIDER_CATALOGS: &[&str] = &[
     include_str!("../data/providers/amazon-bedrock.json"),
     include_str!("../data/providers/ant-ling.json"),
@@ -42,6 +42,7 @@ const BUILTIN_PROVIDER_CATALOGS: &[&str] = &[
     include_str!("../data/providers/openrouter.json"),
     include_str!("../data/providers/qwen-token-plan-cn.json"),
     include_str!("../data/providers/qwen-token-plan-individual.json"),
+    include_str!("../data/providers/qwen-token-plan-individual-cn.json"),
     include_str!("../data/providers/qwen-token-plan.json"),
     include_str!("../data/providers/radius.json"),
     include_str!("../data/providers/snowflake-cortex.json"),
@@ -102,6 +103,7 @@ pub const BUILTIN_PROVIDER_IDS: &[&str] = &[
     "qwen-token-plan",
     "qwen-token-plan-cn",
     "qwen-token-plan-individual",
+    "qwen-token-plan-individual-cn",
     "radius",
     "snowflake-cortex",
     "together",
@@ -114,6 +116,75 @@ pub const BUILTIN_PROVIDER_IDS: &[&str] = &[
     "zai",
     "zai-coding-cn",
 ];
+
+/// Pi's default chat model per provider, from `defaultModelPerProvider` in
+/// Pi's `packages/coding-agent/src/core/model-resolver.ts` (v1.5.2).
+const PI_DEFAULT_MODELS: &[(&str, &str)] = &[
+    ("amazon-bedrock", "us.anthropic.claude-opus-5-5"),
+    ("ant-ling", "Ring-2.6-1T"),
+    ("anthropic", "claude-opus-5-5"),
+    ("openai", "gpt-6.1-sol"),
+    ("azure", "gpt-6.1-sol"),
+    ("openai-codex", "gpt-6.1-sol"),
+    ("radius", "balanced"),
+    ("nvidia", "nvidia/nemotron-3.5-super-vl-120b-a12b"),
+    ("deepseek", "deepseek-v4-pro"),
+    ("google", "gemini-4-argon"),
+    ("google-vertex", "gemini-4-argon"),
+    ("github-copilot", "gpt-6.1-sol"),
+    ("openrouter", "moonshotai/kimi-k2.7-code"),
+    ("vercel-ai-gateway", "zai/glm-5.3"),
+    ("xai", "grok-4.7"),
+    ("groq", "openai/gpt-oss-120b"),
+    ("cerebras", "gpt-oss-120b"),
+    ("zai", "glm-5.3"),
+    ("zai-coding-cn", "glm-5.3"),
+    ("mistral", "devstral-medium-latest"),
+    ("minimax", "MiniMax-M3"),
+    ("minimax-cn", "MiniMax-M3"),
+    ("moonshotai", "kimi-k2.7-code"),
+    ("moonshotai-cn", "kimi-k2.7-code"),
+    ("huggingface", "moonshotai/Kimi-K2.7-Code"),
+    ("fireworks", "accounts/fireworks/models/kimi-k3"),
+    ("together", "moonshotai/Kimi-K3"),
+    ("baseten", "zai-org/GLM-5.3"),
+    ("opencode", "kimi-k2.7-code"),
+    ("opencode-go", "kimi-k3.1-pro"),
+    ("kimi-coding", "kimi-for-coding"),
+    ("meta", "muse-spark-1.3"),
+    ("cloudflare-workers-ai", "@cf/moonshotai/kimi-k2.7-code"),
+    (
+        "cloudflare-ai-gateway",
+        "workers-ai/@cf/moonshotai/kimi-k2.7-code",
+    ),
+    ("qwen-token-plan", "qwen3.8-max"),
+    ("qwen-token-plan-cn", "qwen3.8-max"),
+    ("qwen-token-plan-individual", "qwen3.8-max"),
+    ("qwen-token-plan-individual-cn", "qwen3.8-max"),
+    ("xiaomi", "mimo-v2.6-pro"),
+    ("xiaomi-token-plan-cn", "mimo-v2.6-pro"),
+    ("xiaomi-token-plan-ams", "mimo-v2.6-pro"),
+    ("xiaomi-token-plan-sgp", "mimo-v2.6-pro"),
+];
+
+/// Pi's preferred partner providers, most preferred first. Provider lists
+/// show them first and mark them with `✦`.
+pub const PREFERRED_PROVIDER_IDS: &[&str] = &["radius", "openrouter"];
+
+/// Orders provider IDs: preferred partners first, in their order, then the
+/// others alphabetically.
+pub fn sort_providers<S: AsRef<str>>(providers: &mut [S]) {
+    let rank = |id: &str| {
+        PREFERRED_PROVIDER_IDS
+            .iter()
+            .position(|preferred| *preferred == id)
+            .unwrap_or(PREFERRED_PROVIDER_IDS.len())
+    };
+    providers.sort_by(|a, b| {
+        let (a, b) = (a.as_ref(), b.as_ref());
+        rank(a).cmp(&rank(b)).then_with(|| a.cmp(b))
+    });
+}
 
 #[derive(Debug, Deserialize)]
 struct CatalogFile {
@@ -657,23 +728,13 @@ impl Registry {
             .collect()
     }
 
-    /// The model to use for `provider` when none is named: kiss's choice
-    /// for some providers, otherwise the provider's first catalog model.
+    /// The model to use for `provider` when none is named: Pi's default for
+    /// the provider, otherwise the provider's first catalog model.
     pub fn provider_default(&self, provider: &str) -> Option<Model> {
-        let preferred = match provider {
-            "openai" | "openai-codex" | "github-copilot" => Some("gpt-6.1-sol"),
-            "nvidia" => Some("nvidia/nemotron-3.5-super-vl-120b-a12b"),
-            "xiaomi"
-            | "xiaomi-token-plan-cn"
-            | "xiaomi-token-plan-ams"
-            | "xiaomi-token-plan-sgp" => Some("mimo-v2.6-pro"),
-            "fireworks" => Some("accounts/fireworks/models/kimi-k3"),
-            "together" => Some("moonshotai/Kimi-K3"),
-            "opencode-go" => Some("kimi-k3"),
-            "xai" => Some("grok-4.7"),
-            "meta" => Some("muse-spark-1.3"),
-            _ => None,
-        };
+        let preferred = PI_DEFAULT_MODELS
+            .iter()
+            .find(|(id, _)| *id == provider)
+            .map(|(_, model)| *model);
         preferred
             .and_then(|id| self.resolve(id, Some(provider)).map(|(model, _)| model))
             .or_else(|| {
@@ -925,6 +986,45 @@ mod tests {
         assert_eq!(model.provider, "lan/box");
         let (model, _) = registry.resolve("LAN/box/m1", None).unwrap();
         assert_eq!(model.provider, "lan/box");
+    }
+
+    #[test]
+    fn pi_default_models_are_in_the_catalog() {
+        let registry = Registry::from_builtin();
+        for (provider, id) in PI_DEFAULT_MODELS {
+            assert_eq!(
+                registry.provider_default(provider).map(|model| model.id),
+                Some(id.to_string()),
+                "{provider}"
+            );
+        }
+    }
+
+    #[test]
+    fn pi_v1_5_2_catalog_changes_are_present() {
+        let registry = Registry::from_builtin();
+        let (fable, _) = registry
+            .resolve("anthropic/claude-fable-5-2", None)
+            .expect("Claude Fable 5.2");
+        assert_eq!(fable.context_window, 1_000_000);
+        assert!(
+            registry
+                .resolve("qwen-token-plan-individual-cn/qwen3.8-max", None)
+                .is_some()
+        );
+        assert_eq!(
+            crate::auth::env_var_names("qwen-token-plan-individual-cn"),
+            ["QWEN_TOKEN_PLAN_CN_API_KEY"]
+        );
+        let (sonnet, _) = registry.resolve("anthropic/claude-sonnet-5", None).unwrap();
+        assert_eq!(sonnet.compat.unwrap().supports_temperature, Some(false));
+    }
+
+    #[test]
+    fn partner_providers_sort_first() {
+        let mut providers = vec!["zai", "openrouter", "anthropic", "radius"];
+        sort_providers(&mut providers);
+        assert_eq!(providers, ["radius", "openrouter", "anthropic", "zai"]);
     }
 
     #[test]

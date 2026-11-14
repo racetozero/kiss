@@ -21,23 +21,75 @@ struct Edit {
 
 const BOM: &str = "\u{feff}";
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-enum LineEnding {
-    Lf,
-    CrLf,
+/// LF for every line break: CRLF and lone CR become LF.
+fn normalize_to_lf(text: &str) -> String {
+    text.replace("\r\n", "\n").replace('\r', "\n")
 }
 
-fn detect_line_ending(text: &str) -> LineEnding {
-    let crlf = text.matches("\r\n").count();
-    let lf = text.matches('\n').count() - crlf;
-    if crlf > lf {
-        LineEnding::CrLf
-    } else {
-        LineEnding::Lf
+/// A replacement found in the LF-normalized text: its byte range and new text.
+struct Replacement<'a> {
+    start: usize,
+    end: usize,
+    new_text: &'a str,
+}
+
+/// Apply replacements found in `normalize_to_lf(original)` to `original`
+/// itself. Text outside the replaced ranges keeps its bytes, including its
+/// line endings. Line breaks in new text get the line ending of the line
+/// where the replaced range starts.
+fn apply_to_original(original: &str, replacements: &[Replacement]) -> String {
+    // Only CRLF changes length when normalizing. The LF of the n-th CRLF
+    // (original offset p) is at p - n in the normalized text.
+    let crlfs: Vec<usize> = original.match_indices("\r\n").map(|(at, _)| at).collect();
+    let to_original = |offset: usize| {
+        offset
+            + crlfs
+                .iter()
+                .enumerate()
+                .take_while(|(n, at)| *at - n < offset)
+                .count()
+    };
+    // The line ending of the line containing `offset`, or of the line before
+    // for an unterminated last line. A lone CR counts only in files without
+    // any LF.
+    let ending_at = |offset: usize| {
+        let line_feed = original[offset..]
+            .find('\n')
+            .map(|at| offset + at)
+            .or_else(|| original[..offset].rfind('\n'));
+        match line_feed {
+            Some(at) if at > 0 && original.as_bytes()[at - 1] == b'\r' => "\r\n",
+            Some(_) => "\n",
+            None if original.contains('\r') => "\r",
+            None => "\n",
+        }
+    };
+    let mut out = String::with_capacity(original.len());
+    let mut push = |part: &str| {
+        // A CR before a seam and an LF after it would merge into one CRLF.
+        if out.ends_with('\r') && part.starts_with('\n') {
+            out.push('\n');
+        }
+        out.push_str(part);
+    };
+    let mut position = 0;
+    for replacement in replacements {
+        let start = to_original(replacement.start);
+        push(&original[position..start]);
+        match ending_at(start) {
+            "\n" => push(replacement.new_text),
+            ending => push(&replacement.new_text.replace('\n', ending)),
+        }
+        position = to_original(replacement.end);
     }
+    push(&original[position..]);
+    out
 }
 
-fn apply_edits(content: &str, edits: &[Edit]) -> anyhow::Result<String> {
+fn apply_edits<'a>(
+    content: &str,
+    edits: &'a [Edit],
+) -> anyhow::Result<(String, Vec<Replacement<'a>>)> {
     // Locate every edit against the *original* content and check overlap.
     let mut spans: Vec<(usize, usize, &Edit)> = Vec::with_capacity(edits.len());
     for (i, edit) in edits.iter().enumerate() {
@@ -71,13 +123,19 @@ fn apply_edits(content: &str, edits: &[Edit]) -> anyhow::Result<String> {
 
     let mut out = String::with_capacity(content.len());
     let mut cursor = 0usize;
+    let mut replacements = Vec::with_capacity(spans.len());
     for (start, end, edit) in spans {
         out.push_str(&content[cursor..start]);
         out.push_str(&edit.new_text);
         cursor = end;
+        replacements.push(Replacement {
+            start,
+            end,
+            new_text: &edit.new_text,
+        });
     }
     out.push_str(&content[cursor..]);
-    Ok(out)
+    Ok((out, replacements))
 }
 
 fn unified_diff(path: &str, old: &str, new: &str) -> (String, Option<usize>) {
@@ -194,23 +252,32 @@ impl AgentTool for EditTool {
             Some(rest) => (BOM, rest.to_string()),
             None => ("", raw),
         };
-        let ending = detect_line_ending(&content);
-        let normalized = content.replace("\r\n", "\n");
+        let normalized = normalize_to_lf(&content);
+        let edits: Vec<Edit> = edits
+            .into_iter()
+            .map(|edit| Edit {
+                old_text: normalize_to_lf(&edit.old_text),
+                new_text: normalize_to_lf(&edit.new_text),
+            })
+            .collect();
 
-        let new_content = apply_edits(&normalized, &edits)?;
+        let (new_content, replacements) = apply_edits(&normalized, &edits)?;
         if cancel.is_cancelled() {
             anyhow::bail!("Operation aborted");
         }
-
-        let restored = match ending {
-            LineEnding::Lf => new_content.clone(),
-            LineEnding::CrLf => new_content.replace('\n', "\r\n"),
+        // Diff before writing, so the diff cannot fail after the write.
+        let (patch, first_changed_line) = unified_diff(&path, &normalized, &new_content);
+        // Splice into the original text, so untouched lines keep their line
+        // endings. Without any CR the normalized result is already final.
+        let restored = if content == normalized {
+            new_content
+        } else {
+            apply_to_original(&content, &replacements)
         };
         tokio::fs::write(&absolute, format!("{bom}{restored}"))
             .await
             .map_err(|e| anyhow::anyhow!("Could not edit file: {path}. {e}"))?;
 
-        let (patch, first_changed_line) = unified_diff(&path, &normalized, &new_content);
         Ok(ToolResult {
             content: vec![ContentBlock::text(format!(
                 "Successfully replaced {} block(s) in {path}.",
@@ -311,6 +378,32 @@ mod tests {
         .unwrap();
         let out = std::fs::read_to_string(dir.path().join("f.txt")).unwrap();
         assert_eq!(out, "\u{feff}a\r\nB\r\n");
+    }
+
+    #[tokio::test]
+    async fn untouched_lines_keep_mixed_and_lone_cr_line_endings() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("f.txt");
+        std::fs::write(&file, "a\r\nb\nc\r\nd\n").unwrap();
+        run(
+            dir.path(),
+            json!({"path": "f.txt", "edits": [{"oldText": "c", "newText": "C1\nC2"}]}),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&file).unwrap(),
+            "a\r\nb\nC1\r\nC2\r\nd\n"
+        );
+
+        std::fs::write(&file, "x\ry\rz\r").unwrap();
+        run(
+            dir.path(),
+            json!({"path": "f.txt", "edits": [{"oldText": "y\nz", "newText": "Y\nZ"}]}),
+        )
+        .await
+        .unwrap();
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "x\rY\rZ\r");
     }
 
     #[tokio::test]

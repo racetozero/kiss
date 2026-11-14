@@ -401,7 +401,21 @@
       "baseUrl": "",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 2.5, "output": 15, "cacheRead": 0.25, "cacheWrite": 0 },
+      "cost": {
+        "input": 2.5,
+        "output": 15,
+        "cacheRead": 0.25,
+        "cacheWrite": 0,
+        "tiers": [
+          {
+            "inputTokensAbove": 272000,
+            "input": 5,
+            "output": 22.5,
+            "cacheRead": 0.5,
+            "cacheWrite": 0
+          }
+        ]
+      },
       "contextWindow": 1050000,
       "maxTokens": 128000,
       "thinkingLevelMap": { "off": null, "xhigh": "xhigh" },
@@ -461,7 +475,21 @@
       "baseUrl": "",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 30, "output": 180, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 30,
+        "output": 180,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "tiers": [
+          {
+            "inputTokensAbove": 272000,
+            "input": 60,
+            "output": 270,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          }
+        ]
+      },
       "contextWindow": 1050000,
       "maxTokens": 128000,
       "thinkingLevelMap": { "off": null, "xhigh": "xhigh" },
@@ -481,7 +509,15 @@
       "baseUrl": "",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 5, "output": 30, "cacheRead": 0.5, "cacheWrite": 0 },
+      "cost": {
+        "input": 5,
+        "output": 30,
+        "cacheRead": 0.5,
+        "cacheWrite": 0,
+        "tiers": [
+          { "inputTokensAbove": 272000, "input": 10, "output": 45, "cacheRead": 1, "cacheWrite": 0 }
+        ]
+      },
       "contextWindow": 1050000,
       "maxTokens": 128000,
       "thinkingLevelMap": { "off": null, "xhigh": "xhigh" },
@@ -501,7 +537,21 @@
       "baseUrl": "",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 30, "output": 180, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 30,
+        "output": 180,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "tiers": [
+          {
+            "inputTokensAbove": 272000,
+            "input": 60,
+            "output": 270,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          }
+        ]
+      },
       "contextWindow": 1050000,
       "maxTokens": 128000,
       "thinkingLevelMap": { "off": null, "xhigh": "xhigh", "minimal": null, "low": null },
@@ -541,7 +591,21 @@
       "baseUrl": "",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 0.2, "output": 1.2, "cacheRead": 0.02, "cacheWrite": 0.25 },
+      "cost": {
+        "input": 0.2,
+        "output": 1.2,
+        "cacheRead": 0.02,
+        "cacheWrite": 0.25,
+        "tiers": [
+          {
+            "inputTokensAbove": 272000,
+            "input": 0.4,
+            "output": 1.8,
+            "cacheRead": 0.04,
+            "cacheWrite": 0.5
+          }
+        ]
+      },
       "contextWindow": 1050000,
       "maxTokens": 128000,
       "thinkingLevelMap": { "off": null, "xhigh": "xhigh", "max": "max" },
@@ -561,7 +625,21 @@
       "baseUrl": "",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 4, "output": 20, "cacheRead": 0.4, "cacheWrite": 5 },
+      "cost": {
+        "input": 4,
+        "output": 20,
+        "cacheRead": 0.4,
+        "cacheWrite": 5,
+        "tiers": [
+          {
+            "inputTokensAbove": 272000,
+            "input": 8,
+            "output": 30,
+            "cacheRead": 0.8,
+            "cacheWrite": 10
+          }
+        ]
+      },
       "contextWindow": 1050000,
       "maxTokens": 128000,
       "thinkingLevelMap": { "off": null, "xhigh": "xhigh", "max": "max" },
@@ -581,7 +659,21 @@
       "baseUrl": "",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 2, "output": 12, "cacheRead": 0.2, "cacheWrite": 2.5 },
+      "cost": {
+        "input": 2,
+        "output": 12,
+        "cacheRead": 0.2,
+        "cacheWrite": 2.5,
+        "tiers": [
+          {
+            "inputTokensAbove": 272000,
+            "input": 4,
+            "output": 18,
+            "cacheRead": 0.4,
+            "cacheWrite": 5
+          }
+        ]
+      },
       "contextWindow": 1050000,
       "maxTokens": 128000,
       "thinkingLevelMap": { "off": null, "xhigh": "xhigh", "max": "max" },
@@ -601,8 +693,22 @@
       "baseUrl": "",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 10, "output": 50, "cacheRead": 1, "cacheWrite": 12.5 },
-      "contextWindow": 272000,
+      "cost": {
+        "input": 10,
+        "output": 50,
+        "cacheRead": 1,
+        "cacheWrite": 12.5,
+        "tiers": [
+          {
+            "inputTokensAbove": 272000,
+            "input": 20,
+            "output": 75,
+            "cacheRead": 2,
+            "cacheWrite": 25
+          }
+        ]
+      },
+      "contextWindow": 1050000,
       "maxTokens": 128000,
       "thinkingLevelMap": {
         "off": null,
@@ -629,8 +735,22 @@
       "baseUrl": "",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 0.1, "output": 0.5, "cacheRead": 0.01, "cacheWrite": 0.125 },
-      "contextWindow": 272000,
+      "cost": {
+        "input": 0.1,
+        "output": 0.5,
+        "cacheRead": 0.01,
+        "cacheWrite": 0.125,
+        "tiers": [
+          {
+            "inputTokensAbove": 272000,
+            "input": 0.2,
+            "output": 0.75,
+            "cacheRead": 0.02,
+            "cacheWrite": 0.25
+          }
+        ]
+      },
+      "contextWindow": 1050000,
       "maxTokens": 128000,
       "thinkingLevelMap": {
         "off": "none",
@@ -657,8 +777,22 @@
       "baseUrl": "",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 2, "output": 10, "cacheRead": 0.2, "cacheWrite": 2.5 },
-      "contextWindow": 272000,
+      "cost": {
+        "input": 2,
+        "output": 10,
+        "cacheRead": 0.2,
+        "cacheWrite": 2.5,
+        "tiers": [
+          {
+            "inputTokensAbove": 272000,
+            "input": 4,
+            "output": 15,
+            "cacheRead": 0.4,
+            "cacheWrite": 5
+          }
+        ]
+      },
+      "contextWindow": 1050000,
       "maxTokens": 128000,
       "thinkingLevelMap": {
         "off": "none",
@@ -685,8 +819,22 @@
       "baseUrl": "",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 2, "output": 10, "cacheRead": 0.1, "cacheWrite": 2.5 },
-      "contextWindow": 272000,
+      "cost": {
+        "input": 2,
+        "output": 10,
+        "cacheRead": 0.1,
+        "cacheWrite": 2.5,
+        "tiers": [
+          {
+            "inputTokensAbove": 272000,
+            "input": 4,
+            "output": 15,
+            "cacheRead": 0.2,
+            "cacheWrite": 5
+          }
+        ]
+      },
+      "contextWindow": 1050000,
       "maxTokens": 128000,
       "thinkingLevelMap": {
         "off": null,
@@ -713,8 +861,22 @@
       "baseUrl": "",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 1, "output": 5, "cacheRead": 0.05, "cacheWrite": 1.25 },
-      "contextWindow": 272000,
+      "cost": {
+        "input": 1,
+        "output": 5,
+        "cacheRead": 0.05,
+        "cacheWrite": 1.25,
+        "tiers": [
+          {
+            "inputTokensAbove": 272000,
+            "input": 2,
+            "output": 7.5,
+            "cacheRead": 0.1,
+            "cacheWrite": 2.5
+          }
+        ]
+      },
+      "contextWindow": 1050000,
       "maxTokens": 128000,
       "thinkingLevelMap": {
         "off": "none",
@@ -741,7 +903,21 @@
       "baseUrl": "",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 4, "output": 20, "cacheRead": 0.4, "cacheWrite": 5 },
+      "cost": {
+        "input": 4,
+        "output": 20,
+        "cacheRead": 0.4,
+        "cacheWrite": 5,
+        "tiers": [
+          {
+            "inputTokensAbove": 272000,
+            "input": 8,
+            "output": 30,
+            "cacheRead": 0.8,
+            "cacheWrite": 10
+          }
+        ]
+      },
       "contextWindow": 1050000,
       "maxTokens": 128000,
       "inputLimits": {

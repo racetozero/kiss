@@ -59,7 +59,7 @@ pub async fn run(
             },
             _ = cancel.cancelled() => {
                 cancelled = true;
-                kiss_agent::tools::shell::kill_group(&mut child);
+                kiss_agent::tools::shell::kill_group(&mut child, None);
                 break;
             }
         };

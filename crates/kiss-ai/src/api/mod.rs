@@ -3,6 +3,7 @@
 //! unified `AssistantEvent`s, usage extraction, and error normalization.
 
 pub mod anthropic;
+mod anthropic_threads;
 pub mod bedrock;
 pub(crate) mod claude_code;
 pub mod cursor;
@@ -330,7 +331,18 @@ impl PartialBuilder {
         }
     }
 
-    pub fn finish(mut self, stop_reason: StopReason, model: &Model) {
+    pub fn finish(self, stop_reason: StopReason, model: &Model) {
+        self.finish_with(stop_reason, model, |_| {});
+    }
+
+    /// [`Self::finish`], showing the final message to `inspect` before the
+    /// stream ends.
+    pub fn finish_with(
+        mut self,
+        stop_reason: StopReason,
+        model: &Model,
+        inspect: impl FnOnce(&AssistantMessage),
+    ) {
         self.start();
         self.close_open_blocks();
         self.message.stop_reason = stop_reason;
@@ -344,6 +356,7 @@ impl PartialBuilder {
         {
             self.message.stop_reason = StopReason::ToolUse;
         }
+        inspect(&self.message);
         self.sink.done(self.message);
     }
 
@@ -436,6 +449,98 @@ pub fn finalize_cost(usage: &mut Usage, model: &Model) {
     usage.total_tokens = usage.input + usage.output + usage.cache_read + usage.cache_write;
 }
 
+/// Estimated input tokens of a request's messages, as Pi's
+/// `estimateContextTokens`: the usage of the newest assistant reply that
+/// still describes the prefix, plus about 3.5 characters per token for the
+/// messages after it. A message newer than a reply (such as a compaction
+/// summary inserted before it) means that reply's usage no longer applies.
+fn estimate_context_tokens(messages: &[crate::types::Message]) -> u64 {
+    use crate::types::{ContentBlock, Message, StopReason, UserContent};
+    let chars = |blocks: &[ContentBlock]| -> usize {
+        blocks
+            .iter()
+            .map(|block| match block {
+                ContentBlock::Text { text, .. } => text.len(),
+                ContentBlock::Thinking { thinking, .. } => thinking.len(),
+                ContentBlock::ToolCall(call) => call.name.len() + call.arguments.to_string().len(),
+                ContentBlock::Image { .. } => 4800,
+            })
+            .sum()
+    };
+    let estimate = |message: &Message| -> u64 {
+        let chars = match message {
+            Message::User(user) => match &user.content {
+                UserContent::Text(text) => text.len(),
+                UserContent::Blocks(blocks) => chars(blocks),
+            },
+            Message::Assistant(assistant) => chars(&assistant.content),
+            Message::ToolResult(result) => chars(&result.content),
+        };
+        (chars as f64 / 3.5).ceil() as u64
+    };
+    let usage_tokens = |usage: &crate::types::Usage| {
+        if usage.total_tokens > 0 {
+            usage.total_tokens
+        } else {
+            usage.input + usage.output + usage.cache_read + usage.cache_write
+        }
+    };
+    let mut latest_prefix = i64::MIN;
+    let mut last_usage = None;
+    for (index, message) in messages.iter().enumerate() {
+        let timestamp = match message {
+            Message::User(user) => user.timestamp,
+            Message::Assistant(assistant) => assistant.timestamp,
+            Message::ToolResult(result) => result.timestamp,
+        };
+        if let Message::Assistant(assistant) = message
+            && assistant.timestamp >= latest_prefix
+            && !matches!(
+                assistant.stop_reason,
+                StopReason::Aborted | StopReason::Error
+            )
+            && usage_tokens(&assistant.usage) > 0
+        {
+            last_usage = Some((index, usage_tokens(&assistant.usage)));
+        }
+        latest_prefix = latest_prefix.max(timestamp);
+    }
+    match last_usage {
+        Some((index, tokens)) => tokens + messages[index + 1..].iter().map(estimate).sum::<u64>(),
+        None => messages.iter().map(estimate).sum(),
+    }
+}
+
+/// The output limit for a request: `max_tokens` fit into the context window
+/// with room for the input being counted higher than estimated, as Pi's
+/// `clampMaxTokensToContext`. OpenRouter counts input with its own
+/// tokenizer, up to about 12% above the provider's count, and rejects input
+/// plus `max_tokens` above the window. The margin is the larger of 4096
+/// tokens and 15% of the input while that leaves at least 32768 tokens of
+/// output. Otherwise only 4096 tokens are kept free and output is capped at
+/// 32768.
+pub fn request_max_tokens(
+    model: &Model,
+    context: &Context,
+    options: &crate::stream::StreamOptions,
+) -> u64 {
+    const SAFETY_TOKENS: i64 = 4096;
+    const SAFETY_RATIO: f64 = 0.15;
+    const MIN_OUTPUT_WITH_RATIO_MARGIN: i64 = 32768;
+    let max_tokens = options.max_tokens.unwrap_or(model.max_tokens).max(1);
+    if model.context_window == 0 {
+        return max_tokens;
+    }
+    let window = model.context_window as i64;
+    let input = estimate_context_tokens(&context.messages) as i64;
+    let margin = SAFETY_TOKENS.max((input as f64 * SAFETY_RATIO).ceil() as i64);
+    let mut room = window - input - margin;
+    if room < MIN_OUTPUT_WITH_RATIO_MARGIN {
+        room = MIN_OUTPUT_WITH_RATIO_MARGIN.min(window - input - SAFETY_TOKENS);
+    }
+    max_tokens.min(room.max(1) as u64)
+}
+
 /// Thinking-level token budgets (Anthropic + Google token-budget style).
 pub fn thinking_budget(level: crate::types::ThinkingLevel, max_tokens: u64) -> Option<u64> {
     use crate::types::ThinkingLevel::*;
@@ -498,7 +603,7 @@ pub fn apply_provider_headers(
                 Some("openrouter") => request = request.header("x-session-id", session_id),
                 Some("openai") => {
                     request = request
-                        .header("session_id", session_id)
+                        .header("session-id", session_id)
                         .header("x-client-request-id", session_id);
                 }
                 _ => request = request.header("x-client-request-id", session_id),
@@ -763,6 +868,96 @@ mod provider_header_tests {
         assert_eq!(request.headers()["x-client-request-id"], "session-one");
         assert!(!request.headers().contains_key("session_id"));
         assert!(!request.headers().contains_key("x-session-affinity"));
+    }
+
+    #[test]
+    fn output_limit_leaves_a_margin_for_input_counted_higher() {
+        let mut model = Model {
+            id: "model".into(),
+            name: String::new(),
+            api: "openai-completions".into(),
+            provider: "openrouter".into(),
+            base_url: "https://example.invalid".into(),
+            reasoning: false,
+            input: vec!["text".into()],
+            cost: Default::default(),
+            prompt_cache: None,
+            context_window: 100_000,
+            max_tokens: 64_000,
+            compat: None,
+            thinking_level_map: Default::default(),
+            headers: Default::default(),
+            sampling_params: Default::default(),
+            sampling_params_by_thinking_level: Default::default(),
+        };
+        let context = |input: u64| {
+            let mut reply = AssistantMessage::empty("openai-completions", "openrouter", "model");
+            reply.usage.input = input;
+            reply.timestamp = 1;
+            let user = crate::types::UserMessage {
+                content: crate::types::UserContent::Text("x".repeat(35)),
+                timestamp: 2,
+            };
+            Context {
+                messages: vec![Message::Assistant(reply), Message::User(user)],
+                ..Default::default()
+            }
+        };
+        let options = crate::StreamOptions::default();
+        // 15% of 50,010 input tokens stays free.
+        assert_eq!(
+            request_max_tokens(&model, &context(50_000), &options),
+            42_488
+        );
+        // Near a full window only 4096 tokens stay free.
+        assert_eq!(
+            request_max_tokens(&model, &context(90_000), &options),
+            5_894
+        );
+        assert_eq!(request_max_tokens(&model, &context(0), &options), 64_000);
+        model.context_window = 0;
+        assert_eq!(
+            request_max_tokens(&model, &context(90_000), &options),
+            64_000
+        );
+    }
+
+    #[test]
+    fn responses_openai_affinity_sends_the_documented_session_id_header() {
+        let model = Model {
+            id: "model".into(),
+            name: String::new(),
+            api: "openai-responses".into(),
+            provider: "provider".into(),
+            base_url: "https://example.invalid".into(),
+            reasoning: false,
+            input: vec!["text".into()],
+            cost: Default::default(),
+            prompt_cache: None,
+            context_window: 1,
+            max_tokens: 1,
+            compat: Some(crate::OpenAICompat {
+                session_affinity_format: Some("openai".into()),
+                ..Default::default()
+            }),
+            thinking_level_map: Default::default(),
+            headers: Default::default(),
+            sampling_params: Default::default(),
+            sampling_params_by_thinking_level: Default::default(),
+        };
+        let request = apply_provider_headers(
+            crate::stream::http_client().get("https://example.invalid"),
+            &model,
+            &Context::default(),
+            &crate::StreamOptions {
+                session_id: Some("session-one".into()),
+                ..Default::default()
+            },
+        )
+        .build()
+        .unwrap();
+        assert_eq!(request.headers()["session-id"], "session-one");
+        assert!(!request.headers().contains_key("session_id"));
     }
 
     #[test]

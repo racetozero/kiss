@@ -263,7 +263,7 @@
         "Copilot-Integration-Id": "vscode-chat"
       },
       "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
-      "compat": { "forceAdaptiveThinking": true },
+      "compat": { "forceAdaptiveThinking": true, "supportsTemperature": false },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -1035,6 +1035,25 @@
         }
       },
       "type": "chat"
+    }
+  },
+  "typesafe-system-one": {
+    "classifier:microsoft-decision-1": {
+      "type": "classifier",
+      "id": "microsoft-decision-1",
+      "name": "Microsoft-Decision-1",
+      "api": "typesafe-system-one",
+      "provider": "github-copilot",
+      "baseUrl": "https://api.individual.githubcopilot.com",
+      "input": ["text"],
+      "cost": { "input": 0.042, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 32768,
+      "headers": {
+        "User-Agent": "GitHubCopilotChat/0.35.0",
+        "Editor-Version": "vscode/1.107.0",
+        "Editor-Plugin-Version": "copilot-chat/0.35.0",
+        "Copilot-Integration-Id": "vscode-chat"
+      }
     }
   }
 }

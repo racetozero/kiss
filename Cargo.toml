@@ -33,12 +33,12 @@ unimplemented = "warn"
 
 [workspace.metadata.pi]
 repository = "earendil-works/pi"
-release = "v1.5.0"
-release_commit = "f9a26365568127461c47a07a37dcb42c140a3ac5"
-release_published_at = "2026-11-02T11:05:31Z"
-parity_commit = "f9a26365568127461c47a07a37dcb42c140a3ac5"
-parity_checked_at = "2026-11-03T02:22:12Z"
-catalog_package = "@earendil-works/pi-ai@1.5.0"
+release = "v1.5.2"
+release_commit = "b4afdddf44e059c67ccf5097e5317d913521b470"
+release_published_at = "2026-11-10T12:25:43Z"
+parity_commit = "b4afdddf44e059c67ccf5097e5317d913521b470"
+parity_checked_at = "2026-11-14T01:05:23Z"
+catalog_package = "@earendil-works/pi-ai@1.5.2"
 
 [workspace.dependencies]
 anyhow = "1"

@@ -105,61 +105,6 @@
       },
       "type": "chat"
     },
-    "chat:accounts/fireworks/models/gpt-oss-120b": {
-      "id": "accounts/fireworks/models/gpt-oss-120b",
-      "name": "GPT OSS 120B",
-      "api": "anthropic-messages",
-      "provider": "fireworks",
-      "baseUrl": "https://api.fireworks.ai/inference",
-      "reasoning": true,
-      "input": ["text"],
-      "cost": { "input": 0.15, "output": 0.6, "cacheRead": 0.015, "cacheWrite": 0 },
-      "contextWindow": 131072,
-      "maxTokens": 32768,
-      "compat": {
-        "allowEmptySignature": true,
-        "sendSessionAffinityHeaders": true,
-        "supportsEagerToolInputStreaming": false,
-        "supportsCacheControlOnTools": false,
-        "supportsLongCacheRetention": false,
-        "forceAdaptiveThinking": true
-      },
-      "thinkingLevelMap": {
-        "off": null,
-        "minimal": null,
-        "low": "low",
-        "medium": "medium",
-        "high": "high",
-        "xhigh": null,
-        "max": null
-      },
-      "type": "chat"
-    },
-    "chat:accounts/fireworks/models/inkling": {
-      "id": "accounts/fireworks/models/inkling",
-      "name": "Inkling",
-      "api": "anthropic-messages",
-      "provider": "fireworks",
-      "baseUrl": "https://api.fireworks.ai/inference",
-      "reasoning": true,
-      "input": ["text", "image"],
-      "cost": { "input": 1, "output": 4.05, "cacheRead": 0.17, "cacheWrite": 0 },
-      "contextWindow": 1048576,
-      "maxTokens": 1048576,
-      "compat": {
-        "allowEmptySignature": true,
-        "sendSessionAffinityHeaders": true,
-        "supportsEagerToolInputStreaming": false,
-        "supportsCacheControlOnTools": false,
-        "supportsLongCacheRetention": false
-      },
-      "inputLimits": {
-        "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
-        }
-      },
-      "type": "chat"
-    },
     "chat:accounts/fireworks/models/minimax-m3": {
       "id": "accounts/fireworks/models/minimax-m3",
       "name": "MiniMax-M3",
@@ -257,46 +202,6 @@
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
-      },
-      "type": "chat"
-    },
-    "chat:accounts/fireworks/models/nemotron-3-ultra-nvfp4": {
-      "id": "accounts/fireworks/models/nemotron-3-ultra-nvfp4",
-      "name": "Nemotron 3 Ultra 550B A55B",
-      "api": "anthropic-messages",
-      "provider": "fireworks",
-      "baseUrl": "https://api.fireworks.ai/inference",
-      "reasoning": true,
-      "input": ["text"],
-      "cost": { "input": 0.6, "output": 2.4, "cacheRead": 0.12, "cacheWrite": 0 },
-      "contextWindow": 262144,
-      "maxTokens": 128000,
-      "compat": {
-        "allowEmptySignature": true,
-        "sendSessionAffinityHeaders": true,
-        "supportsEagerToolInputStreaming": false,
-        "supportsCacheControlOnTools": false,
-        "supportsLongCacheRetention": false
-      },
-      "type": "chat"
-    },
-    "chat:accounts/fireworks/models/nemotron-lightning-3p5-30b-a3b": {
-      "id": "accounts/fireworks/models/nemotron-lightning-3p5-30b-a3b",
-      "name": "Nemotron 3.5 Lightning 30B A3B",
-      "api": "anthropic-messages",
-      "provider": "fireworks",
-      "baseUrl": "https://api.fireworks.ai/inference",
-      "reasoning": true,
-      "input": ["text"],
-      "cost": { "input": 0.05, "output": 0.2, "cacheRead": 0.01, "cacheWrite": 0 },
-      "contextWindow": 262144,
-      "maxTokens": 262144,
-      "compat": {
-        "allowEmptySignature": true,
-        "sendSessionAffinityHeaders": true,
-        "supportsEagerToolInputStreaming": false,
-        "supportsCacheControlOnTools": false,
-        "supportsLongCacheRetention": false
       },
       "type": "chat"
     },
@@ -409,6 +314,41 @@
       "reasoning": true,
       "input": ["text", "image"],
       "cost": { "input": 0.21, "output": 0.84, "cacheRead": 0.0042, "cacheWrite": 0 },
+      "contextWindow": 1000000,
+      "maxTokens": 384000,
+      "compat": {
+        "allowEmptySignature": true,
+        "sendSessionAffinityHeaders": true,
+        "supportsEagerToolInputStreaming": false,
+        "supportsCacheControlOnTools": false,
+        "supportsLongCacheRetention": false,
+        "forceAdaptiveThinking": true
+      },
+      "thinkingLevelMap": {
+        "off": "none",
+        "minimal": null,
+        "low": "low",
+        "medium": null,
+        "high": "high",
+        "xhigh": null,
+        "max": "max"
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      },
+      "type": "chat"
+    },
+    "chat:accounts/fireworks/routers/deepseek-v4p1-flash-1017-ultrafast": {
+      "id": "accounts/fireworks/routers/deepseek-v4p1-flash-1017-ultrafast",
+      "name": "DeepSeek V4.1 Flash 1017 Ultra-fast",
+      "api": "anthropic-messages",
+      "provider": "fireworks",
+      "baseUrl": "https://api.fireworks.ai/inference",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 2.4, "output": 9.6, "cacheRead": 0.048, "cacheWrite": 0 },
       "contextWindow": 1000000,
       "maxTokens": 384000,
       "compat": {
@@ -679,6 +619,44 @@
       "reasoning": true,
       "input": ["text", "image"],
       "cost": { "input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 0 },
+      "contextWindow": 1048576,
+      "maxTokens": 131072,
+      "compat": {
+        "supportsStrictMode": true,
+        "supportsStore": false,
+        "supportsDeveloperRole": false,
+        "sendSessionAffinityHeaders": true,
+        "supportsLongCacheRetention": false,
+        "requiresReasoningContentOnAssistantMessages": true,
+        "thinkingFormat": "openai",
+        "supportsMidConvoSystemMessages": true,
+        "supportsMidConvoToolAdditions": true
+      },
+      "thinkingLevelMap": {
+        "off": null,
+        "minimal": null,
+        "low": "low",
+        "medium": null,
+        "high": "high",
+        "xhigh": null,
+        "max": "max"
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      },
+      "type": "chat"
+    },
+    "chat:accounts/fireworks/models/kimi-k3p1-pro": {
+      "id": "accounts/fireworks/models/kimi-k3p1-pro",
+      "name": "Kimi K3.1 Pro",
+      "api": "openai-completions",
+      "provider": "fireworks",
+      "baseUrl": "https://api.fireworks.ai/inference/v1",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 2, "output": 10, "cacheRead": 0.2, "cacheWrite": 0 },
       "contextWindow": 1048576,
       "maxTokens": 131072,
       "compat": {

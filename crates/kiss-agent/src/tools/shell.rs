@@ -38,9 +38,13 @@ pub fn spawn(
 /// End a command started by [`spawn`] and every process in its group. A
 /// shell can ignore SIGTERM and a surviving child keeps the output pipes
 /// open, so this kills, and callers must not wait for end of output.
-pub fn kill_group(child: &mut Child) {
+/// `group` is the child's pid from spawn time. It still reaches background
+/// processes after the shell was reaped, when `child.id()` is `None`.
+pub fn kill_group(child: &mut Child, group: Option<u32>) {
+    #[cfg(not(unix))]
+    let _ = group;
     #[cfg(unix)]
-    if let Some(pid) = child.id() {
+    if let Some(pid) = group.or(child.id()) {
         // macOS signals group members one at a time. A killed child can wake
         // its shell before the shell gets the signal, so `a; b` could start
         // `b`. Stopping the group first narrows that race.

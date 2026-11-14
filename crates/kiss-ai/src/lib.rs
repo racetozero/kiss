@@ -26,7 +26,7 @@ pub mod stream;
 pub mod types;
 
 pub use event::{AssistantEvent, EventSink, EventStream};
-pub use model::{Model, ModelCost, ModelCostTier, OpenAICompat, PromptCache};
+pub use model::{Model, ModelCost, ModelCostTier, OpenAICompat, PromptCache, PromptCacheKeyMode};
 #[cfg(feature = "native")]
 pub use registry::Registry;
 #[cfg(feature = "native")]

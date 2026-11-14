@@ -332,7 +332,7 @@ fn build_request(model: &Model, context: &Context, options: &StreamOptions) -> V
     }
 
     let mut generation_config = json!({
-        "maxOutputTokens": options.max_tokens.unwrap_or(model.max_tokens),
+        "maxOutputTokens": super::request_max_tokens(model, context, options),
     });
     if let Some(t) = options.temperature {
         generation_config["temperature"] = json!(t);
@@ -360,7 +360,7 @@ fn build_request(model: &Model, context: &Context, options: &StreamOptions) -> V
                 "includeThoughts": true,
             });
         } else if let Some(budget) =
-            thinking_budget(level, options.max_tokens.unwrap_or(model.max_tokens))
+            thinking_budget(level, super::request_max_tokens(model, context, options))
         {
             generation_config["thinkingConfig"] = json!({
                 "thinkingBudget": budget,

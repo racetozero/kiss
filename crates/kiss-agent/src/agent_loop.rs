@@ -272,6 +272,7 @@ async fn stream_assistant(
         session_id: config.session_id.clone(),
         transport: config.transport,
         cancel,
+        disable_continuation: false,
     };
 
     let mut stream = match credential_error {

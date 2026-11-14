@@ -265,6 +265,10 @@ enum PickerKind {
     Settings,
     Trust,
     ImportConfirm(PathBuf),
+    /// Continue, fork, or cancel opening the session file at the first path,
+    /// whose stored working directory is gone. The second path is the
+    /// current directory. At startup (`true`), cancel quits.
+    MissingSessionCwd(PathBuf, PathBuf, bool),
     Llama(Vec<LlamaModel>),
     McpServers,
     McpActions(String, Vec<McpPanelAction>),
@@ -1706,6 +1710,21 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
         app.cells.push(Cell::Notice(
             "No credentials yet. Type /login to sign in.".into(),
         ));
+    }
+    // `--session` named a session whose folder is gone: ask to continue or
+    // fork it here first. A startup message waits in the editor.
+    let missing_cwd = {
+        let manager = session.manager.lock().unwrap();
+        manager
+            .missing_cwd()
+            .map(std::path::Path::to_path_buf)
+            .zip(manager.session_file().map(std::path::Path::to_path_buf))
+    };
+    if let Some((stored, path)) = missing_cwd {
+        open_missing_cwd_picker(&mut app, &path, &stored, true);
+        if let Some(message) = initial_message.take() {
+            app.editor.set_text(&message);
+        }
     }
     update_thinking_border(&mut app, session.thinking_level());
     refresh_git_branch(&mut app, &session);
@@ -5000,7 +5019,14 @@ fn handle_session_picker_key(
         }
         SessionPickerAction::Resume(record) => {
             app.session_picker = None;
-            switch_session(app, session, &record);
+            match &record.source {
+                SessionSource::Kiss(path)
+                    if !record.cwd.as_os_str().is_empty() && !record.cwd.exists() =>
+                {
+                    open_missing_cwd_picker(app, path, &record.cwd, false);
+                }
+                _ => switch_session(app, session, &record),
+            }
         }
         SessionPickerAction::Rename { path, name } => {
             let (is_current, renamed) = {
@@ -5070,12 +5096,15 @@ fn open_login_picker(app: &mut App) {
 }
 
 /// Every provider `/login` offers: the built-in catalog, the decision-model
-/// services, and a local llama.cpp server.
+/// services, and a local llama.cpp server. Preferred partners come first.
 fn login_providers() -> impl Iterator<Item = &'static str> {
-    kiss_ai::registry::BUILTIN_PROVIDER_IDS
+    let mut providers: Vec<&'static str> = kiss_ai::registry::BUILTIN_PROVIDER_IDS
         .iter()
         .copied()
         .chain(["typesafe", "liquid", "llama.cpp"])
+        .collect();
+    kiss_ai::registry::sort_providers(&mut providers);
+    providers.into_iter()
 }
 
 fn open_login_picker_with_filter(app: &mut App, filter: Option<&str>) {
@@ -5084,7 +5113,7 @@ fn open_login_picker_with_filter(app: &mut App, filter: Option<&str>) {
         .iter()
         .enumerate()
         .map(|(value, provider)| SelectItem {
-            label: provider.clone(),
+            label: provider_label(provider),
             detail: Some(if provider == "llama.cpp" {
                 "Router URL and optional API key".into()
             } else {
@@ -5213,8 +5242,18 @@ fn open_login_methods_picker(app: &mut App, provider: &str) {
     });
 }
 
+/// A provider ID, with `✦` after a preferred partner.
+fn provider_label(provider: &str) -> String {
+    if kiss_ai::registry::PREFERRED_PROVIDER_IDS.contains(&provider) {
+        format!("{provider} ✦")
+    } else {
+        provider.to_string()
+    }
+}
+
 fn open_logout_picker(app: &mut App) {
-    let providers = kiss_ai::auth::stored_provider_ids();
+    let mut providers = kiss_ai::auth::stored_provider_ids();
+    kiss_ai::registry::sort_providers(&mut providers);
     if providers.is_empty() {
         app.cells.push(Cell::Notice(
             "no stored credentials. Environment variables are unchanged".into(),
@@ -5225,7 +5264,7 @@ fn open_logout_picker(app: &mut App) {
         .iter()
         .enumerate()
         .map(|(value, provider)| SelectItem {
-            label: provider.clone(),
+            label: provider_label(provider),
             detail: Some("Stored credential".into()),
             value,
         })
@@ -6366,6 +6405,22 @@ fn handle_picker_key(
     resources: &mut InteractiveResources,
     command_tx: &mpsc::UnboundedSender<CommandEvent>,
 ) -> Flow {
+    // Cancelling the choice for a session whose folder is gone quits at
+    // startup, as no session was chosen.
+    if let Some(Picker {
+        kind: PickerKind::MissingSessionCwd(_, cwd, true),
+        list,
+    }) = app.picker.as_mut()
+        && (key.key == Key::Escape
+            || *key == KeyEvent::ctrl('c')
+            || (key.key == Key::Enter
+                && list.current().map(|item| item.value)
+                    == crate::setup::missing_cwd_choices(cwd)
+                        .iter()
+                        .position(|(choice, _)| *choice == crate::setup::MissingCwdChoice::Cancel)))
+    {
+        return Flow::Quit;
+    }
     if key.key == Key::Escape
         && matches!(
             app.picker.as_ref().map(|picker| &picker.kind),
@@ -6681,6 +6736,42 @@ fn apply_picker_selection(
                 ))),
             }
         }
+        PickerKind::MissingSessionCwd(path, cwd, _) => {
+            let choice = crate::setup::missing_cwd_choices(&cwd)
+                .get(value)
+                .map(|(choice, _)| *choice);
+            let result = match choice {
+                Some(crate::setup::MissingCwdChoice::Continue) => session.replace_manager(|_| {
+                    let mut manager = kiss_coding::SessionManager::open(&path)?;
+                    manager.continue_in(&cwd);
+                    Ok(manager)
+                }),
+                // Fork like --fork, so the next resume does not ask again.
+                Some(crate::setup::MissingCwdChoice::Fork) => {
+                    session.replace_manager(|current| current.fork_like(&path, &cwd))
+                }
+                _ => {
+                    app.cells.push(Cell::Notice("resume cancelled".into()));
+                    return;
+                }
+            };
+            match result {
+                Ok(()) => {
+                    adopt_session(app, session, Transcript::Rebuild);
+                    let id = session.manager.lock().unwrap().session_id().to_string();
+                    app.cells.push(Cell::Notice(
+                        if choice == Some(crate::setup::MissingCwdChoice::Fork) {
+                            format!("forked into a new session {id}")
+                        } else {
+                            format!("resumed session {id} in the current directory")
+                        },
+                    ));
+                }
+                Err(error) => app
+                    .cells
+                    .push(Cell::Error(format!("could not resume session: {error:#}"))),
+            }
+        }
         PickerKind::ImportConfirm(path) => {
             if value == 0 {
                 import_session(app, session, &path);
@@ -6937,6 +7028,31 @@ fn apply_settings_selection(
         SettingRow::DesktopNotifications => resources.settings.desktop_notifications.toggle(),
     }
     save_interactive_settings(app, session, resources);
+}
+
+/// Ask whether to continue or fork the session at `path`, whose stored
+/// working directory `stored` is gone, in the current directory.
+fn open_missing_cwd_picker(
+    app: &mut App,
+    path: &std::path::Path,
+    stored: &std::path::Path,
+    startup: bool,
+) {
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let items = crate::setup::missing_cwd_choices(&cwd)
+        .into_iter()
+        .enumerate()
+        .map(|(value, (_, label))| SelectItem {
+            label,
+            detail: None,
+            value,
+        })
+        .collect();
+    let title = format!("Session cwd does not exist: {}", stored.display());
+    app.show_picker(Picker {
+        kind: PickerKind::MissingSessionCwd(path.to_path_buf(), cwd, startup),
+        list: SelectList::new(&title, items, app.theme.clone()),
+    });
 }
 
 fn switch_session(app: &mut App, session: &Arc<kiss_coding::AgentSession>, record: &SessionRecord) {

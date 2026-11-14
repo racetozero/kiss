@@ -21,6 +21,9 @@ struct Compat {
     thinking_format: Option<String>,
     max_tokens_field: &'static str,
     vllm_priority: Option<i64>,
+    prompt_cache_key: bool,
+    non_null_assistant_content: bool,
+    tools_with_tool_history: bool,
 }
 
 fn detect_compat(model: &Model) -> Compat {
@@ -45,6 +48,13 @@ fn detect_compat(model: &Model) -> Compat {
             _ => "max_tokens",
         },
         vllm_priority: c.vllm_priority,
+        prompt_cache_key: match c.prompt_cache_key_mode {
+            Some(crate::PromptCacheKeyMode::Enabled) => true,
+            Some(crate::PromptCacheKeyMode::Disabled) => false,
+            Some(crate::PromptCacheKeyMode::Auto) | None => is_openai,
+        },
+        non_null_assistant_content: c.requires_non_null_assistant_content.unwrap_or(false),
+        tools_with_tool_history: c.requires_tools_with_tool_history.unwrap_or(false),
     }
 }
 
@@ -474,7 +484,7 @@ fn build_request(
                     })
                     .collect();
                 let mut m = json!({"role": "assistant"});
-                m["content"] = if text.is_empty() {
+                m["content"] = if text.is_empty() && !compat.non_null_assistant_content {
                     Value::Null
                 } else {
                     Value::String(text)
@@ -541,7 +551,7 @@ fn build_request(
     if compat.usage_in_streaming {
         body["stream_options"] = json!({"include_usage": true});
     }
-    body[compat.max_tokens_field] = json!(options.max_tokens.unwrap_or(model.max_tokens));
+    body[compat.max_tokens_field] = json!(super::request_max_tokens(model, context, options));
     if let Some(priority) = compat.vllm_priority {
         body["priority"] = json!(priority);
     }
@@ -599,9 +609,25 @@ fn build_request(
                 })
                 .collect(),
         );
+    } else if compat.tools_with_tool_history
+        && context.messages.iter().any(|message| match message {
+            Message::ToolResult(_) => true,
+            Message::Assistant(assistant) => assistant
+                .content
+                .iter()
+                .any(|block| matches!(block, ContentBlock::ToolCall(_))),
+            Message::User(_) => false,
+        })
+    {
+        body["tools"] = json!([]);
     }
     if let Some(choice) = &options.tool_choice {
         body["tool_choice"] = choice.openai_chat_value();
+    }
+    if compat.prompt_cache_key
+        && let Some(session) = &options.session_id
+    {
+        body["prompt_cache_key"] = json!(session);
     }
     let level_params = model
         .sampling_params_by_thinking_level
@@ -653,6 +679,78 @@ mod tests {
             ..Default::default()
         }));
         assert!(!lenient.finish_reason);
+    }
+
+    fn tool_history() -> Context {
+        let mut assistant =
+            crate::types::AssistantMessage::empty("openai-completions", "custom", "model");
+        assistant
+            .content
+            .push(ContentBlock::ToolCall(crate::types::ToolCall {
+                id: "call_1".into(),
+                name: "read".into(),
+                arguments: json!({"path": "a"}),
+                thought_signature: None,
+                arguments_error: None,
+            }));
+        Context {
+            messages: vec![Message::Assistant(assistant)],
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn tool_history_compat_sends_empty_content_and_empty_tools() {
+        let model = model_with_compat(OpenAICompat::default());
+        let body = build_request(
+            &model,
+            &tool_history(),
+            &StreamOptions::default(),
+            &detect_compat(&model),
+        );
+        assert!(body.get("tools").is_none());
+        assert_eq!(body["messages"][0]["content"], Value::Null);
+
+        let model = model_with_compat(OpenAICompat {
+            requires_non_null_assistant_content: Some(true),
+            requires_tools_with_tool_history: Some(true),
+            ..Default::default()
+        });
+        let body = build_request(
+            &model,
+            &tool_history(),
+            &StreamOptions::default(),
+            &detect_compat(&model),
+        );
+        assert_eq!(body["tools"], json!([]));
+        assert_eq!(body["messages"][0]["content"], "");
+    }
+
+    #[test]
+    fn prompt_cache_key_mode_controls_the_cache_key() {
+        let options = StreamOptions {
+            session_id: Some("session-one".into()),
+            ..Default::default()
+        };
+        let key = |model: &Model| {
+            build_request(model, &Context::default(), &options, &detect_compat(model))
+                .get("prompt_cache_key")
+                .cloned()
+        };
+        let mut openai = model_with_compat(OpenAICompat::default());
+        openai.base_url = "https://api.openai.com/v1".into();
+        assert_eq!(key(&openai), Some(json!("session-one")));
+        assert_eq!(key(&model_with_compat(OpenAICompat::default())), None);
+        let enabled = model_with_compat(OpenAICompat {
+            prompt_cache_key_mode: Some(crate::PromptCacheKeyMode::Enabled),
+            ..Default::default()
+        });
+        assert_eq!(key(&enabled), Some(json!("session-one")));
+        openai.compat = Some(OpenAICompat {
+            prompt_cache_key_mode: Some(crate::PromptCacheKeyMode::Disabled),
+            ..Default::default()
+        });
+        assert_eq!(key(&openai), None);
     }
 
     #[test]
