@@ -1421,16 +1421,18 @@ fn maybe_refresh_status_line(
     if status_line.running {
         return None;
     }
-    let payload = status_line_payload(app.git_branch.as_deref(), session);
-    if status_line.last_payload.as_deref() == Some(payload.as_str()) {
-        return None;
-    }
     let now = Instant::now();
+    // The debounce gate comes before the payload, so a streaming burst or
+    // typing serializes session state at most once per debounce window.
     if let Some(last) = status_line.last_attempt {
         let ready = last + status_line.config.debounce();
         if now < ready {
             return Some(ready);
         }
+    }
+    let payload = status_line_payload(app.git_branch.as_deref(), session);
+    if status_line.last_payload.as_deref() == Some(payload.as_str()) {
+        return None;
     }
     status_line.generation += 1;
     status_line.running = true;
@@ -9059,9 +9061,12 @@ mod tests {
     async fn status_line_refreshes_run_once_per_payload_and_debounce() {
         let mut app = test_app();
         let session = session_with_cache_usage();
-        app.status_line = test_status_line("true");
         let (tx, mut rx) = mpsc::unbounded_channel();
 
+        // Unconfigured, the check is a no-op with no wake deadline.
+        assert_eq!(maybe_refresh_status_line(&mut app, &session, &tx), None);
+
+        app.status_line = test_status_line("true");
         // The first refresh spawns a run.
         assert_eq!(maybe_refresh_status_line(&mut app, &session, &tx), None);
         assert!(app.status_line.as_ref().unwrap().running);
@@ -9086,19 +9091,19 @@ mod tests {
         let status_line = app.status_line.as_ref().unwrap();
         assert!(!status_line.running);
 
-        // The payload did not change, so nothing new runs.
+        // Inside the debounce window nothing runs; the loop is only told
+        // when to recheck. The payload is not even serialized here.
+        assert!(maybe_refresh_status_line(&mut app, &session, &tx).is_some());
+        assert!(!app.status_line.as_ref().unwrap().running);
+
+        // Past the debounce, an unchanged payload runs nothing.
+        app.status_line.as_mut().unwrap().last_attempt =
+            Some(Instant::now() - Duration::from_secs(1));
         assert_eq!(maybe_refresh_status_line(&mut app, &session, &tx), None);
         assert!(!app.status_line.as_ref().unwrap().running);
 
-        // A changed payload inside the debounce window waits it out.
+        // A changed payload past the debounce runs.
         app.git_branch = Some("feature".into());
-        let wake = maybe_refresh_status_line(&mut app, &session, &tx);
-        assert!(wake.is_some());
-        assert!(!app.status_line.as_ref().unwrap().running);
-
-        // After the debounce the same change runs.
-        app.status_line.as_mut().unwrap().last_attempt =
-            Some(Instant::now() - Duration::from_secs(1));
         assert_eq!(maybe_refresh_status_line(&mut app, &session, &tx), None);
         assert!(app.status_line.as_ref().unwrap().running);
     }
