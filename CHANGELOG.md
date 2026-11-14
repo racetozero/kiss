@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Added
+
+- A Claude Code-compatible custom status line. Set `statusLine` in
+  `settings.json` to `{"type": "command", "command": "~/.claude/statusline.sh"}`
+  and the footer shows the command's output. The command receives the same
+  JSON payload on stdin as in Claude Code (`cwd`, `session_id`, `model`,
+  `workspace`, `cost`, `context_window`, …), so existing status line scripts
+  work unmodified. Optional `padding`, `debounceMs` (default 300), and
+  `timeoutMs` (default 5000) tune rendering and refresh.
+
 ### Fixed
 
 - `Option+Left` and `Option+Right` now move the cursor one word in the editor

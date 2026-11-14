@@ -307,6 +307,42 @@ pub struct WebMcpSettings {
     pub cdp: Option<Value>,
 }
 
+/// A Claude Code-compatible custom status line: an external command that
+/// receives session state as JSON on stdin and prints the footer to stdout.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct StatusLineSettings {
+    /// Only "command" is recognized; other types are ignored.
+    pub r#type: String,
+    pub command: String,
+    /// Leading spaces prepended to every output line.
+    pub padding: Option<usize>,
+    /// Minimum milliseconds between command runs.
+    pub debounce_ms: Option<u64>,
+    /// Milliseconds after which a run is killed and its output dropped.
+    pub timeout_ms: Option<u64>,
+}
+
+impl StatusLineSettings {
+    /// The command to run, when this configuration is usable.
+    pub fn command(&self) -> Option<&str> {
+        (self.r#type == "command" && !self.command.trim().is_empty())
+            .then_some(self.command.as_str())
+    }
+
+    pub fn padding(&self) -> usize {
+        self.padding.unwrap_or(0)
+    }
+
+    pub fn debounce(&self) -> std::time::Duration {
+        std::time::Duration::from_millis(self.debounce_ms.unwrap_or(300))
+    }
+
+    pub fn timeout(&self) -> std::time::Duration {
+        std::time::Duration::from_millis(self.timeout_ms.unwrap_or(5_000))
+    }
+}
+
 /// Where `/share` uploads a session.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
@@ -360,6 +396,8 @@ pub struct Settings {
     pub voice_backend: Option<String>,
     pub markdown: MarkdownSettings,
     pub webmcp: WebMcpSettings,
+    /// Replace the footer with the output of an external command.
+    pub status_line: Option<StatusLineSettings>,
     /// Unknown keys survive load/save.
     #[serde(flatten)]
     pub extra: serde_json::Map<String, Value>,
@@ -890,6 +928,35 @@ mod tests {
             vec!["blocked.example".to_string()]
         );
         assert_eq!(loaded.webmcp.cdp, Some(json!(9333)));
+    }
+
+    #[test]
+    fn status_line_uses_the_claude_code_wire_shape() {
+        let settings: Settings = serde_json::from_value(json!({
+            "statusLine": {"type": "command", "command": "~/.claude/statusline.sh", "padding": 1}
+        }))
+        .unwrap();
+        let status_line = settings.status_line.as_ref().unwrap();
+        assert_eq!(status_line.command(), Some("~/.claude/statusline.sh"));
+        assert_eq!(status_line.padding(), 1);
+        assert_eq!(
+            status_line.debounce(),
+            std::time::Duration::from_millis(300)
+        );
+        assert_eq!(status_line.timeout(), std::time::Duration::from_secs(5));
+        assert_eq!(
+            serde_json::to_value(&settings).unwrap()["statusLine"]["command"],
+            "~/.claude/statusline.sh"
+        );
+
+        // An unrecognized type or an empty command disables the status line.
+        let unknown: StatusLineSettings =
+            serde_json::from_value(json!({"type": "widget", "command": "x"})).unwrap();
+        assert_eq!(unknown.command(), None);
+        let empty: StatusLineSettings =
+            serde_json::from_value(json!({"type": "command", "command": " "})).unwrap();
+        assert_eq!(empty.command(), None);
+        assert_eq!(Settings::default().status_line, None);
     }
 
     #[test]

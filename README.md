@@ -1324,6 +1324,30 @@ configuration only after you trust the project.
 Open `/settings` for common TUI settings. Run `kiss --help` for all command-line
 options. Custom themes live in `~/.kiss/agent/settings.json`.
 
+### Custom status line
+
+Replace the interactive footer with the output of your own command, using the
+same contract as Claude Code. Existing `~/.claude/statusline.sh` scripts work
+with little or no modification:
+
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "~/.claude/statusline.sh"
+  }
+}
+```
+
+The command receives a JSON payload on stdin (`cwd`, `session_id`,
+`transcript_path`, `model.id`, `model.display_name`, `workspace`,
+`cost.total_cost_usd`, `context_window` usage, plus kiss extras under `kiss`)
+and its stdout, ANSI colors included, becomes the footer (up to 5 lines).
+The command re-runs only when that payload changes, debounced by `debounceMs`
+(default 300) and killed after `timeoutMs` (default 5000). Optional `padding`
+adds leading spaces to each line. A failing or silent command keeps the
+previous output; before the first success the default footer shows.
+
 ### Tool selection
 
 Choose which tools are available when a session starts with `defaultTools` in

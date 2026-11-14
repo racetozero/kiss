@@ -122,6 +122,41 @@ struct App {
     /// `/accounts add` in progress: provider and optional label. The next
     /// successful login for that provider becomes a new pooled account.
     pending_account_add: Option<(String, Option<String>)>,
+    /// The Claude Code-compatible custom status line, when configured.
+    status_line: Option<StatusLine>,
+}
+
+/// The rendered footer may show fewer lines than a status line command
+/// prints; this caps how much screen a runaway script can take.
+const STATUS_LINE_MAX_LINES: usize = 5;
+
+/// A configured `statusLine` command and its last output. The main loop
+/// re-runs the command when the JSON payload it would receive changes,
+/// debounced by the configured interval.
+struct StatusLine {
+    config: kiss_coding::settings::StatusLineSettings,
+    /// The last successful output, rendered instead of the default footer.
+    lines: Vec<String>,
+    /// The payload last sent, so unchanged state spawns no command.
+    last_payload: Option<String>,
+    last_attempt: Option<Instant>,
+    /// Identifies the current run, so results of an older run or a
+    /// pre-reload configuration drop.
+    generation: u64,
+    running: bool,
+}
+
+fn status_line_state(settings: &kiss_coding::Settings) -> Option<StatusLine> {
+    let config = settings.status_line.clone()?;
+    config.command()?;
+    Some(StatusLine {
+        config,
+        lines: Vec::new(),
+        last_payload: None,
+        last_attempt: None,
+        generation: 0,
+        running: false,
+    })
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -514,6 +549,12 @@ enum CommandEvent {
     VoicePreview {
         generation: u64,
         text: String,
+    },
+    /// The status line command finished. Empty lines mean it failed or
+    /// printed nothing, which keeps the previous output.
+    StatusLineFinished {
+        generation: u64,
+        lines: Vec<String>,
     },
 }
 
@@ -1118,6 +1159,16 @@ impl App {
     }
 
     fn footer(&self, width: usize, session: &Arc<kiss_coding::AgentSession>) -> Vec<String> {
+        if let Some(status_line) = &self.status_line
+            && !status_line.lines.is_empty()
+        {
+            let pad = " ".repeat(status_line.config.padding());
+            return status_line
+                .lines
+                .iter()
+                .map(|line| kiss_tui::text::truncate_to_width(&format!("{pad}{line}"), width))
+                .collect();
+        }
         let model = session.model();
         let totals = session.totals();
         let (used, window) = session.context_usage();
@@ -1293,6 +1344,153 @@ fn read_git_branch(cwd: &Path) -> Option<String> {
 fn refresh_git_branch(app: &mut App, session: &Arc<kiss_coding::AgentSession>) {
     let cwd = session.manager.lock().unwrap().cwd().to_path_buf();
     app.git_branch = read_git_branch(&cwd);
+}
+
+/// The Claude Code-compatible JSON a status line command reads on stdin.
+/// Every field a stock `~/.claude/statusline.sh` reads keeps Claude's name
+/// and shape; kiss-specific values live under the `kiss` key.
+fn status_line_payload(
+    git_branch: Option<&str>,
+    session: &Arc<kiss_coding::AgentSession>,
+) -> String {
+    let model = session.model();
+    let totals = session.totals();
+    let (used, window) = session.context_usage();
+    let used_percentage = if window > 0 {
+        ((used as f64 / window as f64) * 100.0).round().min(100.0) as u64
+    } else {
+        0
+    };
+    let manager = session.manager.lock().unwrap();
+    let session_file = manager
+        .session_file()
+        .map(|path| path.display().to_string());
+    let cwd = manager.cwd().display().to_string();
+    let payload = serde_json::json!({
+        "hook_event_name": "Status",
+        "session_id": manager.session_id(),
+        "transcript_path": session_file,
+        "cwd": cwd,
+        "version": env!("CARGO_PKG_VERSION"),
+        "model": {
+            "id": model.id,
+            "display_name": if model.name.is_empty() { &model.id } else { &model.name },
+        },
+        "workspace": {"current_dir": cwd, "project_dir": cwd},
+        "output_style": {"name": "default"},
+        "cost": {
+            "total_cost_usd": totals.cost.total,
+            "total_duration_ms": null,
+            "total_api_duration_ms": null,
+            "total_lines_added": null,
+            "total_lines_removed": null,
+        },
+        "context_window": {
+            "total_input_tokens": totals.input,
+            "total_output_tokens": totals.output,
+            "context_window_size": window,
+            "used_percentage": used_percentage,
+            "remaining_percentage": 100u64.saturating_sub(used_percentage),
+            "current_usage": {
+                "input_tokens": totals.input,
+                "output_tokens": totals.output,
+                "cache_creation_input_tokens": totals.cache_write,
+                "cache_read_input_tokens": totals.cache_read,
+            },
+        },
+        "exceeds_200k_tokens": used > 200_000,
+        "kiss": {
+            "session_file": session_file,
+            "session_name": manager.session_name(),
+            "git_branch": git_branch,
+            "provider": model.provider,
+            "thinking_level": session.thinking_level().as_str(),
+        },
+    });
+    payload.to_string()
+}
+
+/// Run the status line command when the payload it would receive changed.
+/// Returns the time to recheck when a change is waiting out the debounce.
+fn maybe_refresh_status_line(
+    app: &mut App,
+    session: &Arc<kiss_coding::AgentSession>,
+    tx: &mpsc::UnboundedSender<CommandEvent>,
+) -> Option<Instant> {
+    let status_line = app.status_line.as_mut()?;
+    if status_line.running {
+        return None;
+    }
+    let payload = status_line_payload(app.git_branch.as_deref(), session);
+    if status_line.last_payload.as_deref() == Some(payload.as_str()) {
+        return None;
+    }
+    let now = Instant::now();
+    if let Some(last) = status_line.last_attempt {
+        let ready = last + status_line.config.debounce();
+        if now < ready {
+            return Some(ready);
+        }
+    }
+    status_line.generation += 1;
+    status_line.running = true;
+    status_line.last_attempt = Some(now);
+    status_line.last_payload = Some(payload.clone());
+    let generation = status_line.generation;
+    let command = status_line.config.command()?.to_string();
+    let timeout = status_line.config.timeout();
+    let cwd = session.manager.lock().unwrap().cwd().to_path_buf();
+    let tx = tx.clone();
+    tokio::spawn(async move {
+        let lines = run_status_line_command(&command, &payload, &cwd, timeout).await;
+        let _ = tx.send(CommandEvent::StatusLineFinished { generation, lines });
+    });
+    None
+}
+
+/// Run `command` through the shell with `payload` on stdin and return its
+/// stdout lines. A failure of any kind returns no lines.
+async fn run_status_line_command(
+    command: &str,
+    payload: &str,
+    cwd: &Path,
+    timeout: Duration,
+) -> Vec<String> {
+    use tokio::io::AsyncWriteExt as _;
+    let mut builder = if cfg!(windows) {
+        let mut builder = tokio::process::Command::new("cmd");
+        builder.args(["/C", command]);
+        builder
+    } else {
+        let mut builder = tokio::process::Command::new("sh");
+        builder.args(["-c", command]);
+        builder
+    };
+    builder
+        .current_dir(cwd)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        // A timeout drops the wait future; the child must die with it.
+        .kill_on_drop(true);
+    let Ok(mut child) = builder.spawn() else {
+        return Vec::new();
+    };
+    if let Some(mut stdin) = child.stdin.take() {
+        let _ = stdin.write_all(payload.as_bytes()).await;
+    }
+    let Ok(Ok(output)) = tokio::time::timeout(timeout, child.wait_with_output()).await else {
+        return Vec::new();
+    };
+    if !output.status.success() {
+        return Vec::new();
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    text.trim()
+        .lines()
+        .take(STATUS_LINE_MAX_LINES)
+        .map(|line| line.trim_end_matches('\r').to_string())
+        .collect()
 }
 
 fn mermaid_mode(setting: MermaidRendering) -> MermaidMode {
@@ -1698,6 +1896,7 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
         job_view: None,
         workflow_outcomes: Vec::new(),
         pending_account_add: None,
+        status_line: status_line_state(&settings),
     };
     if let Some(indent) = &settings.markdown.code_block_indent {
         app.md.code_indent = indent.clone();
@@ -1774,6 +1973,9 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
         let notification_deadline = app.notifications.deadline().filter(|_| input_is_idle);
         let notification_at =
             notification_deadline.unwrap_or_else(|| Instant::now() + Duration::from_secs(86_400));
+        let status_line_deadline = maybe_refresh_status_line(&mut app, &session, &command_tx);
+        let status_line_at =
+            status_line_deadline.unwrap_or_else(|| Instant::now() + Duration::from_secs(86_400));
         if hosts.enabled() {
             hosts.update(status, &session, args);
         }
@@ -1811,6 +2013,9 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
         tokio::select! {
             _ = tokio::time::sleep_until(tokio::time::Instant::from_std(notification_at)),
                 if notification_deadline.is_some() => { dirty = true; }
+            // Waking re-runs maybe_refresh_status_line at the loop top.
+            _ = tokio::time::sleep_until(tokio::time::Instant::from_std(status_line_at)),
+                if status_line_deadline.is_some() => {}
             _ = tokio::time::sleep_until(tokio::time::Instant::from_std(next_render_at)),
                 if dirty && !resize_state.pending() && Instant::now() < next_render_at => {}
             Some(()) = resize_rx.recv() => {
@@ -2582,6 +2787,16 @@ fn handle_command_event(
             }
         }
         CommandEvent::CommandFinished => app.command = None,
+        CommandEvent::StatusLineFinished { generation, lines } => {
+            if let Some(status_line) = app.status_line.as_mut()
+                && status_line.generation == generation
+            {
+                status_line.running = false;
+                if !lines.is_empty() {
+                    status_line.lines = lines;
+                }
+            }
+        }
         CommandEvent::DesktopNotificationFinished(result) => {
             finish_notification(app, result);
         }
@@ -8531,6 +8746,7 @@ fn reload_interactive(
         .clone()
         .unwrap_or_else(|| "  ".into());
     app.idle_recap_armed = resources.settings.auto_recap_enabled();
+    app.status_line = status_line_state(&resources.settings);
     app.last_user_activity = Instant::now();
     app.keybindings = load_keybindings();
     update_thinking_border(app, session.thinking_level());
@@ -8619,6 +8835,7 @@ mod tests {
             job_view: None,
             workflow_outcomes: Vec::new(),
             pending_account_add: None,
+            status_line: None,
         }
     }
 
@@ -8774,6 +8991,151 @@ mod tests {
                 "Workflow approval required"
             )
         );
+    }
+
+    fn test_status_line(command: &str) -> Option<StatusLine> {
+        let settings = kiss_coding::Settings {
+            status_line: Some(
+                serde_json::from_value(serde_json::json!({
+                    "type": "command",
+                    "command": command,
+                    "padding": 2,
+                }))
+                .unwrap(),
+            ),
+            ..Default::default()
+        };
+        status_line_state(&settings)
+    }
+
+    #[test]
+    fn a_status_line_replaces_the_footer_only_once_it_has_output() {
+        let mut app = test_app();
+        let session = session_with_cache_usage();
+        app.status_line = test_status_line("true");
+
+        // No output yet: the default footer shows.
+        let footer = app.footer(160, &session).join("\n");
+        assert!(footer.contains("cache"));
+
+        app.status_line.as_mut().unwrap().lines =
+            vec!["\x1b[35mgpt-5\x1b[0m | ctx 1%".into(), "second".into()];
+        let footer = app.footer(160, &session);
+        assert_eq!(footer.len(), 2);
+        // Padding applies and ANSI colors pass through.
+        assert!(footer[0].starts_with("  \x1b[35m"));
+        assert_eq!(footer[1], "  second");
+        // Lines are truncated to the terminal width.
+        let narrow = app.footer(5, &session);
+        assert!(kiss_tui::text::display_width(&narrow[0]) <= 5);
+    }
+
+    #[test]
+    fn the_status_line_payload_keeps_claude_code_field_names() {
+        let app = test_app();
+        let session = session_with_cache_usage();
+        let payload: serde_json::Value =
+            serde_json::from_str(&status_line_payload(app.git_branch.as_deref(), &session))
+                .unwrap();
+        assert_eq!(payload["hook_event_name"], "Status");
+        assert_eq!(payload["cwd"], "/synthetic");
+        assert_eq!(payload["workspace"]["current_dir"], "/synthetic");
+        assert!(payload["session_id"].is_string());
+        assert!(payload["model"]["id"].is_string());
+        assert!(payload["model"]["display_name"].is_string());
+        assert!(payload["cost"]["total_cost_usd"].is_number());
+        assert!(
+            payload["context_window"]["context_window_size"]
+                .as_u64()
+                .unwrap()
+                > 0
+        );
+        assert!(payload["context_window"]["used_percentage"].is_u64());
+        assert_eq!(payload["exceeds_200k_tokens"], false);
+        assert_eq!(payload["kiss"]["thinking_level"], "off");
+    }
+
+    #[tokio::test]
+    async fn status_line_refreshes_run_once_per_payload_and_debounce() {
+        let mut app = test_app();
+        let session = session_with_cache_usage();
+        app.status_line = test_status_line("true");
+        let (tx, mut rx) = mpsc::unbounded_channel();
+
+        // The first refresh spawns a run.
+        assert_eq!(maybe_refresh_status_line(&mut app, &session, &tx), None);
+        assert!(app.status_line.as_ref().unwrap().running);
+        let event = rx.recv().await.expect("status line result");
+        let generation = app.status_line.as_ref().unwrap().generation;
+        let (mut search_tx, _search_rx) = {
+            let (tx, rx) = mpsc::unbounded_channel();
+            (FileSearchService::new(tx), rx)
+        };
+        // A stale generation drops without touching the current run.
+        handle_command_event(
+            &mut app,
+            CommandEvent::StatusLineFinished {
+                generation: generation + 1,
+                lines: vec!["stale".into()],
+            },
+            &mut search_tx,
+            &session,
+        );
+        assert!(app.status_line.as_ref().unwrap().running);
+        handle_command_event(&mut app, event, &mut search_tx, &session);
+        let status_line = app.status_line.as_ref().unwrap();
+        assert!(!status_line.running);
+
+        // The payload did not change, so nothing new runs.
+        assert_eq!(maybe_refresh_status_line(&mut app, &session, &tx), None);
+        assert!(!app.status_line.as_ref().unwrap().running);
+
+        // A changed payload inside the debounce window waits it out.
+        app.git_branch = Some("feature".into());
+        let wake = maybe_refresh_status_line(&mut app, &session, &tx);
+        assert!(wake.is_some());
+        assert!(!app.status_line.as_ref().unwrap().running);
+
+        // After the debounce the same change runs.
+        app.status_line.as_mut().unwrap().last_attempt =
+            Some(Instant::now() - Duration::from_secs(1));
+        assert_eq!(maybe_refresh_status_line(&mut app, &session, &tx), None);
+        assert!(app.status_line.as_ref().unwrap().running);
+    }
+
+    #[tokio::test]
+    async fn a_status_line_command_feeds_stdin_and_caps_output() {
+        if cfg!(windows) {
+            return;
+        }
+        let lines = run_status_line_command(
+            "python3 -c 'import json,sys; d=json.load(sys.stdin); print(d[\"cwd\"]); [print(i) for i in range(9)]'",
+            &status_line_payload(None, &session_with_cache_usage()),
+            Path::new("."),
+            Duration::from_secs(10),
+        )
+        .await;
+        assert_eq!(lines.len(), STATUS_LINE_MAX_LINES);
+        assert_eq!(lines[0], "/synthetic");
+        // Failure and silence produce no lines.
+        let payload = "{}";
+        for command in ["exit 3", "printf ''"] {
+            let lines =
+                run_status_line_command(command, payload, Path::new("."), Duration::from_secs(10))
+                    .await;
+            assert!(lines.is_empty(), "{command}");
+        }
+        // A hung command is killed at the timeout.
+        let started = Instant::now();
+        let lines = run_status_line_command(
+            "sleep 30",
+            payload,
+            Path::new("."),
+            Duration::from_millis(100),
+        )
+        .await;
+        assert!(lines.is_empty());
+        assert!(started.elapsed() < Duration::from_secs(5));
     }
 
     #[test]
