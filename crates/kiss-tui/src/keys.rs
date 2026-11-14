@@ -451,6 +451,12 @@ impl InputDecoder {
                     Some('\t') => Key::Tab,
                     Some('\r') | Some('\u{e046}') => Key::Enter,
                     Some('\x1b') => Key::Escape,
+                    // Command+Backspace deletes to the line start, as the
+                    // Ctrl+U that Ghostty and iTerm2 send for it.
+                    Some('\x7f') if command => {
+                        event.ctrl = true;
+                        Key::Char('u')
+                    }
                     // Modified Backspace, such as Option+Backspace (CSI 127;3u).
                     Some('\x7f') => Key::Backspace,
                     // Kitty reports F13-F35 as private-use code points.

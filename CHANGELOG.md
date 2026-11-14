@@ -12,6 +12,11 @@
   and WezTerm, `Option+Backspace` and `Ctrl+Backspace` now delete the word
   before the cursor, and `Command+Left` and `Command+Right` move to the start
   and end of the line. They used to do nothing or move one character.
+- `Command+Backspace` and `Ctrl+U` now delete to the start of the visual row,
+  as in Claude Code, instead of erasing a whole wrapped prompt. Repeated
+  presses keep deleting row by row and join lines, as in Claude Code and
+  Codex. Kitty-protocol terminals send `Command+Backspace` as `CSI 127;9u`,
+  which used to delete one character.
 - `Esc` now stops a `!command` that ignores SIGTERM, or whose child keeps
   running. KISS kills the whole process group and stops waiting for output.
 - A Mermaid diagram in a reply no longer ends KISS. Class diagrams with

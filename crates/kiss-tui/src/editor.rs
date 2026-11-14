@@ -41,6 +41,8 @@ pub struct Editor {
     pub border_color_token: String,
     theme: Theme,
     pub placeholder: String,
+    /// Text width from the last render, used to find visual rows.
+    wrap_width: usize,
 }
 
 impl Editor {
@@ -60,6 +62,7 @@ impl Editor {
             border_color_token: "border".into(),
             theme,
             placeholder: String::new(),
+            wrap_width: usize::MAX,
         }
     }
 
@@ -298,18 +301,30 @@ impl Editor {
         }
     }
 
-    /// Kill to start of line (Ctrl+U).
+    /// Kill to the start of the visual row (Ctrl+U / Command+Backspace), as
+    /// in Claude Code. At a row start it kills the row above; at a line start
+    /// it removes the newline, so repeated presses keep deleting.
     pub fn kill_to_start(&mut self) {
         self.leave_history_navigation();
-        self.push_undo();
-        let (_, col) = self.state.cursor;
-        let line = self.current_line();
-        let byte = grapheme_byte_offset(line, col);
-        let killed: String = line.drain(..byte).collect();
-        if !killed.is_empty() {
-            self.kill_ring.push(killed);
+        let (row, col) = self.state.cursor;
+        if col == 0 {
+            if row > 0 {
+                self.backspace();
+                self.kill_ring.push("\n".into());
+            }
+            return;
         }
-        self.state.cursor.1 = 0;
+        self.push_undo();
+        let start = visual_ranges(&self.state.lines[row], self.wrap_width, Some(col))
+            .into_iter()
+            .map(|(start, _)| start)
+            .rfind(|&start| start < col)
+            .unwrap_or(0);
+        let line = self.current_line();
+        let range = grapheme_byte_offset(line, start)..grapheme_byte_offset(line, col);
+        let killed: String = line.drain(range).collect();
+        self.kill_ring.push(killed);
+        self.state.cursor.1 = start;
     }
 
     /// Yank last kill (Ctrl+Y).
@@ -510,6 +525,7 @@ impl Editor {
     /// The editor box as lines no wider than `width`.
     pub fn render(&mut self, width: usize) -> Vec<String> {
         let inner = width.saturating_sub(4).max(1);
+        self.wrap_width = inner;
         let border = self.theme.fg(&self.border_color_token, "│");
         let top = self.theme.fg(
             &self.border_color_token,
@@ -832,6 +848,35 @@ mod tests {
             feed(&mut e, wire);
             assert_eq!(e.text(), "foo baz", "{wire:?}");
             assert_eq!(e.cursor().1, 3, "{wire:?}");
+        }
+    }
+
+    #[test]
+    fn command_backspace_deletes_one_visual_row_at_a_time() {
+        let feed = |e: &mut Editor, wire: &[u8]| {
+            let mut decoder = crate::keys::InputDecoder::default();
+            let mut events = Vec::new();
+            decoder.feed(wire, &mut events);
+            for event in &events {
+                e.handle_event(event);
+            }
+        };
+        // Ctrl+U (Ghostty, iTerm2) and kitty's CSI 127;9u both mean Command+Backspace.
+        for wire in [&b"\x15"[..], b"\x1b[127;9u"] {
+            let mut e = editor();
+            e.insert("first");
+            e.newline();
+            e.insert("aaaa bbbb cccc");
+            e.render(14); // 10 columns of text: "aaaa bbbb " / "cccc"
+            feed(&mut e, wire);
+            assert_eq!(e.text(), "first\naaaa bbbb ", "{wire:?}");
+            feed(&mut e, wire);
+            assert_eq!(e.text(), "first\n", "{wire:?}");
+            feed(&mut e, wire);
+            assert_eq!(e.text(), "first", "{wire:?}");
+            assert_eq!(e.cursor(), (0, 5), "{wire:?}");
+            feed(&mut e, wire);
+            assert_eq!(e.text(), "", "{wire:?}");
         }
     }
 
