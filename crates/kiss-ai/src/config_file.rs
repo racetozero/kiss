@@ -162,11 +162,10 @@ fn replace(path: &Path, contents: &[u8], private: bool) -> Result<()> {
     result
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
 
-    #[cfg(unix)]
     #[test]
     fn a_save_through_a_symlink_keeps_the_link() {
         let directory = tempfile::tempdir().unwrap();
