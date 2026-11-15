@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.0.40 - 2026-11-14
+
 ### Added
 
 - `/advisor` picks a second model, from any provider you are logged in to,
