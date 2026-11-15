@@ -1,7 +1,7 @@
 //! AgentSession: the high-level facade every mode drives. Owns the session
 //! manager, tool set, queues, retry, auto-compaction, and cost accounting.
 
-use crate::advisor::{ADVISOR_SYSTEM_PROMPT, AdvisorTool};
+use crate::advisor::{AdvisorTool, DEFAULT_ADVISOR_MAX_USES, advisor_system_prompt};
 use crate::compaction::{
     self, extract_file_ops, file_ops_details, plan_compaction, should_compact,
 };
@@ -268,6 +268,8 @@ pub struct AgentSession {
     /// root session has one.
     advisor: Mutex<Option<(Model, ThinkingLevel)>>,
     advisor_tool: OnceLock<DynTool>,
+    /// Advisor calls made during the current user prompt.
+    pub(crate) advisor_calls: std::sync::atomic::AtomicU32,
     /// Optional replacement for the provider streaming function. Embedders and
     /// tests install one to run the whole loop against a scripted fake model.
     stream_fn: Mutex<Option<StreamFn>>,
@@ -406,6 +408,7 @@ impl AgentSession {
             workflow_approver: Mutex::new(None),
             advisor: Mutex::new(advisor),
             advisor_tool: OnceLock::new(),
+            advisor_calls: Default::default(),
             stream_fn: Mutex::new(None),
         });
         if subagents_allowed {
@@ -461,6 +464,15 @@ impl AgentSession {
         let (model, thinking) = registry.resolve(pattern, None)?;
         let thinking = model.clamp_thinking_level(thinking.unwrap_or(ThinkingLevel::High));
         Some((model, thinking))
+    }
+
+    /// Advisor calls allowed for each user prompt.
+    pub fn advisor_max_uses(&self) -> u32 {
+        self.settings
+            .lock()
+            .unwrap()
+            .advisor_max_uses
+            .unwrap_or(DEFAULT_ADVISOR_MAX_USES)
     }
 
     /// The system prompt this session was given, without the blocks that
@@ -1480,7 +1492,7 @@ impl AgentSession {
             .any(|tool| tool.name() == crate::advisor::ADVISOR_TOOL_NAME)
         {
             system_prompt.push_str("\n\n");
-            system_prompt.push_str(ADVISOR_SYSTEM_PROMPT);
+            system_prompt.push_str(&advisor_system_prompt(self.advisor_max_uses()));
         }
         if prompt_mode == PromptMode::Workflow
             && self.workflows_enabled()
@@ -1879,6 +1891,9 @@ impl AgentSession {
             (session.sink)(SessionEvent::Agent(Box::new(event)));
         });
 
+        // The advisor limit counts per user prompt; retries share it.
+        self.advisor_calls
+            .store(0, std::sync::atomic::Ordering::SeqCst);
         let active_prompt_mode = Arc::new(Mutex::new(prompt_mode));
         let mut config = self.loop_config(self, active_prompt_mode.clone());
         let mut context = self.build_context_for(prompt_mode);
@@ -2720,7 +2735,10 @@ mod ephemeral_tests {
             SessionManager::in_memory(Path::new("/test")),
             Vec::new(),
             Registry::from_builtin(),
-            Settings::default(),
+            Settings {
+                advisor_max_uses: Some(1),
+                ..Default::default()
+            },
             "root prompt".into(),
             openai_model(),
             ThinkingLevel::Off,
@@ -2730,31 +2748,39 @@ mod ephemeral_tests {
         let mut advisor = openai_model();
         advisor.provider = "anthropic".into();
         advisor.id = "advisor-test".into();
+        advisor.max_tokens = 128_000;
         session.set_advisor(Some((advisor, ThinkingLevel::High)));
-        let requests: Arc<Mutex<Vec<(String, ThinkingLevel, kiss_ai::Context)>>> = Arc::default();
+        type Request = (String, ThinkingLevel, Option<u64>, kiss_ai::Context);
+        let requests: Arc<Mutex<Vec<Request>>> = Arc::default();
         let saved = requests.clone();
         session.set_stream_fn(Some(Arc::new(move |model, context, options| {
             let mut requests = saved.lock().unwrap();
-            requests.push((model.id.clone(), options.reasoning, context.clone()));
+            requests.push((
+                model.id.clone(),
+                options.reasoning,
+                options.max_tokens,
+                context.clone(),
+            ));
+            let main_turns = requests.iter().filter(|(id, ..)| id == "gpt-test").count();
             let mut message =
                 kiss_ai::AssistantMessage::empty("openai-responses", &model.provider, &model.id);
             message.stop_reason = StopReason::Stop;
-            message.content = vec![match requests.len() {
-                1 => {
-                    message.stop_reason = StopReason::ToolUse;
-                    kiss_ai::ContentBlock::ToolCall(kiss_ai::ToolCall {
-                        id: "call_1".into(),
-                        name: "advisor".into(),
-                        arguments: serde_json::json!({}),
-                        thought_signature: None,
-                        arguments_error: None,
-                    })
-                }
-                2 => {
-                    message.usage.input = 50;
-                    kiss_ai::ContentBlock::text("use approach B")
-                }
-                _ => kiss_ai::ContentBlock::text("done"),
+            // Main turns: call, call again over the limit, finish; then a
+            // new prompt calls once more and finishes.
+            message.content = vec![if model.id == "advisor-test" {
+                message.usage.input = 50;
+                kiss_ai::ContentBlock::text("PLAN\nuse approach B")
+            } else if matches!(main_turns, 1 | 2 | 4) {
+                message.stop_reason = StopReason::ToolUse;
+                kiss_ai::ContentBlock::ToolCall(kiss_ai::ToolCall {
+                    id: format!("call_{main_turns}"),
+                    name: "advisor".into(),
+                    arguments: serde_json::json!({}),
+                    thought_signature: None,
+                    arguments_error: None,
+                })
+            } else {
+                kiss_ai::ContentBlock::text("done")
             }];
             let (sink, stream) = kiss_ai::EventStream::channel();
             sink.done(message);
@@ -2765,34 +2791,53 @@ mod ephemeral_tests {
             .prompt(vec![AgentMessage::user("solve the hard problem")])
             .await;
 
-        let requests = requests.lock().unwrap();
-        assert_eq!(requests.len(), 3);
-        let (_, _, first) = &requests[0];
-        assert!(first.tools.iter().any(|tool| tool.name == "advisor"));
-        assert!(first.system_prompt.as_deref().unwrap().contains("Advisor:"));
-        let (model, thinking, advice) = &requests[1];
-        assert_eq!(
-            (model.as_str(), *thinking),
-            ("advisor-test", ThinkingLevel::High)
-        );
-        assert!(advice.tools.is_empty());
-        assert_eq!(advice.messages.len(), 1);
-        let kiss_ai::Message::User(question) = &advice.messages[0] else {
-            panic!("the advisor request must be one user message");
+        let advisor_result = |context: &kiss_ai::Context, id: &str| {
+            context.messages.iter().find_map(|message| match message {
+                kiss_ai::Message::ToolResult(result) if result.tool_call_id == id => Some((
+                    result.is_error,
+                    kiss_ai::UserContent::Blocks(result.content.clone()).as_text(),
+                )),
+                _ => None,
+            })
         };
-        let question = question.content.as_text();
-        assert!(question.contains("root prompt"));
-        assert!(question.contains("[User]: solve the hard problem"));
-        assert!(question.contains("advisor()"));
-        let (_, _, last) = &requests[2];
-        let answered = last.messages.iter().any(|message| {
-            matches!(message, kiss_ai::Message::ToolResult(result)
-                if result.tool_name == "advisor" && !result.is_error
-                    && result.content.iter().any(|block| matches!(block,
-                        kiss_ai::ContentBlock::Text { text, .. } if text == "use approach B")))
-        });
-        assert!(answered);
+        {
+            let requests = requests.lock().unwrap();
+            let ids: Vec<&str> = requests.iter().map(|(id, ..)| id.as_str()).collect();
+            assert_eq!(ids, ["gpt-test", "advisor-test", "gpt-test", "gpt-test"]);
+            let (_, _, _, first) = &requests[0];
+            assert!(first.tools.iter().any(|tool| tool.name == "advisor"));
+            let system_prompt = first.system_prompt.as_deref().unwrap();
+            assert!(system_prompt.contains("at most 1 times"));
+            assert!(system_prompt.contains("After STOP"));
+            let (_, thinking, max_tokens, advice) = &requests[1];
+            assert_eq!(*thinking, ThinkingLevel::High);
+            assert_eq!(*max_tokens, Some(2_048 + 32_768));
+            assert!(advice.tools.is_empty());
+            assert!(advice.system_prompt.as_deref().unwrap().contains("PLAN - "));
+            assert_eq!(advice.messages.len(), 1);
+            let kiss_ai::Message::User(question) = &advice.messages[0] else {
+                panic!("the advisor request must be one user message");
+            };
+            let question = question.content.as_text();
+            assert!(question.contains("root prompt"));
+            assert!(question.contains("[User]: solve the hard problem"));
+            assert!(question.contains("advisor()"));
+            let (_, _, _, last) = &requests[3];
+            let (failed, text) = advisor_result(last, "call_1").unwrap();
+            assert!(!failed);
+            assert!(text.starts_with("PLAN\nuse approach B"), "{text}");
+            assert!(text.ends_with("[Advisor call 1 of 1 for this user request.]"));
+            let (failed, text) = advisor_result(last, "call_2").unwrap();
+            assert!(failed);
+            assert!(text.contains("limit of 1 calls"), "{text}");
+        }
         assert_eq!(session.totals().input, 50);
+
+        // A new user prompt has its own limit.
+        session.prompt(vec![AgentMessage::user("next task")]).await;
+        let requests = requests.lock().unwrap();
+        let ids: Vec<&str> = requests.iter().map(|(id, ..)| id.as_str()).collect();
+        assert_eq!(&ids[4..], ["gpt-test", "advisor-test", "gpt-test"]);
     }
 
     #[test]

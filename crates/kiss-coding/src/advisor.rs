@@ -11,11 +11,31 @@ use tokio_util::sync::CancellationToken;
 
 pub const ADVISOR_TOOL_NAME: &str = "advisor";
 
+/// Advisor calls allowed per user prompt when `advisorMaxUses` is not set.
+pub const DEFAULT_ADVISOR_MAX_USES: u32 = 3;
+
+/// The advisor's answer, without its thinking. The advice itself asks for at
+/// most 700 words; this leaves room so a long answer is not cut off.
+const ADVICE_TOKENS: u64 = 2_048;
+
 /// Told to the working model while an advisor is set.
-pub(crate) const ADVISOR_SYSTEM_PROMPT: &str = "Advisor:\n- The advisor tool sends your whole conversation to a stronger reviewer model and returns its guidance. It takes no arguments.\n- Call it alone, not in the same turn as other tool calls: it sees only the results of earlier turns.\n- On a task with more than a few steps, call it after orientation (reading files, seeing what is there) and before you commit to an approach.\n- Call it when you are stuck: errors recur, an approach does not converge, or results do not fit.\n- Call it when you believe a long task is complete, after you saved the result.\n- Give the advice serious weight. If your evidence contradicts it, say so in one more call instead of switching silently.\n- Do not call it for short tasks whose next step is clear.";
+pub(crate) fn advisor_system_prompt(max_uses: u32) -> String {
+    format!(
+        "{ADVISOR_SYSTEM_PROMPT}\n- You can call it at most {max_uses} times for each user request. Save the calls for the moments that need them.\n- The advice starts with PLAN, CORRECTION, or STOP. After STOP, stop working and ask the user what the advice says to ask."
+    )
+}
+
+const ADVISOR_SYSTEM_PROMPT: &str = "Advisor:\n- The advisor tool sends your whole conversation to a stronger reviewer model and returns its guidance. It takes no arguments.\n- Call it alone, not in the same turn as other tool calls: it sees only the results of earlier turns.\n- On a task with more than a few steps, call it after orientation (reading files, seeing what is there) and before you commit to an approach.\n- Call it when you are stuck: errors recur, an approach does not converge, or results do not fit.\n- Call it when you believe a long task is complete, after you saved the result.\n- Give the advice serious weight. If your evidence contradicts it, say so in one more call instead of switching silently.\n- Do not call it for short tasks whose next step is clear.";
 
 /// The advisor model's own instructions.
-const ADVISOR_INSTRUCTIONS: &str = "You advise a coding agent. You receive the agent's instructions and a transcript of its session. The transcript ends where the agent asked for your advice. You cannot run tools; the agent acts on your advice. Read the task and the evidence in the transcript, then give direct, prioritized guidance: the approach to take, what to check first, and the risks and mistakes you see. When the agent is wrong, say so plainly and give the reason. Name files, functions, and commands. Be concise and do not repeat the transcript.";
+const ADVISOR_INSTRUCTIONS: &str = "You advise a coding agent. You receive the agent's instructions and a transcript of its session. The transcript ends where the agent asked for your advice. You cannot run tools, and the user does not see your answer; the agent acts on it.
+
+Start your answer with exactly one of these words on its own line:
+PLAN - the agent is on track or has not started. Give the steps to take, what to check first, and the risks.
+CORRECTION - the agent made a mistake or is going the wrong way. Say what is wrong, why, and what to do instead.
+STOP - the agent must stop and ask the user, because the task is unclear, unsafe, or not possible as stated. Say why and what to ask.
+
+Then give the guidance in at most 700 words. Name files, functions, and commands. Say plainly when the agent is wrong. Do not repeat the transcript.";
 
 /// Tool results are cut to this many characters in the advisor transcript.
 /// The advisor needs more evidence than a compaction summary does.
@@ -101,6 +121,16 @@ impl AgentTool for AdvisorTool {
         let (model, thinking) = session.advisor().context(
             "No advisor model is set. Run /advisor to choose one, or set advisorModel in ~/.kiss/agent/settings.json.",
         )?;
+        let max_uses = session.advisor_max_uses();
+        let call = session
+            .advisor_calls
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+            + 1;
+        if call > max_uses {
+            anyhow::bail!(
+                "The advisor limit of {max_uses} calls for this user request is reached. Continue with the advice you have, or ask the user. The user can raise the limit with advisorMaxUses in ~/.kiss/agent/settings.json."
+            );
+        }
         let messages = session
             .manager
             .lock()
@@ -120,6 +150,13 @@ impl AgentTool for AdvisorTool {
         };
         let prompt = advisor_prompt(&session.base_system_prompt(), &messages, max_chars);
         let label = format!("{}/{}", model.provider, model.id);
+        // Room for the thinking budget plus a short answer, so an advisor
+        // that is asked for a short plan cannot write a long one.
+        let budget = kiss_ai::api::thinking_budget(thinking, u64::MAX).unwrap_or(0);
+        let max_tokens = match model.max_tokens {
+            0 => ADVICE_TOKENS + budget,
+            limit => (ADVICE_TOKENS + budget).min(limit),
+        };
         let response = session
             .run_ephemeral(
                 "advisor",
@@ -127,7 +164,7 @@ impl AgentTool for AdvisorTool {
                 ADVISOR_INSTRUCTIONS.into(),
                 prompt,
                 Vec::new(),
-                None,
+                Some(max_tokens),
                 cancel,
             )
             .await
@@ -138,8 +175,11 @@ impl AgentTool for AdvisorTool {
                 )
             })?;
         Ok(ToolResult {
-            content: vec![kiss_ai::ContentBlock::text(response.text)],
-            details: json!({"model": label, "thinking": thinking.as_str()}),
+            content: vec![kiss_ai::ContentBlock::text(format!(
+                "{}\n\n[Advisor call {call} of {max_uses} for this user request.]",
+                response.text
+            ))],
+            details: json!({"model": label, "thinking": thinking.as_str(), "call": call, "maxUses": max_uses}),
             ..Default::default()
         })
     }

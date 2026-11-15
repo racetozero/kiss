@@ -10,7 +10,11 @@
   and a text transcript of the session to the advisor and returns its
   guidance. The choice is saved as `advisorModel` in the user settings
   (`provider/model`, with an optional `:thinking` suffix; default `high`).
-  Project settings cannot set it.
+  Project settings cannot set it. The advice starts with `PLAN`,
+  `CORRECTION`, or `STOP` and is kept short (at most about 700 words; the
+  request caps output at the thinking budget plus 2,048 tokens). The agent
+  can call the advisor 3 times per user prompt; `advisorMaxUses` changes the
+  limit.
 - A Claude Code-compatible custom status line. Set `statusLine` in
   `settings.json` to `{"type": "command", "command": "~/.claude/statusline.sh"}`
   and the footer shows the command's output. The command receives the same

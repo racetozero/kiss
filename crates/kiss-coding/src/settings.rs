@@ -378,6 +378,8 @@ pub struct Settings {
     pub subagents: SubagentSettings,
     /// `provider/model[:thinking]` the `advisor` tool asks. User settings only.
     pub advisor_model: Option<String>,
+    /// Advisor calls allowed per user prompt (default 3). User settings only.
+    pub advisor_max_uses: Option<u32>,
     pub workflows: WorkflowSettings,
     pub steering_mode: QueueMode,
     pub follow_up_mode: QueueMode,
@@ -456,6 +458,10 @@ fn merged_settings(mut global: Value, project: Option<Value>) -> Settings {
         .get("advisorModel")
         .and_then(Value::as_str)
         .map(str::to_owned);
+    let advisor_max_uses = global
+        .get("advisorMaxUses")
+        .and_then(Value::as_u64)
+        .and_then(|uses| u32::try_from(uses).ok());
     let subagents_enabled = global
         .pointer("/subagents/enabled")
         .and_then(Value::as_bool)
@@ -521,6 +527,7 @@ fn merged_settings(mut global: Value, project: Option<Value>) -> Settings {
     // The advisor receives the whole transcript and spends tokens with a
     // provider the user chose, so a repository must not choose it.
     settings.advisor_model = advisor_model;
+    settings.advisor_max_uses = advisor_max_uses;
     settings.experimental_context_file = experimental_context_file;
     // Workflows spend the user's tokens many agents at a time, so the same rule
     // applies: only the user's own settings file decides whether they are on.
@@ -687,11 +694,10 @@ mod tests {
 
     #[test]
     fn only_user_settings_choose_the_advisor() {
-        let project = Some(json!({"advisorModel": "openai/gpt-5.2"}));
-        assert_eq!(
-            Settings::from_layers(json!({}), project.clone()).advisor_model,
-            None
-        );
+        let project = Some(json!({"advisorModel": "openai/gpt-5.2", "advisorMaxUses": 50}));
+        let from_project = Settings::from_layers(json!({}), project.clone());
+        assert_eq!(from_project.advisor_model, None);
+        assert_eq!(from_project.advisor_max_uses, None);
         let user = json!({"advisorModel": "anthropic/claude-opus-4-5"});
         assert_eq!(
             Settings::from_layers(user, project)

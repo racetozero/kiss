@@ -231,6 +231,11 @@ transcripts keep the first request and the most recent turns. The advisor
 thinks at `high` unless you add a `:level` suffix, and its cost counts in the
 session totals.
 
+The advice starts with `PLAN`, `CORRECTION`, or `STOP` and is at most about
+700 words. After `STOP`, the agent stops and asks you. The agent can call the
+advisor three times for each prompt you send. Set `advisorMaxUses` in
+`~/.kiss/agent/settings.json` to change that limit.
+
 KISS saves the choice as `advisorModel` in `~/.kiss/agent/settings.json`.
 Project settings cannot set it, and `--no-tools` and child agents have no
 advisor. If the advisor's provider is not logged in at startup, KISS shows a
