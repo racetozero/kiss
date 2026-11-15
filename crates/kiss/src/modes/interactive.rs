@@ -9926,11 +9926,19 @@ mod tests {
 
     #[test]
     fn the_advisor_picker_marks_the_current_advisor_and_ends_with_no_advisor() {
-        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
-            "/synthetic",
-        )));
+        // A provider with a key in models.json is logged in on every machine,
+        // so the list does not depend on the logins of the machine that runs
+        // the test.
+        let directory = tempfile::tempdir().unwrap();
+        let catalog = directory.path().join("models.json");
+        std::fs::write(
+            &catalog,
+            r#"{"providers":{"advisor-test":{"baseUrl":"http://localhost","api":"openai-completions","apiKey":"test","models":[{"id":"strong"}]}}}"#,
+        )
+        .unwrap();
+        let registry = kiss_ai::Registry::load(Some(&catalog));
+        let session = synthetic_session();
         let mut app = test_app();
-        let registry = session.registry.clone();
 
         open_advisor_picker(&mut app, &session, &registry, None);
         let mut picker = app.picker.take().unwrap();
@@ -9944,7 +9952,11 @@ mod tests {
         );
         assert_eq!(last.detail.as_deref(), Some("✔ current"));
 
-        let chosen = models[0].clone();
+        let chosen = models
+            .iter()
+            .find(|model| model.provider == "advisor-test")
+            .unwrap()
+            .clone();
         session.set_advisor(Some((chosen.clone(), ThinkingLevel::High)));
         open_advisor_picker(&mut app, &session, &registry, None);
         let mut picker = app.picker.take().unwrap();
