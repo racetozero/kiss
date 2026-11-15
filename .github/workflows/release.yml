@@ -3,7 +3,9 @@
 # Copyright 2022-2024, axodotdev
 # SPDX-License-Identifier: MIT or Apache-2.0
 #
-# KISS overrides: build-local-artifacts trains target-specific PGO profiles
+# KISS overrides: build-local-artifacts updates the stable toolchain (runner
+# images can ship an older stable than the workspace rust-version), trains
+# target-specific PGO profiles
 # where Rust provides a profiling runtime, the default token permission is
 # read-only, and the Homebrew formula uses the musl builds on Linux and is
 # published after announce with a tap deploy key. `dist generate` removes these
@@ -136,6 +138,10 @@ jobs:
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
             echo "$HOME/.cargo/bin" >> $GITHUB_PATH
           fi
+      # rust-toolchain.toml selects "stable", which rustup does not update on
+      # its own. Runner images can ship a stable older than rust-version.
+      - name: Update the stable Rust toolchain
+        run: rustup update stable --no-self-update
       - name: Install dist
         run: ${{ matrix.install_dist.run }}
       # Get the dist-manifest
