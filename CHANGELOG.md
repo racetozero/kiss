@@ -104,10 +104,6 @@
 - Building KISS from source now needs Rust 1.100 or newer. Every workspace
   crate declares `rust-version = "1.100"`, so an older toolchain gets a clear
   version error instead of unstable-API errors.
-- `cargo update` skips crate versions published less than three days ago.
-  `.cargo/config.toml` sets Cargo's new `global-min-publish-age` cooldown. To
-  take a newer release on purpose, run
-  `CARGO_RESOLVER_INCOMPATIBLE_PUBLISH_AGE=allow cargo update <crate> --precise <version>`.
 - `kiss-tui` no longer depends on `tokio`, and `kiss-workflow` no longer
   depends on `serde` or, outside its doctest, `anyhow`. Cargo 1.100 reported
   them as unused.

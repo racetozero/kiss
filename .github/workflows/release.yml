@@ -476,7 +476,8 @@ jobs:
           test "$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name | IN("kiss-bench", "kiss-agent-ai", "kiss-agent", "kiss-workflow", "kiss-coding", "kiss-mcp", "kiss-agent-sdk")) | .version' | sort -u)" = "$version"
           for crate in kiss-bench kiss-agent-ai kiss-agent kiss-workflow kiss-coding kiss-mcp kiss-agent-sdk; do
             # Reruns after a partial release must not try to republish versions.
-            if curl -fsS "https://crates.io/api/v1/crates/$crate/$version" > /dev/null; then
+            # crates.io answers 403 to requests without a descriptive User-Agent.
+            if curl -fsS -A "kiss-release (https://github.com/racetozero/kiss)" "https://crates.io/api/v1/crates/$crate/$version" > /dev/null; then
               echo "$crate $version already published"
             else
               cargo publish -p "$crate" --locked
