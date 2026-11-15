@@ -4,7 +4,7 @@
 use crate::compaction::serialize_conversation_capped;
 use crate::session_runner::AgentSession;
 use anyhow::Context as _;
-use kiss_agent::{AgentMessage, AgentTool, ExecutionMode, ToolResult, ToolUpdateSink};
+use kiss_agent::{AgentMessage, AgentTool, ToolResult, ToolUpdateSink};
 use serde_json::{Value, json};
 use std::sync::Weak;
 use tokio_util::sync::CancellationToken;
@@ -12,7 +12,7 @@ use tokio_util::sync::CancellationToken;
 pub const ADVISOR_TOOL_NAME: &str = "advisor";
 
 /// Told to the working model while an advisor is set.
-pub(crate) const ADVISOR_SYSTEM_PROMPT: &str = "Advisor:\n- The advisor tool sends your whole conversation to a stronger reviewer model and returns its guidance. It takes no arguments.\n- On a task with more than a few steps, call it after orientation (reading files, seeing what is there) and before you commit to an approach.\n- Call it when you are stuck: errors recur, an approach does not converge, or results do not fit.\n- Call it when you believe a long task is complete, after you saved the result.\n- Give the advice serious weight. If your evidence contradicts it, say so in one more call instead of switching silently.\n- Do not call it for short tasks whose next step is clear.";
+pub(crate) const ADVISOR_SYSTEM_PROMPT: &str = "Advisor:\n- The advisor tool sends your whole conversation to a stronger reviewer model and returns its guidance. It takes no arguments.\n- Call it alone, not in the same turn as other tool calls: it sees only the results of earlier turns.\n- On a task with more than a few steps, call it after orientation (reading files, seeing what is there) and before you commit to an approach.\n- Call it when you are stuck: errors recur, an approach does not converge, or results do not fit.\n- Call it when you believe a long task is complete, after you saved the result.\n- Give the advice serious weight. If your evidence contradicts it, say so in one more call instead of switching silently.\n- Do not call it for short tasks whose next step is clear.";
 
 /// The advisor model's own instructions.
 const ADVISOR_INSTRUCTIONS: &str = "You advise a coding agent. You receive the agent's instructions and a transcript of its session. The transcript ends where the agent asked for your advice. You cannot run tools; the agent acts on your advice. Read the task and the evidence in the transcript, then give direct, prioritized guidance: the approach to take, what to check first, and the risks and mistakes you see. When the agent is wrong, say so plainly and give the reason. Name files, functions, and commands. Be concise and do not repeat the transcript.";
@@ -87,11 +87,6 @@ impl AgentTool for AdvisorTool {
         json!({"type": "object", "properties": {}, "additionalProperties": false})
     }
 
-    // A call in a parallel batch would not see its sibling calls' results.
-    fn execution_mode(&self) -> ExecutionMode {
-        ExecutionMode::Sequential
-    }
-
     async fn execute(
         &self,
         _tool_call_id: &str,
@@ -112,12 +107,16 @@ impl AgentTool for AdvisorTool {
             .unwrap()
             .build_session_context()
             .messages;
-        // About half the advisor's window, at four characters per token.
+        // About half the advisor's window at three characters per token, the
+        // density of code and JSON. The rest is left for the answer.
         let max_chars = match model.context_window {
-            0 => 400_000,
-            window => usize::try_from(window)
-                .unwrap_or(usize::MAX / 4)
-                .saturating_mul(2),
+            0 => 300_000,
+            window => {
+                usize::try_from(window)
+                    .unwrap_or(usize::MAX / 2)
+                    .saturating_mul(3)
+                    / 2
+            }
         };
         let prompt = advisor_prompt(&session.base_system_prompt(), &messages, max_chars);
         let label = format!("{}/{}", model.provider, model.id);

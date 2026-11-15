@@ -5161,16 +5161,23 @@ fn open_advisor_picker(
     });
 }
 
-/// Use `advisor` from now on and save it as the user's `advisorModel`.
+/// Use `advisor` from now on and save it as the user's `advisorModel`, as
+/// `provider/id`, with a `:level` suffix when it does not think at the
+/// default level.
 fn set_advisor(
     app: &mut App,
     session: &Arc<kiss_coding::AgentSession>,
     resources: &mut InteractiveResources,
     advisor: Option<(kiss_ai::Model, ThinkingLevel)>,
-    pattern: Option<String>,
 ) {
     session.set_advisor(advisor);
-    resources.settings.advisor_model = pattern;
+    resources.settings.advisor_model = session.advisor().map(|(model, thinking)| {
+        if thinking == model.clamp_thinking_level(ThinkingLevel::High) {
+            format!("{}/{}", model.provider, model.id)
+        } else {
+            format!("{}/{}:{}", model.provider, model.id, thinking.as_str())
+        }
+    });
     save_interactive_settings(app, session, resources);
     app.cells.push(Cell::Notice(match session.advisor() {
         Some((model, thinking)) => format!(
@@ -6885,17 +6892,10 @@ fn apply_picker_selection(
             }
         }
         PickerKind::Advisor(models) => {
-            let model = models.get(value).cloned();
-            let pattern = model
-                .as_ref()
-                .map(|model| format!("{}/{}", model.provider, model.id));
-            set_advisor(
-                app,
-                session,
-                resources,
-                model.map(|model| (model, ThinkingLevel::High)),
-                pattern,
-            );
+            let advisor = models
+                .get(value)
+                .map(|model| (model.clone(), ThinkingLevel::High));
+            set_advisor(app, session, resources, advisor);
         }
         PickerKind::Thinking => {
             if let Some(level) = ThinkingLevel::ALL.get(value).copied() {
@@ -8216,12 +8216,23 @@ fn run_slash_command(
         "providers" => run_provider_command(app, "list"),
         "advisor" => match rest.as_str() {
             "" => open_model_picker(app, session, None, ModelPurpose::Advisor, command_tx),
-            "off" => set_advisor(app, session, resources, None, None),
+            "off" => set_advisor(app, session, resources, None),
             pattern => {
                 match kiss_coding::AgentSession::resolve_advisor(&session.registry, pattern) {
-                    Some(advisor) => {
-                        set_advisor(app, session, resources, Some(advisor), Some(rest.clone()))
+                    Some((model, _)) if !session.registry.signed_in(&model.provider) => {
+                        app.cells.push(Cell::Error(format!(
+                            "{}/{} needs {provider}, which is not logged in. Run /login {provider}, then /advisor {pattern} again",
+                            model.provider,
+                            model.id,
+                            provider = model.provider
+                        )));
                     }
+                    Some((model, _)) if !ModelAccess::current().allows(&model) => {
+                        app.cells.push(Cell::Error(format!(
+                            "model {pattern} is not available for this GitHub Copilot account. Run /advisor to see the models you can use"
+                        )));
+                    }
+                    Some(advisor) => set_advisor(app, session, resources, Some(advisor)),
                     // An account model list loads first; the picker shows
                     // what matches.
                     None => open_model_picker(

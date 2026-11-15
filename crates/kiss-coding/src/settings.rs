@@ -702,6 +702,27 @@ mod tests {
     }
 
     #[test]
+    fn a_saved_advisor_survives_a_reload_and_clearing_it_turns_it_off() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("settings.json");
+        let reload = || {
+            let text = std::fs::read_to_string(&path).unwrap();
+            Settings::from_layers(serde_json::from_str(&text).unwrap(), None)
+        };
+        let mut settings = Settings::from_layers(json!({}), None);
+        settings.advisor_model = Some("anthropic/claude-opus-4-5".into());
+        settings.save_to(&path).unwrap();
+        let mut settings = reload();
+        assert_eq!(
+            settings.advisor_model.as_deref(),
+            Some("anthropic/claude-opus-4-5")
+        );
+        settings.advisor_model = None;
+        settings.save_to(&path).unwrap();
+        assert_eq!(reload().advisor_model, None);
+    }
+
+    #[test]
     fn a_save_writes_only_changed_settings_and_never_project_or_run_values() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("settings.json");

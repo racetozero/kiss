@@ -235,7 +235,7 @@ pub async fn build_startup(
 ) -> Result<Startup> {
     let cwd = std::env::current_dir()?;
     let ReloadedRuntime {
-        settings,
+        mut settings,
         skills,
         prompt_templates,
         context_file_paths,
@@ -261,13 +261,24 @@ pub async fn build_startup(
                 || names_provider(settings.advisor_model.as_deref(), provider)
         })
         .await;
-    if let Some(pattern) = &settings.advisor_model
+    if let Some(pattern) = settings.advisor_model.clone()
         && !args.no_tools
-        && AgentSession::resolve_advisor(&registry, pattern).is_none()
     {
-        warnings.push(format!(
-            "advisorModel \"{pattern}\" in settings.json matches no model in the catalog, so the advisor is off. Run /advisor to choose a model, or correct advisorModel to a provider/model name that kiss --list-models shows."
-        ));
+        let warning = match AgentSession::resolve_advisor(&registry, &pattern) {
+            None => Some(format!(
+                "advisorModel \"{pattern}\" in settings.json matches no model in the catalog, so the advisor is off. Run /advisor to choose a model, or correct advisorModel to a provider/model name that kiss --list-models shows."
+            )),
+            Some((model, _)) if !registry.signed_in(&model.provider) => Some(format!(
+                "advisorModel \"{pattern}\" uses {provider}, which is not logged in, so the advisor is off for this run. Run /login {provider}, or choose another advisor with /advisor.",
+                provider = model.provider
+            )),
+            Some(_) => None,
+        };
+        if let Some(warning) = warning {
+            warnings.push(warning);
+            // Off for this run only; the saved choice stays.
+            settings.override_for_run(|settings| settings.advisor_model = None);
+        }
     }
     warnings.extend(problems);
     warnings.extend(settings.problems.iter().cloned());
