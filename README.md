@@ -234,7 +234,8 @@ session totals.
 KISS saves the choice as `advisorModel` in `~/.kiss/agent/settings.json`.
 Project settings cannot set it, and `--no-tools` and child agents have no
 advisor. If the advisor's provider is not logged in at startup, KISS shows a
-warning and runs without the advisor until you run `/login`.
+warning and runs without the advisor. Log in with `/login`, then run
+`/advisor` again or restart KISS.
 
 ## Continue work from another agent
 
