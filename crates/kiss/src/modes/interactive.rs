@@ -281,8 +281,19 @@ enum BtwState {
     Failed(String),
 }
 
+/// What a model chosen from the catalog becomes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ModelPurpose {
+    /// The session's working model (`/model`).
+    Session,
+    /// The model the `advisor` tool asks (`/advisor`).
+    Advisor,
+}
+
 enum PickerKind {
     Model(Vec<kiss_ai::Model>),
+    /// The advisor picker. The row after the last model is "No advisor".
+    Advisor(Vec<kiss_ai::Model>),
     Thinking,
     ScopedModels,
     Tree,
@@ -497,6 +508,7 @@ enum CommandEvent {
         registry: Arc<kiss_ai::Registry>,
         warnings: Vec<String>,
         pattern: Option<String>,
+        purpose: ModelPurpose,
     },
     LlamaModels(std::result::Result<Vec<LlamaModel>, String>),
     LlamaActionFinished(std::result::Result<String, String>),
@@ -2864,13 +2876,20 @@ fn handle_command_event(
             registry,
             warnings,
             pattern,
+            purpose,
         } => {
+            let command = match purpose {
+                ModelPurpose::Session => "/model",
+                ModelPurpose::Advisor => "/advisor",
+            };
             for warning in &warnings {
                 app.cells.push(Cell::Notice(format!(
-                    "{warning}. Check your connection or sign in again with /login, then run /model again"
+                    "{warning}. Check your connection or sign in again with /login, then run {command} again"
                 )));
             }
-            if let Some((model, thinking)) = pattern
+            if purpose == ModelPurpose::Advisor {
+                open_advisor_picker(app, session, &registry, pattern.as_deref());
+            } else if let Some((model, thinking)) = pattern
                 .as_deref()
                 .filter(|pattern| !kiss_ai::Registry::is_dynamic(pattern))
                 .and_then(|pattern| registry.resolve(pattern, Some(&session.model().provider)))
@@ -4049,7 +4068,7 @@ fn handle_input(
                 return Flow::Continue;
             }
             Some(Action::SelectModel) => {
-                open_model_picker(app, session, None, command_tx);
+                open_model_picker(app, session, None, ModelPurpose::Session, command_tx);
                 return Flow::Continue;
             }
             Some(Action::CycleThinking) => {
@@ -4979,6 +4998,7 @@ fn open_model_picker(
     app: &mut App,
     session: &Arc<kiss_coding::AgentSession>,
     pattern: Option<&str>,
+    purpose: ModelPurpose,
     command_tx: &mpsc::UnboundedSender<CommandEvent>,
 ) {
     let pattern = pattern.map(str::to_owned);
@@ -4987,6 +5007,7 @@ fn open_model_picker(
             registry: Arc::clone(registry),
             warnings: Vec::new(),
             pattern,
+            purpose,
         });
         return;
     }
@@ -5014,6 +5035,7 @@ fn open_model_picker(
             registry: Arc::new(registry),
             warnings,
             pattern,
+            purpose,
         });
         let _ = tx.send(CommandEvent::CommandFinished);
     });
@@ -5081,6 +5103,84 @@ fn open_model_picker_with_filter(
         kind: PickerKind::Model(models),
         list,
     });
+}
+
+/// List every model of a connected provider, then "No advisor". The
+/// current advisor is marked.
+fn open_advisor_picker(
+    app: &mut App,
+    session: &Arc<kiss_coding::AgentSession>,
+    registry: &kiss_ai::Registry,
+    filter: Option<&str>,
+) {
+    let access = ModelAccess::current();
+    let models: Vec<kiss_ai::Model> = registry
+        .available_models()
+        .into_iter()
+        .filter(|(_, model)| access.allows(model))
+        .map(|(_, model)| model.clone())
+        .collect();
+    let current = session.advisor().map(|(model, _)| model);
+    let is_current = |model: &kiss_ai::Model| {
+        current
+            .as_ref()
+            .is_some_and(|current| current.provider == model.provider && current.id == model.id)
+    };
+    let mut items: Vec<SelectItem> = models
+        .iter()
+        .enumerate()
+        .map(|(value, model)| SelectItem {
+            label: format!("{}/{}", model.provider, model.id),
+            detail: Some(if is_current(model) {
+                format!("{} ✔ current", model.display_name())
+            } else {
+                model.display_name().to_string()
+            }),
+            value,
+        })
+        .collect();
+    items.push(SelectItem {
+        label: "No advisor".into(),
+        detail: current.is_none().then(|| "✔ current".into()),
+        value: models.len(),
+    });
+    let selected = models.iter().position(is_current).unwrap_or(models.len());
+    let mut list = SelectList::new(
+        "Advisor · when the agent needs stronger judgment (a hard decision, an ambiguous failure, no progress) it asks this model, which sees the whole conversation and uses extra tokens. Enter saves",
+        items,
+        app.theme.clone(),
+    );
+    list.max_visible = 12;
+    list.selected = selected;
+    if let Some(filter) = filter {
+        list.set_filter(filter.to_string());
+    }
+    app.show_picker(Picker {
+        kind: PickerKind::Advisor(models),
+        list,
+    });
+}
+
+/// Use `advisor` from now on and save it as the user's `advisorModel`.
+fn set_advisor(
+    app: &mut App,
+    session: &Arc<kiss_coding::AgentSession>,
+    resources: &mut InteractiveResources,
+    advisor: Option<(kiss_ai::Model, ThinkingLevel)>,
+    pattern: Option<String>,
+) {
+    session.set_advisor(advisor);
+    resources.settings.advisor_model = pattern;
+    save_interactive_settings(app, session, resources);
+    app.cells.push(Cell::Notice(match session.advisor() {
+        Some((model, thinking)) => format!(
+            "advisor set to {}/{} (thinking {}). The agent can now call the advisor tool",
+            model.provider,
+            model.id,
+            thinking.as_str()
+        ),
+        None => "advisor is off".into(),
+    }));
 }
 
 fn open_thinking_picker(app: &mut App, session: &Arc<kiss_coding::AgentSession>) {
@@ -6784,6 +6884,19 @@ fn apply_picker_selection(
                 }
             }
         }
+        PickerKind::Advisor(models) => {
+            let model = models.get(value).cloned();
+            let pattern = model
+                .as_ref()
+                .map(|model| format!("{}/{}", model.provider, model.id));
+            set_advisor(
+                app,
+                session,
+                resources,
+                model.map(|model| (model, ThinkingLevel::High)),
+                pattern,
+            );
+        }
         PickerKind::Thinking => {
             if let Some(level) = ThinkingLevel::ALL.get(value).copied() {
                 session.set_thinking_level(level);
@@ -7911,6 +8024,7 @@ fn run_slash_command(
                     app,
                     session,
                     (!rest.is_empty()).then_some(rest.as_str()),
+                    ModelPurpose::Session,
                     command_tx,
                 );
             } else if let Some((model, thinking)) = session.registry.resolve(&rest, None) {
@@ -8100,6 +8214,26 @@ fn run_slash_command(
         "webmcp" => start_webmcp(app, session, &rest, command_tx),
         "provider" => run_provider_command(app, &rest),
         "providers" => run_provider_command(app, "list"),
+        "advisor" => match rest.as_str() {
+            "" => open_model_picker(app, session, None, ModelPurpose::Advisor, command_tx),
+            "off" => set_advisor(app, session, resources, None, None),
+            pattern => {
+                match kiss_coding::AgentSession::resolve_advisor(&session.registry, pattern) {
+                    Some(advisor) => {
+                        set_advisor(app, session, resources, Some(advisor), Some(rest.clone()))
+                    }
+                    // An account model list loads first; the picker shows
+                    // what matches.
+                    None => open_model_picker(
+                        app,
+                        session,
+                        Some(pattern),
+                        ModelPurpose::Advisor,
+                        command_tx,
+                    ),
+                }
+            }
+        },
         "btw" => {
             if rest.is_empty() {
                 app.cells
@@ -9694,6 +9828,7 @@ mod tests {
                     registry: Arc::new(registry.clone()),
                     warnings: Vec::new(),
                     pattern: pattern.map(str::to_owned),
+                    purpose: ModelPurpose::Session,
                 },
                 &mut file_search,
                 &session,
@@ -9728,7 +9863,13 @@ mod tests {
             assert_eq!(session.model().provider, "cursor");
             assert_eq!(session.model().id, "gpt-5.5-high");
             for _ in 0..3 {
-                open_model_picker(&mut app, &session, Some("cursor"), &tx);
+                open_model_picker(
+                    &mut app,
+                    &session,
+                    Some("cursor"),
+                    ModelPurpose::Session,
+                    &tx,
+                );
                 let event = rx
                     .try_recv()
                     .expect("cached model list must be ready without waiting for discovery");
@@ -9760,6 +9901,7 @@ mod tests {
                     registry: session.registry.clone(),
                     warnings: vec!["discovery failed".into()],
                     pattern: None,
+                    purpose: ModelPurpose::Session,
                 },
                 &mut file_search,
                 &session,
@@ -9769,6 +9911,35 @@ mod tests {
                 "failed discovery must remain eligible for retry"
             );
         }
+    }
+
+    #[test]
+    fn the_advisor_picker_marks_the_current_advisor_and_ends_with_no_advisor() {
+        let session = test_session(kiss_coding::SessionManager::in_memory(Path::new(
+            "/synthetic",
+        )));
+        let mut app = test_app();
+        let registry = session.registry.clone();
+
+        open_advisor_picker(&mut app, &session, &registry, None);
+        let mut picker = app.picker.take().unwrap();
+        let PickerKind::Advisor(models) = &picker.kind else {
+            panic!("advisor picker")
+        };
+        let last = picker.list.current().unwrap();
+        assert_eq!(
+            (last.label.as_str(), last.value),
+            ("No advisor", models.len())
+        );
+        assert_eq!(last.detail.as_deref(), Some("✔ current"));
+
+        let chosen = models[0].clone();
+        session.set_advisor(Some((chosen.clone(), ThinkingLevel::High)));
+        open_advisor_picker(&mut app, &session, &registry, None);
+        let mut picker = app.picker.take().unwrap();
+        let current = picker.list.current().unwrap();
+        assert_eq!(current.label, format!("{}/{}", chosen.provider, chosen.id));
+        assert!(current.detail.as_deref().unwrap().ends_with("✔ current"));
     }
 
     #[test]

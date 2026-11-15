@@ -3,6 +3,7 @@
 //! AgentSession facade.
 
 mod account_failover;
+pub mod advisor;
 mod child_turn;
 pub mod compaction;
 mod context_file;

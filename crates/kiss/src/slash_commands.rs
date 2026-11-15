@@ -126,6 +126,11 @@ pub(crate) const KISS_SLASH_COMMANDS: &[SlashCommand] = &[
         Some("[list|add|use|remove] [provider]"),
     ),
     SlashCommand::new(
+        "advisor",
+        "Choose a model the agent asks for advice on hard problems",
+        Some("[provider/model|off]"),
+    ),
+    SlashCommand::new(
         "btw",
         "Ask a quick read-only side question",
         Some("<question>"),
@@ -292,6 +297,7 @@ mod tests {
                 "provider",
                 "providers",
                 "accounts",
+                "advisor",
                 "btw",
                 "recap",
                 "workflow",

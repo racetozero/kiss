@@ -376,6 +376,8 @@ pub struct Settings {
     pub retry: RetrySettings,
     pub cache_warming: CacheWarmingMode,
     pub subagents: SubagentSettings,
+    /// `provider/model[:thinking]` the `advisor` tool asks. User settings only.
+    pub advisor_model: Option<String>,
     pub workflows: WorkflowSettings,
     pub steering_mode: QueueMode,
     pub follow_up_mode: QueueMode,
@@ -450,6 +452,10 @@ fn merged_settings(mut global: Value, project: Option<Value>) -> Settings {
         .get("experimentalContextFile")
         .and_then(Value::as_bool)
         .unwrap_or(false);
+    let advisor_model = global
+        .get("advisorModel")
+        .and_then(Value::as_str)
+        .map(str::to_owned);
     let subagents_enabled = global
         .pointer("/subagents/enabled")
         .and_then(Value::as_bool)
@@ -512,6 +518,9 @@ fn merged_settings(mut global: Value, project: Option<Value>) -> Settings {
     // Subagents are a user-level authority choice. A repository must not turn
     // them on through a trusted project settings file.
     settings.subagents.enabled = subagents_enabled;
+    // The advisor receives the whole transcript and spends tokens with a
+    // provider the user chose, so a repository must not choose it.
+    settings.advisor_model = advisor_model;
     settings.experimental_context_file = experimental_context_file;
     // Workflows spend the user's tokens many agents at a time, so the same rule
     // applies: only the user's own settings file decides whether they are on.
@@ -674,6 +683,22 @@ mod tests {
         assert_eq!(settings.default_model, None);
         assert_eq!(settings.problems.len(), 1);
         assert!(settings.problems[0].contains("defaultModel"));
+    }
+
+    #[test]
+    fn only_user_settings_choose_the_advisor() {
+        let project = Some(json!({"advisorModel": "openai/gpt-5.2"}));
+        assert_eq!(
+            Settings::from_layers(json!({}), project.clone()).advisor_model,
+            None
+        );
+        let user = json!({"advisorModel": "anthropic/claude-opus-4-5"});
+        assert_eq!(
+            Settings::from_layers(user, project)
+                .advisor_model
+                .as_deref(),
+            Some("anthropic/claude-opus-4-5")
+        );
     }
 
     #[test]

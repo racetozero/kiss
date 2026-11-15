@@ -4,6 +4,13 @@
 
 ### Added
 
+- `/advisor` picks a second model, from any provider you are logged in to,
+  that the agent can consult through a new `advisor` tool when it needs
+  stronger judgment. The tool takes no arguments: it sends the system prompt
+  and a text transcript of the session to the advisor and returns its
+  guidance. The choice is saved as `advisorModel` in the user settings
+  (`provider/model`, with an optional `:thinking` suffix; default `high`).
+  Project settings cannot set it.
 - A Claude Code-compatible custom status line. Set `statusLine` in
   `settings.json` to `{"type": "command", "command": "~/.claude/statusline.sh"}`
   and the footer shows the command's output. The command receives the same

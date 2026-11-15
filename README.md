@@ -209,6 +209,32 @@ KISS uses summary compaction or your saved reasoning effort.
 
 <img width="432" height="62" alt="image" src="https://github.com/user-attachments/assets/3a3ce46e-3b70-49ce-ba7c-d02996a64630" />
 
+### Choose an advisor model
+
+An advisor is a second model that your main model asks for guidance when it
+needs stronger judgment: a hard decision, an ambiguous failure, or a problem
+it does not solve. Run `/advisor` and pick any model from any provider you are
+logged in to, or pick `No advisor`. For example, use a fast model as the main
+model and a stronger model as the advisor.
+
+```text
+/advisor                              open the picker
+/advisor anthropic/claude-opus-4-5    set the advisor directly
+/advisor openai/gpt-5.2:xhigh         set the advisor and its thinking level
+/advisor off                          remove the advisor
+```
+
+With an advisor set, the main model gets an `advisor` tool without
+arguments. A call sends the system prompt and a text transcript of the
+session to the advisor and returns its answer as the tool result. Long
+transcripts keep the first request and the most recent turns. The advisor
+thinks at `high` unless you add a `:level` suffix, and its cost counts in the
+session totals.
+
+KISS saves the choice as `advisorModel` in `~/.kiss/agent/settings.json`.
+Project settings cannot set it, and `--no-tools` and child agents have no
+advisor.
+
 ## Continue work from another agent
 
 Run `/resume` to continue a KISS, Pi, Claude Code, or OpenAI Codex session.

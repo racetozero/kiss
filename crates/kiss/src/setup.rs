@@ -246,17 +246,29 @@ pub async fn build_startup(
 
     let mut registry = Registry::load(None);
     // Fetch only the account model lists this run can use.
+    let names_provider = |pattern: Option<&str>, provider: &str| {
+        pattern.is_some_and(|pattern| {
+            pattern
+                .strip_prefix(provider)
+                .is_some_and(|rest| rest.starts_with('/'))
+        })
+    };
     let mut warnings = registry
         .refresh_dynamic(|provider| {
             args.provider.as_deref() == Some(provider)
                 || settings.default_provider.as_deref() == Some(provider)
-                || args.model.as_deref().is_some_and(|model| {
-                    model
-                        .strip_prefix(provider)
-                        .is_some_and(|rest| rest.starts_with('/'))
-                })
+                || names_provider(args.model.as_deref(), provider)
+                || names_provider(settings.advisor_model.as_deref(), provider)
         })
         .await;
+    if let Some(pattern) = &settings.advisor_model
+        && !args.no_tools
+        && AgentSession::resolve_advisor(&registry, pattern).is_none()
+    {
+        warnings.push(format!(
+            "advisorModel \"{pattern}\" in settings.json matches no model in the catalog, so the advisor is off. Run /advisor to choose a model, or correct advisorModel to a provider/model name that kiss --list-models shows."
+        ));
+    }
     warnings.extend(problems);
     warnings.extend(settings.problems.iter().cloned());
     warnings.extend(registry.problems.iter().cloned());

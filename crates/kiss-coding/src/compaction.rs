@@ -86,6 +86,15 @@ pub(crate) fn estimate_context_tokens_iter<M: Borrow<AgentMessage>>(
 /// Serialize a conversation to labeled text for the summary prompt. Tool
 /// results are capped so summarization stays cheap.
 pub fn serialize_conversation(messages: &[Message]) -> String {
+    serialize_conversation_capped(messages, TOOL_RESULT_SERIALIZE_CAP)
+}
+
+/// [`serialize_conversation`] with each tool result cut to `tool_result_cap`
+/// characters.
+pub(crate) fn serialize_conversation_capped(
+    messages: &[Message],
+    tool_result_cap: usize,
+) -> String {
     let mut out = String::new();
     for message in messages {
         match message {
@@ -138,9 +147,9 @@ pub fn serialize_conversation(messages: &[Message]) -> String {
                     })
                     .collect::<Vec<_>>()
                     .join("\n");
-                let capped = if text.chars().count() > TOOL_RESULT_SERIALIZE_CAP {
-                    let kept: String = text.chars().take(TOOL_RESULT_SERIALIZE_CAP).collect();
-                    let dropped = text.chars().count() - TOOL_RESULT_SERIALIZE_CAP;
+                let capped = if text.chars().count() > tool_result_cap {
+                    let kept: String = text.chars().take(tool_result_cap).collect();
+                    let dropped = text.chars().count() - tool_result_cap;
                     format!("{kept}\n[... {dropped} characters truncated]")
                 } else {
                     text

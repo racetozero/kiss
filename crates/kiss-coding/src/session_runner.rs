@@ -1,6 +1,7 @@
 //! AgentSession: the high-level facade every mode drives. Owns the session
 //! manager, tool set, queues, retry, auto-compaction, and cost accounting.
 
+use crate::advisor::{ADVISOR_SYSTEM_PROMPT, AdvisorTool};
 use crate::compaction::{
     self, extract_file_ops, file_ops_details, plan_compaction, should_compact,
 };
@@ -263,6 +264,10 @@ pub struct AgentSession {
     workflows: OnceLock<Arc<WorkflowRuntime>>,
     iterative: OnceLock<Arc<IterativeRuntime>>,
     workflow_approver: Mutex<Option<WorkflowApprover>>,
+    /// The model and thinking level the `advisor` tool asks, if any. Only a
+    /// root session has one.
+    advisor: Mutex<Option<(Model, ThinkingLevel)>>,
+    advisor_tool: OnceLock<DynTool>,
     /// Optional replacement for the provider streaming function. Embedders and
     /// tests install one to run the whole loop against a scripted fake model.
     stream_fn: Mutex<Option<StreamFn>>,
@@ -365,9 +370,15 @@ impl AgentSession {
         subagents_allowed: bool,
     ) -> Arc<Self> {
         let totals = manager.usage_totals();
+        let registry: Arc<Registry> = registry.into();
+        let advisor = settings
+            .advisor_model
+            .as_deref()
+            .filter(|_| subagents_allowed)
+            .and_then(|pattern| Self::resolve_advisor(&registry, pattern));
         let session = Arc::new(AgentSession {
             manager: Mutex::new(manager),
-            registry: registry.into(),
+            registry,
             base_tools: Mutex::new(tools.clone()),
             session_tools: Mutex::new(Vec::new()),
             tools: Mutex::new(tools),
@@ -393,9 +404,13 @@ impl AgentSession {
             workflows: OnceLock::new(),
             iterative: OnceLock::new(),
             workflow_approver: Mutex::new(None),
+            advisor: Mutex::new(advisor),
+            advisor_tool: OnceLock::new(),
             stream_fn: Mutex::new(None),
         });
         if subagents_allowed {
+            let tool: DynTool = Arc::new(AdvisorTool(Arc::downgrade(&session)));
+            assert!(session.advisor_tool.set(tool).is_ok());
             let runtime = SubagentRuntime::new(Arc::downgrade(&session));
             assert!(session.subagents.set(runtime).is_ok());
             let workflows = WorkflowRuntime::new(Arc::downgrade(&session));
@@ -418,6 +433,40 @@ impl AgentSession {
 
     pub fn model(&self) -> Model {
         self.model.lock().unwrap().clone()
+    }
+
+    /// The model and thinking level the `advisor` tool asks, if one is set.
+    pub fn advisor(&self) -> Option<(Model, ThinkingLevel)> {
+        self.advisor.lock().unwrap().clone()
+    }
+
+    /// Set or clear the advisor for the next request. A child session or a
+    /// session without tools has no advisor, so this does nothing there.
+    /// Saving the choice is the caller's job (`Settings::advisor_model`).
+    pub fn set_advisor(&self, advisor: Option<(Model, ThinkingLevel)>) {
+        if self.advisor_tool.get().is_none() {
+            return;
+        }
+        *self.advisor.lock().unwrap() = advisor.map(|(model, thinking)| {
+            let thinking = model.clamp_thinking_level(thinking);
+            (model, thinking)
+        });
+        self.rebuild_tools();
+    }
+
+    /// The advisor for a pattern such as `anthropic/claude-opus-5-5` or
+    /// `openai/gpt-5.2:xhigh`. Without a thinking suffix the advisor thinks
+    /// at `high`, or the nearest level the model supports.
+    pub fn resolve_advisor(registry: &Registry, pattern: &str) -> Option<(Model, ThinkingLevel)> {
+        let (model, thinking) = registry.resolve(pattern, None)?;
+        let thinking = model.clamp_thinking_level(thinking.unwrap_or(ThinkingLevel::High));
+        Some((model, thinking))
+    }
+
+    /// The system prompt this session was given, without the blocks that
+    /// `build_context_for` adds per request.
+    pub(crate) fn base_system_prompt(&self) -> String {
+        self.system_prompt.lock().unwrap().clone()
     }
 
     pub fn thinking_level(&self) -> ThinkingLevel {
@@ -639,6 +688,11 @@ impl AgentSession {
             && let Some(runtime) = self.subagents.get()
         {
             tools.extend(runtime.control_tools());
+        }
+        if self.advisor.lock().unwrap().is_some()
+            && let Some(tool) = self.advisor_tool.get()
+        {
+            tools.push(tool.clone());
         }
         // Only a different tool list changes the request prefix; a settings
         // change that keeps the tools must not stop cache warming.
@@ -1421,6 +1475,13 @@ impl AgentSession {
             system_prompt.push_str("\n\n");
             system_prompt.push_str(SUBAGENT_SYSTEM_PROMPT);
         }
+        if tools
+            .iter()
+            .any(|tool| tool.name() == crate::advisor::ADVISOR_TOOL_NAME)
+        {
+            system_prompt.push_str("\n\n");
+            system_prompt.push_str(ADVISOR_SYSTEM_PROMPT);
+        }
         if prompt_mode == PromptMode::Workflow
             && self.workflows_enabled()
             && self.workflows.get().is_some()
@@ -1509,20 +1570,27 @@ impl AgentSession {
         Ok(child)
     }
 
-    async fn run_ephemeral(
+    /// Send one request with no history to `model` and return its answer.
+    /// A model other than the session's runs without fast mode.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) async fn run_ephemeral(
         self: &Arc<Self>,
         kind: &str,
+        (model, thinking): (Model, ThinkingLevel),
         system_prompt: String,
         prompt: String,
         tools: Vec<DynTool>,
-        max_tokens: u64,
+        max_tokens: Option<u64>,
         cancel: CancellationToken,
     ) -> anyhow::Result<EphemeralResponse> {
         let session_id = self.manager.lock().unwrap().session_id().to_string();
-        let model = self.model();
         let mut config = self.loop_config(self, Arc::new(Mutex::new(PromptMode::Ordinary)));
-        config.thinking_level = ThinkingLevel::Off;
-        config.max_tokens = Some(max_tokens);
+        if config.model.provider != model.provider || config.model.id != model.id {
+            config.fast_mode = false;
+        }
+        config.model = model.clone();
+        config.thinking_level = thinking;
+        config.max_tokens = max_tokens;
         config.session_id = Some(format!("ephemeral-{}", uuid::Uuid::new_v4()));
         config.get_steering_messages = None;
         config.get_follow_up_messages = None;
@@ -1605,10 +1673,11 @@ impl AgentSession {
             .collect();
         self.run_ephemeral(
             "btw",
+            (self.model(), ThinkingLevel::Off),
             "Answer the side question from the supplied session context. This is a read-only request. Use the read tool only when a file is needed. Do not propose or perform edits. Give no more than 150 words or 600 characters. Use no more than five bullets. Return only the answer.".into(),
             prompt,
             read_tools,
-            500,
+            Some(500),
             cancel,
         )
         .await
@@ -1626,13 +1695,14 @@ impl AgentSession {
         }
         let response = self
             .run_ephemeral(
-            "title",
+                "title",
+                (self.model(), ThinkingLevel::Off),
                 format!(
                     "Write a one-line title for this task, no more than {SESSION_TITLE_MAX_CHARS} characters. Aim for fewer than five words and start with an imperative verb. Keep ticket IDs and code terms unchanged. Match the user's language. Return the title in sentence case without quotes, Markdown, or ending punctuation."
                 ),
                 format!("User prompt:\n{prompt}"),
                 Vec::new(),
-                64,
+                Some(64),
                 cancel,
             )
             .await?;
@@ -1662,10 +1732,11 @@ impl AgentSession {
             .unwrap_or_default();
         self.run_ephemeral(
             "recap",
+            (self.model(), ThinkingLevel::Off),
             "Summarize the supplied coding session in one plain-text line of at most 120 characters. State what was done and the next action when one is clear. Do not use a prefix, Markdown, or a newline. Return only the recap.".into(),
             format!("Session transcript:\n{transcript}{previous}"),
             Vec::new(),
-            160,
+            Some(160),
             cancel,
         )
         .await
@@ -2641,6 +2712,125 @@ mod ephemeral_tests {
             );
             assert!(!session.is_running());
         }
+    }
+
+    #[tokio::test]
+    async fn the_advisor_tool_asks_the_advisor_model_with_the_transcript() {
+        let session = AgentSession::new(
+            SessionManager::in_memory(Path::new("/test")),
+            Vec::new(),
+            Registry::from_builtin(),
+            Settings::default(),
+            "root prompt".into(),
+            openai_model(),
+            ThinkingLevel::Off,
+            None,
+            Arc::new(|_| {}),
+        );
+        let mut advisor = openai_model();
+        advisor.provider = "anthropic".into();
+        advisor.id = "advisor-test".into();
+        session.set_advisor(Some((advisor, ThinkingLevel::High)));
+        let requests: Arc<Mutex<Vec<(String, ThinkingLevel, kiss_ai::Context)>>> = Arc::default();
+        let saved = requests.clone();
+        session.set_stream_fn(Some(Arc::new(move |model, context, options| {
+            let mut requests = saved.lock().unwrap();
+            requests.push((model.id.clone(), options.reasoning, context.clone()));
+            let mut message =
+                kiss_ai::AssistantMessage::empty("openai-responses", &model.provider, &model.id);
+            message.stop_reason = StopReason::Stop;
+            message.content = vec![match requests.len() {
+                1 => {
+                    message.stop_reason = StopReason::ToolUse;
+                    kiss_ai::ContentBlock::ToolCall(kiss_ai::ToolCall {
+                        id: "call_1".into(),
+                        name: "advisor".into(),
+                        arguments: serde_json::json!({}),
+                        thought_signature: None,
+                        arguments_error: None,
+                    })
+                }
+                2 => {
+                    message.usage.input = 50;
+                    kiss_ai::ContentBlock::text("use approach B")
+                }
+                _ => kiss_ai::ContentBlock::text("done"),
+            }];
+            let (sink, stream) = kiss_ai::EventStream::channel();
+            sink.done(message);
+            stream
+        })));
+
+        session
+            .prompt(vec![AgentMessage::user("solve the hard problem")])
+            .await;
+
+        let requests = requests.lock().unwrap();
+        assert_eq!(requests.len(), 3);
+        let (_, _, first) = &requests[0];
+        assert!(first.tools.iter().any(|tool| tool.name == "advisor"));
+        assert!(first.system_prompt.as_deref().unwrap().contains("Advisor:"));
+        let (model, thinking, advice) = &requests[1];
+        assert_eq!(
+            (model.as_str(), *thinking),
+            ("advisor-test", ThinkingLevel::High)
+        );
+        assert!(advice.tools.is_empty());
+        assert_eq!(advice.messages.len(), 1);
+        let kiss_ai::Message::User(question) = &advice.messages[0] else {
+            panic!("the advisor request must be one user message");
+        };
+        let question = question.content.as_text();
+        assert!(question.contains("root prompt"));
+        assert!(question.contains("[User]: solve the hard problem"));
+        assert!(question.contains("advisor()"));
+        let (_, _, last) = &requests[2];
+        let answered = last.messages.iter().any(|message| {
+            matches!(message, kiss_ai::Message::ToolResult(result)
+                if result.tool_name == "advisor" && !result.is_error
+                    && result.content.iter().any(|block| matches!(block,
+                        kiss_ai::ContentBlock::Text { text, .. } if text == "use approach B")))
+        });
+        assert!(answered);
+        assert_eq!(session.totals().input, 50);
+    }
+
+    #[test]
+    fn only_a_root_session_with_an_advisor_has_the_tool() {
+        let session = settings_test_session(Settings::default(), true);
+        assert!(session.available_tool_names().is_empty());
+        let advisor =
+            AgentSession::resolve_advisor(&session.registry, "anthropic/claude-opus-4-5").unwrap();
+        assert_eq!(
+            advisor.1,
+            advisor.0.clamp_thinking_level(ThinkingLevel::High)
+        );
+        session.set_advisor(Some(advisor.clone()));
+        assert_eq!(session.available_tool_names(), ["advisor"]);
+        assert!(session.build_context().system_prompt.contains("Advisor:"));
+        let child = session
+            .create_subagent_session("task", "/root/task", ForkTurns::None, None, None)
+            .unwrap();
+        assert!(child.advisor().is_none());
+        assert!(child.available_tool_names().is_empty());
+        session.set_advisor(None);
+        assert!(session.available_tool_names().is_empty());
+        assert!(!session.build_context().system_prompt.contains("Advisor:"));
+
+        let settings = Settings {
+            advisor_model: Some("anthropic/claude-opus-4-5:low".into()),
+            ..Default::default()
+        };
+        let configured = settings_test_session(settings.clone(), true);
+        assert_eq!(
+            configured
+                .advisor()
+                .map(|(model, thinking)| (model.id, thinking)),
+            Some(("claude-opus-4-5".into(), ThinkingLevel::Low))
+        );
+        let without_tools = settings_test_session(settings, false);
+        without_tools.set_advisor(Some(advisor));
+        assert!(without_tools.available_tool_names().is_empty());
     }
 
     /// A transient stream error can end a response after it starts a tool call.
