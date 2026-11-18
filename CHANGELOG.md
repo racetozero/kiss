@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.0.41 - 2026-11-18
+
 ### Fixed
 
 - Cursor models no longer refuse to edit files with "the workspace is now
