@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Fixed
+
+- Cursor models no longer refuse to edit files with "the workspace is now
+  `none`" or "I cannot edit a file until a workspace is set". KISS did not
+  tell Cursor the workspace path in its context reply, so Cursor told the
+  model on every prompt that the workspace folders had changed to none.
+
 ## 0.0.40 - 2026-11-14
 
 ### Added

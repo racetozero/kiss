@@ -121,8 +121,6 @@ pub struct AgentRunRequest {
 pub struct ConversationStateStructure {
     #[prost(bytes = "vec", repeated, tag = "1")]
     pub root_prompt_messages_json: Vec<Vec<u8>>,
-    #[prost(string, repeated, tag = "9")]
-    pub previous_workspace_uris: Vec<String>,
     #[prost(int32, optional, tag = "10")]
     pub mode: Option<i32>,
     #[prost(string, tag = "22")]
@@ -594,8 +592,22 @@ pub struct RequestContextSuccess {
 pub struct RequestContext {
     #[prost(message, repeated, tag = "2")]
     pub rules: Vec<CursorRule>,
+    #[prost(message, optional, tag = "4")]
+    pub env: Option<RequestContextEnv>,
     #[prost(message, repeated, tag = "7")]
     pub tools: Vec<McpToolDefinition>,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct RequestContextEnv {
+    #[prost(string, tag = "1")]
+    pub os_version: String,
+    #[prost(string, repeated, tag = "2")]
+    pub workspace_paths: Vec<String>,
+    #[prost(string, tag = "3")]
+    pub shell: String,
+    #[prost(string, optional, tag = "21")]
+    pub process_working_directory: Option<String>,
 }
 
 #[derive(Clone, PartialEq, Message)]

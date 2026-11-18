@@ -390,6 +390,12 @@ async fn run(
                             rule_type: Some(wire::CursorRuleType { global: Some(wire::CursorRuleTypeGlobal {}) }),
                             source: 2, // CursorRuleSource.USER
                         }).into_iter().collect();
+                        // Cursor takes the workspace from this reply, not from the run
+                        // request. Without it Cursor tells the model that the workspace
+                        // is `none`, and the model then refuses to edit files.
+                        let cwd = std::env::current_dir()
+                            .ok()
+                            .map(|path| path.to_string_lossy().into_owned());
                         send(&request_tx, wire::AgentClientMessage {
                             message: Some(wire::agent_client_message::Message::ExecClientMessage(wire::ExecClientMessage {
                                 id: exec.id,
@@ -398,6 +404,12 @@ async fn run(
                                     success: Some(wire::RequestContextSuccess {
                                         request_context: Some(wire::RequestContext {
                                             rules,
+                                            env: Some(wire::RequestContextEnv {
+                                                os_version: std::env::consts::OS.into(),
+                                                workspace_paths: cwd.iter().cloned().collect(),
+                                                shell: std::env::var("SHELL").unwrap_or_default(),
+                                                process_working_directory: cwd,
+                                            }),
                                             tools: context.tools.iter().map(mcp_tool).collect::<Result<Vec<_>>>()?,
                                         }),
                                     }),
@@ -1004,12 +1016,6 @@ fn build_request(
     let run_request = wire::AgentRunRequest {
         conversation_state: Some(wire::ConversationStateStructure {
             root_prompt_messages_json: root_ids,
-            previous_workspace_uris: std::env::current_dir()
-                .ok()
-                .and_then(|path| url::Url::from_directory_path(path).ok())
-                .map(Into::into)
-                .into_iter()
-                .collect(),
             mode: Some(1),
             client_name: "kiss".into(),
         }),
@@ -1582,8 +1588,16 @@ mod tests {
     struct FixtureSetupContext {
         #[prost(message, repeated, tag = "2")]
         rules: Vec<FixtureRule>,
+        #[prost(message, optional, tag = "4")]
+        env: Option<FixtureEnv>,
         #[prost(message, repeated, tag = "7")]
         tools: Vec<wire::McpToolDefinition>,
+    }
+
+    #[derive(Clone, PartialEq, prost::Message)]
+    struct FixtureEnv {
+        #[prost(string, repeated, tag = "2")]
+        workspace_paths: Vec<String>,
     }
 
     #[derive(Clone, PartialEq, prost::Message)]
@@ -1764,6 +1778,8 @@ mod tests {
                                 let context = result.success.unwrap().context.unwrap();
                                 assert_eq!(context.tools[0].tool_name, if shell_mode && mode != "shell-disabled" { "bash" } else { "read" });
                                 assert_eq!(context.rules[0].content, "Follow KISS instructions");
+                                // Cursor reports the workspace as `none` when this is empty.
+                                assert_eq!(context.env.unwrap().workspace_paths, [std::env::current_dir().unwrap().to_string_lossy()]);
                                 assert_eq!(context.rules[0].source, 2);
                                 assert_eq!(context.rules[0].rule_type.as_ref().unwrap().global, Some(Vec::new()));
                                 socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").await.unwrap();
