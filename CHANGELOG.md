@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+### Changed
+
+- The first prompt of a session gets its answer 100 to 250 ms sooner on
+  macOS. KISS read the operating system's trusted root certificates once for
+  each HTTP client, up to three times before the first request. It now reads
+  them once, and starts when you begin to type a prompt.
+- KISS uses less memory. A new idle session uses about 9 MiB instead of
+  11 MiB. A session after one prompt with two file reads uses about 22 MiB
+  instead of 30 MiB. A transcript of 5,000 entries (10 MB of text) uses about
+  74 MiB instead of 123 MiB after two quiet seconds. The terminal renderer no longer
+  keeps a second copy of every transcript row, a tool call with valid
+  arguments no longer loads the full JSON Schema validator, and an idle
+  session returns freed memory to the operating system.
+- KISS starts faster and uses less CPU while a model streams. The time from
+  launch to a ready prompt fell from about 21 ms to about 11 ms with thirty
+  `enabledModels` patterns, because the model catalog parses in one pass and
+  each pattern is prepared once. The footer no longer reads `accounts.json`
+  for every frame.
+
 ## 0.0.41 - 2026-11-18
 
 ### Fixed

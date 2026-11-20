@@ -13,6 +13,8 @@ use std::sync::Arc;
 use kiss_sdk::events::session_event_json;
 
 pub async fn run(args: &Args) -> Result<i32> {
+    // A request follows at once. Read the root certificates during startup.
+    kiss_ai::stream::preload_root_certificates();
     let sink = Arc::new(move |event: SessionEvent| {
         if let Some(value) = session_event_json(&event) {
             println!("{value}");

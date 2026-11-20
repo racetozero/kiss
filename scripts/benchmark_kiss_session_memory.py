@@ -208,6 +208,34 @@ def sample_memory(process: subprocess.Popen[bytes], master: int) -> list[MemoryS
     return observations
 
 
+def run_update(master: int, token: bytes) -> None:
+    """Run `!!cat update.txt` and wait for its output.
+
+    KISS saves a shell result before its screen shows that the command ended.
+    A command sent in that interval is refused and stays in the editor, so
+    press Enter again.
+    """
+    refused = b'did not start because'
+    os.write(master, b'!!cat update.txt\r')
+    data = bytearray()
+    deadline = time.perf_counter() + 30
+    while time.perf_counter() < deadline:
+        if not select.select([master], [], [], 0.05)[0]:
+            continue
+        data.extend(os.read(master, 65_536))
+        if token in data:
+            return
+        if refused in data:
+            data.clear()
+            time.sleep(0.05)
+            os.write(master, b'\r')
+        # Keep only a possible marker prefix across read boundaries.
+        del data[: max(0, len(data) - max(len(token), len(refused)) + 1)]
+    raise RuntimeError(
+        f'timed out waiting for {token!r}. Check local shell commands and repeat the benchmark.'
+    )
+
+
 def run(
     binary: Path, entries: int, compacted: bool, text: str, updates: int, trial: int
 ) -> Trial:
@@ -278,8 +306,7 @@ def run(
                 (root / 'update.txt').write_text(
                     text.replace('\n', ' ') + '\n' + token + '\n'
                 )
-                os.write(master, b'!!cat update.txt\r')
-                wait_for(master, token.encode(), time.perf_counter(), 30)
+                run_update(master, token.encode())
                 # Progress can paint before the completed shell entry is saved.
                 deadline = time.monotonic() + 30
                 while True:

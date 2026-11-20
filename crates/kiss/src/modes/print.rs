@@ -10,6 +10,8 @@ use std::io::Read;
 use std::sync::{Arc, Mutex};
 
 pub async fn run(args: &Args) -> Result<i32> {
+    // A request follows at once. Read the root certificates during startup.
+    kiss_ai::stream::preload_root_certificates();
     let final_text: Arc<Mutex<Vec<String>>> = Default::default();
     let error: Arc<Mutex<Option<String>>> = Default::default();
     let truncated: Arc<Mutex<bool>> = Default::default();

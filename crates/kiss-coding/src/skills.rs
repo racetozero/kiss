@@ -157,7 +157,15 @@ fn scan_dir(dir: &Path, include_root_md: bool, out: &mut Vec<Skill>) {
     }
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.is_dir() {
+        // The directory listing already has the type of most entries. Only a
+        // symbolic link needs a second look, because it can name a directory.
+        let is_dir = match entry.file_type() {
+            Ok(kind) if kind.is_dir() => true,
+            Ok(kind) if kind.is_symlink() => path.is_dir(),
+            Ok(_) => false,
+            Err(_) => path.is_dir(),
+        };
+        if is_dir {
             scan_dir(&path, false, out);
         } else if include_root_md
             && path.extension().and_then(|e| e.to_str()) == Some("md")
@@ -296,6 +304,29 @@ mod tests {
             .find(|skill| skill.name == "pdf-tools")
             .unwrap();
         assert_eq!(loaded.file_path, root.join("pdf-tools/SKILL.md"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_linked_skill_directory_is_discovered() {
+        let dir = tempfile::tempdir().unwrap();
+        let elsewhere = tempfile::tempdir().unwrap();
+        std::fs::write(
+            elsewhere.path().join("SKILL.md"),
+            "---\nname: linked\ndescription: A linked skill\n---\nBody",
+        )
+        .unwrap();
+        std::os::unix::fs::symlink(elsewhere.path(), dir.path().join("linked")).unwrap();
+        // A link to a file is not a skill directory.
+        std::os::unix::fs::symlink(
+            elsewhere.path().join("SKILL.md"),
+            dir.path().join("note.txt"),
+        )
+        .unwrap();
+        let mut out = Vec::new();
+        scan_dir(dir.path(), false, &mut out);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].name, "linked");
     }
 
     #[test]

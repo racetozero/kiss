@@ -508,9 +508,8 @@ async fn connect_websocket(
     })
     .map_err(|_| WebSocketFailure::protocol("cannot make Responses HTTP upgrade URL"))?;
     static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
-    crate::stream::ensure_tls_crypto_provider();
     let client = CLIENT.get_or_init(|| {
-        reqwest::Client::builder()
+        crate::stream::http_client_builder()
             .http1_only()
             .redirect(reqwest::redirect::Policy::none())
             .connect_timeout(WEBSOCKET_CONNECT_TIMEOUT)

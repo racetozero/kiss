@@ -312,14 +312,68 @@ fn info(provider: &str, pool: &Pool) -> PoolInfo {
     }
 }
 
+/// What identifies one version of `accounts.json` without reading it. Each
+/// write replaces the file, so on Unix the inode changes too. That covers a
+/// rewrite that keeps the length within one timestamp step.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct FileSignature {
+    len: u64,
+    modified: std::time::SystemTime,
+    #[cfg(unix)]
+    inode: u64,
+}
+
+fn file_signature(path: &Path) -> Option<FileSignature> {
+    let metadata = std::fs::metadata(path).ok()?;
+    Some(FileSignature {
+        len: metadata.len(),
+        modified: metadata.modified().ok()?,
+        #[cfg(unix)]
+        inode: std::os::unix::fs::MetadataExt::ino(&metadata),
+    })
+}
+
+#[derive(Default)]
+struct PoolInfoCache {
+    path: Option<PathBuf>,
+    signature: Option<FileSignature>,
+    pools: std::sync::Arc<[PoolInfo]>,
+}
+
+static POOL_INFO_CACHE: OnceLock<Mutex<PoolInfoCache>> = OnceLock::new();
+
+/// Every pool with accounts in the file at `path`, sorted by provider ID.
+/// The interactive footer asks on each frame, so an unchanged file costs one
+/// `stat` and no read. Another kiss process can replace the file at any
+/// time, so each call checks it.
+fn pool_infos_at(path: &Path) -> std::sync::Arc<[PoolInfo]> {
+    let signature = file_signature(path);
+    let mut cache = POOL_INFO_CACHE
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap();
+    if cache.path.as_deref() == Some(path) && cache.signature == signature {
+        return cache.pools.clone();
+    }
+    let pools: std::sync::Arc<[PoolInfo]> = read_accounts_at(path)
+        .unwrap_or_default()
+        .pools
+        .iter()
+        .filter(|(_, pool)| !pool.accounts.is_empty())
+        .map(|(provider, pool)| info(provider, pool))
+        .collect();
+    cache.path = Some(path.to_path_buf());
+    cache.signature = signature;
+    cache.pools = pools.clone();
+    pools
+}
+
 /// The provider's pool, or `None` when the provider has no pool.
 pub fn pool(provider: &str) -> Option<PoolInfo> {
-    read_accounts_at(&accounts_path(&auth_path().ok()?))
-        .ok()?
-        .pools
-        .get(provider)
-        .filter(|pool| !pool.accounts.is_empty())
-        .map(|pool| info(provider, pool))
+    pool_infos_at(&accounts_path(&auth_path().ok()?))
+        .iter()
+        .find(|pool| pool.provider == provider)
+        .cloned()
 }
 
 /// Every configured pool, sorted by provider ID.
@@ -327,13 +381,7 @@ pub fn pools() -> Vec<PoolInfo> {
     let Ok(path) = auth_path() else {
         return Vec::new();
     };
-    read_accounts_at(&accounts_path(&path))
-        .unwrap_or_default()
-        .pools
-        .iter()
-        .filter(|(_, pool)| !pool.accounts.is_empty())
-        .map(|(provider, pool)| info(provider, pool))
-        .collect()
+    pool_infos_at(&accounts_path(&path)).to_vec()
 }
 
 fn begin_add_at(auth_path: &Path, provider: &str) -> Result<()> {
@@ -741,6 +789,42 @@ mod tests {
             finish_add_at(&auth_path, "openai-codex", Some(label)).unwrap();
         }
         (directory, auth_path)
+    }
+
+    #[test]
+    #[ignore = "release-mode performance benchmark"]
+    fn benchmark_performance_account_pool_view() {
+        let (_directory, auth_path) = three_accounts();
+        let path = accounts_path(&auth_path);
+        kiss_bench::measure("accounts_read_3", 15, 100, "3_accounts", || {
+            read_accounts_at(&path).unwrap().pools.len()
+        });
+        pool_infos_at(&path);
+        kiss_bench::measure("accounts_view_cached_3", 15, 1_000, "3_accounts", || {
+            pool_infos_at(&path).len()
+        });
+    }
+
+    #[test]
+    fn the_cached_pool_view_follows_every_rewrite_of_the_file() {
+        let (_directory, auth_path) = three_accounts();
+        let path = accounts_path(&auth_path);
+        let active = || {
+            pool_infos_at(&path)
+                .iter()
+                .find(|pool| pool.provider == "openai-codex")
+                .and_then(|pool| pool.active().map(|account| account.index))
+        };
+        assert_eq!(active(), Some(0));
+        assert_eq!(active(), Some(0));
+        // The new file has the same length as the old file.
+        activate_at(&auth_path, "openai-codex", 1).unwrap();
+        assert_eq!(active(), Some(1));
+        activate_at(&auth_path, "openai-codex", 2).unwrap();
+        assert_eq!(active(), Some(2));
+        std::fs::remove_file(&path).unwrap();
+        assert_eq!(active(), None);
+        assert!(pool_infos_at(&path).is_empty());
     }
 
     #[test]

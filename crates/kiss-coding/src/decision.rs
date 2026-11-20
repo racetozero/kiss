@@ -330,7 +330,11 @@ impl DecisionClient {
 
 fn http_client() -> &'static reqwest::Client {
     static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
-    CLIENT.get_or_init(reqwest::Client::new)
+    CLIENT.get_or_init(|| {
+        kiss_ai::stream::http_client_builder()
+            .build()
+            .expect("reqwest client")
+    })
 }
 
 fn collect_interactions(messages: &[AgentMessage], pinned_start: usize) -> Vec<Interaction> {

@@ -597,6 +597,9 @@ const ACTIVE_FRAME_INTERVAL: Duration = Duration::from_millis(33);
 const RESIZE_POLL_INTERVAL: Duration = Duration::from_millis(25);
 const RESIZE_SETTLE_DELAY: Duration = Duration::from_millis(75);
 const MAX_READY_EVENTS_PER_TICK: usize = 256;
+/// How long the session must be quiet before it returns freed memory to the
+/// operating system. Each key press and each event restarts the wait.
+const IDLE_MEMORY_RELEASE_DELAY: Duration = Duration::from_secs(2);
 
 #[derive(Debug)]
 struct ResizeState {
@@ -811,9 +814,10 @@ impl App {
             self.cell_render_cache.truncate(self.cells.len());
         }
 
+        let blank: Arc<str> = Arc::from("");
         for (cell_index, cell) in self.cells.iter().enumerate() {
             if !frame.is_empty() {
-                frame.push(Arc::from(""));
+                frame.push(blank.clone());
             }
             let key = cell_render_key(
                 cell,
@@ -1271,7 +1275,8 @@ fn cell_render_key(
     expand_tools: bool,
     mermaid_mode: MermaidMode,
 ) -> u64 {
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    // Every frame hashes every cell's text, so the hash must be fast.
+    let mut hasher = xxhash_rust::xxh3::Xxh3::new();
     std::mem::discriminant(cell).hash(&mut hasher);
     hide_thinking.hash(&mut hasher);
     expand_tools.hash(&mut hasher);
@@ -1626,6 +1631,14 @@ fn provisional_lines(editor: &mut Editor, theme: &Theme, width: usize) -> Vec<St
 }
 
 // Empty bytes signal the decoder's standalone-Escape deadline, not EOF.
+/// True when the editor holds text for the model: not a slash command and
+/// not a shell command. A request will probably follow.
+fn draft_is_a_prompt(editor: &Editor) -> bool {
+    let text = editor.text();
+    let text = text.trim_start();
+    !text.is_empty() && !text.starts_with(['/', '!'])
+}
+
 async fn read_terminal_input(
     receiver: &mut mpsc::UnboundedReceiver<Vec<u8>>,
     escape_deadline: Option<Instant>,
@@ -1696,6 +1709,15 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
         out.flush()?;
     }
 
+    // The first request reads the operating system's trusted root
+    // certificates, which takes about 100 ms on macOS. A startup message
+    // sends a request at once, so read them now. Otherwise read them when
+    // the user starts to type a prompt, so a session that sends no request
+    // stays small.
+    let mut certificates_requested = !args.messages.is_empty();
+    if certificates_requested {
+        kiss_ai::stream::preload_root_certificates();
+    }
     let startup_args = args.clone();
     let mut startup_task =
         tokio::spawn(async move { build_startup(&startup_args, true, sink).await });
@@ -1746,6 +1768,10 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
                             return Ok(0);
                         }
                     }
+                }
+                if !certificates_requested && draft_is_a_prompt(&provisional_editor) {
+                    certificates_requested = true;
+                    kiss_ai::stream::preload_root_certificates();
                 }
                 startup_dirty = true;
             }
@@ -1963,6 +1989,8 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
 
     let mut ticker = tokio::time::interval(std::time::Duration::from_millis(80));
     ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    // Startup frees the memory that it used to read files and the catalog.
+    let mut memory_release_at = Some(Instant::now() + IDLE_MEMORY_RELEASE_DELAY);
     let mut dirty = true;
     let mut next_render_at = Instant::now();
     let (file_search_tx, mut file_search_rx) = mpsc::unbounded_channel::<FileSearchResult>();
@@ -2024,7 +2052,18 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
                 };
         }
 
+        // Work frees memory, and the allocator keeps it until a later
+        // allocation. An idle session makes none, so ask once after each
+        // quiet period. Only work restarts the wait, not a timer.
+        let mut worked = false;
+        let memory_release_due = memory_release_at.filter(|_| !render_is_active);
         tokio::select! {
+            _ = tokio::time::sleep_until(tokio::time::Instant::from_std(
+                    memory_release_due.unwrap_or_else(Instant::now))),
+                if memory_release_due.is_some() => {
+                memory_release_at = None;
+                crate::release_idle_memory();
+            }
             _ = tokio::time::sleep_until(tokio::time::Instant::from_std(notification_at)),
                 if notification_deadline.is_some() => { dirty = true; }
             // Waking re-runs maybe_refresh_status_line at the loop top.
@@ -2059,6 +2098,7 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
                 }
             }
             Some(event) = event_rx.recv() => {
+                worked = true;
                 handle_session_event(&mut app, event, &mut file_search, &session);
                 for _ in 1..MAX_READY_EVENTS_PER_TICK {
                     let Ok(event) = event_rx.try_recv() else { break };
@@ -2067,6 +2107,7 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
                 dirty = true;
             }
             Some(event) = command_rx.recv() => {
+                worked = true;
                 handle_command_event(&mut app, event, &mut file_search, &session);
                 for _ in 1..MAX_READY_EVENTS_PER_TICK {
                     let Ok(event) = command_rx.try_recv() else { break };
@@ -2075,6 +2116,7 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
                 dirty = true;
             }
             Some(result) = file_search_rx.recv() => {
+                worked = true;
                 apply_file_search_result(&mut app, result);
                 for _ in 1..MAX_READY_EVENTS_PER_TICK {
                     let Ok(result) = file_search_rx.try_recv() else { break };
@@ -2102,9 +2144,17 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
                         Flow::Quit => break 'main,
                     }
                 }
+                if !certificates_requested && draft_is_a_prompt(&app.editor) {
+                    certificates_requested = true;
+                    kiss_ai::stream::preload_root_certificates();
+                }
+                worked = true;
                 dirty = true;
                 next_render_at = Instant::now();
             }
+        }
+        if worked {
+            memory_release_at = Some(Instant::now() + IDLE_MEMORY_RELEASE_DELAY);
         }
     }
 
@@ -9367,6 +9417,25 @@ mod tests {
         app.editor.set_text("!git status");
         update_thinking_border(&mut app, ThinkingLevel::Max);
         assert_eq!(app.editor.border_color_token, "bashMode");
+    }
+
+    #[test]
+    fn only_a_draft_for_the_model_requests_the_root_certificates() {
+        let mut editor = Editor::new(Theme::dark());
+        for (text, expected) in [
+            ("", false),
+            ("   ", false),
+            ("/model", false),
+            ("  /clone", false),
+            ("!ls", false),
+            ("!!cat file", false),
+            ("fix the test", true),
+            ("$review this", true),
+            ("@src/lib.rs explain", true),
+        ] {
+            editor.set_text(text);
+            assert_eq!(draft_is_a_prompt(&editor), expected, "{text:?}");
+        }
     }
 
     #[test]

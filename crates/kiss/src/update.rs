@@ -198,7 +198,7 @@ fn parse_release_tag(tag: &str) -> Result<Version> {
 
 fn http_client() -> Result<reqwest::Client> {
     ensure_tls_crypto_provider()?;
-    reqwest::Client::builder()
+    kiss_ai::stream::http_client_builder()
         .timeout(StdDuration::from_secs(10))
         .user_agent(concat!("kiss/", env!("CARGO_PKG_VERSION")))
         .build()

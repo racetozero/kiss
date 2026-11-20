@@ -84,8 +84,8 @@ impl DiffRenderer {
         height: usize,
         out: &mut impl Write,
     ) -> std::io::Result<()> {
-        self.render_frame_lines(new_lines, width, height, out, |line| {
-            Arc::from(line.as_str())
+        self.render_frame_lines(new_lines, width, height, out, |line, old| {
+            old.cloned().unwrap_or_else(|| Arc::from(line.as_str()))
         })
     }
 
@@ -97,7 +97,9 @@ impl DiffRenderer {
         height: usize,
         out: &mut impl Write,
     ) -> std::io::Result<()> {
-        self.render_frame_lines(new_lines, width, height, out, Arc::clone)
+        // Keep the caller's row, not an equal older one, so the renderer
+        // never holds a row that the transcript cache has dropped.
+        self.render_frame_lines(new_lines, width, height, out, |line, _| line.clone())
     }
 
     fn render_frame_lines<S: AsRef<str>>(
@@ -106,7 +108,7 @@ impl DiffRenderer {
         width: usize,
         height: usize,
         out: &mut impl Write,
-        share_source: impl Fn(&S) -> Arc<str>,
+        share_source: impl Fn(&S, Option<&Arc<str>>) -> Arc<str>,
     ) -> std::io::Result<()> {
         let width = width.max(1);
         let height = height.max(1);
@@ -120,7 +122,7 @@ impl DiffRenderer {
             let unchanged = reusable
                 .as_ref()
                 .and_then(|old| old.source.get(row))
-                .is_some_and(|old| old.as_ref() == source);
+                .is_some_and(|old| same_row(old, source));
             !unchanged && display_width(source) > width
         }) {
             let wrapped: Vec<String> = new_lines
@@ -134,8 +136,8 @@ impl DiffRenderer {
                     }
                 })
                 .collect();
-            prepare_lines(&wrapped, width, height, reusable, |line| {
-                Arc::from(line.as_str())
+            prepare_lines(&wrapped, width, height, reusable, |line, old| {
+                old.cloned().unwrap_or_else(|| Arc::from(line.as_str()))
             })
         } else {
             prepare_lines(new_lines, width, height, reusable, share_source)
@@ -231,6 +233,7 @@ impl DiffRenderer {
                 }
                 buffer.write_all(b"\x1b[2K")?;
                 buffer.write_all(line.as_bytes())?;
+                buffer.write_all(ROW_RESET)?;
             }
             if shrank {
                 buffer.write_all(b"\x1b[J")?;
@@ -283,6 +286,7 @@ impl DiffRenderer {
                 }
                 buffer.write_all(b"\x1b[2K")?;
                 buffer.write_all(line.as_bytes())?;
+                buffer.write_all(ROW_RESET)?;
             }
             buffer.write_all(b"\x1b[?2026l")?;
             buffer.flush()
@@ -337,12 +341,23 @@ impl DiffRenderer {
     }
 }
 
+/// Written after every row, so a style cannot continue into the next row.
+/// It is not stored with the row: most rows are then the same allocation as
+/// the row that the transcript cache holds.
+const ROW_RESET: &[u8] = b"\x1b[0m";
+
+/// Row equality. An unchanged transcript row is the same allocation in each
+/// frame, so most comparisons end at the pointer check.
+fn same_row(old: &str, new: &str) -> bool {
+    (old.len() == new.len() && std::ptr::eq(old.as_ptr(), new.as_ptr())) || old == new
+}
+
 fn prepare_lines<S: AsRef<str>>(
     lines: &[S],
     width: usize,
     height: usize,
     reusable: Option<ReusableLines<'_>>,
-    share_source: impl Fn(&S) -> Arc<str>,
+    share_source: impl Fn(&S, Option<&Arc<str>>) -> Arc<str>,
 ) -> PreparedFrame {
     let viewport_top = lines.len().saturating_sub(height);
     let mut position = None;
@@ -364,28 +379,33 @@ fn prepare_lines<S: AsRef<str>>(
         }
         if marker.is_none()
             && let Some(old) = reusable.as_ref()
-            && old
-                .source
-                .get(row)
-                .is_some_and(|old| old.as_ref() == source)
+            && let Some(old_source) = old.source.get(row)
+            && same_row(old_source, source)
         {
-            source_lines.push(old.source[row].clone());
-            prepared.push(old.prepared[row].clone());
+            let shared = share_source(input, Some(old_source));
+            // A row that needed no change is stored once for both lists.
+            prepared.push(if Arc::ptr_eq(old_source, &old.prepared[row]) {
+                shared.clone()
+            } else {
+                old.prepared[row].clone()
+            });
+            source_lines.push(shared);
             continue;
         }
-        source_lines.push(share_source(input));
+        let shared = share_source(input, None);
         let without_marker = marker
             .map(|_| Cow::Owned(source.replace(CURSOR_MARKER, "")))
             .unwrap_or_else(|| Cow::Borrowed(source));
         let line = if display_width(&without_marker) > width {
-            truncate_to_width(&strip_ansi(&without_marker), width)
+            Cow::Owned(truncate_to_width(&strip_ansi(&without_marker), width))
         } else {
-            without_marker.into_owned()
+            without_marker
         };
-        let mut output = String::with_capacity(line.len() + 4);
-        output.push_str(&line);
-        output.push_str("\x1b[0m");
-        prepared.push(Arc::from(output));
+        prepared.push(match line {
+            Cow::Borrowed(_) => shared.clone(),
+            Cow::Owned(line) => Arc::from(line),
+        });
+        source_lines.push(shared);
     }
     PreparedFrame {
         source: source_lines,
@@ -396,10 +416,11 @@ fn prepare_lines<S: AsRef<str>>(
 
 fn changed_range(old: &[Arc<str>], new: &[Arc<str>]) -> (Option<usize>, Option<usize>) {
     let length = old.len().max(new.len());
-    let changed = |index: usize| {
-        let old_line = old.get(index).map(AsRef::as_ref).unwrap_or("");
-        let new_line = new.get(index).map(AsRef::as_ref).unwrap_or("");
-        old_line != new_line
+    // A row that exists differs from a missing row, even when it is empty.
+    let changed = |index: usize| match (old.get(index), new.get(index)) {
+        (Some(old_line), Some(new_line)) => !same_row(old_line, new_line),
+        (None, None) => false,
+        _ => true,
     };
     let first = (0..length).find(|index| changed(*index));
     let last = first.and_then(|first| (first..length).rev().find(|index| changed(*index)));
@@ -492,6 +513,99 @@ mod tests {
         assert_eq!(
             terminal.lines.last().unwrap().iter().collect::<String>(),
             "retry"
+        );
+    }
+
+    /// Replay a fixed pseudo-random edit sequence and hash every byte sent to
+    /// the terminal. The expected values were recorded before rows were
+    /// shared between the transcript cache and the renderer.
+    #[test]
+    fn a_long_edit_sequence_writes_the_recorded_terminal_bytes() {
+        fn fnv(hash: &mut u64, bytes: &[u8]) {
+            for byte in bytes {
+                *hash ^= u64::from(*byte);
+                *hash = hash.wrapping_mul(0x0100_0000_01b3);
+            }
+        }
+        let mut seed = 0x2545_f491_4f6c_dd1d_u64;
+        let mut next = move |bound: usize| {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            (seed % bound as u64) as usize
+        };
+        let row = |next: &mut dyn FnMut(usize) -> usize| match next(8) {
+            0 => String::new(),
+            1 => format!("\x1b[38;2;90;170;255mstyled {}\x1b[39m tail", next(1000)),
+            2 => format!("wide 界 row {} {}", next(1000), "x".repeat(next(90))),
+            3 => format!("\x1b[1mbold\x1b[22m {}", "long ".repeat(next(30))),
+            _ => format!("plain row {}", next(100_000)),
+        };
+        let mut rows: Vec<String> = Vec::new();
+        let (mut width, mut height) = (40, 12);
+        let mut owned_renderer = DiffRenderer::new();
+        let mut shared_renderer = DiffRenderer::new();
+        let (mut owned_hash, mut shared_hash) =
+            (0xcbf2_9ce4_8422_2325_u64, 0xcbf2_9ce4_8422_2325_u64);
+        let mut total = 0;
+        for _ in 0..600 {
+            match next(12) {
+                0..=4 => {
+                    for _ in 0..=next(4) {
+                        rows.push(row(&mut next));
+                    }
+                }
+                5 | 6 if !rows.is_empty() => {
+                    // Change a row near the end, usually inside the viewport.
+                    let back = next(rows.len().min(height + 3));
+                    let index = rows.len() - 1 - back;
+                    rows[index] = row(&mut next);
+                }
+                7 if rows.len() > 2 => rows.truncate(rows.len() - 1 - next(2)),
+                8 => width = 20 + next(60),
+                9 => height = 5 + next(20),
+                10 if !rows.is_empty() => {
+                    let index = rows.len() - 1 - next(rows.len().min(3));
+                    let split = rows[index]
+                        .char_indices()
+                        .map(|(offset, _)| offset)
+                        .nth(next(6))
+                        .unwrap_or(rows[index].len());
+                    // An escape sequence must stay whole.
+                    if !rows[index][..split].contains('\x1b') {
+                        rows[index].insert_str(split, CURSOR_MARKER);
+                    }
+                }
+                _ => {}
+            }
+            let frame: Vec<String> = rows.clone();
+            let shared: Vec<Arc<str>> = frame.iter().map(|row| Arc::from(row.as_str())).collect();
+            let mut owned_out = Vec::new();
+            let mut shared_out = Vec::new();
+            owned_renderer
+                .render_frame(&frame, width, height, &mut owned_out)
+                .unwrap();
+            shared_renderer
+                .render_shared_frame(&shared, width, height, &mut shared_out)
+                .unwrap();
+            // The cursor marker belongs to one frame only.
+            for row in &mut rows {
+                if row.contains(CURSOR_MARKER) {
+                    *row = row.replace(CURSOR_MARKER, "");
+                }
+            }
+            total += owned_out.len();
+            fnv(&mut owned_hash, &owned_out);
+            fnv(&mut shared_hash, &shared_out);
+        }
+        assert_eq!(
+            (total, owned_hash, shared_hash),
+            (
+                1_866_928,
+                16_542_310_529_929_354_599,
+                16_542_310_529_929_354_599
+            ),
+            "the terminal bytes changed"
         );
     }
 

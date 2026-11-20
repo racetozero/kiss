@@ -2531,6 +2531,7 @@ dependencies = [
  "tokio-tungstenite",
  "tokio-util",
  "url",
+ "xxhash-rust",
 ]
 
 [[package]]
@@ -2571,12 +2572,14 @@ dependencies = [
  "h2 0.4.15",
  "http 1.5.0",
  "kiss-bench",
+ "memchr",
  "prost",
  "prost-types",
  "rand 0.9.5",
  "rcgen",
  "reqwest 0.12.28",
  "rustls 0.23.43",
+ "rustls-native-certs",
  "serde",
  "serde_json",
  "sha2 0.10.9",

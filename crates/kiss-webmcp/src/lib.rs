@@ -727,7 +727,7 @@ struct VersionResponse {
 
 async fn cdp_url_from_port(port: u16) -> Result<Url> {
     let endpoint = format!("http://127.0.0.1:{port}/json/version");
-    let client = reqwest::Client::builder()
+    let client = kiss_ai::stream::http_client_builder()
         .timeout(Duration::from_secs(5))
         .build()?;
     let version = client

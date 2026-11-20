@@ -639,14 +639,13 @@ fn cursor_request(
 ) -> reqwest::RequestBuilder {
     static HTTP1: OnceLock<reqwest::Client> = OnceLock::new();
     static NEGOTIATED: OnceLock<reqwest::Client> = OnceLock::new();
-    crate::stream::ensure_tls_crypto_provider();
     let slot = if transport == CursorTransport::Http1 {
         &HTTP1
     } else {
         &NEGOTIATED
     };
     let client = slot.get_or_init(|| {
-        let builder = reqwest::Client::builder()
+        let builder = crate::stream::http_client_builder()
             .redirect(reqwest::redirect::Policy::none())
             .connect_timeout(Duration::from_secs(30))
             .pool_idle_timeout(Duration::from_secs(90));

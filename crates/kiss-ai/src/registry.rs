@@ -244,6 +244,97 @@ struct CatalogModel {
     headers: BTreeMap<String, String>,
 }
 
+/// One entry of a generated provider file: a model and its operation.
+/// The operation is the entry's `type`, which `Model` does not have.
+struct CatalogEntry {
+    /// False for an image or classifier entry.
+    is_chat: bool,
+    model: Model,
+}
+
+impl<'de> Deserialize<'de> for CatalogEntry {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        use serde::de::{DeserializeSeed, MapAccess, Visitor};
+        use std::borrow::Cow;
+
+        struct Key;
+        impl<'de> Visitor<'de> for Key {
+            type Value = Cow<'de, str>;
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("a field name")
+            }
+            fn visit_borrowed_str<E>(self, key: &'de str) -> Result<Self::Value, E> {
+                Ok(Cow::Borrowed(key))
+            }
+            fn visit_str<E>(self, key: &str) -> Result<Self::Value, E> {
+                Ok(Cow::Owned(key.to_owned()))
+            }
+        }
+        impl<'de> DeserializeSeed<'de> for Key {
+            type Value = Cow<'de, str>;
+            fn deserialize<D: serde::Deserializer<'de>>(
+                self,
+                deserializer: D,
+            ) -> Result<Self::Value, D::Error> {
+                deserializer.deserialize_str(self)
+            }
+        }
+
+        /// Gives `Model` every field of the entry except `type`.
+        struct WithoutType<'a, A> {
+            map: A,
+            kind: &'a mut Option<String>,
+        }
+        impl<'de, A: MapAccess<'de>> MapAccess<'de> for WithoutType<'_, A> {
+            type Error = A::Error;
+            fn next_key_seed<K: DeserializeSeed<'de>>(
+                &mut self,
+                seed: K,
+            ) -> Result<Option<K::Value>, A::Error> {
+                loop {
+                    let Some(key) = self.map.next_key_seed(Key)? else {
+                        return Ok(None);
+                    };
+                    if key == "type" {
+                        *self.kind = Some(self.map.next_value()?);
+                        continue;
+                    }
+                    let key = serde::de::value::CowStrDeserializer::new(key);
+                    return seed.deserialize(key).map(Some);
+                }
+            }
+            fn next_value_seed<V: DeserializeSeed<'de>>(
+                &mut self,
+                seed: V,
+            ) -> Result<V::Value, A::Error> {
+                self.map.next_value_seed(seed)
+            }
+        }
+
+        struct Entry;
+        impl<'de> Visitor<'de> for Entry {
+            type Value = CatalogEntry;
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("a catalog entry")
+            }
+            fn visit_map<A: MapAccess<'de>>(self, map: A) -> Result<CatalogEntry, A::Error> {
+                let mut kind = None;
+                let fields = WithoutType {
+                    map,
+                    kind: &mut kind,
+                };
+                let model =
+                    Model::deserialize(serde::de::value::MapAccessDeserializer::new(fields))?;
+                Ok(CatalogEntry {
+                    is_chat: kind.is_none_or(|kind| kind == "chat"),
+                    model,
+                })
+            }
+        }
+        deserializer.deserialize_map(Entry)
+    }
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct RadiusGatewayConfig {
@@ -279,7 +370,11 @@ struct DatabricksModelService {
 #[derive(Debug, Clone)]
 pub struct Registry {
     models: Vec<Model>,
-    model_indices: HashMap<(String, String), usize>,
+    /// The position in `models` of each provider and model ID, keyed by the
+    /// hash of the pair. The names are in `models` already, so the index
+    /// does not keep a second copy of them.
+    model_indices: HashMap<u64, usize>,
+    index_hasher: std::hash::RandomState,
     manually_configured_providers: BTreeSet<String>,
     /// Placeholder API keys declared in models.json (e.g. "ollama").
     pub declared_keys: BTreeMap<String, String>,
@@ -314,6 +409,7 @@ impl Registry {
         let mut r = Registry {
             models: Vec::new(),
             model_indices: HashMap::new(),
+            index_hasher: Default::default(),
             manually_configured_providers: BTreeSet::new(),
             declared_keys: BTreeMap::new(),
             auth_providers: BTreeMap::new(),
@@ -588,6 +684,23 @@ impl Registry {
     }
 
     fn merge_generated_catalog(&mut self, text: &str) -> Result<()> {
+        // Read each model straight from the text. A generic JSON tree of the
+        // whole file takes longer to build than the models, and leaves freed
+        // memory scattered between them. The direct reader fails on an
+        // entry that is not a chat model and does not have a model's shape,
+        // so such a file goes through the generic tree instead.
+        if let Ok(catalog) =
+            serde_json::from_str::<BTreeMap<String, BTreeMap<String, CatalogEntry>>>(text)
+        {
+            for models in catalog.into_values() {
+                for entry in models.into_values() {
+                    if entry.is_chat {
+                        self.merge_generated_model(entry.model);
+                    }
+                }
+            }
+            return Ok(());
+        }
         let catalog: BTreeMap<String, BTreeMap<String, serde_json::Value>> =
             serde_json::from_str(text).context("parse generated Pi model catalog")?;
         for models in catalog.into_values() {
@@ -601,34 +714,51 @@ impl Registry {
                 {
                     continue;
                 }
-                let mut model: Model = serde_json::from_value(value)
+                let model: Model = serde_json::from_value(value)
                     .with_context(|| format!("parse chat model {key}"))?;
-                // Mistral models also support its OpenAI-compatible chat API.
-                // The native Conversations API is not needed by this harness.
-                if model.api == "mistral-conversations" {
-                    model.api = "openai-completions".into();
-                    model.base_url = "https://api.mistral.ai/v1".into();
-                    if !model.thinking_level_map.is_empty() {
-                        model
-                            .compat
-                            .get_or_insert_default()
-                            .supports_reasoning_effort = Some(true);
-                    }
-                }
-                expand_environment_placeholders(&model.provider, &mut model.base_url);
-                self.upsert(model);
+                self.merge_generated_model(model);
             }
         }
         Ok(())
     }
 
+    fn merge_generated_model(&mut self, mut model: Model) {
+        // Mistral models also support its OpenAI-compatible chat API.
+        // The native Conversations API is not needed by this harness.
+        if model.api == "mistral-conversations" {
+            model.api = "openai-completions".into();
+            model.base_url = "https://api.mistral.ai/v1".into();
+            if !model.thinking_level_map.is_empty() {
+                model
+                    .compat
+                    .get_or_insert_default()
+                    .supports_reasoning_effort = Some(true);
+            }
+        }
+        expand_environment_placeholders(&model.provider, &mut model.base_url);
+        self.upsert(model);
+    }
+
+    fn index_key(&self, provider: &str, id: &str) -> u64 {
+        use std::hash::BuildHasher as _;
+        self.index_hasher.hash_one((provider, id))
+    }
+
     fn upsert(&mut self, model: Model) {
-        let key = (model.provider.clone(), model.id.clone());
-        if let Some(&index) = self.model_indices.get(&key) {
-            self.models[index] = model;
-        } else {
-            self.model_indices.insert(key, self.models.len());
-            self.models.push(model);
+        let key = self.index_key(&model.provider, &model.id);
+        let same = |other: &Model| other.provider == model.provider && other.id == model.id;
+        match self.model_indices.get(&key) {
+            Some(&index) if same(&self.models[index]) => self.models[index] = model,
+            // Two different models have one hash. The index keeps the first;
+            // the other is found by a scan.
+            Some(_) => match self.models.iter().position(same) {
+                Some(index) => self.models[index] = model,
+                None => self.models.push(model),
+            },
+            None => {
+                self.model_indices.insert(key, self.models.len());
+                self.models.push(model);
+            }
         }
     }
 
@@ -639,12 +769,12 @@ impl Registry {
             .collect::<std::collections::HashSet<_>>();
         self.models
             .retain(|model| model.provider != provider || model_ids.contains(model.id.as_str()));
-        self.model_indices = self
-            .models
-            .iter()
-            .enumerate()
-            .map(|(index, model)| ((model.provider.clone(), model.id.clone()), index))
-            .collect();
+        self.model_indices.clear();
+        for (index, model) in self.models.iter().enumerate() {
+            let key = self.index_key(&model.provider, &model.id);
+            // On a shared hash the index keeps the first model, as `upsert` does.
+            self.model_indices.entry(key).or_insert(index);
+        }
     }
 
     fn merge_catalog(&mut self, text: &str) -> Result<()> {
@@ -826,25 +956,85 @@ impl Registry {
 
     /// Match models against comma-separated glob-ish patterns (`claude-*`).
     pub fn match_patterns(&self, patterns: &[String]) -> Vec<Model> {
-        let patterns: Vec<String> = patterns
+        // Prepare each pattern once and lower each model name once. Thirty
+        // patterns against the whole catalog are about 110,000 comparisons
+        // at each start. Lowering both sides and setting up a substring
+        // search inside each comparison took about 10 ms.
+        let patterns: Vec<LoweredPattern> = patterns
             .iter()
             .map(|pattern| match pattern.trim().split_once('/') {
                 Some((provider, rest)) => format!("{}/{rest}", canonical_provider_id(provider)),
                 None => pattern.trim().to_owned(),
             })
+            .map(|pattern| LoweredPattern::new(&pattern))
             .collect();
+        if patterns.is_empty() {
+            return Vec::new();
+        }
         let mut out = Vec::new();
+        let mut scoped = String::new();
         for m in &self.models {
-            for pat in &patterns {
-                if pattern_matches(pat, &m.id)
-                    || pattern_matches(pat, &format!("{}/{}", m.provider, m.id))
-                {
-                    out.push(m.clone());
-                    break;
-                }
+            let id = m.id.to_lowercase();
+            scoped.clear();
+            scoped.push_str(&m.provider);
+            scoped.push('/');
+            scoped.push_str(&m.id);
+            let scoped = scoped.to_lowercase();
+            if patterns
+                .iter()
+                .any(|pattern| pattern.matches(&id) || pattern.matches(&scoped))
+            {
+                out.push(m.clone());
             }
         }
         out
+    }
+}
+
+/// A simple `*` glob that ignores case, prepared for many comparisons.
+struct LoweredPattern {
+    /// The text between the `*` characters, in lower case.
+    parts: Vec<(String, memchr::memmem::Finder<'static>)>,
+}
+
+impl LoweredPattern {
+    fn new(pattern: &str) -> Self {
+        Self {
+            parts: pattern
+                .to_lowercase()
+                .split('*')
+                .map(|part| {
+                    let finder = memchr::memmem::Finder::new(part).into_owned();
+                    (part.to_owned(), finder)
+                })
+                .collect(),
+        }
+    }
+
+    /// `value` must be in lower case.
+    fn matches(&self, value: &str) -> bool {
+        let value = value.as_bytes();
+        if let [(_, whole)] = self.parts.as_slice() {
+            return whole.find(value).is_some();
+        }
+        let mut pos = 0usize;
+        for (i, (part, finder)) in self.parts.iter().enumerate() {
+            if part.is_empty() {
+                continue;
+            }
+            match finder.find(&value[pos..]) {
+                Some(found) => {
+                    if i == 0 && found != 0 {
+                        return false;
+                    }
+                    pos += found + part.len();
+                }
+                None => return false,
+            }
+        }
+        self.parts
+            .last()
+            .is_none_or(|(last, _)| value.ends_with(last.as_bytes()))
     }
 }
 
@@ -873,43 +1063,76 @@ fn split_thinking_suffix(pattern: &str) -> (&str, Option<ThinkingLevel>) {
     (pattern, None)
 }
 
-fn pattern_matches(pattern: &str, value: &str) -> bool {
-    // Simple `*` glob, case-insensitive.
-    let pattern = pattern.to_lowercase();
-    let value = value.to_lowercase();
-    let parts: Vec<&str> = pattern.split('*').collect();
-    if parts.len() == 1 {
-        return value.contains(&pattern);
-    }
-    let mut pos = 0usize;
-    for (i, part) in parts.iter().enumerate() {
-        if part.is_empty() {
-            continue;
-        }
-        match value[pos..].find(part) {
-            Some(found) => {
-                if i == 0 && found != 0 {
-                    return false;
-                }
-                pos += found + part.len();
-            }
-            None => return false,
-        }
-    }
-    if let Some(last) = parts.last()
-        && !last.is_empty()
-        && !value.ends_with(last)
-    {
-        return false;
-    }
-    true
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
     use tokio::net::TcpListener;
+
+    /// The catalog parser reads each model from its own text. This test
+    /// reads the same files through a generic JSON tree, as the parser did
+    /// before, and expects the same models in the same order.
+    #[test]
+    fn the_catalog_parser_matches_a_generic_json_parse() {
+        let mut expected = Registry {
+            models: Vec::new(),
+            model_indices: HashMap::new(),
+            index_hasher: Default::default(),
+            manually_configured_providers: BTreeSet::new(),
+            declared_keys: BTreeMap::new(),
+            auth_providers: BTreeMap::new(),
+            problems: Vec::new(),
+        };
+        for text in BUILTIN_PROVIDER_CATALOGS {
+            let catalog: BTreeMap<String, BTreeMap<String, serde_json::Value>> =
+                serde_json::from_str(text).unwrap();
+            for models in catalog.into_values() {
+                for value in models.into_values() {
+                    if value
+                        .get("type")
+                        .and_then(serde_json::Value::as_str)
+                        .is_some_and(|kind| kind != "chat")
+                    {
+                        continue;
+                    }
+                    let mut model: Model = serde_json::from_value(value).unwrap();
+                    if model.api == "mistral-conversations" {
+                        model.api = "openai-completions".into();
+                        model.base_url = "https://api.mistral.ai/v1".into();
+                        if !model.thinking_level_map.is_empty() {
+                            model
+                                .compat
+                                .get_or_insert_default()
+                                .supports_reasoning_effort = Some(true);
+                        }
+                    }
+                    expand_environment_placeholders(&model.provider, &mut model.base_url);
+                    expected.upsert(model);
+                }
+            }
+        }
+        // Every built-in file must take the direct reader. If one stops,
+        // start-up is slower: give the new entry a model's shape.
+        for text in BUILTIN_PROVIDER_CATALOGS {
+            let direct =
+                serde_json::from_str::<BTreeMap<String, BTreeMap<String, CatalogEntry>>>(text);
+            assert!(direct.is_ok(), "{:?}", direct.err());
+        }
+        let registry = Registry::from_builtin();
+        assert_eq!(registry.all().len(), expected.all().len());
+        for (index, (actual, expected)) in registry.all().iter().zip(expected.all()).enumerate() {
+            assert_eq!(actual, expected, "model {index}");
+        }
+        assert_eq!(registry.model_indices.len(), registry.all().len());
+    }
+
+    #[test]
+    #[ignore = "release-mode performance benchmark"]
+    fn benchmark_performance_registry_load() {
+        kiss_bench::measure("registry_builtin", 15, 5, "builtin_catalog", || {
+            Registry::from_builtin().all().len()
+        });
+    }
 
     #[test]
     fn builtin_catalog_loads() {
@@ -1189,6 +1412,29 @@ mod tests {
     }
 
     #[test]
+    fn a_file_with_an_entry_of_another_shape_still_loads_its_chat_models() {
+        let mut registry = Registry::from_builtin();
+        let count = registry.all().len();
+        // The image entry has no `api`, and its `type` is not its first key.
+        registry
+            .merge_generated_catalog(
+                r#"{"openai-completions": {
+            "chat:new": {"id":"new","type":"chat","api":"openai-completions","provider":"test","baseUrl":"https://example.test"},
+            "chat:plain": {"id":"plain","api":"openai-completions","provider":"test","baseUrl":"https://example.test"},
+            "image:paint": {"id":"paint","type":"image"}
+        }}"#,
+            )
+            .unwrap();
+        assert_eq!(registry.all().len(), count + 2);
+        assert!(registry.resolve("test/new", None).is_some());
+        assert!(registry.resolve("test/plain", None).is_some());
+        let error = registry
+            .merge_generated_catalog(r#"{"api": {"chat:broken": {"type":"chat","id":"broken"}}}"#)
+            .unwrap_err();
+        assert!(format!("{error:#}").starts_with("parse chat model chat:broken"));
+    }
+
+    #[test]
     fn deepseek_flash_is_in_the_catalog() {
         let registry = Registry::from_builtin();
         let (model, _) = registry
@@ -1218,6 +1464,111 @@ mod tests {
 
         let (m, _) = r.resolve("openai/gpt", None).expect("provider prefix");
         assert_eq!(m.provider, "openai");
+    }
+
+    /// The comparison as it was when it lowered both sides on every call.
+    fn reference_pattern_matches(pattern: &str, value: &str) -> bool {
+        // Simple `*` glob, case-insensitive.
+        let pattern = pattern.to_lowercase();
+        let value = value.to_lowercase();
+        let parts: Vec<&str> = pattern.split('*').collect();
+        if parts.len() == 1 {
+            return value.contains(&pattern);
+        }
+        let mut pos = 0usize;
+        for (i, part) in parts.iter().enumerate() {
+            if part.is_empty() {
+                continue;
+            }
+            match value[pos..].find(part) {
+                Some(found) => {
+                    if i == 0 && found != 0 {
+                        return false;
+                    }
+                    pos += found + part.len();
+                }
+                None => return false,
+            }
+        }
+        if let Some(last) = parts.last()
+            && !last.is_empty()
+            && !value.ends_with(last)
+        {
+            return false;
+        }
+        true
+    }
+
+    #[test]
+    fn pattern_matching_agrees_with_the_reference_for_the_whole_catalog() {
+        let registry = Registry::from_builtin();
+        let patterns = [
+            "claude-*",
+            "Claude-Opus-*",
+            "anthropic/claude-opus-5-5",
+            "openai-codex/gpt-6-sol",
+            "openrouter/anthropic/*",
+            "azure-openai-responses/gpt-6.1-*",
+            "*-sol",
+            "*",
+            "**",
+            "gpt*sol*",
+            "*/kimi-*",
+            "amazon-bedrock/amazon.nova-2-lite-v1:0",
+            "  google/gemini-4-argon  ",
+            "no-such-model",
+            "",
+        ];
+        for count in [1, 3, patterns.len()] {
+            for chosen in patterns.windows(count) {
+                let chosen: Vec<String> =
+                    chosen.iter().map(|pattern| pattern.to_string()).collect();
+                let canonical: Vec<String> = chosen
+                    .iter()
+                    .map(|pattern| match pattern.trim().split_once('/') {
+                        Some((provider, rest)) => {
+                            format!("{}/{rest}", canonical_provider_id(provider))
+                        }
+                        None => pattern.trim().to_owned(),
+                    })
+                    .collect();
+                let expected: Vec<&Model> = registry
+                    .all()
+                    .iter()
+                    .filter(|model| {
+                        canonical.iter().any(|pattern| {
+                            reference_pattern_matches(pattern, &model.id)
+                                || reference_pattern_matches(
+                                    pattern,
+                                    &format!("{}/{}", model.provider, model.id),
+                                )
+                        })
+                    })
+                    .collect();
+                let actual = registry.match_patterns(&chosen);
+                assert_eq!(actual.iter().collect::<Vec<_>>(), expected, "{chosen:?}");
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "release-mode performance benchmark"]
+    fn benchmark_performance_match_patterns() {
+        let registry = Registry::from_builtin();
+        let patterns: Vec<String> = registry
+            .all()
+            .iter()
+            .step_by(registry.all().len() / 30)
+            .take(30)
+            .map(|model| format!("{}/{}", model.provider, model.id))
+            .collect();
+        kiss_bench::measure(
+            "registry_match_30_patterns",
+            15,
+            3,
+            "30_patterns_whole_catalog",
+            || registry.match_patterns(&patterns).len(),
+        );
     }
 
     #[test]

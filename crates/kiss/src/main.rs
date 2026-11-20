@@ -68,6 +68,19 @@ fn main() -> ExitCode {
     exit_code(code)
 }
 
+// mimalloc returns freed memory to the operating system only when the
+// program allocates or frees again later. An idle session does neither, so
+// it kept several megabytes that it no longer used. Interactive mode calls
+// this a short time after activity stops.
+pub(crate) fn release_idle_memory() {
+    unsafe extern "C" {
+        // From the mimalloc library that the `mimalloc` crate links.
+        fn mi_collect(force: bool);
+    }
+    // SAFETY: `mi_collect` may be called from any thread at any time.
+    unsafe { mi_collect(true) }
+}
+
 fn exit_code(code: i32) -> ExitCode {
     ExitCode::from(u8::try_from(code).unwrap_or(1))
 }

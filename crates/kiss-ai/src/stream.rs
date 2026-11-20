@@ -192,15 +192,64 @@ fn drop_foreign_thinking(model: &Model, context: &mut Context) {
 /// Shared HTTP client with connection pooling across requests.
 #[cfg(feature = "native")]
 pub fn http_client() -> &'static reqwest::Client {
-    ensure_tls_crypto_provider();
     static CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
     CLIENT.get_or_init(|| {
-        reqwest::Client::builder()
+        http_client_builder()
             .connect_timeout(std::time::Duration::from_secs(30))
             .pool_idle_timeout(std::time::Duration::from_secs(90))
             .build()
             .expect("reqwest client")
     })
+}
+
+/// The operating system's trusted root certificates, read once for the
+/// process. On macOS the read takes about 100 ms and starts Security
+/// framework work on other threads, and reqwest repeats it for each client.
+#[cfg(feature = "native")]
+fn native_root_certificates() -> &'static [reqwest::Certificate] {
+    static CERTIFICATES: std::sync::OnceLock<Vec<reqwest::Certificate>> =
+        std::sync::OnceLock::new();
+    CERTIFICATES.get_or_init(|| {
+        rustls_native_certs::load_native_certs()
+            .certs
+            .into_iter()
+            // reqwest skips a native certificate that rustls cannot parse,
+            // but it fails the client for an added one. Skip it here.
+            .filter(|certificate| {
+                rustls::RootCertStore::empty()
+                    .add(certificate.clone())
+                    .is_ok()
+            })
+            .filter_map(|certificate| reqwest::Certificate::from_der(&certificate).ok())
+            .collect()
+    })
+}
+
+/// Start every reqwest client from this builder. It trusts the same root
+/// certificates as `reqwest::Client::builder()`, but all clients share one
+/// read of the operating system's store.
+#[cfg(feature = "native")]
+pub fn http_client_builder() -> reqwest::ClientBuilder {
+    ensure_tls_crypto_provider();
+    native_root_certificates().iter().cloned().fold(
+        reqwest::Client::builder().tls_built_in_native_certs(false),
+        reqwest::ClientBuilder::add_root_certificate,
+    )
+}
+
+/// Read the trusted root certificates on a blocking thread, so the first
+/// request does not wait for them. Call it inside a Tokio runtime when a
+/// request will probably follow, for example when the user starts to type.
+#[cfg(feature = "native")]
+pub fn preload_root_certificates() {
+    static STARTED: std::sync::Once = std::sync::Once::new();
+    STARTED.call_once(|| {
+        if let Ok(runtime) = tokio::runtime::Handle::try_current() {
+            runtime.spawn_blocking(|| {
+                native_root_certificates();
+            });
+        }
+    });
 }
 
 #[cfg(feature = "native")]
@@ -224,6 +273,32 @@ mod tests {
         super::ensure_tls_crypto_provider();
         assert!(rustls::crypto::CryptoProvider::get_default().is_some());
         reqwest::Client::builder().build().unwrap();
+    }
+
+    #[test]
+    fn clients_share_one_read_of_the_native_root_certificates() {
+        let first = super::native_root_certificates().as_ptr();
+        super::http_client_builder().build().unwrap();
+        super::http_client_builder().http1_only().build().unwrap();
+        assert_eq!(super::native_root_certificates().as_ptr(), first);
+    }
+
+    #[test]
+    #[ignore = "release-mode performance benchmark"]
+    fn benchmark_performance_http_client_build() {
+        // The first build in a process also reads the operating system's
+        // trusted root certificates. Later builds reuse them.
+        let started = std::time::Instant::now();
+        super::http_client_builder().build().unwrap();
+        kiss_bench::report(
+            "http_client_first_build",
+            &mut [started.elapsed().as_nanos()],
+            1,
+            "native_root_read_and_one_client",
+        );
+        kiss_bench::measure("http_client_next_build", 11, 3, "one_client", || {
+            super::http_client_builder().build().unwrap()
+        });
     }
 
     #[test]
