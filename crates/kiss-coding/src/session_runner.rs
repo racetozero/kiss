@@ -1214,6 +1214,11 @@ impl AgentSession {
             Box::pin(async move {
                 let settings = session.settings();
                 let context_file_changed = session.sync_context_file();
+                // Every request is checked, including the first of a run and
+                // one after steering, so a prompt never starts past the
+                // threshold.
+                let cancelled = session.cancel.lock().unwrap().is_cancelled();
+                let compacted = session.compact_past_threshold(cancelled).await;
                 let model = session.model();
                 let saved_effort = session.thinking_level();
                 let decision_model = settings
@@ -1228,6 +1233,7 @@ impl AgentSession {
                 let mut update = TurnUpdate {
                     context: (model_changed
                         || context_file_changed
+                        || compacted
                         || settings.experimental_context_file)
                         .then(|| session.build_context_for(*active_prompt_mode.lock().unwrap())),
                     model: model_changed.then(|| model.clone()),
@@ -1336,33 +1342,10 @@ impl AgentSession {
                     before != *active
                 };
 
+                // Threshold compaction runs in `prepare_generation`, before
+                // each model request.
                 let context_file_changed = session.sync_context_file();
-                let mut context_changed = mode_changed || context_file_changed;
-                if has_tool_results {
-                    let settings = session.settings();
-                    let cancel = session.cancel.lock().unwrap().clone();
-                    let model = session.model();
-                    let revision_before = {
-                        let manager = session.manager.lock().unwrap();
-                        let context = manager.build_session_context();
-                        if !auto_compaction_needed(
-                            &settings,
-                            &context.messages,
-                            &model,
-                            cancel.is_cancelled(),
-                        ) {
-                            None
-                        } else {
-                            Some(manager.context_revision())
-                        }
-                    };
-
-                    if let Some(revision_before) = revision_before {
-                        session.auto_compact().await;
-                        let revision_after = session.manager.lock().unwrap().context_revision();
-                        context_changed |= revision_after != revision_before;
-                    }
-                }
+                let context_changed = mode_changed || context_file_changed;
 
                 {
                     let mut run = reasoning_run.lock().unwrap();
@@ -1870,11 +1853,31 @@ impl AgentSession {
         }
     }
 
-    /// Compact inside an active run.
-    async fn auto_compact(self: &Arc<Self>) {
+    /// Compact inside an active run. Returns whether the context changed.
+    async fn auto_compact(self: &Arc<Self>) -> bool {
+        let revision_before = self.manager.lock().unwrap().context_revision();
         *self.phase.lock().unwrap() = RunPhase::Compacting;
         self.run_compaction(None, true).await;
         *self.phase.lock().unwrap() = RunPhase::Streaming;
+        self.manager.lock().unwrap().context_revision() != revision_before
+    }
+
+    /// Compact inside an active run when the context is past the threshold.
+    /// Returns whether the context changed.
+    async fn compact_past_threshold(self: &Arc<Self>, cancelled: bool) -> bool {
+        let settings = self.settings();
+        let model = self.model();
+        let needed = {
+            let manager = self.manager.lock().unwrap();
+            auto_compaction_needed(
+                &settings,
+                manager.context_messages(),
+                manager.latest_compaction_ms(),
+                &model,
+                cancelled,
+            )
+        };
+        needed && self.auto_compact().await
     }
 
     /// Run the agent loop with retry and automatic compaction. `new_prompts`
@@ -1899,6 +1902,7 @@ impl AgentSession {
         let mut context = self.build_context_for(prompt_mode);
 
         let mut attempt: u32 = 0;
+        let mut pressure_recovered = false;
         loop {
             let messages = match new_prompts.take() {
                 Some(prompts) => {
@@ -1922,6 +1926,43 @@ impl AgentSession {
                 }
             };
 
+            let settings = self.settings();
+            let last_reply = messages.iter().rev().find_map(|m| match m {
+                AgentMessage::Assistant(a) => Some(a),
+                _ => None,
+            });
+            // The context was too large for the request, or it left too
+            // little room for the reply. Compact and retry once.
+            let pressure = last_reply.and_then(|reply| context_pressure(reply, &self.model()));
+            if let Some(pressure) = pressure
+                && settings.compaction.enabled
+                && !pressure_recovered
+                && !cancel.is_cancelled()
+            {
+                pressure_recovered = true;
+                if !self.auto_compact().await || cancel.is_cancelled() {
+                    break;
+                }
+                if pressure == ContextPressure::TruncatedReply {
+                    // The cut-off reply is the last message. A request cannot
+                    // end with an assistant message, so ask for the rest.
+                    new_prompts = Some(vec![AgentMessage::Custom(kiss_agent::CustomMessage {
+                        custom_type: "truncated_reply_continue".into(),
+                        content: kiss_ai::UserContent::Text(
+                            "Your previous reply was cut off because the context was nearly full. The conversation is now compacted. Continue from where the reply stopped.".into(),
+                        ),
+                        display: true,
+                        details: None,
+                        timestamp: kiss_ai::now_ms(),
+                    })]);
+                }
+                context = self.build_context_for(*active_prompt_mode.lock().unwrap());
+                config.model = self.model();
+                config.thinking_level = self.thinking_level();
+                config.fast_mode = self.fast_mode();
+                continue;
+            }
+
             // Retry on transient error stops.
             let last_error = messages.iter().rev().find_map(|m| match m {
                 AgentMessage::Assistant(a) if a.stop_reason == StopReason::Error => {
@@ -1929,7 +1970,6 @@ impl AgentSession {
                 }
                 _ => None,
             });
-            let settings = self.settings();
             let retry = &settings.retry;
             if let Some(error) = last_error
                 && retry.enabled
@@ -1961,16 +2001,8 @@ impl AgentSession {
                 continue;
             }
 
-            // Auto-compaction check after a completed run.
-            let ctx = self.manager.lock().unwrap().build_session_context();
-            if auto_compaction_needed(
-                &settings,
-                &ctx.messages,
-                &self.model(),
-                cancel.is_cancelled(),
-            ) {
-                self.auto_compact().await;
-            }
+            // Compact after a completed run, so the next prompt starts small.
+            self.compact_past_threshold(cancel.is_cancelled()).await;
             break;
         }
     }
@@ -2367,6 +2399,7 @@ impl AgentSession {
             let tokens = compaction::estimate_request_tokens(
                 manager.context_messages(),
                 self.settings().experimental_context_file,
+                manager.latest_compaction_ms(),
             );
             *self.context_usage_cache.lock().unwrap() = Some((revision, tokens));
             tokens
@@ -2490,9 +2523,10 @@ fn queued_mode(queue: &Arc<Mutex<VecDeque<QueuedPrompt>>>, mode: QueueMode) -> O
     }
 }
 
-fn auto_compaction_needed(
+fn auto_compaction_needed<M: std::borrow::Borrow<AgentMessage>>(
     settings: &Settings,
-    messages: &[AgentMessage],
+    messages: impl DoubleEndedIterator<Item = M>,
+    compacted_at: Option<i64>,
     model: &Model,
     cancelled: bool,
 ) -> bool {
@@ -2501,8 +2535,9 @@ fn auto_compaction_needed(
         && model.context_window > 0
         && should_compact(
             compaction::estimate_request_tokens(
-                messages.iter(),
+                messages,
                 settings.experimental_context_file,
+                compacted_at,
             ),
             model.context_window,
             settings.compaction.reserve_tokens_for(model),
@@ -2603,6 +2638,92 @@ fn is_transient(error: &str) -> bool {
         .any(|needle| e.contains(needle))
 }
 
+/// Why a reply failed because the context is too large for the model.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ContextPressure {
+    /// The provider rejected the request because its input is too large.
+    Overflow,
+    /// The reply stopped at an output limit that the request cut below the
+    /// model's limit to fit the remaining context window.
+    TruncatedReply,
+}
+
+/// Whether `reply` from `model` failed because of context pressure.
+fn context_pressure(reply: &kiss_ai::AssistantMessage, model: &Model) -> Option<ContextPressure> {
+    // An error from another model says nothing about this model's window.
+    if reply.provider != model.provider || reply.model != model.id {
+        return None;
+    }
+    match reply.stop_reason {
+        StopReason::Error => reply
+            .error_message
+            .as_deref()
+            .is_some_and(is_context_overflow)
+            .then_some(ContextPressure::Overflow),
+        // Pi retries any length stop below the model's limit, because it
+        // drops the cut-off reply first. Kiss compacts and asks for the rest,
+        // so it only does that when the context window cut the limit.
+        StopReason::Length => {
+            let input = reply.usage.input + reply.usage.cache_read + reply.usage.cache_write;
+            let clamped =
+                kiss_ai::api::fit_max_tokens(model, input, model.max_tokens) < model.max_tokens;
+            (clamped && reply.usage.output < model.max_tokens)
+                .then_some(ContextPressure::TruncatedReply)
+        }
+        _ => None,
+    }
+}
+
+/// Whether a provider error says the request input exceeds the context
+/// window or the request size limit. The patterns are the ones Pi matches.
+fn is_context_overflow(error: &str) -> bool {
+    static OVERFLOW: std::sync::LazyLock<regex::RegexSet> = std::sync::LazyLock::new(|| {
+        regex::RegexSet::new([
+            r"(?i)prompt (?:is )?too long",
+            r"(?i)prompt exceeds max length",
+            r"(?i)request_too_large",
+            r"(?i)input is too long for requested model",
+            r"(?i)exceeds the context window",
+            r"(?i)exceeds (?:the )?(?:model'?s )?maximum context length(?: of [\d,]+ tokens?|\s*\([\d,]+\))",
+            r"(?i)context window exceeded",
+            r"(?i)input token count.*exceeds the maximum",
+            r"(?i)maximum prompt length is \d+",
+            r"(?i)reduce the length of the messages",
+            r"(?i)maximum context length is \d+ tokens",
+            r"(?i)exceeds (?:the )?maximum allowed input length of [\d,]+ tokens?",
+            r"(?i)input \(\d+ tokens\) is longer than the model'?s context length \(\d+ tokens\)",
+            r"(?i)exceeds the limit of \d+",
+            r"(?i)exceeds the available context size",
+            r"(?i)greater than the context length",
+            r"(?i)context window exceeds limit",
+            r"(?i)exceeded model token limit",
+            r"(?i)too large for model with \d+ maximum context length",
+            r"(?i)prompt has [\d,]+ tokens?, but the configured context size is [\d,]+ tokens?",
+            r"(?i)model_context_window_exceeded",
+            r"(?i)prompt too long; exceeded (?:max )?context length",
+            r"(?i)range of input length should be",
+            r"(?i)context[_ ]length[_ ]exceeded",
+            r"(?i)too many tokens",
+            r"(?i)token limit exceeded",
+        ])
+        .expect("context overflow patterns are valid")
+    });
+    // Rate limits can say "too many tokens" without an overflow.
+    static NOT_OVERFLOW: std::sync::LazyLock<regex::RegexSet> = std::sync::LazyLock::new(|| {
+        regex::RegexSet::new([
+            r"(?i)^(?:throttling error|service unavailable):",
+            r"(?i)throttlingexception",
+            r"(?i)rate limit",
+            r"(?i)too many requests",
+        ])
+        .expect("non-overflow patterns are valid")
+    });
+    // A 429 is a rate limit, so the transient retry handles it.
+    !NOT_OVERFLOW.is_match(error)
+        && !kiss_ai::api::mentions_status(error, 429)
+        && (OVERFLOW.is_match(error) || kiss_ai::api::mentions_status(error, 413))
+}
+
 #[cfg(test)]
 mod ephemeral_tests {
     use super::*;
@@ -2628,6 +2749,255 @@ mod ephemeral_tests {
             sampling_params: Default::default(),
             sampling_params_by_thinking_level: Default::default(),
         }
+    }
+
+    fn scripted_reply(
+        stop_reason: StopReason,
+        text: &str,
+        error: Option<&str>,
+    ) -> kiss_ai::AssistantMessage {
+        let mut message =
+            kiss_ai::AssistantMessage::empty("openai-responses", "openai", "gpt-test");
+        message.stop_reason = stop_reason;
+        message.error_message = error.map(str::to_string);
+        if !text.is_empty() {
+            message.content.push(kiss_ai::ContentBlock::text(text));
+            message.usage.output = 10;
+        }
+        message
+    }
+
+    /// A session whose requests (turns and summaries) answer from `script`
+    /// in order. The returned list records each request's context.
+    fn scripted_session(
+        model: Model,
+        settings: Settings,
+        history: Vec<AgentMessage>,
+        script: Vec<kiss_ai::AssistantMessage>,
+    ) -> (Arc<AgentSession>, Arc<Mutex<Vec<kiss_ai::Context>>>) {
+        let mut manager = SessionManager::in_memory(Path::new("/test"));
+        for message in history {
+            manager.append_message(message).unwrap();
+        }
+        let session = AgentSession::new(
+            manager,
+            Vec::new(),
+            Registry::load(None),
+            settings,
+            "test".into(),
+            model,
+            ThinkingLevel::Off,
+            None,
+            Arc::new(|_| {}),
+        );
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let seen = requests.clone();
+        let script = Arc::new(Mutex::new(VecDeque::from(script)));
+        session.set_stream_fn(Some(Arc::new(move |_, context, _| {
+            seen.lock().unwrap().push(context.clone());
+            let message = script
+                .lock()
+                .unwrap()
+                .pop_front()
+                .unwrap_or_else(|| scripted_reply(StopReason::Stop, "", None));
+            let (sink, stream) = kiss_ai::EventStream::channel();
+            if message.stop_reason == StopReason::Error {
+                sink.error(message);
+            } else {
+                sink.done(message);
+            }
+            stream
+        })));
+        (session, requests)
+    }
+
+    fn compaction_settings() -> Settings {
+        Settings {
+            compaction: crate::settings::CompactionSettings {
+                keep_recent_tokens: 10,
+                ..Default::default()
+            },
+            retry: crate::settings::RetrySettings {
+                base_delay_ms: 0,
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+    }
+
+    fn old_history() -> Vec<AgentMessage> {
+        vec![
+            AgentMessage::user("x".repeat(2_000)),
+            AgentMessage::Assistant(scripted_reply(StopReason::Stop, &"y".repeat(2_000), None)),
+        ]
+    }
+
+    fn compaction_count(session: &AgentSession) -> usize {
+        session
+            .manager
+            .lock()
+            .unwrap()
+            .entries()
+            .iter()
+            .filter(|entry| {
+                matches!(
+                    entry,
+                    crate::session::entry::SessionEntry::Compaction { .. }
+                )
+            })
+            .count()
+    }
+
+    /// A length stop after an input so large that the request cut the
+    /// output limit of `openai_model`.
+    fn truncated_reply() -> kiss_ai::AssistantMessage {
+        let mut reply = scripted_reply(StopReason::Length, "partial", None);
+        reply.usage.input = 95_000;
+        reply
+    }
+
+    #[tokio::test]
+    async fn context_usage_after_compaction_ignores_retained_replies() {
+        let mut history = old_history();
+        if let Some(AgentMessage::Assistant(reply)) = history.last_mut() {
+            reply.usage.input = 90_000;
+        }
+        let (session, _) = scripted_session(
+            openai_model(),
+            compaction_settings(),
+            history,
+            vec![scripted_reply(StopReason::Stop, "## Goal\nsummary", None)],
+        );
+        assert!(session.context_usage().0 >= 90_000);
+        session.compact(None).await.unwrap();
+        assert_eq!(compaction_count(&session), 1);
+        // The retained reply measured the history before the compaction.
+        assert!(session.context_usage().0 < 10_000);
+    }
+
+    #[test]
+    fn context_overflow_errors_are_recognized() {
+        for error in [
+            "prompt is too long: 213462 tokens > 200000 maximum",
+            r#"HTTP 400: {"error":{"message":"Your input exceeds the context window of this model."}}"#,
+            "The input token count (1196265) exceeds the maximum number of tokens allowed (1048575)",
+            "HTTP 413: request entity too large",
+        ] {
+            assert!(is_context_overflow(error), "{error}");
+        }
+        for error in [
+            "HTTP 503",
+            "ThrottlingException: Too many tokens, please wait before trying again.",
+            "rate limit reached: too many tokens per minute",
+            "HTTP 429: too many tokens",
+        ] {
+            assert!(!is_context_overflow(error), "{error}");
+        }
+
+        let model = openai_model();
+        let truncated = truncated_reply();
+        assert_eq!(
+            context_pressure(&truncated, &model),
+            Some(ContextPressure::TruncatedReply)
+        );
+        let mut full_length = truncated.clone();
+        full_length.usage.output = model.max_tokens;
+        assert_eq!(context_pressure(&full_length, &model), None);
+        // With a nearly empty context the request kept the model's limit.
+        let mut unclamped = truncated.clone();
+        unclamped.usage.input = 0;
+        assert_eq!(context_pressure(&unclamped, &model), None);
+        let mut other_model = scripted_reply(StopReason::Error, "", Some("prompt is too long"));
+        assert_eq!(
+            context_pressure(&other_model, &model),
+            Some(ContextPressure::Overflow)
+        );
+        other_model.model = "other".into();
+        assert_eq!(context_pressure(&other_model, &model), None);
+    }
+
+    #[tokio::test]
+    async fn context_overflow_compacts_and_retries_once() {
+        let overflow = || scripted_reply(StopReason::Error, "", Some("prompt is too long: 9 > 8"));
+        let summary = || scripted_reply(StopReason::Stop, "## Goal\nsummary", None);
+        for second_attempt_fails in [false, true] {
+            let retry = if second_attempt_fails {
+                overflow()
+            } else {
+                scripted_reply(StopReason::Stop, "done", None)
+            };
+            let (session, requests) = scripted_session(
+                openai_model(),
+                compaction_settings(),
+                old_history(),
+                vec![overflow(), summary(), retry, summary()],
+            );
+            session.prompt(vec![AgentMessage::user("finish")]).await;
+            // The failed turn, its summary and one retry. A second overflow
+            // is not compacted again.
+            assert_eq!(requests.lock().unwrap().len(), 3);
+            assert_eq!(compaction_count(&session), 1);
+        }
+    }
+
+    #[tokio::test]
+    async fn reply_cut_off_by_context_compacts_and_asks_for_the_rest() {
+        let (session, requests) = scripted_session(
+            openai_model(),
+            compaction_settings(),
+            old_history(),
+            vec![
+                truncated_reply(),
+                scripted_reply(StopReason::Stop, "## Goal\nsummary", None),
+                scripted_reply(StopReason::Stop, "rest", None),
+            ],
+        );
+        session.prompt(vec![AgentMessage::user("finish")]).await;
+        let requests = requests.lock().unwrap();
+        assert_eq!(requests.len(), 3);
+        assert_eq!(compaction_count(&session), 1);
+        let Some(kiss_ai::Message::User(last)) = requests[2].messages.last() else {
+            panic!("the retry must end with the continuation request");
+        };
+        assert!(
+            last.content
+                .as_text()
+                .contains("Continue from where the reply stopped")
+        );
+    }
+
+    #[tokio::test]
+    async fn a_prompt_past_the_threshold_compacts_before_its_first_request() {
+        let mut model = openai_model();
+        model.context_window = 1_000;
+        let mut settings = compaction_settings();
+        settings.compaction.reserve_tokens = 100;
+        let mut history = old_history();
+        if let Some(AgentMessage::Assistant(reply)) = history.last_mut() {
+            reply.usage.input = 950;
+        }
+        let (session, requests) = scripted_session(
+            model,
+            settings,
+            history,
+            vec![
+                scripted_reply(StopReason::Stop, "## Goal\nsummary", None),
+                scripted_reply(StopReason::Stop, "done", None),
+            ],
+        );
+        session.prompt(vec![AgentMessage::user("finish")]).await;
+        let requests = requests.lock().unwrap();
+        assert_eq!(requests.len(), 2);
+        assert_eq!(compaction_count(&session), 1);
+        let Some(kiss_ai::Message::User(first)) = requests[1].messages.first() else {
+            panic!("the turn must start with the compaction summary");
+        };
+        assert!(
+            first
+                .content
+                .as_text()
+                .contains("was compacted into this summary")
+        );
     }
 
     #[tokio::test]
@@ -4179,26 +4549,56 @@ mod ephemeral_tests {
     fn auto_compaction_guard_checks_settings_threshold_and_cancel() {
         let mut settings = Settings::default();
         settings.compaction.reserve_tokens = 20;
-        let messages = vec![AgentMessage::user("x".repeat(360))];
+        let messages = [AgentMessage::user("x".repeat(360))];
         let mut model = openai_model();
         model.context_window = 100;
-        assert!(auto_compaction_needed(&settings, &messages, &model, false));
-        assert!(!auto_compaction_needed(&settings, &messages, &model, true));
+        assert!(auto_compaction_needed(
+            &settings,
+            messages.iter(),
+            None,
+            &model,
+            false
+        ));
+        assert!(!auto_compaction_needed(
+            &settings,
+            messages.iter(),
+            None,
+            &model,
+            true
+        ));
         settings.compaction.enabled = false;
-        assert!(!auto_compaction_needed(&settings, &messages, &model, false));
+        assert!(!auto_compaction_needed(
+            &settings,
+            messages.iter(),
+            None,
+            &model,
+            false
+        ));
         settings.compaction.enabled = true;
         let mut assistant = kiss_ai::AssistantMessage::empty("test", "test", "test");
         assistant.usage.input = 1000;
         assistant
             .content
             .push(kiss_ai::ContentBlock::text("short note"));
-        let edited = vec![
+        let edited = [
             AgentMessage::user("task"),
             AgentMessage::Assistant(assistant),
         ];
-        assert!(auto_compaction_needed(&settings, &edited, &model, false));
+        assert!(auto_compaction_needed(
+            &settings,
+            edited.iter(),
+            None,
+            &model,
+            false
+        ));
         settings.experimental_context_file = true;
-        assert!(!auto_compaction_needed(&settings, &edited, &model, false));
+        assert!(!auto_compaction_needed(
+            &settings,
+            edited.iter(),
+            None,
+            &model,
+            false
+        ));
     }
 
     #[test]

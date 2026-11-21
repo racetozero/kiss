@@ -524,15 +524,25 @@ pub fn request_max_tokens(
     context: &Context,
     options: &crate::stream::StreamOptions,
 ) -> u64 {
+    fit_max_tokens(
+        model,
+        estimate_context_tokens(&context.messages),
+        options.max_tokens.unwrap_or(model.max_tokens),
+    )
+}
+
+/// `max_tokens` fit into the context window after `input` tokens; see
+/// [`request_max_tokens`].
+pub fn fit_max_tokens(model: &Model, input: u64, max_tokens: u64) -> u64 {
     const SAFETY_TOKENS: i64 = 4096;
     const SAFETY_RATIO: f64 = 0.15;
     const MIN_OUTPUT_WITH_RATIO_MARGIN: i64 = 32768;
-    let max_tokens = options.max_tokens.unwrap_or(model.max_tokens).max(1);
+    let max_tokens = max_tokens.max(1);
     if model.context_window == 0 {
         return max_tokens;
     }
     let window = model.context_window as i64;
-    let input = estimate_context_tokens(&context.messages) as i64;
+    let input = input as i64;
     let margin = SAFETY_TOKENS.max((input as f64 * SAFETY_RATIO).ceil() as i64);
     let mut room = window - input - margin;
     if room < MIN_OUTPUT_WITH_RATIO_MARGIN {

@@ -918,6 +918,18 @@ impl SessionManager {
 
     // ----- context building --------------------------------------------
 
+    /// When the latest compaction on the active branch ran, in milliseconds.
+    /// Replies from before it report usage for the history it replaced.
+    pub(crate) fn latest_compaction_ms(&self) -> Option<i64> {
+        self.branch_entries(None)
+            .into_iter()
+            .rev()
+            .find_map(|entry| match entry {
+                SessionEntry::Compaction { base, .. } => Some(entry_timestamp(base)),
+                _ => None,
+            })
+    }
+
     /// Active-branch entries with compaction applied: on a compaction with a
     /// retained tail, the checkpoint replaces everything before it.
     pub fn build_context_entries(&self) -> Vec<&SessionEntry> {

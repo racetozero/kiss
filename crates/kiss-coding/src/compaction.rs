@@ -43,35 +43,48 @@ pub fn estimate_message_tokens(message: &AgentMessage) -> u64 {
     (chars as u64).div_ceil(4)
 }
 
-/// Estimated context size: prefer the last assistant usage (input+output+
-/// cache) and add estimates for everything after it.
 /// Tokens the next request would send. With the experimental context file,
 /// the model may have edited history, so usage reported by old assistant
 /// messages no longer describes it and every message is estimated.
+/// `compacted_at` is when the latest compaction ran; see
+/// [`estimate_context_tokens_iter`].
 pub(crate) fn estimate_request_tokens<M: Borrow<AgentMessage>>(
     messages: impl DoubleEndedIterator<Item = M>,
     context_file: bool,
+    compacted_at: Option<i64>,
 ) -> u64 {
     if context_file {
         messages
             .map(|message| estimate_message_tokens(message.borrow()))
             .sum()
     } else {
-        estimate_context_tokens_iter(messages)
+        estimate_context_tokens_iter(messages, compacted_at)
     }
 }
 
 pub fn estimate_context_tokens(messages: &[AgentMessage]) -> u64 {
-    estimate_context_tokens_iter(messages.iter())
+    estimate_context_tokens_iter(messages.iter(), None)
 }
 
+/// Estimated context size: the usage (input+output+cache) of the latest
+/// reply that still describes the context, plus estimates for everything
+/// after it. A failed reply reports no usable usage. A reply from before
+/// `compacted_at` was measured against the history before that compaction,
+/// so it is estimated like any other message.
 pub(crate) fn estimate_context_tokens_iter<M: Borrow<AgentMessage>>(
     messages: impl DoubleEndedIterator<Item = M>,
+    compacted_at: Option<i64>,
 ) -> u64 {
     let mut tokens = 0;
     for message in messages.rev() {
         let message = message.borrow();
-        if let AgentMessage::Assistant(assistant) = message {
+        if let AgentMessage::Assistant(assistant) = message
+            && !matches!(
+                assistant.stop_reason,
+                kiss_ai::StopReason::Error | kiss_ai::StopReason::Aborted
+            )
+            && compacted_at.is_none_or(|compacted_at| assistant.timestamp > compacted_at)
+        {
             return tokens
                 + assistant.usage.input
                 + assistant.usage.output
@@ -449,6 +462,32 @@ mod tests {
         ] {
             assert_eq!(estimate_context_tokens(&messages), expected);
         }
+    }
+
+    #[test]
+    fn context_estimate_ignores_usage_from_before_compaction_and_failed_replies() {
+        let mut retained = AssistantMessage::empty("test", "test", "test");
+        retained.usage.input = 900_000;
+        retained.timestamp = 1_000;
+        let messages = [user("12345678"), AgentMessage::Assistant(retained.clone())];
+        // The retained reply measured the history before the compaction.
+        assert_eq!(
+            estimate_context_tokens_iter(messages.iter(), Some(2_000)),
+            2
+        );
+        assert_eq!(
+            estimate_context_tokens_iter(messages.iter(), Some(500)),
+            900_000
+        );
+
+        let mut failed = AssistantMessage::empty("test", "test", "test");
+        failed.stop_reason = StopReason::Error;
+        let messages = vec![
+            AgentMessage::Assistant(retained),
+            user("12345678"),
+            AgentMessage::Assistant(failed),
+        ];
+        assert_eq!(estimate_context_tokens(&messages), 900_002);
     }
 
     #[test]
