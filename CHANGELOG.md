@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.0.42 - 2026-11-22
+
 ### Changed
 
 - The first prompt of a session gets its answer 100 to 250 ms sooner on
