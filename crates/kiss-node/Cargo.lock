@@ -2016,7 +2016,7 @@ dependencies = [
 
 [[package]]
 name = "kiss-agent"
-version = "0.0.42"
+version = "0.0.43"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2035,7 +2035,7 @@ dependencies = [
 
 [[package]]
 name = "kiss-agent-ai"
-version = "0.0.42"
+version = "0.0.43"
 dependencies = [
  "anyhow",
  "aws-config",
@@ -2070,7 +2070,7 @@ dependencies = [
 
 [[package]]
 name = "kiss-agent-sdk"
-version = "0.0.42"
+version = "0.0.43"
 dependencies = [
  "anyhow",
  "dirs",
@@ -2090,7 +2090,7 @@ dependencies = [
 
 [[package]]
 name = "kiss-coding"
-version = "0.0.42"
+version = "0.0.43"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2121,7 +2121,7 @@ dependencies = [
 
 [[package]]
 name = "kiss-mcp"
-version = "0.0.42"
+version = "0.0.43"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2145,7 +2145,7 @@ dependencies = [
 
 [[package]]
 name = "kiss-node"
-version = "0.0.42"
+version = "0.0.43"
 dependencies = [
  "kiss-agent-sdk",
  "mimalloc",
@@ -2158,7 +2158,7 @@ dependencies = [
 
 [[package]]
 name = "kiss-workflow"
-version = "0.0.42"
+version = "0.0.43"
 dependencies = [
  "async-trait",
  "futures",

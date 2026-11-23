@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.0.43 - 2026-11-23
+
+### Fixed
+
+- Dollar amounts in replies now show as text. KISS read a line such as
+  `a **$10 cap**, but only **$1**` as LaTeX math, so the dollar signs and the
+  spaces between them went missing and the `**` stayed visible. As in Pandoc,
+  a closing `$` before a digit no longer ends inline math.
+
 ## 0.0.42 - 2026-11-22
 
 ### Changed
