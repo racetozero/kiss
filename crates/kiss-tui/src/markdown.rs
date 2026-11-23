@@ -151,6 +151,33 @@ const MARKDOWN_OPTIONS: Options = Options::ENABLE_STRIKETHROUGH
     .union(Options::ENABLE_TABLES)
     .union(Options::ENABLE_MATH);
 
+/// Escape the opening `$` of inline math whose closing `$` is followed by a
+/// digit, as in `a **$10 cap**, but only **$1**`. Pandoc reads such dollars as
+/// currency; pulldown-cmark pairs them as math and mangles the text between.
+/// Each fix frees the old closing `$` to pair again, so parse until none remain.
+fn escape_currency_dollars(markdown: &str) -> Cow<'_, str> {
+    let mut source = Cow::Borrowed(markdown);
+    if !markdown.contains('$') {
+        return source;
+    }
+    loop {
+        let opener = Parser::new_ext(&source, MARKDOWN_OPTIONS)
+            .into_offset_iter()
+            .find_map(|(event, range)| {
+                (matches!(event, Event::InlineMath(_))
+                    && source
+                        .as_bytes()
+                        .get(range.end)
+                        .is_some_and(u8::is_ascii_digit))
+                .then_some(range.start)
+            });
+        let Some(opener) = opener else {
+            return source;
+        };
+        source.to_mut().insert(opener, '\\');
+    }
+}
+
 fn stable_prefix_len(markdown: &str) -> usize {
     let parser = Parser::new_ext(markdown, MARKDOWN_OPTIONS);
     let mut depth = 0usize;
@@ -206,7 +233,8 @@ impl MarkdownRenderer {
         mermaid_mode: MermaidMode,
     ) -> Vec<String> {
         let mut out: Vec<String> = Vec::new();
-        let parser = Parser::new_ext(markdown, MARKDOWN_OPTIONS);
+        let markdown = escape_currency_dollars(markdown);
+        let parser = Parser::new_ext(&markdown, MARKDOWN_OPTIONS);
 
         let mut current = String::new();
         let mut has_bare_url = false;
@@ -1519,6 +1547,31 @@ mod tests {
         assert!(text.contains('a'));
         assert!(text.contains('b'));
         assert!(text.contains('─'));
+    }
+
+    #[test]
+    fn currency_dollars_followed_by_digits_stay_literal() {
+        let cases = [
+            (
+                "Your key has a **$10 cap**, while this run permits only **$1**.",
+                "Your key has a $10 cap, while this run permits only $1.",
+            ),
+            (
+                "At our $0.01/million-token rate, a 100-token query costs **$0.000001**.",
+                "At our $0.01/million-token rate, a 100-token query costs $0.000001.",
+            ),
+            ("Pay $5, $10, or $20 today.", "Pay $5, $10, or $20 today."),
+            (
+                "| Cost |\n| --- |\n| $0.01 per $1 spent, then $2 |",
+                "$0.01 per $1 spent, then $2",
+            ),
+        ];
+        for (source, expected) in cases {
+            let text = render_plain_at(source, 200).join("\n");
+            assert!(text.contains(expected), "{source:?} rendered as {text:?}");
+        }
+        let math = render_plain("Use $x^2$ and $\\pi$.").join("\n");
+        assert!(math.contains("x²") && math.contains('π'), "{math:?}");
     }
 
     #[test]
