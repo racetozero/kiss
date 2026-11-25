@@ -31,7 +31,11 @@ fn detect_compat(model: &Model) -> Compat {
     let is_openai = url.contains("api.openai.com");
     let c = model.compat.clone().unwrap_or_default();
     Compat {
-        developer_role: c.supports_developer_role.unwrap_or(is_openai),
+        // The developer role is OpenAI's. Other hosts' chat templates often
+        // reject it, and every host accepts system.
+        developer_role: c
+            .supports_developer_role
+            .unwrap_or(is_openai || model.provider == "openai"),
         reasoning_effort: c
             .supports_reasoning_effort
             .unwrap_or(is_openai || url.contains("openrouter")),
@@ -169,7 +173,24 @@ struct DecodeState {
     finish_reason: Option<String>,
     /// OpenRouter reports its billed cost in `usage`.
     openrouter: bool,
+    /// OpenRouter's `native_finish_reason`: the upstream provider's own reason.
+    native_finish_reason: Option<String>,
 }
+
+/// Native reasons that OpenRouter reports as a clean `stop`. Other native
+/// reasons on an empty `stop` are upstream failures, such as Gemini's
+/// `MALFORMED_RESPONSE`. Compared in lowercase.
+const CLEAN_NATIVE_STOPS: &[&str] = &[
+    "stop",
+    "end_turn",
+    "stop_sequence",
+    "eos",
+    "complete",
+    "completed",
+    "pause_turn",
+    "compaction",
+    "end_of_stream",
+];
 
 fn is_reasoning_detail(value: &Value) -> bool {
     let Some(object) = value.as_object() else {
@@ -271,7 +292,16 @@ fn finish(
         builder.end_tool_call(idx, None);
     }
     let has_tools = !state.tool_map.is_empty();
-    builder.message.raw_stop_reason = state.finish_reason.clone();
+    builder.message.raw_stop_reason = match (&state.finish_reason, &state.native_finish_reason) {
+        (Some(reason), Some(native)) if reason != native => Some(format!("{reason}.{native}")),
+        (reason, _) => reason.clone(),
+    };
+    let native_note = state
+        .native_finish_reason
+        .as_ref()
+        .filter(|native| state.finish_reason.as_ref() != Some(*native))
+        .map(|native| format!(" (native_finish_reason: {native})"))
+        .unwrap_or_default();
     if finish_reason_required && state.finish_reason.is_none() {
         builder.fail(
             super::stream_error("the response ended without a finish_reason"),
@@ -288,7 +318,29 @@ fn finish(
         _ => None,
     };
     if let Some(failure) = failure {
-        builder.fail(format!("Provider finish_reason: {failure}"), false, model);
+        builder.fail(
+            format!("Provider finish_reason: {failure}{native_note}"),
+            false,
+            model,
+        );
+        return;
+    }
+    // OpenRouter reports an upstream failure that it has no case for as an
+    // empty `stop`. Only the native reason tells it from a real empty turn.
+    if state.finish_reason.as_deref() == Some("stop")
+        && let Some(native) = &state.native_finish_reason
+        && !CLEAN_NATIVE_STOPS.contains(&native.to_lowercase().as_str())
+        && !builder.message.content.iter().any(|block| match block {
+            ContentBlock::Text { text, .. } => !text.trim().is_empty(),
+            ContentBlock::ToolCall(_) => true,
+            _ => false,
+        })
+    {
+        builder.fail(
+            format!("OpenRouter returned an empty response (native_finish_reason: {native})"),
+            false,
+            model,
+        );
         return;
     }
     let stop = match state.finish_reason.as_deref() {
@@ -337,7 +389,13 @@ fn handle_chunk(
         if state.openrouter {
             super::apply_openrouter_cost(&mut builder.message.usage, usage);
         }
-        if let Some(r) = usage["completion_tokens_details"]["reasoning_tokens"].as_u64() {
+        // Some servers report reasoning tokens at the top level.
+        let detail = usage["completion_tokens_details"]["reasoning_tokens"].as_u64();
+        if let Some(r) = detail
+            .filter(|&tokens| tokens > 0)
+            .or_else(|| usage["reasoning_tokens"].as_u64())
+            .or(detail)
+        {
             builder.message.usage.reasoning = Some(r);
         }
     }
@@ -354,6 +412,13 @@ fn handle_chunk(
     };
     if let Some(reason) = choice["finish_reason"].as_str() {
         state.finish_reason = Some(reason.to_string());
+    }
+    if state.openrouter
+        && let Some(native) = choice["native_finish_reason"]
+            .as_str()
+            .filter(|native| !native.is_empty())
+    {
+        state.native_finish_reason = Some(native.to_string());
     }
     let delta = &choice["delta"];
 
@@ -836,6 +901,63 @@ mod tests {
             &detect_compat(&model),
         );
         assert_eq!(fast["service_tier"], "priority");
+    }
+
+    #[test]
+    fn only_openai_gets_the_developer_role_by_default() {
+        let registry = crate::registry::Registry::from_builtin();
+        for (reference, developer) in [
+            ("cerebras/gpt-oss-120b", false),
+            ("groq/openai/gpt-oss-120b", false),
+            ("together/openai/gpt-oss-120b", false),
+            ("openrouter/openai/gpt-6.2-sol", false),
+        ] {
+            let (model, _) = registry.resolve(reference, None).expect(reference);
+            assert_eq!(
+                detect_compat(&model).developer_role,
+                developer,
+                "{reference}"
+            );
+        }
+        let mut openai = model_with_compat(OpenAICompat::default());
+        openai.provider = "openai".into();
+        assert!(detect_compat(&openai).developer_role);
+    }
+
+    #[test]
+    fn openrouter_empty_stop_with_an_upstream_failure_is_an_error() {
+        let model = model_with_compat(OpenAICompat::default());
+        let run = |delta: Value, native: &str| {
+            let (sink, stream) = crate::EventStream::channel();
+            let mut builder = PartialBuilder::new(&model, sink);
+            let mut state = DecodeState {
+                openrouter: true,
+                ..Default::default()
+            };
+            let chunk = json!({"choices": [{
+                "delta": delta,
+                "finish_reason": "stop",
+                "native_finish_reason": native,
+            }]});
+            handle_chunk(&chunk.to_string(), &mut builder, &mut state).unwrap();
+            finish(builder, state, &model, true);
+            futures::executor::block_on(stream.result())
+        };
+        let failed = run(json!({"reasoning": "thinking"}), "MALFORMED_RESPONSE");
+        assert_eq!(failed.stop_reason, StopReason::Error);
+        assert_eq!(
+            failed.error_message.as_deref(),
+            Some(
+                "OpenRouter returned an empty response (native_finish_reason: MALFORMED_RESPONSE)"
+            )
+        );
+        assert_eq!(
+            failed.raw_stop_reason.as_deref(),
+            Some("stop.MALFORMED_RESPONSE")
+        );
+        assert_eq!(run(json!({}), "end_turn").stop_reason, StopReason::Stop);
+        let answered = run(json!({"content": "Answer"}), "MALFORMED_RESPONSE");
+        assert_eq!(answered.stop_reason, StopReason::Stop);
     }
 
     #[test]

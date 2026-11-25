@@ -33,7 +33,7 @@
       "provider": "mistral",
       "baseUrl": "https://api.mistral.ai",
       "reasoning": true,
-      "input": ["text"],
+      "input": ["text", "image"],
       "cost": { "input": 0.3, "output": 1.2, "cacheRead": 0.007, "cacheWrite": 0 },
       "contextWindow": 1048576,
       "maxTokens": 128000,
@@ -46,45 +46,11 @@
         "xhigh": null,
         "max": "max"
       },
-      "type": "chat"
-    },
-    "chat:devstral-2512": {
-      "id": "devstral-2512",
-      "name": "Devstral 2",
-      "api": "mistral-conversations",
-      "provider": "mistral",
-      "baseUrl": "https://api.mistral.ai",
-      "reasoning": false,
-      "input": ["text"],
-      "cost": { "input": 0.4, "output": 2, "cacheRead": 0.04, "cacheWrite": 0 },
-      "contextWindow": 262144,
-      "maxTokens": 262144,
-      "type": "chat"
-    },
-    "chat:devstral-latest": {
-      "id": "devstral-latest",
-      "name": "Devstral 2",
-      "api": "mistral-conversations",
-      "provider": "mistral",
-      "baseUrl": "https://api.mistral.ai",
-      "reasoning": false,
-      "input": ["text"],
-      "cost": { "input": 0.4, "output": 2, "cacheRead": 0.04, "cacheWrite": 0 },
-      "contextWindow": 262144,
-      "maxTokens": 262144,
-      "type": "chat"
-    },
-    "chat:devstral-medium-latest": {
-      "id": "devstral-medium-latest",
-      "name": "Devstral 2 (latest)",
-      "api": "mistral-conversations",
-      "provider": "mistral",
-      "baseUrl": "https://api.mistral.ai",
-      "reasoning": false,
-      "input": ["text"],
-      "cost": { "input": 0.4, "output": 2, "cacheRead": 0.04, "cacheWrite": 0 },
-      "contextWindow": 262144,
-      "maxTokens": 262144,
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      },
       "type": "chat"
     },
     "chat:glm-5-2": {
@@ -109,51 +75,6 @@
       },
       "type": "chat"
     },
-    "chat:labs-devstral-small-2512": {
-      "id": "labs-devstral-small-2512",
-      "name": "Devstral Small 2",
-      "api": "mistral-conversations",
-      "provider": "mistral",
-      "baseUrl": "https://api.mistral.ai",
-      "reasoning": false,
-      "input": ["text", "image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
-      "contextWindow": 256000,
-      "maxTokens": 256000,
-      "inputLimits": {
-        "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
-        }
-      },
-      "type": "chat"
-    },
-    "chat:labs-leanstral-1-5-1": {
-      "id": "labs-leanstral-1-5-1",
-      "name": "Leanstral 1.5",
-      "api": "mistral-conversations",
-      "provider": "mistral",
-      "baseUrl": "https://api.mistral.ai",
-      "reasoning": true,
-      "input": ["text", "image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
-      "contextWindow": 262144,
-      "maxTokens": 128000,
-      "thinkingLevelMap": {
-        "off": "none",
-        "minimal": null,
-        "low": null,
-        "medium": null,
-        "high": "high",
-        "xhigh": null,
-        "max": null
-      },
-      "inputLimits": {
-        "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
-        }
-      },
-      "type": "chat"
-    },
     "chat:magistral-medium-latest": {
       "id": "magistral-medium-latest",
       "name": "Magistral Medium (latest)",
@@ -162,9 +83,9 @@
       "baseUrl": "https://api.mistral.ai",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 2, "output": 5, "cacheRead": 0.2, "cacheWrite": 0 },
+      "cost": { "input": 1.5, "output": 7.5, "cacheRead": 0.15, "cacheWrite": 0 },
       "contextWindow": 262144,
-      "maxTokens": 16384,
+      "maxTokens": 262144,
       "thinkingLevelMap": {
         "off": "none",
         "minimal": null,
@@ -199,6 +120,24 @@
       },
       "type": "chat"
     },
+    "chat:ministral-14b-latest": {
+      "id": "ministral-14b-latest",
+      "name": "Ministral 3 14B (latest)",
+      "api": "mistral-conversations",
+      "provider": "mistral",
+      "baseUrl": "https://api.mistral.ai",
+      "reasoning": false,
+      "input": ["text", "image"],
+      "cost": { "input": 0.2, "output": 0.2, "cacheRead": 0.02, "cacheWrite": 0 },
+      "contextWindow": 262144,
+      "maxTokens": 262144,
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      },
+      "type": "chat"
+    },
     "chat:ministral-3b-2512": {
       "id": "ministral-3b-2512",
       "name": "Ministral 3 3B",
@@ -209,7 +148,7 @@
       "input": ["text", "image"],
       "cost": { "input": 0.1, "output": 0.1, "cacheRead": 0.01, "cacheWrite": 0 },
       "contextWindow": 131072,
-      "maxTokens": 262144,
+      "maxTokens": 131072,
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -219,7 +158,7 @@
     },
     "chat:ministral-3b-latest": {
       "id": "ministral-3b-latest",
-      "name": "Ministral 3B (latest)",
+      "name": "Ministral 3 3B (latest)",
       "api": "mistral-conversations",
       "provider": "mistral",
       "baseUrl": "https://api.mistral.ai",
@@ -227,7 +166,7 @@
       "input": ["text", "image"],
       "cost": { "input": 0.1, "output": 0.1, "cacheRead": 0.01, "cacheWrite": 0 },
       "contextWindow": 131072,
-      "maxTokens": 128000,
+      "maxTokens": 131072,
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -255,7 +194,7 @@
     },
     "chat:ministral-8b-latest": {
       "id": "ministral-8b-latest",
-      "name": "Ministral 8B (latest)",
+      "name": "Ministral 3 8B (latest)",
       "api": "mistral-conversations",
       "provider": "mistral",
       "baseUrl": "https://api.mistral.ai",
@@ -263,7 +202,7 @@
       "input": ["text", "image"],
       "cost": { "input": 0.15, "output": 0.15, "cacheRead": 0.015, "cacheWrite": 0 },
       "contextWindow": 262144,
-      "maxTokens": 128000,
+      "maxTokens": 262144,
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -316,9 +255,9 @@
       },
       "type": "chat"
     },
-    "chat:mistral-large-4-0-8": {
-      "id": "mistral-large-4-0-8",
-      "name": "Mistral Large 4.0.8",
+    "chat:mistral-large-latest": {
+      "id": "mistral-large-latest",
+      "name": "Mistral Large (latest)",
       "api": "mistral-conversations",
       "provider": "mistral",
       "baseUrl": "https://api.mistral.ai",
@@ -336,60 +275,6 @@
         "xhigh": null,
         "max": null
       },
-      "inputLimits": {
-        "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
-        }
-      },
-      "type": "chat"
-    },
-    "chat:mistral-large-latest": {
-      "id": "mistral-large-latest",
-      "name": "Mistral Large (latest)",
-      "api": "mistral-conversations",
-      "provider": "mistral",
-      "baseUrl": "https://api.mistral.ai",
-      "reasoning": false,
-      "input": ["text", "image"],
-      "cost": { "input": 0.5, "output": 1.5, "cacheRead": 0.05, "cacheWrite": 0 },
-      "contextWindow": 262144,
-      "maxTokens": 262144,
-      "inputLimits": {
-        "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
-        }
-      },
-      "type": "chat"
-    },
-    "chat:mistral-medium-2505": {
-      "id": "mistral-medium-2505",
-      "name": "Mistral Medium 3",
-      "api": "mistral-conversations",
-      "provider": "mistral",
-      "baseUrl": "https://api.mistral.ai",
-      "reasoning": false,
-      "input": ["text", "image"],
-      "cost": { "input": 0.4, "output": 2, "cacheRead": 0.04, "cacheWrite": 0 },
-      "contextWindow": 131072,
-      "maxTokens": 131072,
-      "inputLimits": {
-        "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
-        }
-      },
-      "type": "chat"
-    },
-    "chat:mistral-medium-2508": {
-      "id": "mistral-medium-2508",
-      "name": "Mistral Medium 3.1",
-      "api": "mistral-conversations",
-      "provider": "mistral",
-      "baseUrl": "https://api.mistral.ai",
-      "reasoning": false,
-      "input": ["text", "image"],
-      "cost": { "input": 0.4, "output": 2, "cacheRead": 0.04, "cacheWrite": 0 },
-      "contextWindow": 262144,
-      "maxTokens": 262144,
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -424,33 +309,6 @@
       },
       "type": "chat"
     },
-    "chat:mistral-medium-3.5": {
-      "id": "mistral-medium-3.5",
-      "name": "Mistral Medium 3.5",
-      "api": "mistral-conversations",
-      "provider": "mistral",
-      "baseUrl": "https://api.mistral.ai",
-      "reasoning": true,
-      "thinkingLevelMap": {
-        "off": "none",
-        "minimal": null,
-        "low": null,
-        "medium": null,
-        "high": "high",
-        "xhigh": null,
-        "max": null
-      },
-      "input": ["text", "image"],
-      "cost": { "input": 1.5, "output": 7.5, "cacheRead": 0, "cacheWrite": 0 },
-      "contextWindow": 262144,
-      "maxTokens": 262144,
-      "inputLimits": {
-        "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
-        }
-      },
-      "type": "chat"
-    },
     "chat:mistral-medium-latest": {
       "id": "mistral-medium-latest",
       "name": "Mistral Medium (latest)",
@@ -471,24 +329,6 @@
         "xhigh": null,
         "max": null
       },
-      "inputLimits": {
-        "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
-        }
-      },
-      "type": "chat"
-    },
-    "chat:mistral-small-2506": {
-      "id": "mistral-small-2506",
-      "name": "Mistral Small 3.2",
-      "api": "mistral-conversations",
-      "provider": "mistral",
-      "baseUrl": "https://api.mistral.ai",
-      "reasoning": false,
-      "input": ["text", "image"],
-      "cost": { "input": 0.1, "output": 0.3, "cacheRead": 0.01, "cacheWrite": 0 },
-      "contextWindow": 128000,
-      "maxTokens": 16384,
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -543,37 +383,6 @@
         "xhigh": null,
         "max": null
       },
-      "inputLimits": {
-        "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
-        }
-      },
-      "type": "chat"
-    },
-    "chat:open-mistral-nemo": {
-      "id": "open-mistral-nemo",
-      "name": "Open Mistral Nemo",
-      "api": "mistral-conversations",
-      "provider": "mistral",
-      "baseUrl": "https://api.mistral.ai",
-      "reasoning": false,
-      "input": ["text"],
-      "cost": { "input": 0.15, "output": 0.15, "cacheRead": 0.015, "cacheWrite": 0 },
-      "contextWindow": 128000,
-      "maxTokens": 128000,
-      "type": "chat"
-    },
-    "chat:pixtral-12b": {
-      "id": "pixtral-12b",
-      "name": "Pixtral 12B",
-      "api": "mistral-conversations",
-      "provider": "mistral",
-      "baseUrl": "https://api.mistral.ai",
-      "reasoning": false,
-      "input": ["text", "image"],
-      "cost": { "input": 0.15, "output": 0.15, "cacheRead": 0.015, "cacheWrite": 0 },
-      "contextWindow": 128000,
-      "maxTokens": 128000,
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }

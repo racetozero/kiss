@@ -39,6 +39,8 @@ pub async fn run(
     let mut stderr = child.stderr.take().expect("piped stderr");
     let mut collected: Vec<u8> = Vec::new();
     let mut spill_file = None;
+    // Why the full output could not be saved. The tail still comes back.
+    let mut spill_error: Option<std::io::Error> = None;
     let mut stdout_buffer = [0u8; 8192];
     let mut stderr_buffer = [0u8; 8192];
     let mut stdout_open = true;
@@ -63,11 +65,20 @@ pub async fn run(
                 break;
             }
         };
-        if spill_file.is_none() && collected.len() + bytes.len() > MAX_INLINE_BYTES {
-            spill_file = Some(spill(&collected)?);
+        if spill_file.is_none()
+            && spill_error.is_none()
+            && collected.len() + bytes.len() > MAX_INLINE_BYTES
+        {
+            match spill(&collected) {
+                Ok(file) => spill_file = Some(file),
+                Err(error) => spill_error = Some(error),
+            }
         }
-        if let Some((file, _)) = &mut spill_file {
-            file.write_all(bytes).context(OUTPUT_FILE_ERROR)?;
+        if let Some(Err(error)) = spill_file.as_mut().map(|(file, _)| file.write_all(bytes)) {
+            if let Some((_, path)) = spill_file.take() {
+                let _ = std::fs::remove_file(path);
+            }
+            spill_error = Some(error);
         }
         collected.extend_from_slice(bytes);
         // Keep up to three preceding bytes so a split UTF-8 character can be
@@ -81,15 +92,30 @@ pub async fn run(
     let exit_code = status.and_then(|status| status.code());
 
     let text = String::from_utf8_lossy(&collected).into_owned();
-    let (output, truncated, full_output_path) = if let Some((mut file, path)) = spill_file {
-        file.flush().context(OUTPUT_FILE_ERROR)?;
+    if let Some(Err(error)) = spill_file.as_mut().map(|(file, _)| file.flush()) {
+        if let Some((_, path)) = spill_file.take() {
+            let _ = std::fs::remove_file(path);
+        }
+        spill_error = Some(error);
+    }
+    let tail = || {
         let start = text.ceil_char_boundary(text.len().saturating_sub(MAX_INLINE_BYTES));
-        let tail = text[start..].to_string();
-        let path = path.display().to_string();
-        let notice = format!("\n\n[output truncated. Full output: {path}]");
-        (format!("{tail}{notice}"), true, Some(path))
-    } else {
-        (text, false, None)
+        text[start..].to_string()
+    };
+    let (output, truncated, full_output_path) = match (spill_file, spill_error) {
+        (Some((_, path)), _) => {
+            let path = path.display().to_string();
+            let notice = format!("\n\n[output truncated. Full output: {path}]");
+            (format!("{}{notice}", tail()), true, Some(path))
+        }
+        (None, Some(error)) => {
+            let notice = format!(
+                "\n\n[output truncated. Could not save the full output: {error}. Free disk space or make the temporary directory {} writable.]",
+                std::env::temp_dir().display()
+            );
+            (format!("{}{notice}", tail()), true, None)
+        }
+        (None, None) => (text, false, None),
     };
 
     Ok(crate::session::BashResult {
@@ -101,15 +127,16 @@ pub async fn run(
     })
 }
 
-const OUTPUT_FILE_ERROR: &str = "The command output could not be saved. Use a writable temporary directory with free disk space. Correct the temporary directory permissions or free disk space, then run the command again.";
-
-fn spill(bytes: &[u8]) -> Result<(BufWriter<std::fs::File>, std::path::PathBuf)> {
+fn spill(bytes: &[u8]) -> std::io::Result<(BufWriter<std::fs::File>, std::path::PathBuf)> {
     let directory = std::env::temp_dir().join("kiss-sdk-bash");
-    std::fs::create_dir_all(&directory).context(OUTPUT_FILE_ERROR)?;
+    std::fs::create_dir_all(&directory)?;
     let path = directory.join(format!("{}.log", uuid::Uuid::new_v4()));
-    let file = std::fs::File::create_new(&path).context(OUTPUT_FILE_ERROR)?;
-    let mut file = BufWriter::new(file);
-    file.write_all(bytes).context(OUTPUT_FILE_ERROR)?;
+    let mut file = BufWriter::new(std::fs::File::create_new(&path)?);
+    if let Err(error) = file.write_all(bytes) {
+        drop(file);
+        let _ = std::fs::remove_file(&path);
+        return Err(error);
+    }
     Ok((file, path))
 }
 
@@ -145,5 +172,51 @@ mod tests {
             )
         );
         std::fs::remove_file(path).unwrap();
+    }
+
+    #[tokio::test]
+    async fn unsaved_full_output_keeps_the_tail() {
+        // The temporary directory is read once per process, so a child test
+        // process runs the command with a file in its place.
+        if std::env::var_os("KISS_TEST_UNUSABLE_TMPDIR").is_none() {
+            let directory = tempfile::tempdir().unwrap();
+            let file = directory.path().join("not-a-directory");
+            std::fs::write(&file, "").unwrap();
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "shell::tests::unsaved_full_output_keeps_the_tail",
+                ])
+                .env("KISS_TEST_UNUSABLE_TMPDIR", "1")
+                .env("TMPDIR", file)
+                .output()
+                .unwrap();
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            assert!(
+                output.status.success() && stdout.contains("1 passed"),
+                "{output:?}"
+            );
+            return;
+        }
+        let result = run(
+            "printf '%070000d' 0",
+            Path::new("/"),
+            Some("bash"),
+            None,
+            CancellationToken::new(),
+            Arc::new(|_| {}),
+        )
+        .await
+        .unwrap();
+        assert!(result.truncated);
+        assert!(result.full_output_path.is_none());
+        assert!(result.output.starts_with("0000"));
+        assert!(
+            result
+                .output
+                .contains("[output truncated. Could not save the full output: "),
+            "{}",
+            &result.output[result.output.len() - 300..]
+        );
     }
 }

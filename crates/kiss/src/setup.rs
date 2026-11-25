@@ -397,8 +397,9 @@ mod tests {
             "muse-spark-1.3"
         );
         for (provider, id) in [
-            ("openai", "gpt-6.1-sol"),
-            ("openai-codex", "gpt-6.1-sol"),
+            ("openai", "gpt-6.2-sol"),
+            ("openai-codex", "gpt-6.2-sol"),
+            ("mistral", "mistral-medium-latest"),
             ("fireworks", "accounts/fireworks/models/kimi-k3"),
             ("together", "moonshotai/Kimi-K3"),
             ("opencode-go", "kimi-k3.1-pro"),

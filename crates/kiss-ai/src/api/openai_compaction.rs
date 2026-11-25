@@ -466,9 +466,10 @@ mod tests {
             &context,
             &options,
         );
-        assert_eq!(body["input"][0]["type"], "compaction");
-        assert_eq!(body["input"][1]["role"], "user");
-        assert_eq!(body["input"][2]["type"], "compaction_trigger");
+        assert_eq!(body["input"][0]["content"], "system");
+        assert_eq!(body["input"][1]["type"], "compaction");
+        assert_eq!(body["input"][2]["role"], "user");
+        assert_eq!(body["input"][3]["type"], "compaction_trigger");
         assert_eq!(body["reasoning"]["effort"], "high");
         assert_eq!(body["tools"][0]["name"], "read");
         assert_eq!(body["store"], false);

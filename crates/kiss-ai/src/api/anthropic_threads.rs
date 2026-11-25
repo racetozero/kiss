@@ -71,13 +71,14 @@ fn set(session_id: &str, state: State) {
 
 /// Whether requests for `model` may use threads. Gateways that drop unknown
 /// fields would turn a `continue` into a request without the earlier
-/// conversation, so the default is Anthropic's own endpoint only.
+/// conversation, so the default is a base URL on Anthropic's own endpoint,
+/// for any provider.
 pub(crate) fn supported(model: &Model) -> bool {
     model
         .compat
         .as_ref()
         .and_then(|compat| compat.supports_message_threads)
-        .unwrap_or(model.provider == "anthropic" && model.base_url.contains("api.anthropic.com"))
+        .unwrap_or(model.base_url.contains("api.anthropic.com"))
 }
 
 /// Hash of everything a `continue` builds on: the settings that must stay

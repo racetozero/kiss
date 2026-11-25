@@ -11,10 +11,16 @@
       "cost": {
         "input": 0.1,
         "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0,
+        "cacheRead": 0.1,
+        "cacheWrite": 0.1,
         "tiers": [
-          { "inputTokensAbove": 272000, "input": 0.2, "output": 0, "cacheRead": 0, "cacheWrite": 0 }
+          {
+            "inputTokensAbove": 272000,
+            "input": 0.2,
+            "output": 0,
+            "cacheRead": 0.2,
+            "cacheWrite": 0.2
+          }
         ]
       },
       "contextWindow": 922000
@@ -32,41 +38,6 @@
       "cost": { "input": 5, "output": 30, "cacheRead": 0.5, "cacheWrite": 0 },
       "contextWindow": 400000,
       "maxTokens": 128000,
-      "compat": { "supportsStrictMode": true },
-      "inputLimits": {
-        "maxRequestBytes": 536870912,
-        "images": {
-          "maxPerRequest": 1500,
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
-        }
-      },
-      "type": "chat"
-    },
-    "chat:gpt-4": {
-      "id": "gpt-4",
-      "name": "GPT-4",
-      "api": "openai-responses",
-      "provider": "openai",
-      "baseUrl": "https://api.openai.com/v1",
-      "reasoning": false,
-      "input": ["text"],
-      "cost": { "input": 30, "output": 60, "cacheRead": 0, "cacheWrite": 0 },
-      "contextWindow": 8192,
-      "maxTokens": 8192,
-      "compat": { "supportsStrictMode": true },
-      "type": "chat"
-    },
-    "chat:gpt-4-turbo": {
-      "id": "gpt-4-turbo",
-      "name": "GPT-4 Turbo",
-      "api": "openai-responses",
-      "provider": "openai",
-      "baseUrl": "https://api.openai.com/v1",
-      "reasoning": false,
-      "input": ["text", "image"],
-      "cost": { "input": 10, "output": 30, "cacheRead": 0, "cacheWrite": 0 },
-      "contextWindow": 128000,
-      "maxTokens": 4096,
       "compat": { "supportsStrictMode": true },
       "inputLimits": {
         "maxRequestBytes": 536870912,
@@ -119,27 +90,6 @@
       },
       "type": "chat"
     },
-    "chat:gpt-4.1-nano": {
-      "id": "gpt-4.1-nano",
-      "name": "GPT-4.1 nano",
-      "api": "openai-responses",
-      "provider": "openai",
-      "baseUrl": "https://api.openai.com/v1",
-      "reasoning": false,
-      "input": ["text", "image"],
-      "cost": { "input": 0.1, "output": 0.4, "cacheRead": 0.025, "cacheWrite": 0 },
-      "contextWindow": 1047576,
-      "maxTokens": 32768,
-      "compat": { "supportsStrictMode": true },
-      "inputLimits": {
-        "maxRequestBytes": 536870912,
-        "images": {
-          "maxPerRequest": 1500,
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
-        }
-      },
-      "type": "chat"
-    },
     "chat:gpt-4o": {
       "id": "gpt-4o",
       "name": "GPT-4o",
@@ -151,27 +101,6 @@
       "cost": { "input": 2.5, "output": 10, "cacheRead": 1.25, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 16384,
-      "compat": { "supportsStrictMode": true },
-      "inputLimits": {
-        "maxRequestBytes": 536870912,
-        "images": {
-          "maxPerRequest": 1500,
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
-        }
-      },
-      "type": "chat"
-    },
-    "chat:gpt-4o-2024-05-13": {
-      "id": "gpt-4o-2024-05-13",
-      "name": "GPT-4o (2024-05-13)",
-      "api": "openai-responses",
-      "provider": "openai",
-      "baseUrl": "https://api.openai.com/v1",
-      "reasoning": false,
-      "input": ["text", "image"],
-      "cost": { "input": 5, "output": 15, "cacheRead": 0, "cacheWrite": 0 },
-      "contextWindow": 128000,
-      "maxTokens": 4096,
       "compat": { "supportsStrictMode": true },
       "inputLimits": {
         "maxRequestBytes": 536870912,
@@ -265,28 +194,6 @@
         "xhigh": null,
         "max": null
       },
-      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
-      "inputLimits": {
-        "maxRequestBytes": 536870912,
-        "images": {
-          "maxPerRequest": 1500,
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
-        }
-      },
-      "type": "chat"
-    },
-    "chat:gpt-5-chat-latest": {
-      "id": "gpt-5-chat-latest",
-      "name": "GPT-5 Chat Latest",
-      "api": "openai-responses",
-      "baseUrl": "https://api.openai.com/v1",
-      "provider": "openai",
-      "reasoning": false,
-      "input": ["text", "image"],
-      "cost": { "input": 1.25, "output": 10, "cacheRead": 0.125, "cacheWrite": 0 },
-      "contextWindow": 128000,
-      "maxTokens": 16384,
-      "thinkingLevelMap": { "off": null },
       "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
       "inputLimits": {
         "maxRequestBytes": 536870912,
@@ -490,36 +397,6 @@
       "maxTokens": 128000,
       "thinkingLevelMap": {
         "off": "none",
-        "minimal": null,
-        "low": "low",
-        "medium": "medium",
-        "high": "high",
-        "xhigh": "xhigh",
-        "max": null
-      },
-      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
-      "inputLimits": {
-        "maxRequestBytes": 536870912,
-        "images": {
-          "maxPerRequest": 1500,
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
-        }
-      },
-      "type": "chat"
-    },
-    "chat:gpt-5.3-codex-spark": {
-      "id": "gpt-5.3-codex-spark",
-      "name": "GPT-5.3 Codex Spark",
-      "api": "openai-responses",
-      "provider": "openai",
-      "baseUrl": "https://api.openai.com/v1",
-      "reasoning": true,
-      "input": ["text", "image"],
-      "cost": { "input": 1.75, "output": 14, "cacheRead": 0.175, "cacheWrite": 0 },
-      "contextWindow": 128000,
-      "maxTokens": 32000,
-      "thinkingLevelMap": {
-        "off": null,
         "minimal": null,
         "low": "low",
         "medium": "medium",
@@ -1022,6 +899,54 @@
       },
       "type": "chat"
     },
+    "chat:gpt-6-cyber": {
+      "id": "gpt-6-cyber",
+      "name": "GPT-6 Cyber",
+      "api": "openai-responses",
+      "provider": "openai",
+      "baseUrl": "https://api.openai.com/v1",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": {
+        "input": 20,
+        "output": 100,
+        "cacheRead": 2,
+        "cacheWrite": 25,
+        "tiers": [
+          {
+            "inputTokensAbove": 272000,
+            "input": 40,
+            "output": 150,
+            "cacheRead": 4,
+            "cacheWrite": 25
+          }
+        ]
+      },
+      "contextWindow": 1050000,
+      "maxTokens": 128000,
+      "thinkingLevelMap": {
+        "off": null,
+        "minimal": null,
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh",
+        "max": "max"
+      },
+      "compat": {
+        "supportsStrictMode": true,
+        "supportsOpenAIGrammarTools": true,
+        "supportsExplicitPromptCacheMode": true
+      },
+      "inputLimits": {
+        "maxRequestBytes": 536870912,
+        "images": {
+          "maxPerRequest": 1500,
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      },
+      "type": "chat"
+    },
     "chat:gpt-6-luna": {
       "id": "gpt-6-luna",
       "name": "GPT-6 Luna",
@@ -1230,6 +1155,110 @@
       },
       "type": "chat"
     },
+    "chat:gpt-6.2-astra": {
+      "id": "gpt-6.2-astra",
+      "name": "GPT-6.2 Astra",
+      "api": "openai-responses",
+      "provider": "openai",
+      "baseUrl": "https://api.openai.com/v1",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": {
+        "input": 8,
+        "output": 40,
+        "cacheRead": 0.4,
+        "cacheWrite": 10,
+        "tiers": [
+          {
+            "inputTokensAbove": 272000,
+            "input": 16,
+            "output": 60,
+            "cacheRead": 0.8,
+            "cacheWrite": 20
+          }
+        ]
+      },
+      "contextWindow": 272000,
+      "maxTokens": 128000,
+      "thinkingLevelMap": {
+        "off": null,
+        "minimal": null,
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh",
+        "max": "max"
+      },
+      "compat": {
+        "supportsStrictMode": true,
+        "supportsOpenAIGrammarTools": true,
+        "supportsAdditionalTools": true,
+        "supportsToolSearch": true,
+        "supportsMidConvoSystemMessages": true,
+        "supportsExplicitPromptCacheMode": true,
+        "supportsMidConvoEffort": true
+      },
+      "inputLimits": {
+        "maxRequestBytes": 536870912,
+        "images": {
+          "maxPerRequest": 1500,
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      },
+      "type": "chat"
+    },
+    "chat:gpt-6.2-sol": {
+      "id": "gpt-6.2-sol",
+      "name": "GPT-6.2 Sol",
+      "api": "openai-responses",
+      "provider": "openai",
+      "baseUrl": "https://api.openai.com/v1",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": {
+        "input": 2,
+        "output": 10,
+        "cacheRead": 0.1,
+        "cacheWrite": 2.5,
+        "tiers": [
+          {
+            "inputTokensAbove": 272000,
+            "input": 4,
+            "output": 15,
+            "cacheRead": 0.2,
+            "cacheWrite": 5
+          }
+        ]
+      },
+      "contextWindow": 272000,
+      "maxTokens": 128000,
+      "thinkingLevelMap": {
+        "off": null,
+        "minimal": null,
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh",
+        "max": "max"
+      },
+      "compat": {
+        "supportsStrictMode": true,
+        "supportsOpenAIGrammarTools": true,
+        "supportsAdditionalTools": true,
+        "supportsToolSearch": true,
+        "supportsMidConvoSystemMessages": true,
+        "supportsExplicitPromptCacheMode": true,
+        "supportsMidConvoEffort": true
+      },
+      "inputLimits": {
+        "maxRequestBytes": 536870912,
+        "images": {
+          "maxPerRequest": 1500,
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      },
+      "type": "chat"
+    },
     "chat:gpt-daybreak-blue-latest": {
       "id": "gpt-daybreak-blue-latest",
       "name": "Daybreak Blue",
@@ -1304,66 +1333,6 @@
       },
       "type": "chat"
     },
-    "chat:o1": {
-      "id": "o1",
-      "name": "o1",
-      "api": "openai-responses",
-      "provider": "openai",
-      "baseUrl": "https://api.openai.com/v1",
-      "reasoning": true,
-      "input": ["text", "image"],
-      "cost": { "input": 15, "output": 60, "cacheRead": 7.5, "cacheWrite": 0 },
-      "contextWindow": 200000,
-      "maxTokens": 100000,
-      "thinkingLevelMap": {
-        "off": null,
-        "minimal": null,
-        "low": "low",
-        "medium": "medium",
-        "high": "high",
-        "xhigh": null,
-        "max": null
-      },
-      "compat": { "supportsStrictMode": true },
-      "inputLimits": {
-        "maxRequestBytes": 536870912,
-        "images": {
-          "maxPerRequest": 1500,
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
-        }
-      },
-      "type": "chat"
-    },
-    "chat:o1-pro": {
-      "id": "o1-pro",
-      "name": "o1-pro",
-      "api": "openai-responses",
-      "provider": "openai",
-      "baseUrl": "https://api.openai.com/v1",
-      "reasoning": true,
-      "input": ["text", "image"],
-      "cost": { "input": 150, "output": 600, "cacheRead": 0, "cacheWrite": 0 },
-      "contextWindow": 200000,
-      "maxTokens": 100000,
-      "thinkingLevelMap": {
-        "off": null,
-        "minimal": null,
-        "low": "low",
-        "medium": "medium",
-        "high": "high",
-        "xhigh": null,
-        "max": null
-      },
-      "compat": { "supportsStrictMode": true },
-      "inputLimits": {
-        "maxRequestBytes": 536870912,
-        "images": {
-          "maxPerRequest": 1500,
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
-        }
-      },
-      "type": "chat"
-    },
     "chat:o3": {
       "id": "o3",
       "name": "o3",
@@ -1394,29 +1363,6 @@
       },
       "type": "chat"
     },
-    "chat:o3-mini": {
-      "id": "o3-mini",
-      "name": "o3-mini",
-      "api": "openai-responses",
-      "provider": "openai",
-      "baseUrl": "https://api.openai.com/v1",
-      "reasoning": true,
-      "input": ["text"],
-      "cost": { "input": 1.1, "output": 4.4, "cacheRead": 0.55, "cacheWrite": 0 },
-      "contextWindow": 200000,
-      "maxTokens": 100000,
-      "thinkingLevelMap": {
-        "off": null,
-        "minimal": null,
-        "low": "low",
-        "medium": "medium",
-        "high": "high",
-        "xhigh": null,
-        "max": null
-      },
-      "compat": { "supportsStrictMode": true },
-      "type": "chat"
-    },
     "chat:o3-pro": {
       "id": "o3-pro",
       "name": "o3-pro",
@@ -1426,36 +1372,6 @@
       "reasoning": true,
       "input": ["text", "image"],
       "cost": { "input": 20, "output": 80, "cacheRead": 0, "cacheWrite": 0 },
-      "contextWindow": 200000,
-      "maxTokens": 100000,
-      "thinkingLevelMap": {
-        "off": null,
-        "minimal": null,
-        "low": "low",
-        "medium": "medium",
-        "high": "high",
-        "xhigh": null,
-        "max": null
-      },
-      "compat": { "supportsStrictMode": true },
-      "inputLimits": {
-        "maxRequestBytes": 536870912,
-        "images": {
-          "maxPerRequest": 1500,
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
-        }
-      },
-      "type": "chat"
-    },
-    "chat:o4-mini": {
-      "id": "o4-mini",
-      "name": "o4-mini",
-      "api": "openai-responses",
-      "provider": "openai",
-      "baseUrl": "https://api.openai.com/v1",
-      "reasoning": true,
-      "input": ["text", "image"],
-      "cost": { "input": 1.1, "output": 4.4, "cacheRead": 0.275, "cacheWrite": 0 },
       "contextWindow": 200000,
       "maxTokens": 100000,
       "thinkingLevelMap": {

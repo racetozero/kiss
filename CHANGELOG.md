@@ -2,6 +2,51 @@
 
 ## Unreleased
 
+### Changed
+
+- KISS tracks Pi v1.6.1. The model catalog is `@earendil-works/pi-ai@1.6.1`:
+  it adds GPT-6.2 Astra and GPT-6.2 Sol, Gemini 4 Hydrogen, Neon, and
+  Carbon, GLM-5.4, and Qwen4 Max, and removes models that their providers
+  shut down. GPT-6.2 Sol is the default model for `openai`, `azure`, and
+  `openai-codex`, and `mistral-medium-latest` is the default for Mistral.
+- OpenAI Responses and Codex requests send the system prompt as the first
+  input item instead of `instructions`, so GPT-6.2 can reuse the prompt
+  cache across turns. Replayed tool calls carry `status: "completed"`, so
+  GPT-6.2 keeps earlier reasoning. Codex requests send the output limit, and
+  a Codex WebSocket is replaced after 45 minutes instead of 55.
+- Anthropic message threads are on for any provider whose base URL is on
+  `api.anthropic.com`.
+- The Qwen Token Plan providers read `QWEN_TOKEN_PLAN_TEAM_API_KEY`,
+  `QWEN_TOKEN_PLAN_TEAM_CN_API_KEY`, `QWEN_TOKEN_PLAN_INDIVIDUAL_API_KEY`, or
+  `QWEN_TOKEN_PLAN_INDIVIDUAL_CN_API_KEY` first. The shared variables still
+  work.
+- The find tool accepts patterns that start with `./`, such as `./src/*.rs`.
+- Chat Completions models of the `openai` provider use the developer role
+  for the system prompt also when their base URL is not `api.openai.com`.
+  Other providers keep the system role.
+
+### Fixed
+
+- The bash tool no longer returns `(no output)` when the output ends with a
+  line over 50 KB and then an empty line. It shows the end of that line.
+- When the full output of a bash command or a `!` command cannot be saved
+  (a full disk or an unwritable temporary directory), KISS keeps the
+  truncated output and says why the full output was not saved. Before, the
+  command failed.
+- More temporary provider failures are retried: Cloudflare HTTP 525,
+  Anthropic `api_error` events, bare socket error codes such as
+  `ECONNRESET`, the Codex WebSocket connection limit, "rate increased too
+  quickly", and gateway and OpenRouter wording for empty or cut-off
+  responses. An empty OpenRouter `stop` whose `native_finish_reason` names
+  an upstream failure is now an error that KISS retries.
+- An error code such as `plugin_request_too_large` no longer starts
+  compact-and-retry as if the context overflowed.
+- A prompt that Google blocks now reports the block reason and safety
+  ratings instead of a cut-off stream, and a `CONTINUATION` finish is a
+  length stop.
+- Chat Completions usage reads reasoning tokens that a server reports at the
+  top level of `usage`.
+
 ## 0.0.43 - 2026-11-23
 
 ### Fixed

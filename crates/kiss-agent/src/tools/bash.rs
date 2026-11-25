@@ -4,7 +4,6 @@
 
 use crate::tool::{AgentTool, ToolResult, ToolUpdateSink};
 use crate::tools::truncate::{DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, format_size, truncate_tail};
-use anyhow::Context as _;
 use kiss_ai::ContentBlock;
 use serde_json::{Value, json};
 use std::io::{BufWriter, Write};
@@ -14,7 +13,6 @@ use tokio::io::AsyncReadExt;
 use tokio_util::sync::CancellationToken;
 
 const UPDATE_THROTTLE: Duration = Duration::from_millis(100);
-const OUTPUT_FILE_ERROR: &str = "The command output could not be saved. Use a writable temporary directory with free disk space. Correct the temporary directory permissions or free disk space, then run the command again.";
 
 /// Keep only the live tail. Once output is large, preserve its raw bytes on disk.
 #[derive(Default)]
@@ -24,16 +22,24 @@ struct BashOutput {
     pending_utf8: Vec<u8>,
     prefix: Vec<u8>,
     spill: Option<(BufWriter<std::fs::File>, PathBuf)>,
+    /// Why the full output could not be saved. Once set, no file is written.
+    spill_error: Option<String>,
     total_bytes: usize,
     newlines: usize,
     last_line_bytes: usize,
+    /// Whether the last line has a character that is not whitespace.
+    last_line_text: bool,
+    /// Size of the last finished line with such a character.
+    text_line_bytes: usize,
 }
 
 impl BashOutput {
-    fn append(&mut self, bytes: &[u8]) -> anyhow::Result<()> {
+    fn append(&mut self, bytes: &[u8]) {
         if let Some((file, _)) = &mut self.spill {
-            file.write_all(bytes).context(OUTPUT_FILE_ERROR)?;
-        } else {
+            if let Err(error) = file.write_all(bytes) {
+                self.fail_spill(error);
+            }
+        } else if self.spill_error.is_none() {
             self.prefix.extend_from_slice(bytes);
         }
         let mut pending = std::mem::take(&mut self.pending_utf8);
@@ -62,34 +68,58 @@ impl BashOutput {
         pending.drain(..offset);
         self.pending_utf8 = pending;
         if self.spill.is_none()
+            && self.spill_error.is_none()
             && (self.total_bytes + usize::from(!self.pending_utf8.is_empty()) * 3
                 > DEFAULT_MAX_BYTES
                 || self.newlines >= DEFAULT_MAX_LINES)
         {
-            let file = tempfile::Builder::new()
+            let prefix = std::mem::take(&mut self.prefix);
+            let opened = tempfile::Builder::new()
                 .prefix("kiss-bash-")
                 .suffix(".txt")
                 .tempfile()
-                .context(OUTPUT_FILE_ERROR)?;
-            let (file, path) = file
-                .keep()
-                .map_err(|error| error.error)
-                .context(OUTPUT_FILE_ERROR)?;
-            let mut file = BufWriter::with_capacity(64 * 1024, file);
-            file.write_all(&self.prefix).context(OUTPUT_FILE_ERROR)?;
-            self.prefix = Vec::new();
-            self.spill = Some((file, path));
+                .and_then(|file| file.keep().map_err(|error| error.error));
+            match opened {
+                Ok((file, path)) => {
+                    let mut file = BufWriter::with_capacity(64 * 1024, file);
+                    let written = file.write_all(&prefix);
+                    self.spill = Some((file, path));
+                    if let Err(error) = written {
+                        self.fail_spill(error);
+                    }
+                }
+                Err(error) => self.fail_spill(error),
+            }
         }
-        Ok(())
+    }
+
+    /// Stop saving the full output and delete the incomplete file. The
+    /// truncated output stays, so a full disk does not fail the command.
+    fn fail_spill(&mut self, error: std::io::Error) {
+        if let Some((file, path)) = self.spill.take() {
+            drop(file);
+            let _ = std::fs::remove_file(path);
+        }
+        self.spill_error = Some(format!(
+            "{error}. Free disk space or make the temporary directory {} writable",
+            std::env::temp_dir().display()
+        ));
     }
 
     fn record(&mut self, text: &str) {
         self.total_bytes += text.len();
         self.newlines += text.bytes().filter(|&byte| byte == b'\n').count();
-        self.last_line_bytes = match text.rfind('\n') {
-            Some(index) => text.len() - index - 1,
-            None => self.last_line_bytes + text.len(),
-        };
+        let mut lines = text.split('\n');
+        let first = lines.next().unwrap_or_default();
+        self.last_line_bytes += first.len();
+        self.last_line_text |= !first.trim().is_empty();
+        for line in lines {
+            if self.last_line_text {
+                self.text_line_bytes = self.last_line_bytes;
+            }
+            self.last_line_bytes = line.len();
+            self.last_line_text = !line.trim().is_empty();
+        }
         self.tail.push_str(text);
         if self.tail.len() > DEFAULT_MAX_BYTES + 1 {
             let cut = self
@@ -101,18 +131,16 @@ impl BashOutput {
     }
 
     fn truncation(&self) -> crate::tools::truncate::TruncationResult {
-        let text = if self.partial_first_line && self.last_line_bytes <= DEFAULT_MAX_BYTES {
-            self.tail
-                .split_once('\n')
-                .map(|(_, rest)| rest)
-                .unwrap_or("")
-        } else {
-            &self.tail
+        // The cut first line shows only when nothing but blank lines follow
+        // it, as `truncate_tail` does with the full output.
+        let (text, keep_partial) = match self.tail.split_once('\n') {
+            Some((_, rest)) if self.partial_first_line && !rest.trim().is_empty() => (rest, false),
+            _ => (self.tail.as_str(), self.partial_first_line),
         };
         let mut result = truncate_tail(text, DEFAULT_MAX_LINES, DEFAULT_MAX_BYTES);
         result.total_lines = self.newlines + 1;
         result.total_bytes = self.total_bytes;
-        result.last_line_partial = self.last_line_bytes > DEFAULT_MAX_BYTES;
+        result.last_line_partial = keep_partial;
         result.truncated =
             result.output_lines < result.total_lines || result.output_bytes < result.total_bytes;
         if result.truncated {
@@ -124,15 +152,14 @@ impl BashOutput {
         result
     }
 
-    fn finish(&mut self) -> anyhow::Result<()> {
+    fn finish(&mut self) {
         if !self.pending_utf8.is_empty() {
             self.record("\u{fffd}");
             self.pending_utf8.clear();
         }
-        if let Some((file, _)) = &mut self.spill {
-            file.flush().context(OUTPUT_FILE_ERROR)?;
+        if let Some(Err(error)) = self.spill.as_mut().map(|(file, _)| file.flush()) {
+            self.fail_spill(error);
         }
-        Ok(())
     }
 }
 
@@ -238,7 +265,6 @@ impl AgentTool for BashTool {
         let mut shell_exit: Option<(Option<i32>, Duration)> = None;
 
         loop {
-            let mut output_error = None;
             let timeout_sleep = async {
                 match deadline {
                     Some(d) => tokio::time::sleep_until(d).await,
@@ -249,14 +275,14 @@ impl AgentTool for BashTool {
                 n = stdout.read(&mut stdout_buf), if stdout_open => {
                     match n {
                         Ok(0) => stdout_open = false,
-                        Ok(n) => output_error = output.append(&stdout_buf[..n]).err(),
+                        Ok(n) => output.append(&stdout_buf[..n]),
                         Err(_) => stdout_open = false,
                     }
                 }
                 n = stderr.read(&mut stderr_buf), if stderr_open => {
                     match n {
                         Ok(0) => stderr_open = false,
-                        Ok(n) => output_error = output.append(&stderr_buf[..n]).err(),
+                        Ok(n) => output.append(&stderr_buf[..n]),
                         Err(_) => stderr_open = false,
                     }
                 }
@@ -274,11 +300,6 @@ impl AgentTool for BashTool {
                     break;
                 }
                 else => break,
-            }
-            if let Some(error) = output_error {
-                super::shell::kill_group(&mut child, group);
-                let _ = child.wait().await;
-                return Err(error);
             }
             // The cancellation and no-deadline futures stay pending forever.
             // Therefore, `select!` does not enter its `else` branch after both
@@ -300,41 +321,53 @@ impl AgentTool for BashTool {
             None => child.wait().await.ok().and_then(|s| s.code()),
         };
 
-        output.finish()?;
+        output.finish();
         let truncation = output.truncation();
         let mut output_text = truncation.content.clone();
         let mut details = Value::Null;
 
         if truncation.truncated {
-            let full_path = output
-                .spill
-                .as_ref()
-                .expect("truncated output has a spill file")
-                .1
-                .display()
-                .to_string();
+            let (full_output, file_key, file_value) = match (&output.spill, &output.spill_error) {
+                (Some((_, path)), _) => {
+                    let path = path.display().to_string();
+                    (format!("Full output: {path}"), "fullOutputPath", path)
+                }
+                (None, error) => {
+                    let error = error.clone().unwrap_or_default();
+                    (
+                        format!("Could not save the full output: {error}"),
+                        "fullOutputError",
+                        error,
+                    )
+                }
+            };
             let start = truncation.total_lines - truncation.output_lines + 1;
             let end = truncation.total_lines;
             let notice = if truncation.last_line_partial {
                 format!(
-                    "[Showing last {} of line {end} (line is {}). Full output: {full_path}]",
+                    "[Showing last {} of line {start} (line is {}). {full_output}]",
                     format_size(truncation.output_bytes),
-                    format_size(output.last_line_bytes),
+                    // Only blank lines can follow the cut line.
+                    format_size(if output.last_line_text {
+                        output.last_line_bytes
+                    } else {
+                        output.text_line_bytes
+                    }),
                 )
             } else if truncation.truncated_by == Some(super::truncate::TruncatedBy::Lines) {
                 format!(
-                    "[Showing lines {start}-{end} of {}. Full output: {full_path}]",
+                    "[Showing lines {start}-{end} of {}. {full_output}]",
                     truncation.total_lines
                 )
             } else {
                 format!(
-                    "[Showing lines {start}-{end} of {} ({} limit). Full output: {full_path}]",
+                    "[Showing lines {start}-{end} of {} ({} limit). {full_output}]",
                     truncation.total_lines,
                     format_size(DEFAULT_MAX_BYTES)
                 )
             };
             output_text = format!("{output_text}\n\n{notice}");
-            details = json!({"truncation": truncation, "fullOutputPath": full_path});
+            details = json!({"truncation": truncation, file_key: file_value});
         }
 
         let with_status = |status: &str| {
@@ -394,6 +427,7 @@ mod tests {
             "line\n".repeat(3000).into_bytes(),
             "x".repeat(200_000).into_bytes(),
             format!("{}\nend\n", "x".repeat(100_000)).into_bytes(),
+            format!("{}\n\n", "x".repeat(100_000)).into_bytes(),
             "\u{00e9}\u{1f642}\n".repeat(20_000).into_bytes(),
             vec![0xff; 60_000],
             [vec![b'x'; 70_000], vec![0xf0, 0x9f, 0x99]].concat(),
@@ -402,9 +436,9 @@ mod tests {
             for chunk_size in [1, 8192] {
                 let mut output = BashOutput::default();
                 for chunk in bytes.chunks(chunk_size) {
-                    output.append(chunk).unwrap();
+                    output.append(chunk);
                 }
-                output.finish().unwrap();
+                output.finish();
                 let expected = truncate_tail(
                     &String::from_utf8_lossy(&bytes),
                     DEFAULT_MAX_LINES,
@@ -485,10 +519,10 @@ mod tests {
             || {
                 let mut output = BashOutput::default();
                 for chunk in bytes.chunks(8192) {
-                    output.append(chunk).unwrap();
+                    output.append(chunk);
                     std::hint::black_box(output.truncation());
                 }
-                output.finish().unwrap();
+                output.finish();
                 let result = output.truncation();
                 if let Some((file, path)) = output.spill.take() {
                     drop(file);
@@ -526,6 +560,69 @@ mod tests {
         );
         assert!(result.output_text().starts_with("end\n"));
         std::fs::remove_file(path).unwrap();
+    }
+
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn long_line_before_blank_lines_shows_its_end_and_size() {
+        let result = tool()
+            .execute(
+                "1",
+                json!({"command": "printf '%070000d' 0; printf '\\n\\n'"}),
+                CancellationToken::new(),
+                None,
+            )
+            .await
+            .unwrap();
+        let text = result.output_text();
+        assert!(text.starts_with("0000"), "{text}");
+        assert!(
+            text.contains(&format!("of line 1 (line is {}).", format_size(70_000))),
+            "{text}"
+        );
+        std::fs::remove_file(result.details["fullOutputPath"].as_str().unwrap()).unwrap();
+    }
+
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn unsaved_full_output_keeps_the_tail() {
+        // The temporary directory is read once per process, so a child test
+        // process runs the command with a missing one.
+        if std::env::var_os("KISS_TEST_MISSING_TMPDIR").is_none() {
+            let directory = tempfile::tempdir().unwrap();
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "tools::bash::tests::unsaved_full_output_keeps_the_tail",
+                ])
+                .env("KISS_TEST_MISSING_TMPDIR", "1")
+                .env("TMPDIR", directory.path().join("missing"))
+                .output()
+                .unwrap();
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            assert!(
+                output.status.success() && stdout.contains("1 passed"),
+                "{output:?}"
+            );
+            return;
+        }
+        let result = BashTool::new(PathBuf::from("/"))
+            .execute(
+                "1",
+                json!({"command": "printf '%070000d' 0; printf '\\nend\\n'"}),
+                CancellationToken::new(),
+                None,
+            )
+            .await
+            .unwrap();
+        let text = result.output_text();
+        assert!(text.starts_with("end\n"), "{text}");
+        assert!(
+            text.contains(". Could not save the full output: "),
+            "{text}"
+        );
+        assert!(result.details["fullOutputError"].is_string());
+        assert!(result.details.get("fullOutputPath").is_none());
     }
 
     #[tokio::test]

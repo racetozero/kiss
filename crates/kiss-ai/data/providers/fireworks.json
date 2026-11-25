@@ -9,7 +9,7 @@
       "reasoning": true,
       "input": ["text", "image"],
       "cost": { "input": 0.3, "output": 1.2, "cacheRead": 0.006, "cacheWrite": 0 },
-      "contextWindow": 1000000,
+      "contextWindow": 1048576,
       "maxTokens": 384000,
       "compat": {
         "allowEmptySignature": true,
@@ -44,7 +44,7 @@
       "reasoning": true,
       "input": ["text", "image"],
       "cost": { "input": 0.3, "output": 1.2, "cacheRead": 0.006, "cacheWrite": 0 },
-      "contextWindow": 1000000,
+      "contextWindow": 1048576,
       "maxTokens": 384000,
       "compat": {
         "allowEmptySignature": true,
@@ -105,6 +105,41 @@
       },
       "type": "chat"
     },
+    "chat:accounts/fireworks/models/hy4-flash": {
+      "id": "accounts/fireworks/models/hy4-flash",
+      "name": "Hy4 flash",
+      "api": "anthropic-messages",
+      "provider": "fireworks",
+      "baseUrl": "https://api.fireworks.ai/inference",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 0.07, "output": 0.281, "cacheRead": 0.003, "cacheWrite": 0 },
+      "contextWindow": 524288,
+      "maxTokens": 65536,
+      "compat": {
+        "allowEmptySignature": true,
+        "sendSessionAffinityHeaders": true,
+        "supportsEagerToolInputStreaming": false,
+        "supportsCacheControlOnTools": false,
+        "supportsLongCacheRetention": false,
+        "forceAdaptiveThinking": true
+      },
+      "thinkingLevelMap": {
+        "off": "none",
+        "minimal": null,
+        "low": null,
+        "medium": null,
+        "high": "high",
+        "xhigh": null,
+        "max": null
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      },
+      "type": "chat"
+    },
     "chat:accounts/fireworks/models/minimax-m3": {
       "id": "accounts/fireworks/models/minimax-m3",
       "name": "MiniMax-M3",
@@ -144,7 +179,7 @@
       "reasoning": true,
       "input": ["text", "image"],
       "cost": { "input": 0.15, "output": 0.6, "cacheRead": 0.015, "cacheWrite": 0 },
-      "contextWindow": 1000000,
+      "contextWindow": 1048576,
       "maxTokens": 512000,
       "compat": {
         "allowEmptySignature": true,
@@ -270,6 +305,76 @@
       },
       "type": "chat"
     },
+    "chat:accounts/fireworks/models/qwen4-max": {
+      "id": "accounts/fireworks/models/qwen4-max",
+      "name": "Qwen4 Max",
+      "api": "anthropic-messages",
+      "provider": "fireworks",
+      "baseUrl": "https://api.fireworks.ai/inference",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 1.5, "output": 4.5, "cacheRead": 0.075, "cacheWrite": 0 },
+      "contextWindow": 262144,
+      "maxTokens": 262144,
+      "compat": {
+        "allowEmptySignature": true,
+        "sendSessionAffinityHeaders": true,
+        "supportsEagerToolInputStreaming": false,
+        "supportsCacheControlOnTools": false,
+        "supportsLongCacheRetention": false,
+        "forceAdaptiveThinking": true
+      },
+      "thinkingLevelMap": {
+        "off": "none",
+        "minimal": null,
+        "low": "low",
+        "medium": null,
+        "high": "high",
+        "xhigh": "xhigh",
+        "max": null
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      },
+      "type": "chat"
+    },
+    "chat:accounts/fireworks/models/ultramarine-1-flash-us": {
+      "id": "accounts/fireworks/models/ultramarine-1-flash-us",
+      "name": "Ultramarine 1 Flash",
+      "api": "anthropic-messages",
+      "provider": "fireworks",
+      "baseUrl": "https://api.fireworks.ai/inference",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 0.15, "output": 0.5, "cacheRead": 0.03, "cacheWrite": 0 },
+      "contextWindow": 1048576,
+      "maxTokens": 131072,
+      "compat": {
+        "allowEmptySignature": true,
+        "sendSessionAffinityHeaders": true,
+        "supportsEagerToolInputStreaming": false,
+        "supportsCacheControlOnTools": false,
+        "supportsLongCacheRetention": false,
+        "forceAdaptiveThinking": true
+      },
+      "thinkingLevelMap": {
+        "off": null,
+        "minimal": null,
+        "low": "low",
+        "medium": null,
+        "high": "high",
+        "xhigh": null,
+        "max": "max"
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      },
+      "type": "chat"
+    },
     "chat:accounts/fireworks/routers/deepseek-flash-latest": {
       "id": "accounts/fireworks/routers/deepseek-flash-latest",
       "name": "DeepSeek Flash Latest",
@@ -305,6 +410,41 @@
       },
       "type": "chat"
     },
+    "chat:accounts/fireworks/routers/deepseek-v4p1-flash-1017-flex": {
+      "id": "accounts/fireworks/routers/deepseek-v4p1-flash-1017-flex",
+      "name": "DeepSeek V4.1 Flash 1017 Flex",
+      "api": "anthropic-messages",
+      "provider": "fireworks",
+      "baseUrl": "https://api.fireworks.ai/inference",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 0.15, "output": 0.6, "cacheRead": 0.003, "cacheWrite": 0 },
+      "contextWindow": 1048576,
+      "maxTokens": 384000,
+      "compat": {
+        "allowEmptySignature": true,
+        "sendSessionAffinityHeaders": true,
+        "supportsEagerToolInputStreaming": false,
+        "supportsCacheControlOnTools": false,
+        "supportsLongCacheRetention": false,
+        "forceAdaptiveThinking": true
+      },
+      "thinkingLevelMap": {
+        "off": "none",
+        "minimal": null,
+        "low": "low",
+        "medium": null,
+        "high": "high",
+        "xhigh": null,
+        "max": "max"
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      },
+      "type": "chat"
+    },
     "chat:accounts/fireworks/routers/deepseek-v4p1-flash-1017-spot": {
       "id": "accounts/fireworks/routers/deepseek-v4p1-flash-1017-spot",
       "name": "DeepSeek V4.1 Flash 1017 Spot",
@@ -313,7 +453,7 @@
       "baseUrl": "https://api.fireworks.ai/inference",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 0.21, "output": 0.84, "cacheRead": 0.0042, "cacheWrite": 0 },
+      "cost": { "input": 0.15, "output": 0.6, "cacheRead": 0.003, "cacheWrite": 0 },
       "contextWindow": 1000000,
       "maxTokens": 384000,
       "compat": {
@@ -348,8 +488,43 @@
       "baseUrl": "https://api.fireworks.ai/inference",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 2.4, "output": 9.6, "cacheRead": 0.048, "cacheWrite": 0 },
+      "cost": { "input": 1.2, "output": 4.8, "cacheRead": 0.024, "cacheWrite": 0 },
       "contextWindow": 1000000,
+      "maxTokens": 384000,
+      "compat": {
+        "allowEmptySignature": true,
+        "sendSessionAffinityHeaders": true,
+        "supportsEagerToolInputStreaming": false,
+        "supportsCacheControlOnTools": false,
+        "supportsLongCacheRetention": false,
+        "forceAdaptiveThinking": true
+      },
+      "thinkingLevelMap": {
+        "off": "none",
+        "minimal": null,
+        "low": "low",
+        "medium": null,
+        "high": "high",
+        "xhigh": null,
+        "max": "max"
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      },
+      "type": "chat"
+    },
+    "chat:accounts/fireworks/routers/deepseek-v4p1-flash-1017-us": {
+      "id": "accounts/fireworks/routers/deepseek-v4p1-flash-1017-us",
+      "name": "DeepSeek V4.1 Flash 1017 (US)",
+      "api": "anthropic-messages",
+      "provider": "fireworks",
+      "baseUrl": "https://api.fireworks.ai/inference",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 0.45, "output": 1.8, "cacheRead": 0.009, "cacheWrite": 0 },
+      "contextWindow": 1048576,
       "maxTokens": 384000,
       "compat": {
         "allowEmptySignature": true,
@@ -383,8 +558,43 @@
       "baseUrl": "https://api.fireworks.ai/inference",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 0.21, "output": 0.84, "cacheRead": 0.0042, "cacheWrite": 0 },
+      "cost": { "input": 0.15, "output": 0.6, "cacheRead": 0.003, "cacheWrite": 0 },
       "contextWindow": 1000000,
+      "maxTokens": 384000,
+      "compat": {
+        "allowEmptySignature": true,
+        "sendSessionAffinityHeaders": true,
+        "supportsEagerToolInputStreaming": false,
+        "supportsCacheControlOnTools": false,
+        "supportsLongCacheRetention": false,
+        "forceAdaptiveThinking": true
+      },
+      "thinkingLevelMap": {
+        "off": "none",
+        "minimal": null,
+        "low": "low",
+        "medium": null,
+        "high": "high",
+        "xhigh": null,
+        "max": "max"
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      },
+      "type": "chat"
+    },
+    "chat:accounts/fireworks/routers/deepseek-v4p1-flash-us": {
+      "id": "accounts/fireworks/routers/deepseek-v4p1-flash-us",
+      "name": "DeepSeek V4.1 Flash (US)",
+      "api": "anthropic-messages",
+      "provider": "fireworks",
+      "baseUrl": "https://api.fireworks.ai/inference",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 0.45, "output": 1.8, "cacheRead": 0.009, "cacheWrite": 0 },
+      "contextWindow": 1048576,
       "maxTokens": 384000,
       "compat": {
         "allowEmptySignature": true,
@@ -420,7 +630,7 @@
       "input": ["text", "image"],
       "cost": { "input": 4.5, "output": 22.5, "cacheRead": 0.45, "cacheWrite": 0 },
       "contextWindow": 1048576,
-      "maxTokens": 131072,
+      "maxTokens": 1048576,
       "compat": {
         "allowEmptySignature": true,
         "sendSessionAffinityHeaders": true,
@@ -447,15 +657,15 @@
     },
     "chat:accounts/fireworks/routers/kimi-latest": {
       "id": "accounts/fireworks/routers/kimi-latest",
-      "name": "Kimi Latest",
+      "name": "Kimi Latest (Kimi K3.1 Pro)",
       "api": "anthropic-messages",
       "provider": "fireworks",
       "baseUrl": "https://api.fireworks.ai/inference",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 0 },
+      "cost": { "input": 2, "output": 10, "cacheRead": 0.2, "cacheWrite": 0 },
       "contextWindow": 1048576,
-      "maxTokens": 131072,
+      "maxTokens": 1048576,
       "compat": {
         "allowEmptySignature": true,
         "sendSessionAffinityHeaders": true,
@@ -561,7 +771,6 @@
       "compat": {
         "supportsStrictMode": true,
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "sendSessionAffinityHeaders": true,
         "supportsLongCacheRetention": false
       },
@@ -590,7 +799,6 @@
       "compat": {
         "supportsStrictMode": true,
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "sendSessionAffinityHeaders": true,
         "supportsLongCacheRetention": false
       },
@@ -620,11 +828,10 @@
       "input": ["text", "image"],
       "cost": { "input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 0 },
       "contextWindow": 1048576,
-      "maxTokens": 131072,
+      "maxTokens": 1048576,
       "compat": {
         "supportsStrictMode": true,
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "sendSessionAffinityHeaders": true,
         "supportsLongCacheRetention": false,
         "requiresReasoningContentOnAssistantMessages": true,
@@ -658,11 +865,10 @@
       "input": ["text", "image"],
       "cost": { "input": 2, "output": 10, "cacheRead": 0.2, "cacheWrite": 0 },
       "contextWindow": 1048576,
-      "maxTokens": 131072,
+      "maxTokens": 1048576,
       "compat": {
         "supportsStrictMode": true,
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "sendSessionAffinityHeaders": true,
         "supportsLongCacheRetention": false,
         "requiresReasoningContentOnAssistantMessages": true,
@@ -700,7 +906,6 @@
       "compat": {
         "supportsStrictMode": true,
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "sendSessionAffinityHeaders": true,
         "supportsLongCacheRetention": false
       },
@@ -723,13 +928,40 @@
       "baseUrl": "https://api.fireworks.ai/inference/v1",
       "reasoning": true,
       "input": ["text"],
-      "cost": { "input": 0.98, "output": 3.08, "cacheRead": 0.182, "cacheWrite": 0 },
+      "cost": { "input": 0.7, "output": 2.2, "cacheRead": 0.13, "cacheWrite": 0 },
       "contextWindow": 1048573,
       "maxTokens": 262144,
       "compat": {
         "supportsStrictMode": true,
         "supportsStore": false,
-        "supportsDeveloperRole": false,
+        "sendSessionAffinityHeaders": true,
+        "supportsLongCacheRetention": false
+      },
+      "thinkingLevelMap": {
+        "off": null,
+        "minimal": null,
+        "low": "low",
+        "medium": null,
+        "high": "high",
+        "xhigh": null,
+        "max": "max"
+      },
+      "type": "chat"
+    },
+    "chat:accounts/fireworks/routers/glm-5p3-us": {
+      "id": "accounts/fireworks/routers/glm-5p3-us",
+      "name": "GLM 5.3 (US)",
+      "api": "openai-completions",
+      "provider": "fireworks",
+      "baseUrl": "https://api.fireworks.ai/inference/v1",
+      "reasoning": true,
+      "input": ["text"],
+      "cost": { "input": 2.1, "output": 6.6, "cacheRead": 0.39, "cacheWrite": 0 },
+      "contextWindow": 1048573,
+      "maxTokens": 262144,
+      "compat": {
+        "supportsStrictMode": true,
+        "supportsStore": false,
         "sendSessionAffinityHeaders": true,
         "supportsLongCacheRetention": false
       },
@@ -758,7 +990,6 @@
       "compat": {
         "supportsStrictMode": true,
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "sendSessionAffinityHeaders": true,
         "supportsLongCacheRetention": false
       },
@@ -787,7 +1018,6 @@
       "compat": {
         "supportsStrictMode": true,
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "sendSessionAffinityHeaders": true,
         "supportsLongCacheRetention": false
       },
@@ -821,7 +1051,6 @@
       "compat": {
         "supportsStrictMode": true,
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "sendSessionAffinityHeaders": true,
         "supportsLongCacheRetention": false
       },
@@ -846,11 +1075,10 @@
       "input": ["text", "image"],
       "cost": { "input": 4.5, "output": 22.5, "cacheRead": 0.45, "cacheWrite": 0 },
       "contextWindow": 1048576,
-      "maxTokens": 131072,
+      "maxTokens": 1048576,
       "compat": {
         "supportsStrictMode": true,
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "sendSessionAffinityHeaders": true,
         "supportsLongCacheRetention": false,
         "requiresReasoningContentOnAssistantMessages": true,
@@ -874,21 +1102,57 @@
       },
       "type": "chat"
     },
-    "chat:accounts/fireworks/routers/kimi-k3-spot": {
-      "id": "accounts/fireworks/routers/kimi-k3-spot",
-      "name": "Kimi K3 Spot",
+    "chat:accounts/fireworks/routers/kimi-k3-us": {
+      "id": "accounts/fireworks/routers/kimi-k3-us",
+      "name": "Kimi K3 (US)",
       "api": "openai-completions",
       "provider": "fireworks",
       "baseUrl": "https://api.fireworks.ai/inference/v1",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 2.1, "output": 10.5, "cacheRead": 0.21, "cacheWrite": 0 },
+      "cost": { "input": 4.5, "output": 22.5, "cacheRead": 0.45, "cacheWrite": 0 },
       "contextWindow": 1048576,
-      "maxTokens": 131072,
+      "maxTokens": 1048576,
       "compat": {
         "supportsStrictMode": true,
         "supportsStore": false,
-        "supportsDeveloperRole": false,
+        "sendSessionAffinityHeaders": true,
+        "supportsLongCacheRetention": false,
+        "requiresReasoningContentOnAssistantMessages": true,
+        "thinkingFormat": "openai",
+        "supportsMidConvoSystemMessages": true,
+        "supportsMidConvoToolAdditions": true
+      },
+      "thinkingLevelMap": {
+        "off": null,
+        "minimal": null,
+        "low": "low",
+        "medium": null,
+        "high": "high",
+        "xhigh": null,
+        "max": "max"
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      },
+      "type": "chat"
+    },
+    "chat:accounts/fireworks/routers/kimi-k3p1-pro-us": {
+      "id": "accounts/fireworks/routers/kimi-k3p1-pro-us",
+      "name": "Kimi K3.1 Pro (US)",
+      "api": "openai-completions",
+      "provider": "fireworks",
+      "baseUrl": "https://api.fireworks.ai/inference/v1",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 2.5, "output": 12.5, "cacheRead": 0.25, "cacheWrite": 0 },
+      "contextWindow": 1048576,
+      "maxTokens": 1048576,
+      "compat": {
+        "supportsStrictMode": true,
+        "supportsStore": false,
         "sendSessionAffinityHeaders": true,
         "supportsLongCacheRetention": false,
         "requiresReasoningContentOnAssistantMessages": true,

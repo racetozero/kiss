@@ -27,7 +27,7 @@ impl AgentTool for FindTool {
         json!({
             "type": "object",
             "properties": {
-                "pattern": {"type": "string", "description": "Glob pattern to match files, e.g. '*.rs', '**/*.json', or 'src/**/*.spec.ts'"},
+                "pattern": {"type": "string", "description": "Glob pattern relative to the search directory, e.g. 'src/**/*.rs'. Without '/', e.g. '*.rs', it matches file names at any depth"},
                 "path": {"type": "string", "description": "Directory to search in (default: current directory)"},
                 "limit": {"type": "number", "description": "Maximum number of results (default: 1000)"},
             },
@@ -58,7 +58,12 @@ impl AgentTool for FindTool {
             // On Windows `\` separates paths, so `src\**\*.ts` means `src/**/*.ts`.
             // Elsewhere `\` escapes a glob character.
             let pattern = if cfg!(windows) { pattern.replace('\\', "/") } else { pattern };
-            let normalized = if pattern.contains('/') { pattern.clone() } else { format!("**/{pattern}") };
+            // Relative paths never start with `./`, so `./src/*.rs` means `src/*.rs`.
+            let mut pattern = pattern.as_str();
+            while let Some(rest) = pattern.strip_prefix("./") {
+                pattern = rest;
+            }
+            let normalized = if pattern.contains('/') { pattern.to_string() } else { format!("**/{pattern}") };
             let glob = globset::GlobBuilder::new(&normalized)
                 .literal_separator(true)
                 .build()
@@ -168,6 +173,34 @@ mod tests {
         let text = r.output_text();
         assert!(text.contains("src/main.rs"));
         assert!(!text.contains("target/out.rs"));
+    }
+
+    #[tokio::test]
+    async fn path_patterns_start_at_the_search_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("src")).unwrap();
+        std::fs::create_dir_all(dir.path().join("pkg/src")).unwrap();
+        std::fs::write(dir.path().join("src/main.rs"), "").unwrap();
+        std::fs::write(dir.path().join("pkg/src/lib.rs"), "").unwrap();
+        let tool = FindTool {
+            cwd: dir.path().to_path_buf(),
+        };
+        for (pattern, expected) in [
+            ("src/*.rs", "src/main.rs"),
+            ("./src/*.rs", "src/main.rs"),
+            ("**/src/*.rs", "pkg/src/lib.rs\nsrc/main.rs"),
+        ] {
+            let result = tool
+                .execute(
+                    "1",
+                    json!({"pattern": pattern}),
+                    CancellationToken::new(),
+                    None,
+                )
+                .await
+                .unwrap();
+            assert_eq!(result.output_text(), expected, "{pattern}");
+        }
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 8)]

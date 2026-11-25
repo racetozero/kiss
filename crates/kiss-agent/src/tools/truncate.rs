@@ -123,33 +123,47 @@ pub fn truncate_tail(content: &str, max_lines: usize, max_bytes: usize) -> Trunc
     let lines: Vec<&str> = content.split('\n').collect();
     let total_lines = lines.len();
 
-    if let Some(last) = lines.last()
-        && last.len() > max_bytes
-    {
-        let boundary = last.ceil_char_boundary(last.len() - max_bytes);
-        let piece = &last[boundary..];
+    let mut out_bytes = 0usize;
+    let mut out_lines = 0usize;
+    let mut partial = None;
+    for (i, line) in lines.iter().rev().enumerate() {
+        let separator = usize::from(i > 0);
+        if out_lines + 1 > max_lines {
+            break;
+        }
+        if out_bytes + separator + line.len() > max_bytes {
+            // A line over the limit with nothing or only blank lines after it
+            // keeps its end, so the output is not only the blank lines.
+            let room = max_bytes.saturating_sub(out_bytes + separator);
+            let blank_after = lines[total_lines - out_lines..]
+                .iter()
+                .all(|after| after.trim().is_empty());
+            if room > 0 && blank_after && (out_lines == 0 || !line.trim().is_empty()) {
+                partial = Some(&line[line.ceil_char_boundary(line.len() - room)..]);
+            }
+            break;
+        }
+        out_bytes += separator + line.len();
+        out_lines += 1;
+    }
+
+    if let Some(piece) = partial {
+        let mut content_out = piece.to_string();
+        for line in &lines[total_lines - out_lines..] {
+            content_out.push('\n');
+            content_out.push_str(line);
+        }
         return TruncationResult {
-            content: piece.to_string(),
+            output_bytes: content_out.len(),
+            content: content_out,
             truncated: true,
             truncated_by: Some(TruncatedBy::Bytes),
             total_lines,
             total_bytes,
-            output_lines: 1,
-            output_bytes: piece.len(),
+            output_lines: out_lines + 1,
             last_line_partial: true,
             first_line_exceeds_limit: false,
         };
-    }
-
-    let mut out_bytes = 0usize;
-    let mut out_lines = 0usize;
-    for (i, line) in lines.iter().rev().enumerate() {
-        let add = line.len() + usize::from(i > 0);
-        if out_lines + 1 > max_lines || out_bytes + add > max_bytes {
-            break;
-        }
-        out_bytes += add;
-        out_lines += 1;
     }
 
     if out_lines == total_lines {
@@ -259,6 +273,15 @@ mod tests {
         assert!(r.last_line_partial);
         assert_eq!(r.content.len(), 40);
         assert!(r.content.chars().all(|c| c == 'y'));
+    }
+
+    #[test]
+    fn tail_keeps_end_of_long_line_before_blank_lines() {
+        let content = format!("start\n{}\n\n", "y".repeat(100));
+        let r = truncate_tail(&content, 10, 40);
+        assert!(r.last_line_partial);
+        assert_eq!(r.content, format!("{}\n\n", "y".repeat(38)));
+        assert_eq!(r.output_lines, 3);
     }
 
     #[test]

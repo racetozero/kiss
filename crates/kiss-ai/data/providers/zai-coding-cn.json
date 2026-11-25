@@ -13,7 +13,6 @@
       "maxTokens": 32768,
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
         "thinkingFormat": "zai",
@@ -49,7 +48,6 @@
       },
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "supportsReasoningEffort": true,
         "maxTokensField": "max_tokens",
         "thinkingFormat": "zai",
@@ -80,7 +78,6 @@
       },
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "supportsReasoningEffort": true,
         "maxTokensField": "max_tokens",
         "thinkingFormat": "zai",
@@ -116,12 +113,46 @@
       },
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "supportsReasoningEffort": true,
         "maxTokensField": "max_tokens",
         "thinkingFormat": "zai",
         "supportsStrictMode": true,
         "zaiToolStream": true
+      },
+      "type": "chat"
+    },
+    "chat:glm-5.4": {
+      "id": "glm-5.4",
+      "name": "GLM-5.4",
+      "api": "openai-completions",
+      "provider": "zai-coding-cn",
+      "baseUrl": "https://open.bigmodel.cn/api/coding/paas/v4",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 1000000,
+      "maxTokens": 131072,
+      "thinkingLevelMap": {
+        "off": null,
+        "minimal": null,
+        "low": "low",
+        "medium": null,
+        "high": "high",
+        "xhigh": null,
+        "max": "max"
+      },
+      "compat": {
+        "supportsStore": false,
+        "supportsReasoningEffort": true,
+        "maxTokensField": "max_tokens",
+        "thinkingFormat": "zai",
+        "supportsStrictMode": true,
+        "zaiToolStream": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
       },
       "type": "chat"
     }

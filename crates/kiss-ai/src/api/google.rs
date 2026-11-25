@@ -119,8 +119,17 @@ pub async fn stream(model: &Model, context: &Context, options: &StreamOptions, s
     }
     builder.message.raw_stop_reason = state.finish_reason.clone();
     let stop = match state.finish_reason.as_deref() {
-        Some("MAX_TOKENS") => StopReason::Length,
+        // CONTINUATION: the request's token limit came first. KISS does not
+        // resume with the continuation token.
+        Some("MAX_TOKENS" | "CONTINUATION") => StopReason::Length,
         Some("STOP") => StopReason::Stop,
+        // A blocked prompt gets no candidate and no finish reason. Retrying
+        // the same prompt does not help.
+        None if state.prompt_block.is_some() => {
+            let message = state.prompt_block.take().unwrap_or_default();
+            builder.fail(message, false, model);
+            return;
+        }
         // The last chunk carries finishReason, so its absence means the
         // stream was cut off.
         None => {
@@ -177,6 +186,8 @@ struct DecodeState {
     text_idx: Option<usize>,
     thinking_idx: Option<usize>,
     finish_reason: Option<String>,
+    /// Why Google blocked the prompt, sent instead of a candidate.
+    prompt_block: Option<String>,
 }
 
 fn handle_chunk(
@@ -209,6 +220,36 @@ fn handle_chunk(
     }
     if let Some(id) = chunk["responseId"].as_str() {
         builder.message.response_id = Some(id.to_string());
+    }
+    let feedback = &chunk["promptFeedback"];
+    if state.prompt_block.is_none()
+        && let Some(reason) = feedback["blockReason"].as_str()
+    {
+        let mut details = vec![format!("Google prompt blocked: {reason}")];
+        if let Some(message) = feedback["blockReasonMessage"].as_str() {
+            details.push(message.to_string());
+        }
+        let ratings: Vec<String> = feedback["safetyRatings"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|rating| {
+                let category = rating["category"].as_str()?;
+                Some(match rating["probability"].as_str() {
+                    Some(probability) => format!("{category} ({probability})"),
+                    None => category.to_string(),
+                })
+            })
+            .collect();
+        if !ratings.is_empty() {
+            let label = if ratings.len() == 1 {
+                "rating"
+            } else {
+                "ratings"
+            };
+            details.push(format!("Safety {label}: {}", ratings.join(", ")));
+        }
+        state.prompt_block = Some(details.join(". "));
     }
     let Some(candidate) = chunk["candidates"].as_array().and_then(|c| c.first()) else {
         return Ok(());

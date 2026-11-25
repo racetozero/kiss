@@ -2595,10 +2595,19 @@ fn is_transient(error: &str) -> bool {
     {
         return false;
     }
-    let transient_status = [429, 500, 502, 503, 504, 520, 524, 529]
+    let transient_status = [429, 500, 502, 503, 504, 520, 524, 525, 529]
         .into_iter()
         .any(|status| kiss_ai::api::mentions_status(error, status));
+    // Bare socket error codes, and Anthropic's internal `api_error`, also sent
+    // once the stream began. Neither may be part of a longer identifier.
+    static CODES: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
+        regex::Regex::new(
+            r#"(?i)(?:^|[^a-z0-9_])(?:econnreset|econnaborted|econnrefused|etimedout|epipe|api_error)(?:[^a-z0-9_]|$)"#,
+        )
+        .unwrap()
+    });
     transient_status
+        || CODES.is_match(error)
         || [
             "overloaded",
             "currently experiencing high demand",
@@ -2633,6 +2642,23 @@ fn is_transient(error: &str) -> bool {
             "cut short after the reply had begun",
             "http2 stream failed",
             "http/2 stream failed",
+            // A request that waited too long in the provider's queue.
+            "admission ceiling",
+            // OpenAI `slow_down` and Qwen throttling.
+            "rate increased too quickly",
+            "provider is temporarily unavailable",
+            "provider temporarily unavailable",
+            "connection reset by peer",
+            // The Codex 60-minute WebSocket limit. A retry opens a new one.
+            "websocket connection limit reached",
+            "websocket_connection_limit_reached",
+            // OpenRouter and gateway failures relayed without a status.
+            "returned an empty response",
+            "stopped before completing the response",
+            "ended the response before it was complete",
+            "connection to the provider was reset",
+            "reported a failure while generating the response",
+            "repeat the request later",
         ]
         .iter()
         .any(|needle| e.contains(needle))
@@ -2681,7 +2707,7 @@ fn is_context_overflow(error: &str) -> bool {
         regex::RegexSet::new([
             r"(?i)prompt (?:is )?too long",
             r"(?i)prompt exceeds max length",
-            r"(?i)request_too_large",
+            r"(?i)(?:^|[^a-z0-9_])request_too_large(?:[^a-z0-9_]|$)",
             r"(?i)input is too long for requested model",
             r"(?i)exceeds the context window",
             r"(?i)exceeds (?:the )?(?:model'?s )?maximum context length(?: of [\d,]+ tokens?|\s*\([\d,]+\))",
@@ -2882,6 +2908,7 @@ mod ephemeral_tests {
             r#"HTTP 400: {"error":{"message":"Your input exceeds the context window of this model."}}"#,
             "The input token count (1196265) exceeds the maximum number of tokens allowed (1048575)",
             "HTTP 413: request entity too large",
+            r#"{"type":"error","error":{"type":"request_too_large"}}"#,
         ] {
             assert!(is_context_overflow(error), "{error}");
         }
@@ -2890,6 +2917,7 @@ mod ephemeral_tests {
             "ThrottlingException: Too many tokens, please wait before trying again.",
             "rate limit reached: too many tokens per minute",
             "HTTP 429: too many tokens",
+            "HTTP 400: plugin_request_too_large",
         ] {
             assert!(!is_context_overflow(error), "{error}");
         }
@@ -3993,11 +4021,26 @@ mod ephemeral_tests {
         assert!(is_transient("HTTP 529: Overloaded"));
         assert!(is_transient(r#"provider error {"status": 503}"#));
         assert!(is_transient("Cloudflare returned HTTP 520"));
+        for error in [
+            "HTTP 525",
+            "api_error: Unable to complete this request right now. Please try again.",
+            "read ECONNRESET",
+            "Responses websocket connection limit reached",
+            "Provider returned an empty response",
+            "The provider is temporarily unavailable. Retry shortly.",
+            "request rate increased too quickly",
+        ] {
+            assert!(is_transient(error), "{error}");
+        }
         assert!(is_transient("Azure is currently experiencing high demand"));
         assert!(is_transient("connection reset by peer"));
         assert!(is_transient("rate limit exceeded"));
         assert!(!is_transient("model has a 500 token limit"));
         assert!(!is_transient("connection settings are invalid"));
+        assert!(!is_transient("codepipeline_error: invalid_api_error_code"));
+        assert!(is_transient(
+            r#"{"type":"error","error":{"type":"api_error","message":"Internal"}}"#
+        ));
         assert!(!is_transient(
             "HTTP 429: subscription_sharing_usage_limit_exceeded"
         ));

@@ -12,7 +12,7 @@
       "contextWindow": 1000000,
       "maxTokens": 128000,
       "compat": { "sendSessionAffinityHeaders": true, "forceAdaptiveThinking": true },
-      "thinkingLevelMap": { "off": null, "xhigh": "xhigh", "max": "max" },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max", "off": null },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -32,7 +32,27 @@
       "contextWindow": 1000000,
       "maxTokens": 128000,
       "compat": { "sendSessionAffinityHeaders": true, "forceAdaptiveThinking": true },
-      "thinkingLevelMap": { "off": null, "xhigh": "xhigh", "max": "max" },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max", "off": null },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      },
+      "type": "chat"
+    },
+    "chat:claude-fable-5-2": {
+      "id": "claude-fable-5-2",
+      "name": "Claude Fable 5.2",
+      "api": "anthropic-messages",
+      "provider": "cloudflare-ai-gateway",
+      "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/anthropic",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 8, "output": 40, "cacheRead": 0.2, "cacheWrite": 10 },
+      "contextWindow": 1000000,
+      "maxTokens": 128000,
+      "compat": { "sendSessionAffinityHeaders": true, "forceAdaptiveThinking": true },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max", "off": null },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -224,7 +244,7 @@
         "forceAdaptiveThinking": true,
         "supportsTemperature": false
       },
-      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max", "off": null },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -311,7 +331,7 @@
         "forceAdaptiveThinking": true,
         "supportsTemperature": false
       },
-      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max" },
+      "thinkingLevelMap": { "xhigh": "xhigh", "max": "max", "off": null },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -334,7 +354,6 @@
       "maxTokens": 1048576,
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
         "supportsLongCacheRetention": false,
@@ -364,7 +383,6 @@
       "maxTokens": 1048576,
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
         "supportsLongCacheRetention": false,
@@ -394,7 +412,6 @@
       "maxTokens": 1048576,
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
         "supportsLongCacheRetention": false,
@@ -429,7 +446,6 @@
       "maxTokens": 16384,
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
         "supportsLongCacheRetention": false,
@@ -455,7 +471,6 @@
       "maxTokens": 131000,
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
         "supportsLongCacheRetention": false,
@@ -476,7 +491,6 @@
       "maxTokens": 24000,
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
         "supportsLongCacheRetention": false,
@@ -497,7 +511,6 @@
       "maxTokens": 16384,
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
         "supportsLongCacheRetention": false,
@@ -523,7 +536,6 @@
       "maxTokens": 128000,
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
         "supportsLongCacheRetention": false,
@@ -549,7 +561,6 @@
       "maxTokens": 256000,
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
         "supportsLongCacheRetention": false,
@@ -575,7 +586,6 @@
       "maxTokens": 262144,
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
         "supportsLongCacheRetention": false,
@@ -601,7 +611,6 @@
       "maxTokens": 256000,
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
         "supportsLongCacheRetention": false,
@@ -622,7 +631,6 @@
       "maxTokens": 16384,
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
         "supportsLongCacheRetention": false,
@@ -643,7 +651,6 @@
       "maxTokens": 16384,
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
         "supportsLongCacheRetention": false,
@@ -664,7 +671,6 @@
       "maxTokens": 32768,
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
         "supportsLongCacheRetention": false,
@@ -685,7 +691,31 @@
       "maxTokens": 262144,
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
+        "supportsReasoningEffort": false,
+        "maxTokensField": "max_tokens",
+        "supportsLongCacheRetention": false,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      },
+      "type": "chat"
+    },
+    "chat:workers-ai/@cf/thinkingmachines/inkling-2-small": {
+      "id": "workers-ai/@cf/thinkingmachines/inkling-2-small",
+      "name": "Inkling 2 Small",
+      "api": "openai-completions",
+      "provider": "cloudflare-ai-gateway",
+      "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 0.3, "output": 1, "cacheRead": 0.1, "cacheWrite": 0 },
+      "contextWindow": 1048576,
+      "maxTokens": 1048576,
+      "compat": {
+        "supportsStore": false,
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
         "supportsLongCacheRetention": false,
@@ -711,7 +741,6 @@
       "maxTokens": 131072,
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
         "supportsLongCacheRetention": false,
@@ -732,7 +761,6 @@
       "maxTokens": 256000,
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
         "supportsLongCacheRetention": false,
@@ -753,7 +781,6 @@
       "maxTokens": 1048576,
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
         "supportsLongCacheRetention": false,
@@ -774,7 +801,6 @@
       "maxTokens": 1048576,
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
         "supportsLongCacheRetention": false,
@@ -835,7 +861,7 @@
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai",
       "reasoning": false,
       "input": ["text", "image"],
-      "cost": { "input": 0.1, "output": 0.4, "cacheRead": 0.025, "cacheWrite": 0 },
+      "cost": { "input": 0.1, "output": 0.4, "cacheRead": 0.03, "cacheWrite": 0 },
       "contextWindow": 1000000,
       "maxTokens": 32768,
       "compat": { "supportsStrictMode": true },
@@ -1485,6 +1511,90 @@
       "maxTokens": 128000,
       "thinkingLevelMap": {
         "off": "none",
+        "minimal": null,
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh",
+        "max": "max"
+      },
+      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      },
+      "type": "chat"
+    },
+    "chat:gpt-6.2-astra": {
+      "id": "gpt-6.2-astra",
+      "name": "GPT-6.2 Astra",
+      "api": "openai-responses",
+      "provider": "cloudflare-ai-gateway",
+      "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": {
+        "input": 8,
+        "output": 40,
+        "cacheRead": 0.4,
+        "cacheWrite": 10,
+        "tiers": [
+          {
+            "inputTokensAbove": 272000,
+            "input": 16,
+            "output": 60,
+            "cacheRead": 0.8,
+            "cacheWrite": 20
+          }
+        ]
+      },
+      "contextWindow": 1050000,
+      "maxTokens": 128000,
+      "thinkingLevelMap": {
+        "off": null,
+        "minimal": null,
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh",
+        "max": "max"
+      },
+      "compat": { "supportsStrictMode": true, "supportsOpenAIGrammarTools": true },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      },
+      "type": "chat"
+    },
+    "chat:gpt-6.2-sol": {
+      "id": "gpt-6.2-sol",
+      "name": "GPT-6.2 Sol",
+      "api": "openai-responses",
+      "provider": "cloudflare-ai-gateway",
+      "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": {
+        "input": 2,
+        "output": 10,
+        "cacheRead": 0.1,
+        "cacheWrite": 2.5,
+        "tiers": [
+          {
+            "inputTokensAbove": 272000,
+            "input": 4,
+            "output": 15,
+            "cacheRead": 0.2,
+            "cacheWrite": 5
+          }
+        ]
+      },
+      "contextWindow": 1050000,
+      "maxTokens": 128000,
+      "thinkingLevelMap": {
+        "off": null,
         "minimal": null,
         "low": "low",
         "medium": "medium",

@@ -22,7 +22,9 @@ use tokio_tungstenite::tungstenite::{Error as WebSocketError, Message as WebSock
 const CODEX_WEBSOCKET_BETA: &str = "responses_websockets=2026-02-06";
 const WEBSOCKET_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 const WEBSOCKET_IDLE_TTL: Duration = Duration::from_secs(5 * 60);
-const WEBSOCKET_MAX_AGE: Duration = Duration::from_secs(55 * 60);
+// The server closes a socket after 60 minutes, even during a response. New
+// requests open a new socket after 45 minutes, so long responses can finish.
+const WEBSOCKET_MAX_AGE: Duration = Duration::from_secs(45 * 60);
 
 type ResponsesSocket = WebSocketStream<reqwest::Upgraded>;
 
@@ -1232,8 +1234,12 @@ pub(crate) fn response_input(context: &Context) -> Vec<Value> {
                                 .map_or((tc.id.as_str(), None), |(call_id, item_id)| {
                                     (call_id, Some(item_id))
                                 });
+                            // OpenAI returns tool calls as "completed". A replay
+                            // without the status no longer matches the history,
+                            // and GPT-6.2 then drops the reasoning after it.
                             let mut item = json!({
                                 "type": "function_call",
+                                "status": "completed",
                                 "call_id": call_id,
                                 "name": tc.name,
                                 "arguments": serde_json::to_string(&tc.arguments).unwrap_or_else(|_| "{}".into()),
@@ -1280,7 +1286,19 @@ pub(crate) fn response_input(context: &Context) -> Vec<Value> {
 }
 
 pub(crate) fn build_request(model: &Model, context: &Context, options: &StreamOptions) -> Value {
-    let input = response_input(context);
+    let mut input = response_input(context);
+    // The system prompt is the first input item, not `instructions`: GPT-6.2
+    // puts instructions after the input, so no turn could reuse the cache.
+    if let Some(system) = &context.system_prompt {
+        let developer = model.reasoning
+            && model
+                .compat
+                .as_ref()
+                .and_then(|compat| compat.supports_developer_role)
+                != Some(false);
+        let role = if developer { "developer" } else { "system" };
+        input.insert(0, json!({"role": role, "content": system}));
+    }
     let mut body = json!({
         "model": model.id,
         "input": input,
@@ -1297,8 +1315,7 @@ pub(crate) fn build_request(model: &Model, context: &Context, options: &StreamOp
             .credential
             .as_ref()
             .is_some_and(|credential| credential.is_bearer());
-    if model.api != "openai-codex-responses"
-        && !chatgpt
+    if !chatgpt
         && model
             .compat
             .as_ref()
@@ -1308,13 +1325,7 @@ pub(crate) fn build_request(model: &Model, context: &Context, options: &StreamOp
         body["max_output_tokens"] =
             json!(super::request_max_tokens(model, context, options).max(16));
     }
-    if let Some(system) = &context.system_prompt {
-        body["instructions"] = json!(system);
-    }
     if model.api == "openai-codex-responses" {
-        if context.system_prompt.is_none() {
-            body["instructions"] = json!("You are a helpful assistant.");
-        }
         body["text"] = json!({"verbosity": "low"});
         body["tool_choice"] = json!("auto");
         body["include"] = json!(["reasoning.encrypted_content"]);
@@ -1731,13 +1742,17 @@ mod request_tests {
     }
 
     #[test]
-    fn codex_request_omits_unsupported_output_limit() {
+    fn codex_request_sends_the_output_limit() {
         let body = build_request(
             &model("openai-codex-responses", "https://chatgpt.com/backend-api"),
             &Context::default(),
             &StreamOptions::default(),
         );
-        assert!(body.get("max_output_tokens").is_none());
+        assert!(
+            body["max_output_tokens"]
+                .as_u64()
+                .is_some_and(|limit| limit >= 16)
+        );
     }
 
     #[tokio::test]
@@ -1856,7 +1871,8 @@ mod request_tests {
         let body = request.split_once("\r\n\r\n").unwrap().1;
         let body: Value = serde_json::from_str(body).unwrap();
         assert_eq!(body["model"], "gpt-test");
-        assert_eq!(body["instructions"], "be concise");
+        assert!(body.get("instructions").is_none());
+        assert_eq!(body["input"][0]["content"], "be concise");
         assert_eq!(body["tools"][0]["name"], "read");
         assert_eq!(body["store"], false);
     }
@@ -2077,14 +2093,14 @@ mod request_tests {
         assert!(requests[0].get("stream").is_none());
         assert!(requests[0].get("background").is_none());
         assert!(requests[0].get("previous_response_id").is_none());
-        assert_eq!(requests[0]["input"].as_array().unwrap().len(), 1);
+        assert_eq!(requests[0]["input"].as_array().unwrap().len(), 2);
         assert_eq!(requests[1]["previous_response_id"], "resp-1");
         assert_eq!(requests[1]["input"].as_array().unwrap().len(), 1);
         assert_eq!(requests[1]["input"][0]["content"][0]["text"], "again");
         assert!(requests[2].get("previous_response_id").is_none());
-        assert_eq!(requests[2]["input"].as_array().unwrap().len(), 5);
+        assert_eq!(requests[2]["input"].as_array().unwrap().len(), 6);
         assert_eq!(
-            requests[2]["input"][4]["content"][0]["text"],
+            requests[2]["input"][5]["content"][0]["text"],
             "full context"
         );
     }
@@ -2293,7 +2309,7 @@ mod request_tests {
         assert_eq!(requests.len(), 2);
         assert_eq!(requests[0]["type"], "response.create");
         assert!(requests[0].get("previous_response_id").is_none());
-        assert_eq!(requests[0]["input"].as_array().unwrap().len(), 1);
+        assert_eq!(requests[0]["input"].as_array().unwrap().len(), 2);
         assert_eq!(requests[1]["previous_response_id"], "resp-1");
         assert_eq!(requests[1]["input"].as_array().unwrap().len(), 1);
         assert_eq!(requests[1]["input"][0]["content"][0]["text"], "again");

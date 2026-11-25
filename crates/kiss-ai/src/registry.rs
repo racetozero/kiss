@@ -118,14 +118,14 @@ pub const BUILTIN_PROVIDER_IDS: &[&str] = &[
 ];
 
 /// Pi's default chat model per provider, from `defaultModelPerProvider` in
-/// Pi's `packages/coding-agent/src/core/model-resolver.ts` (v1.5.2).
+/// Pi's `packages/coding-agent/src/core/model-resolver.ts` (v1.6.1).
 const PI_DEFAULT_MODELS: &[(&str, &str)] = &[
     ("amazon-bedrock", "us.anthropic.claude-opus-5-5"),
     ("ant-ling", "Ring-2.6-1T"),
     ("anthropic", "claude-opus-5-5"),
-    ("openai", "gpt-6.1-sol"),
-    ("azure", "gpt-6.1-sol"),
-    ("openai-codex", "gpt-6.1-sol"),
+    ("openai", "gpt-6.2-sol"),
+    ("azure", "gpt-6.2-sol"),
+    ("openai-codex", "gpt-6.2-sol"),
     ("radius", "balanced"),
     ("nvidia", "nvidia/nemotron-3.5-super-vl-120b-a12b"),
     ("deepseek", "deepseek-v4-pro"),
@@ -139,7 +139,7 @@ const PI_DEFAULT_MODELS: &[(&str, &str)] = &[
     ("cerebras", "gpt-oss-120b"),
     ("zai", "glm-5.3"),
     ("zai-coding-cn", "glm-5.3"),
-    ("mistral", "devstral-medium-latest"),
+    ("mistral", "mistral-medium-latest"),
     ("minimax", "MiniMax-M3"),
     ("minimax-cn", "MiniMax-M3"),
     ("moonshotai", "kimi-k2.7-code"),
@@ -1237,7 +1237,10 @@ mod tests {
         );
         assert_eq!(
             crate::auth::env_var_names("qwen-token-plan-individual-cn"),
-            ["QWEN_TOKEN_PLAN_CN_API_KEY"]
+            [
+                "QWEN_TOKEN_PLAN_INDIVIDUAL_CN_API_KEY",
+                "QWEN_TOKEN_PLAN_CN_API_KEY"
+            ]
         );
         let (sonnet, _) = registry.resolve("anthropic/claude-sonnet-5", None).unwrap();
         assert_eq!(sonnet.compat.unwrap().supports_temperature, Some(false));

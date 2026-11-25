@@ -205,10 +205,21 @@ pub fn env_var_names(provider: &str) -> &'static [&'static str] {
         "opencode" => &["OPENCODE_API_KEY"],
         "opencode-go" => &["OPENCODE_API_KEY"],
         "openrouter" => &["OPENROUTER_API_KEY"],
-        "qwen-token-plan" => &["QWEN_TOKEN_PLAN_API_KEY"],
-        "qwen-token-plan-cn" => &["QWEN_TOKEN_PLAN_CN_API_KEY"],
-        "qwen-token-plan-individual" => &["QWEN_TOKEN_PLAN_API_KEY"],
-        "qwen-token-plan-individual-cn" => &["QWEN_TOKEN_PLAN_CN_API_KEY"],
+        // The per-plan variable first, then the region variable both plans
+        // used to share.
+        "qwen-token-plan" => &["QWEN_TOKEN_PLAN_TEAM_API_KEY", "QWEN_TOKEN_PLAN_API_KEY"],
+        "qwen-token-plan-cn" => &[
+            "QWEN_TOKEN_PLAN_TEAM_CN_API_KEY",
+            "QWEN_TOKEN_PLAN_CN_API_KEY",
+        ],
+        "qwen-token-plan-individual" => &[
+            "QWEN_TOKEN_PLAN_INDIVIDUAL_API_KEY",
+            "QWEN_TOKEN_PLAN_API_KEY",
+        ],
+        "qwen-token-plan-individual-cn" => &[
+            "QWEN_TOKEN_PLAN_INDIVIDUAL_CN_API_KEY",
+            "QWEN_TOKEN_PLAN_CN_API_KEY",
+        ],
         "radius" => &["RADIUS_API_KEY"],
         "snowflake-cortex" => &["SNOWFLAKE_PAT", "SNOWFLAKE_TOKEN"],
         "together" => &["TOGETHER_API_KEY"],

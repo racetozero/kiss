@@ -13,7 +13,6 @@
       "maxTokens": 262144,
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
         "supportsStrictMode": false,
@@ -40,7 +39,6 @@
       "maxTokens": 262144,
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
         "supportsStrictMode": false,
@@ -68,7 +66,6 @@
       "maxTokens": 262144,
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
         "supportsStrictMode": false,
@@ -96,7 +93,6 @@
       "maxTokens": 1048576,
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "supportsReasoningEffort": true,
         "maxTokensField": "max_tokens",
         "supportsStrictMode": false,
@@ -134,7 +130,6 @@
       "maxTokens": 1048576,
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "supportsReasoningEffort": true,
         "maxTokensField": "max_tokens",
         "supportsStrictMode": false,
@@ -172,7 +167,6 @@
       "maxTokens": 1048576,
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "supportsReasoningEffort": true,
         "maxTokensField": "max_tokens",
         "supportsStrictMode": false,

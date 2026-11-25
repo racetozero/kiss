@@ -51,7 +51,7 @@ impl AgentTool for GrepTool {
             "properties": {
                 "pattern": {"type": "string", "description": "Search pattern (regex or literal string)"},
                 "path": {"type": "string", "description": "Directory or file to search (default: current directory)"},
-                "glob": {"type": "string", "description": "Filter files by glob pattern, e.g. '*.rs' or '**/*.spec.ts'"},
+                "glob": {"type": "string", "description": "Filter files by glob pattern relative to path, e.g. 'src/**/*.rs'. Without '/', e.g. '*.rs', it matches file names at any depth"},
                 "ignoreCase": {"type": "boolean", "description": "Case-insensitive search (default: false)"},
                 "literal": {"type": "boolean", "description": "Treat pattern as literal string instead of regex (default: false)"},
                 "context": {"type": "number", "description": "Number of lines to show before and after each match (default: 0)"},

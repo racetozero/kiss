@@ -138,6 +138,24 @@
         }
       },
       "type": "chat"
+    },
+    "chat:qwen4-max": {
+      "id": "qwen4-max",
+      "name": "Qwen4 Max",
+      "api": "anthropic-messages",
+      "provider": "opencode-go",
+      "baseUrl": "https://opencode.ai/inference/go/anthropic",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 1.5, "output": 4.5, "cacheRead": 0.075, "cacheWrite": 1.875 },
+      "contextWindow": 1000000,
+      "maxTokens": 262144,
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      },
+      "type": "chat"
     }
   },
   "google-generative-ai": {
@@ -183,7 +201,6 @@
       "maxTokens": 131072,
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "supportsStrictMode": true,
         "maxTokensField": "max_tokens"
       },
@@ -211,7 +228,6 @@
       "maxTokens": 384000,
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "supportsStrictMode": true,
         "maxTokensField": "max_tokens",
         "requiresReasoningContentOnAssistantMessages": true,
@@ -228,7 +244,7 @@
     },
     "chat:deepseek-v4.1-flash": {
       "id": "deepseek-v4.1-flash",
-      "name": "DeepSeek V4.1 Flash",
+      "name": "DeepSeek V4.1 Flash 1017",
       "api": "openai-completions",
       "provider": "opencode-go",
       "baseUrl": "https://opencode.ai/inference/go/openai/v1",
@@ -248,7 +264,6 @@
       },
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "supportsStrictMode": true,
         "maxTokensField": "max_tokens",
         "requiresReasoningContentOnAssistantMessages": true,
@@ -258,34 +273,6 @@
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
-      },
-      "type": "chat"
-    },
-    "chat:glm-5.2": {
-      "id": "glm-5.2",
-      "name": "GLM-5.2",
-      "api": "openai-completions",
-      "provider": "opencode-go",
-      "baseUrl": "https://opencode.ai/inference/go/openai/v1",
-      "reasoning": true,
-      "input": ["text"],
-      "cost": { "input": 1.4, "output": 4.4, "cacheRead": 0.26, "cacheWrite": 0 },
-      "contextWindow": 1000000,
-      "maxTokens": 131072,
-      "compat": {
-        "supportsStore": false,
-        "supportsDeveloperRole": false,
-        "supportsStrictMode": true,
-        "maxTokensField": "max_tokens"
-      },
-      "thinkingLevelMap": {
-        "off": null,
-        "minimal": null,
-        "low": null,
-        "medium": null,
-        "high": "high",
-        "xhigh": null,
-        "max": "max"
       },
       "type": "chat"
     },
@@ -302,7 +289,6 @@
       "maxTokens": 131072,
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "supportsStrictMode": true,
         "maxTokensField": "max_tokens"
       },
@@ -330,7 +316,6 @@
       "maxTokens": 131072,
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "supportsStrictMode": true,
         "maxTokensField": "max_tokens"
       },
@@ -342,6 +327,29 @@
         "high": "high",
         "xhigh": null,
         "max": "max"
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      },
+      "type": "chat"
+    },
+    "chat:hungerg-free": {
+      "id": "hungerg-free",
+      "name": "HungerG Free",
+      "api": "openai-completions",
+      "provider": "opencode-go",
+      "baseUrl": "https://opencode.ai/inference/go/openai/v1",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 1000000,
+      "maxTokens": 65536,
+      "compat": {
+        "supportsStore": false,
+        "supportsStrictMode": true,
+        "maxTokensField": "max_tokens"
       },
       "inputLimits": {
         "images": {
@@ -363,7 +371,6 @@
       "maxTokens": 128000,
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "supportsStrictMode": true,
         "maxTokensField": "max_tokens"
       },
@@ -391,7 +398,38 @@
       "maxTokens": 65536,
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
+        "supportsStrictMode": true,
+        "maxTokensField": "max_tokens"
+      },
+      "thinkingLevelMap": {
+        "off": "none",
+        "minimal": null,
+        "low": null,
+        "medium": null,
+        "high": "high",
+        "xhigh": null,
+        "max": null
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      },
+      "type": "chat"
+    },
+    "chat:hy4-flash-free": {
+      "id": "hy4-flash-free",
+      "name": "Hy4 flash Free",
+      "api": "openai-completions",
+      "provider": "opencode-go",
+      "baseUrl": "https://opencode.ai/inference/go/openai/v1",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 1048576,
+      "maxTokens": 65536,
+      "compat": {
+        "supportsStore": false,
         "supportsStrictMode": true,
         "maxTokensField": "max_tokens"
       },
@@ -420,11 +458,10 @@
       "reasoning": true,
       "input": ["text"],
       "cost": { "input": 0.834, "output": 2.501, "cacheRead": 0.042, "cacheWrite": 0 },
-      "contextWindow": 1024000,
-      "maxTokens": 64000,
+      "contextWindow": 1048576,
+      "maxTokens": 65536,
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "supportsStrictMode": true,
         "maxTokensField": "max_tokens"
       },
@@ -452,7 +489,6 @@
       "maxTokens": 131072,
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "supportsStrictMode": true,
         "maxTokensField": "max_tokens"
       },
@@ -471,7 +507,6 @@
       "maxTokens": 262144,
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "supportsStrictMode": true,
         "maxTokensField": "max_tokens"
       },
@@ -492,10 +527,9 @@
       "input": ["text", "image"],
       "cost": { "input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 3 },
       "contextWindow": 1048576,
-      "maxTokens": 131072,
+      "maxTokens": 1048576,
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "supportsStrictMode": true,
         "maxTokensField": "max_tokens",
         "supportsMidConvoSystemMessages": true,
@@ -527,10 +561,9 @@
       "input": ["text", "image"],
       "cost": { "input": 2, "output": 10, "cacheRead": 0.2, "cacheWrite": 2 },
       "contextWindow": 1048576,
-      "maxTokens": 131072,
+      "maxTokens": 1048576,
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "supportsStrictMode": true,
         "maxTokensField": "max_tokens",
         "supportsMidConvoSystemMessages": true,
@@ -552,39 +585,19 @@
       },
       "type": "chat"
     },
-    "chat:longcat-2.0": {
-      "id": "longcat-2.0",
-      "name": "LongCat-2.0",
-      "api": "openai-completions",
-      "provider": "opencode-go",
-      "baseUrl": "https://opencode.ai/inference/go/openai/v1",
-      "reasoning": true,
-      "input": ["text"],
-      "cost": { "input": 0.3, "output": 1.2, "cacheRead": 0.006, "cacheWrite": 0 },
-      "contextWindow": 1000000,
-      "maxTokens": 131072,
-      "compat": {
-        "supportsStore": false,
-        "supportsDeveloperRole": false,
-        "supportsStrictMode": true,
-        "maxTokensField": "max_tokens"
-      },
-      "type": "chat"
-    },
-    "chat:longcat-2.5-free": {
-      "id": "longcat-2.5-free",
-      "name": "LongCat 2.5 Free",
+    "chat:longcat-2.5": {
+      "id": "longcat-2.5",
+      "name": "LongCat-2.5",
       "api": "openai-completions",
       "provider": "opencode-go",
       "baseUrl": "https://opencode.ai/inference/go/openai/v1",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": { "input": 0.3, "output": 1.2, "cacheRead": 0.006, "cacheWrite": 0 },
       "contextWindow": 1000000,
       "maxTokens": 262144,
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "supportsStrictMode": true,
         "maxTokensField": "max_tokens"
       },
@@ -592,49 +605,6 @@
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
         }
-      },
-      "type": "chat"
-    },
-    "chat:mimo-v2.5": {
-      "id": "mimo-v2.5",
-      "name": "MiMo V2.5",
-      "api": "openai-completions",
-      "provider": "opencode-go",
-      "baseUrl": "https://opencode.ai/inference/go/openai/v1",
-      "reasoning": true,
-      "input": ["text", "image"],
-      "cost": { "input": 0.14, "output": 0.28, "cacheRead": 0.0028, "cacheWrite": 0 },
-      "contextWindow": 1000000,
-      "maxTokens": 128000,
-      "compat": {
-        "supportsStore": false,
-        "supportsDeveloperRole": false,
-        "supportsStrictMode": true,
-        "maxTokensField": "max_tokens"
-      },
-      "inputLimits": {
-        "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
-        }
-      },
-      "type": "chat"
-    },
-    "chat:mimo-v2.5-pro": {
-      "id": "mimo-v2.5-pro",
-      "name": "MiMo V2.5 Pro",
-      "api": "openai-completions",
-      "provider": "opencode-go",
-      "baseUrl": "https://opencode.ai/inference/go/openai/v1",
-      "reasoning": true,
-      "input": ["text"],
-      "cost": { "input": 0.435, "output": 0.87, "cacheRead": 0.003625, "cacheWrite": 0 },
-      "contextWindow": 1048576,
-      "maxTokens": 128000,
-      "compat": {
-        "supportsStore": false,
-        "supportsDeveloperRole": false,
-        "supportsStrictMode": true,
-        "maxTokensField": "max_tokens"
       },
       "type": "chat"
     },
@@ -651,7 +621,6 @@
       "maxTokens": 131072,
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "supportsStrictMode": true,
         "maxTokensField": "max_tokens"
       },
@@ -675,7 +644,6 @@
       "maxTokens": 131072,
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "supportsStrictMode": true,
         "maxTokensField": "max_tokens"
       },
@@ -699,7 +667,6 @@
       "maxTokens": 512000,
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "supportsStrictMode": true,
         "maxTokensField": "max_tokens"
       },
@@ -732,7 +699,6 @@
       "maxTokens": 65536,
       "compat": {
         "supportsStore": false,
-        "supportsDeveloperRole": false,
         "supportsStrictMode": true,
         "maxTokensField": "max_tokens"
       },
