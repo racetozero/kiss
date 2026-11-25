@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.0.44 - 2026-11-25
+
 ### Changed
 
 - KISS tracks Pi v1.6.1. The model catalog is `@earendil-works/pi-ai@1.6.1`:
