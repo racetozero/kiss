@@ -110,6 +110,9 @@ def launch(
             str(binary),
             '--provider',
             'anthropic',
+            # `--api-key` requires an explicit model.
+            '--model',
+            'claude-fable-5',
             '--api-key',
             'local-benchmark-key',
             '--no-context-files',

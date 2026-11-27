@@ -797,18 +797,21 @@ See the [SDK guide](docs/sdk.md), [RPC protocol](docs/rpc.md), and
 
 ## Performance
 
-KISS benchmarks local work, not model or network latency. Startup and large-session results below were measured on 2026-10-10.
-The other KISS tables come from an earlier full release benchmark run.
+KISS benchmarks local work, not model or network latency. The startup and
+memory, long-session memory, and visible-startup results below were measured
+on 2026-11-22 with KISS 0.0.42. Sections with their own date keep their
+earlier results. The other KISS tables come from an earlier full release
+benchmark run.
 
 ### Startup and memory
 
 | Measure                     |            Mean |
 | --------------------------- | --------------: |
-| Warm time to first frame    |        8.557 ms |
-| Warm time to first input    |        8.640 ms |
-| One idle session            |  20.083 MiB RSS |
-| Ten idle sessions           | 201.635 MiB RSS |
-| Extra RSS per added session |      20.172 MiB |
+| Warm time to first frame    |        7.767 ms |
+| Warm time to first input    |        7.869 ms |
+| One idle session            |  23.490 MiB RSS |
+| Ten idle sessions           | 197.411 MiB RSS |
+| Extra RSS per added session |      19.325 MiB |
 
 Startup results use twenty launches after one warmup and detect output bytes,
 not visible screen cells. The visible-screen test below uses a different method.
@@ -816,26 +819,36 @@ These separate runs do not measure a startup regression. Memory uses three
 trials. RSS is the resident memory reported by macOS and differs from Linux
 proportional set size.
 
+The KISS 0.0.41 binary in the same run on the same host measured 10.826 ms
+to first frame, 10.935 ms to first input, 21.380 MiB for one idle session,
+214.490 MiB for ten, and 21.457 MiB for each added session. The one-session
+RSS of 0.0.42 is higher and its ten-session RSS is lower. RSS counts pages
+that the allocator keeps, so use the footprint values below for retained
+memory.
+
 ### Long-session memory
 
-Context-use accounting now borrows saved messages instead of copying the active
-conversation. These matched tests compare the earlier release binary (product
-source `3ab0483`) with `8e5243c` on the same Apple M4, macOS 27.0, Rust 1.99.0,
-and normal release settings with mimalloc.
+KISS 0.0.42 keeps one copy of each transcript row in the terminal renderer
+instead of two, does not load the full JSON Schema validator for a tool call
+with valid arguments, and returns freed memory to the operating system when a
+session is idle. These matched tests compare KISS 0.0.41 (`33ff574`) with
+0.0.42 (`7d11f3b`) on the same Apple M4, macOS 27.0.1, Rust 1.100.0, and
+normal release settings with mimalloc.
 
 | History entries | Compacted | Before footprint, MiB [range] | After footprint, MiB [range] |
 | --------------- | --------- | ----------------------------: | ---------------------------: |
-| 0               | No        |           9.329 [9.313–9.360] |       10.313 [10.266–10.329] |
-| 1,000           | No        |        38.172 [37.438–39.610] |       33.141 [33.126–33.141] |
-| 1,000           | Yes       |        35.704 [35.532–35.704] |       33.157 [31.782–33.516] |
-| 5,000           | No        |     131.532 [128.063–131.548] |    126.985 [122.766–127.001] |
-| 5,000           | Yes       |     127.282 [127.266–127.282] |    126.641 [126.641–126.985] |
+| 0               | No        |        11.235 [11.219–11.282] |          9.001 [8.938–9.047] |
+| 1,000           | No        |        38.844 [37.094–39.454] |       33.126 [33.094–34.594] |
+| 1,000           | Yes       |        39.407 [39.391–39.422] |       33.532 [33.516–33.594] |
+| 5,000           | No        |     121.766 [120.501–122.641] |       99.126 [98.704–99.266] |
+| 5,000           | Yes       |     122.516 [121.938–122.891] |       99.094 [96.016–99.344] |
 
 Values are physical footprint after 20 local shell updates and a further idle
 sample. They are medians of three process medians; brackets give the process
-range. At 1,000 uncompacted entries, footprint fell about 13%; at 5,000, it fell
-about 3.5%. The empty-history case increased by 0.984 MiB. Before transcript
-reconstruction, the 5,000-entry footprint fell from 33.954 to 22.922 MiB.
+range. The empty-history footprint fell about 20%. At 1,000 uncompacted
+entries, footprint fell about 15%; at 5,000, it fell about 19%. Before
+transcript reconstruction, the 5,000-entry footprint fell from 23.782 to
+22.969 MiB.
 
 Each fixture rotates user, assistant, and shell messages with 2,048 text bytes
 per entry, plus one readiness message. Compacted fixtures keep the last 32
@@ -1085,34 +1098,42 @@ is excluded. Values below include the variation shown in the source.
 
 Source checked on 2026-10-10. We did not run this suite. It does not include KISS.
 
-KISS was measured on an Apple M4 with macOS 27.0 and Rust 1.99.0, using
-product source `3ab0483`. The normal release build uses fat LTO, one codegen
+KISS was measured on an Apple M4 with macOS 27.0.1 and Rust 1.100.0, using
+KISS 0.0.42 (`7d11f3b`). The normal release build uses fat LTO, one codegen
 unit, and mimalloc. The test uses a 160 by 40 pseudo-terminal and pyte 0.8.2.
 Timing starts before process creation. Output and input count only when visible
 screen cells appear after a synchronized terminal update ends. The test checks
 that terminal echo is off before sending input. No model turn is submitted.
 
-| Measure                        | KISS local mean ± sample standard deviation |       p95 |       p99 |
-| ------------------------------ | ------------------------------------------: | --------: | --------: |
-| First visible output, cold     |                            7.008 ± 3.158 ms | 13.210 ms | 22.637 ms |
-| Cold time to type              |                            9.420 ± 4.007 ms | 17.121 ms | 28.500 ms |
-| Warm time to type              |                            8.960 ± 2.620 ms | 12.463 ms | 25.364 ms |
-| Installed CLI payload          |                                   25.230 MB |         — |         — |
-| Process tree RSS after startup |                           20.772 ± 0.092 MB |         — |         — |
+| Measure                        | KISS local mean ± sample standard deviation |      p95 |       p99 |
+| ------------------------------ | ------------------------------------------: | -------: | --------: |
+| First visible output, cold     |                            6.207 ± 2.536 ms | 7.101 ms |  9.187 ms |
+| Cold time to type              |                            8.459 ± 3.347 ms | 9.306 ms | 12.394 ms |
+| Warm time to type              |                            8.603 ± 7.008 ms | 9.426 ms | 13.939 ms |
+| Installed CLI payload          |                                   26.404 MB |        — |         — |
+| Process tree RSS after startup |                           26.648 ± 0.705 MB |        — |         — |
 
 The test alternated 1,000 cold and 1,000 warm launches. Cold launches use fresh
 project and session directories; warm launches reuse directories after a
 warmup. OS caches were not cleared. The test reads global user configuration,
-uses the built-in Anthropic provider with a placeholder key and an empty
-custom-model file, and disables context files. Typing time includes the screen
+uses the built-in Anthropic provider with an explicit model, a placeholder
+key, and an empty custom-model file, and disables context files. Typing time includes the screen
 observer's work and starts with launch; the probe is sent after the first frame.
 
 RSS was measured with `ps` in 20 separate launches, after reading output for
 one second following typing. Each process tree had one process. This sample
 count is too small for useful memory p95 or p99 values. MB means 1,000,000 bytes.
-Installed size is the executable's 25,229,584 bytes; it excludes receipts,
+Installed size is the executable's 26,404,112 bytes; it excludes receipts,
 download caches, SDKs, generated sessions, and OS libraries. The CLI has no
 separate language runtime or updater.
+
+The KISS 0.0.41 binary in the same test on the same host measured 6.172 ms
+to first visible output, 8.350 ms cold and 8.197 ms warm time to type, and
+22.058 ± 0.076 MB RSS. The time differences between the two versions are
+smaller than their sample standard deviations. RSS after startup is about
+4.6 MB higher in 0.0.42 in this test. A probable cause, which this test does
+not isolate, is that 0.0.42 starts to read the system root certificates when
+typing begins, and this test types a probe before it samples memory.
 
 Hardware, OS, configuration, observer, and installation scope differ from
 Prime's suite, so these results do not support a direct comparison.
