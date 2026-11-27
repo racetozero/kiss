@@ -40,6 +40,7 @@ static ALLOCATOR: mimalloc::MiMalloc = mimalloc::MiMalloc;
 // from such a handler, so an early exit leaves empty `.profraw` files and the
 // release PGO training step fails. See rust-lang/rust#77553.
 fn main() -> ExitCode {
+    terminal_hosts::take_program_resume_token();
     let args = match Args::try_parse_cli(std::env::args_os()) {
         Ok(args) => args,
         Err(err) => {

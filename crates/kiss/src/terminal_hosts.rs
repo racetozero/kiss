@@ -49,6 +49,74 @@ enum Host {
         workspace: OsString,
         surface: OsString,
     },
+    /// A terminal with the Program Resume Protocol (OSC 7577), such as Rex.
+    /// It reruns the reported command after it restarts. The token signs
+    /// each report, so output that only passes through the terminal cannot
+    /// register a command.
+    ProgramResume { token: String },
+}
+
+/// The OSC 7577 token, taken out of the environment at startup so that no
+/// process KISS starts can replace its command or register one that later
+/// runs with the user's rights.
+pub(crate) static PROGRAM_RESUME_TOKEN: std::sync::OnceLock<Option<String>> =
+    std::sync::OnceLock::new();
+
+/// Remove `OSC7577_TOKEN` from the environment and keep it. Call this before
+/// any other thread starts.
+pub(crate) fn take_program_resume_token() {
+    let token = std::env::var("OSC7577_TOKEN")
+        .ok()
+        .filter(|token| !token.is_empty());
+    // SAFETY: `main` calls this before it starts the runtime, while it is the
+    // only thread.
+    unsafe { std::env::remove_var("OSC7577_TOKEN") };
+    let _ = PROGRAM_RESUME_TOKEN.set(token);
+}
+
+/// An OSC 7577 report of `resume`, or a report that clears the command when
+/// `resume` is `None` or the protocol cannot carry it: a program that is a
+/// bare name or an absolute path, an absolute folder, at most 64 arguments
+/// without control characters, and at most 2,048 bytes in all.
+fn program_resume_sequence(token: &str, resume: Option<&Resume>, pid: u32, time: u64) -> String {
+    use base64::Engine as _;
+    use sha2::Digest as _;
+    let encode = |text: &str| base64::engine::general_purpose::STANDARD.encode(text);
+    let sign = |pairs: &str| {
+        let body = format!("pid={pid}:time={time}:{pairs}");
+        let mac = sha2::Sha256::digest(format!("{body}:{token}"));
+        let mac: String = mac.iter().map(|byte| format!("{byte:02x}")).collect();
+        format!("\x1b]7577;{body}:mac={mac}\x1b\\")
+    };
+    let report = resume.and_then(|resume| {
+        let program = resume.argv.first()?;
+        let cwd = resume.cwd.to_str()?;
+        let plain = |text: &str| !text.chars().any(char::is_control);
+        let program_ok =
+            (!program.is_empty() && !program.starts_with('-') && !program.contains(['/', '\\']))
+                || std::path::Path::new(program).is_absolute();
+        (program_ok
+            && resume.argv.len() <= 64
+            && resume.cwd.is_absolute()
+            && plain(cwd)
+            && resume.argv.iter().all(|arg| plain(arg)))
+        .then(|| {
+            let argv: Vec<String> = resume.argv.iter().map(|arg| encode(arg)).collect();
+            sign(&format!("argv={}:cwd={}", argv.join(","), encode(cwd)))
+        })
+        .filter(|sequence| sequence.len() <= 2048)
+    });
+    report.unwrap_or_else(|| sign("clear=1"))
+}
+
+fn write_program_resume(token: &str, resume: Option<&Resume>) -> bool {
+    use std::io::Write as _;
+    let time = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_secs());
+    let sequence = program_resume_sequence(token, resume, std::process::id(), time);
+    let mut out = std::io::stdout().lock();
+    out.write_all(sequence.as_bytes()).is_ok() && out.flush().is_ok()
 }
 
 pub(crate) struct TerminalHosts {
@@ -78,6 +146,11 @@ impl TerminalHosts {
                 binary: "cmux".into(),
                 workspace,
                 surface,
+            });
+        }
+        if let Some(Some(token)) = PROGRAM_RESUME_TOKEN.get() {
+            hosts.push(Host::ProgramResume {
+                token: token.clone(),
             });
         }
         Self::start(hosts)
@@ -204,6 +277,7 @@ impl Host {
     fn command(&self, args: &[&str]) -> Command {
         let binary = match self {
             Self::Herdr { binary, .. } | Self::Cmux { binary, .. } => binary,
+            Self::ProgramResume { .. } => unreachable!("OSC 7577 runs no command"),
         };
         let mut command = Command::new(binary);
         command
@@ -244,6 +318,12 @@ impl Host {
                                 })
                         }
                         Self::Cmux { .. } => true,
+                        // Relative paths in the flags were typed in the
+                        // folder KISS started in, so they must resume there.
+                        Self::ProgramResume { .. } => {
+                            resume.argv.len() <= 7
+                                || std::env::current_dir().is_ok_and(|cwd| cwd == resume.cwd)
+                        }
                     }
             });
             let state_sent = self
@@ -332,6 +412,15 @@ impl Host {
                 }
                 sent
             }
+            Self::ProgramResume { token } => {
+                if registered.as_ref() != resume
+                    && (resume.is_some() || registered.is_some())
+                    && write_program_resume(token, resume)
+                {
+                    *registered = resume.cloned();
+                }
+                true
+            }
             Self::Cmux {
                 workspace, surface, ..
             } => {
@@ -374,6 +463,10 @@ impl Host {
 
     async fn release(&self, registered: Option<&Resume>, sequence: &mut u64) -> bool {
         match self {
+            // The user quit, so the terminal must not bring the session back.
+            Self::ProgramResume { token } => {
+                registered.is_none() || write_program_resume(token, None)
+            }
             Self::Herdr { pane, socket, .. } => {
                 let seq = next_sequence(sequence);
                 if let Some(sent) = herdr_request(socket, "pane.release_agent", serde_json::json!({

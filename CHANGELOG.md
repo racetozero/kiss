@@ -2,6 +2,40 @@
 
 ## Unreleased
 
+### Added
+
+- Terminals with the Program Resume Protocol (OSC 7577), such as Rex, can
+  reopen the current session after they restart. When the terminal sets
+  `OSC7577_TOKEN`, interactive mode reports a signed `kiss --session`
+  command with the tool and instruction flags it started with, and clears
+  it when you quit. KISS removes the token from the environment of every
+  process it starts.
+
+### Changed
+
+- KISS tracks Pi v1.7.0. The model catalog is `@earendil-works/pi-ai@1.7.0`.
+  The default model of `ant-ling` is `Ling-3.1-flash`, and the default of
+  `cloudflare-workers-ai` and `cloudflare-ai-gateway` is `@cf/zai-org/glm-5.3`,
+  because their earlier defaults are retired. GitHub Copilot Claude 5.x and
+  GPT-6 models keep the prompt cache when the thinking level changes.
+- `thinkingFormat: "ant-ling"` in `models.json` is an alias for `"deepseek"`.
+
+### Fixed
+
+- A session opened at startup with `kiss --session`, `kiss -c`, or the
+  startup session picker now shows its earlier messages. Before, the screen
+  stayed empty until you used `/resume`, for example when Herdr reopened a
+  pane after a restart.
+- GitHub Copilot models on Chat Completions keep their reasoning state
+  between turns: KISS sends back Copilot's `reasoning_opaque` value.
+- Amazon Bedrock Kimi K3.1 and GLM 5.3 use the selected thinking level, and
+  Kimi K3 models no longer get earlier reasoning back, which could make later
+  turns fail.
+- `!!` commands no longer count toward the context estimate, so large output
+  that the model never sees does not start compaction early.
+- The follow-up key (Ctrl+Enter) with an open command menu applies the
+  selected entry as Enter does, instead of queuing the half-typed text.
+
 ## 0.0.44 - 2026-11-25
 
 ### Changed

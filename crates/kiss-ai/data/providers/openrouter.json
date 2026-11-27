@@ -975,29 +975,6 @@
         }
       }
     },
-    "chat:~unbiased/pareto-latest": {
-      "type": "chat",
-      "id": "~unbiased/pareto-latest",
-      "name": "Pareto Latest",
-      "api": "openai-completions",
-      "baseUrl": "https://openrouter.ai/api/v1",
-      "provider": "openrouter",
-      "reasoning": false,
-      "input": ["text", "image"],
-      "cost": { "input": 0.8, "output": 3.2, "cacheRead": 0.03, "cacheWrite": 0 },
-      "contextWindow": 1048576,
-      "maxTokens": 131072,
-      "compat": {
-        "thinkingFormat": "openrouter",
-        "supportsStrictMode": true,
-        "sendSessionAffinityHeaders": true
-      },
-      "inputLimits": {
-        "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
-        }
-      }
-    },
     "chat:~x-ai/grok-latest": {
       "type": "chat",
       "id": "~x-ai/grok-latest",
@@ -1870,10 +1847,10 @@
       "provider": "openrouter",
       "reasoning": true,
       "thinkingLevelMap": {
-        "off": null,
+        "off": "none",
         "minimal": null,
-        "low": null,
-        "medium": null,
+        "low": "low",
+        "medium": "medium",
         "high": "high",
         "xhigh": null,
         "max": null
@@ -2348,9 +2325,9 @@
         "max": "max"
       },
       "input": ["text", "image"],
-      "cost": { "input": 0.44, "output": 1.32, "cacheRead": 0.028, "cacheWrite": 0 },
+      "cost": { "input": 0.2156, "output": 0.6468, "cacheRead": 0.00686, "cacheWrite": 0 },
       "contextWindow": 1048576,
-      "maxTokens": 393216,
+      "maxTokens": 262144,
       "compat": {
         "thinkingFormat": "openrouter",
         "supportsStrictMode": true,
@@ -2381,7 +2358,7 @@
         "max": null
       },
       "input": ["text"],
-      "cost": { "input": 0.85697, "output": 1.5228, "cacheRead": 0.2, "cacheWrite": 0 },
+      "cost": { "input": 0.75557, "output": 1.5007, "cacheRead": 0.21, "cacheWrite": 0 },
       "contextWindow": 1048576,
       "maxTokens": 393216,
       "compat": {
@@ -2409,9 +2386,9 @@
         "max": "max"
       },
       "input": ["text"],
-      "cost": { "input": 0.111, "output": 4.44, "cacheRead": 0.097, "cacheWrite": 0 },
+      "cost": { "input": 0.0999, "output": 5, "cacheRead": 0.0999, "cacheWrite": 0 },
       "contextWindow": 1048576,
-      "maxTokens": 943718,
+      "maxTokens": 393216,
       "compat": {
         "thinkingFormat": "openrouter",
         "supportsStrictMode": true,
@@ -3894,18 +3871,41 @@
         "sendSessionAffinityHeaders": true
       }
     },
-    "chat:inclusionai/ling-3.2-flash:free": {
+    "chat:inclusionai/ling-3.2-flash": {
       "type": "chat",
-      "id": "inclusionai/ling-3.2-flash:free",
-      "name": "inclusionAI: Ling 3.2 Flash (free)",
+      "id": "inclusionai/ling-3.2-flash",
+      "name": "inclusionAI: Ling 3.2 Flash",
       "api": "openai-completions",
       "baseUrl": "https://openrouter.ai/api/v1",
       "provider": "openrouter",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": { "input": 0.3, "output": 0.9, "cacheRead": 0.06, "cacheWrite": 0 },
       "contextWindow": 1048576,
       "maxTokens": 262144,
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
+    },
+    "chat:inclusionai/lingsante-3.1-air-vl": {
+      "type": "chat",
+      "id": "inclusionai/lingsante-3.1-air-vl",
+      "name": "inclusionAI: LingSante 3.1 Air VL",
+      "api": "openai-completions",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "provider": "openrouter",
+      "reasoning": true,
+      "input": ["text", "image"],
+      "cost": { "input": 0.06, "output": 0.18, "cacheRead": 0.012, "cacheWrite": 0 },
+      "contextWindow": 131072,
+      "maxTokens": 32768,
       "compat": {
         "thinkingFormat": "openrouter",
         "supportsStrictMode": true,
@@ -4037,9 +4037,9 @@
       "provider": "openrouter",
       "reasoning": false,
       "input": ["text"],
-      "cost": { "input": 0.71, "output": 0.71, "cacheRead": 0.71, "cacheWrite": 0 },
-      "contextWindow": 128000,
-      "maxTokens": 115200,
+      "cost": { "input": 0.59, "output": 0.79, "cacheRead": 0.295, "cacheWrite": 0 },
+      "contextWindow": 131072,
+      "maxTokens": 32768,
       "compat": {
         "thinkingFormat": "openrouter",
         "supportsStrictMode": true,
@@ -4142,9 +4142,9 @@
         "max": null
       },
       "input": ["text", "image"],
-      "cost": { "input": 0.35, "output": 1.5, "cacheRead": 0.04, "cacheWrite": 0 },
+      "cost": { "input": 0.3, "output": 1.2, "cacheRead": 0.04, "cacheWrite": 0 },
       "contextWindow": 131072,
-      "maxTokens": 117964,
+      "maxTokens": 16384,
       "compat": {
         "thinkingFormat": "openrouter",
         "supportsStrictMode": true,
@@ -4514,7 +4514,7 @@
         "max": "max"
       },
       "input": ["text", "image"],
-      "cost": { "input": 0.15, "output": 0.6, "cacheRead": 0.015, "cacheWrite": 0 },
+      "cost": { "input": 0.075, "output": 0.3, "cacheRead": 0.0075, "cacheWrite": 0 },
       "contextWindow": 1048576,
       "maxTokens": 524288,
       "compat": {
@@ -4538,6 +4538,24 @@
       "reasoning": false,
       "input": ["text"],
       "cost": { "input": 0.3, "output": 0.9, "cacheRead": 0.03, "cacheWrite": 0 },
+      "contextWindow": 256000,
+      "maxTokens": 204800,
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      }
+    },
+    "chat:mistralai/codestral-2508:batch": {
+      "type": "chat",
+      "id": "mistralai/codestral-2508:batch",
+      "name": "Mistral: Codestral 2508 (batch)",
+      "api": "openai-completions",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "provider": "openrouter",
+      "reasoning": false,
+      "input": ["text"],
+      "cost": { "input": 0.15, "output": 0.45, "cacheRead": 0.015, "cacheWrite": 0 },
       "contextWindow": 256000,
       "maxTokens": 204800,
       "compat": {
@@ -4633,6 +4651,29 @@
         }
       }
     },
+    "chat:mistralai/ministral-8b-2512:batch": {
+      "type": "chat",
+      "id": "mistralai/ministral-8b-2512:batch",
+      "name": "Mistral: Ministral 3 8B 2512 (batch)",
+      "api": "openai-completions",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "provider": "openrouter",
+      "reasoning": false,
+      "input": ["text", "image"],
+      "cost": { "input": 0.075, "output": 0.075, "cacheRead": 0.0075, "cacheWrite": 0 },
+      "contextWindow": 262144,
+      "maxTokens": 209715,
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
+    },
     "chat:mistralai/mistral-large": {
       "type": "chat",
       "id": "mistralai/mistral-large",
@@ -4679,6 +4720,29 @@
       "reasoning": false,
       "input": ["text", "image"],
       "cost": { "input": 0.5, "output": 1.5, "cacheRead": 0.05, "cacheWrite": 0 },
+      "contextWindow": 262144,
+      "maxTokens": 209715,
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
+    },
+    "chat:mistralai/mistral-large-2512:batch": {
+      "type": "chat",
+      "id": "mistralai/mistral-large-2512:batch",
+      "name": "Mistral: Mistral Large 3 2512 (batch)",
+      "api": "openai-completions",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "provider": "openrouter",
+      "reasoning": false,
+      "input": ["text", "image"],
+      "cost": { "input": 0.25, "output": 0.75, "cacheRead": 0.025, "cacheWrite": 0 },
       "contextWindow": 262144,
       "maxTokens": 209715,
       "compat": {
@@ -4856,6 +4920,38 @@
         }
       }
     },
+    "chat:mistralai/mistral-small-2603:batch": {
+      "type": "chat",
+      "id": "mistralai/mistral-small-2603:batch",
+      "name": "Mistral: Mistral Small 4 (batch)",
+      "api": "openai-completions",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "provider": "openrouter",
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "off": "none",
+        "minimal": null,
+        "low": null,
+        "medium": null,
+        "high": "high",
+        "xhigh": null,
+        "max": null
+      },
+      "input": ["text", "image"],
+      "cost": { "input": 0.075, "output": 0.3, "cacheRead": 0.0075, "cacheWrite": 0 },
+      "contextWindow": 262144,
+      "maxTokens": 209715,
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      },
+      "inputLimits": {
+        "images": {
+          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
+        }
+      }
+    },
     "chat:mistralai/mistral-small-3.1-24b-instruct": {
       "type": "chat",
       "id": "mistralai/mistral-small-3.1-24b-instruct",
@@ -4932,6 +5028,42 @@
       "cost": { "input": 0.1, "output": 0.3, "cacheRead": 0.01, "cacheWrite": 0 },
       "contextWindow": 32768,
       "maxTokens": 26214,
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      }
+    },
+    "chat:moonshotai/kimi-k2": {
+      "type": "chat",
+      "id": "moonshotai/kimi-k2",
+      "name": "MoonshotAI: Kimi K2 0711",
+      "api": "openai-completions",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "provider": "openrouter",
+      "reasoning": false,
+      "input": ["text"],
+      "cost": { "input": 0.57, "output": 2.3, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 131072,
+      "maxTokens": 98304,
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      }
+    },
+    "chat:moonshotai/kimi-k2-0905": {
+      "type": "chat",
+      "id": "moonshotai/kimi-k2-0905",
+      "name": "MoonshotAI: Kimi K2 0905",
+      "api": "openai-completions",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "provider": "openrouter",
+      "reasoning": false,
+      "input": ["text"],
+      "cost": { "input": 0.6, "output": 2.5, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 262144,
+      "maxTokens": 98304,
       "compat": {
         "thinkingFormat": "openrouter",
         "supportsStrictMode": true,
@@ -9235,7 +9367,7 @@
       "input": ["text", "image"],
       "cost": { "input": 0.07, "output": 0.5, "cacheRead": 0.03, "cacheWrite": 0 },
       "contextWindow": 1048576,
-      "maxTokens": 131072,
+      "maxTokens": 943718,
       "compat": {
         "thinkingFormat": "openrouter",
         "supportsStrictMode": true,
@@ -9267,7 +9399,7 @@
       "input": ["text", "image"],
       "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 1048576,
-      "maxTokens": 131072,
+      "maxTokens": 943718,
       "compat": {
         "thinkingFormat": "openrouter",
         "supportsStrictMode": true,
@@ -9783,9 +9915,9 @@
       "provider": "openrouter",
       "reasoning": true,
       "input": ["text", "image"],
-      "cost": { "input": 0.45, "output": 3, "cacheRead": 0.22, "cacheWrite": 0 },
+      "cost": { "input": 0.5, "output": 3.6, "cacheRead": 0.3, "cacheWrite": 0 },
       "contextWindow": 262144,
-      "maxTokens": 81920,
+      "maxTokens": 235929,
       "compat": {
         "thinkingFormat": "openrouter",
         "supportsStrictMode": true,
@@ -10204,9 +10336,9 @@
         "max": null
       },
       "input": ["text", "image"],
-      "cost": { "input": 0.035, "output": 1.5, "cacheRead": 0.0175, "cacheWrite": 0 },
+      "cost": { "input": 0.06, "output": 1.96, "cacheRead": 0.059, "cacheWrite": 0 },
       "contextWindow": 262144,
-      "maxTokens": 131072,
+      "maxTokens": 235929,
       "compat": {
         "thinkingFormat": "openrouter",
         "supportsStrictMode": true,
@@ -10493,9 +10625,9 @@
         "max": "max"
       },
       "input": ["text"],
-      "cost": { "input": 0.25, "output": 1, "cacheRead": 0.05, "cacheWrite": 0 },
+      "cost": { "input": 0.3, "output": 1, "cacheRead": 0.04, "cacheWrite": 0 },
       "contextWindow": 1048576,
-      "maxTokens": 131072,
+      "maxTokens": 943718,
       "compat": {
         "thinkingFormat": "openrouter",
         "supportsStrictMode": true,
@@ -10787,7 +10919,7 @@
         "max": null
       },
       "input": ["text"],
-      "cost": { "input": 0.132, "output": 0.528, "cacheRead": 0.033, "cacheWrite": 0 },
+      "cost": { "input": 0.0825, "output": 0.33, "cacheRead": 0.020625, "cacheWrite": 0 },
       "contextWindow": 262144,
       "maxTokens": 128000,
       "compat": {
@@ -10869,7 +11001,7 @@
         "max": null
       },
       "input": ["text"],
-      "cost": { "input": 0.834, "output": 2.501, "cacheRead": 0.042, "cacheWrite": 0 },
+      "cost": { "input": 0.7506, "output": 2.2509, "cacheRead": 0.0378, "cacheWrite": 0 },
       "contextWindow": 1048576,
       "maxTokens": 64000,
       "compat": {
@@ -10928,7 +11060,7 @@
         "max": "max"
       },
       "input": ["text", "image"],
-      "cost": { "input": 0.075, "output": 0.3, "cacheRead": 0.015, "cacheWrite": 0 },
+      "cost": { "input": 0.06, "output": 0.24, "cacheRead": 0.012, "cacheWrite": 0 },
       "contextWindow": 1048576,
       "maxTokens": 65536,
       "compat": {
@@ -11050,75 +11182,6 @@
       "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 1000000,
       "maxTokens": 128000,
-      "compat": {
-        "thinkingFormat": "openrouter",
-        "supportsStrictMode": true,
-        "sendSessionAffinityHeaders": true
-      },
-      "inputLimits": {
-        "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
-        }
-      }
-    },
-    "chat:unbiased/pareto-26.10": {
-      "type": "chat",
-      "id": "unbiased/pareto-26.10",
-      "name": "Pareto 26.10",
-      "api": "openai-completions",
-      "baseUrl": "https://openrouter.ai/api/v1",
-      "provider": "openrouter",
-      "reasoning": false,
-      "input": ["text", "image"],
-      "cost": { "input": 0.8, "output": 3.2, "cacheRead": 0.03, "cacheWrite": 0 },
-      "contextWindow": 1048576,
-      "maxTokens": 131072,
-      "compat": {
-        "thinkingFormat": "openrouter",
-        "supportsStrictMode": true,
-        "sendSessionAffinityHeaders": true
-      },
-      "inputLimits": {
-        "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
-        }
-      }
-    },
-    "chat:unbiased/pareto-26.10-preview": {
-      "type": "chat",
-      "id": "unbiased/pareto-26.10-preview",
-      "name": "Pareto 26.10 Preview",
-      "api": "openai-completions",
-      "baseUrl": "https://openrouter.ai/api/v1",
-      "provider": "openrouter",
-      "reasoning": false,
-      "input": ["text", "image"],
-      "cost": { "input": 0.8, "output": 3.2, "cacheRead": 0.03, "cacheWrite": 0 },
-      "contextWindow": 1048576,
-      "maxTokens": 131072,
-      "compat": {
-        "thinkingFormat": "openrouter",
-        "supportsStrictMode": true,
-        "sendSessionAffinityHeaders": true
-      },
-      "inputLimits": {
-        "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
-        }
-      }
-    },
-    "chat:unbiased/pareto-26.9": {
-      "type": "chat",
-      "id": "unbiased/pareto-26.9",
-      "name": "Pareto 26.9",
-      "api": "openai-completions",
-      "baseUrl": "https://openrouter.ai/api/v1",
-      "provider": "openrouter",
-      "reasoning": false,
-      "input": ["text", "image"],
-      "cost": { "input": 2.5, "output": 7.5, "cacheRead": 0.25, "cacheWrite": 0 },
-      "contextWindow": 262144,
-      "maxTokens": 131072,
       "compat": {
         "thinkingFormat": "openrouter",
         "supportsStrictMode": true,
@@ -11704,9 +11767,9 @@
       "provider": "openrouter",
       "reasoning": true,
       "input": ["text"],
-      "cost": { "input": 0.14, "output": 0.86, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": { "input": 0.2, "output": 1.1, "cacheRead": 0.03, "cacheWrite": 0 },
       "contextWindow": 131072,
-      "maxTokens": 117964,
+      "maxTokens": 98304,
       "compat": {
         "thinkingFormat": "openrouter",
         "supportsStrictMode": true,
@@ -11966,9 +12029,9 @@
         "max": "max"
       },
       "input": ["text", "image"],
-      "cost": { "input": 0.12, "output": 0.38, "cacheRead": 0.02, "cacheWrite": 0 },
-      "contextWindow": 1048576,
-      "maxTokens": 943718,
+      "cost": { "input": 0.15, "output": 0.5, "cacheRead": 0.03, "cacheWrite": 0 },
+      "contextWindow": 1048575,
+      "maxTokens": 943717,
       "compat": {
         "thinkingFormat": "openrouter",
         "supportsStrictMode": true,
@@ -12164,7 +12227,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "imageOutput": 9.820359 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12180,7 +12243,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "imageOutput": 1.916168 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12196,7 +12259,13 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "imageOutput": 14.648438
+      },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12212,7 +12281,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "imageOutput": 3.417969 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12228,7 +12297,13 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "imageOutput": 17.089844
+      },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12244,7 +12319,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "imageOutput": 7.324219 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12260,7 +12335,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["image", "text"],
       "output": ["image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "imageOutput": 9.580838 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12276,7 +12351,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "imageOutput": 4.311377 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12292,7 +12367,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "imageOutput": 8.383234 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12308,7 +12383,13 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "imageOutput": 10.778443
+      },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12324,7 +12405,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "imageOutput": 4.790419 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12340,7 +12421,13 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["image", "text"],
       "output": ["image", "text"],
-      "cost": { "input": 0.3, "output": 2.5, "cacheRead": 0.03, "cacheWrite": 0.083333 },
+      "cost": {
+        "input": 0.3,
+        "output": 2.5,
+        "cacheRead": 0.03,
+        "cacheWrite": 0.083333,
+        "imageOutput": 30
+      },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12356,7 +12443,13 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["image", "text"],
       "output": ["image", "text"],
-      "cost": { "input": 2, "output": 12, "cacheRead": 0.2, "cacheWrite": 0.375 },
+      "cost": {
+        "input": 2,
+        "output": 12,
+        "cacheRead": 0.2,
+        "cacheWrite": 0.375,
+        "imageOutput": 120
+      },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12372,7 +12465,13 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["image", "text"],
       "output": ["image", "text"],
-      "cost": { "input": 2, "output": 12, "cacheRead": 0.2, "cacheWrite": 0.375 },
+      "cost": {
+        "input": 2,
+        "output": 12,
+        "cacheRead": 0.2,
+        "cacheWrite": 0.375,
+        "imageOutput": 120
+      },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12388,7 +12487,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["image", "text"],
       "output": ["image", "text"],
-      "cost": { "input": 0.5, "output": 3, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": { "input": 0.5, "output": 3, "cacheRead": 0, "cacheWrite": 0, "imageOutput": 60 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12404,7 +12503,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["image", "text"],
       "output": ["image", "text"],
-      "cost": { "input": 0.5, "output": 3, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": { "input": 0.5, "output": 3, "cacheRead": 0, "cacheWrite": 0, "imageOutput": 60 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12420,7 +12519,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["image", "text"],
       "output": ["image", "text"],
-      "cost": { "input": 0.25, "output": 1.5, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": { "input": 0.25, "output": 1.5, "cacheRead": 0, "cacheWrite": 0, "imageOutput": 30 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12436,7 +12535,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["image", "text"],
       "output": ["image", "text"],
-      "cost": { "input": 1.5, "output": 7.5, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": { "input": 1.5, "output": 7.5, "cacheRead": 0, "cacheWrite": 0, "imageOutput": 30 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12452,7 +12551,13 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "imageOutput": 14.371257
+      },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12468,7 +12573,13 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "imageOutput": 14.371257
+      },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12484,7 +12595,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "imageOutput": 7.185629 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12500,7 +12611,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "imageOutput": 3.592814 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12516,7 +12627,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "imageOutput": 2.39521 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12532,7 +12643,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 5, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": { "input": 5, "output": 0, "cacheRead": 0, "cacheWrite": 0, "imageOutput": 47 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12548,7 +12659,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 5, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": { "input": 5, "output": 0, "cacheRead": 0, "cacheWrite": 0, "imageOutput": 108 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12564,7 +12675,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 5, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": { "input": 5, "output": 0, "cacheRead": 0, "cacheWrite": 0, "imageOutput": 38 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12580,7 +12691,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 1.75, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": { "input": 1.75, "output": 0, "cacheRead": 0, "cacheWrite": 0, "imageOutput": 19 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12596,7 +12707,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 5, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": { "input": 5, "output": 0, "cacheRead": 0, "cacheWrite": 0, "imageOutput": 34 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12612,7 +12723,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 1.75, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": { "input": 1.75, "output": 0, "cacheRead": 0, "cacheWrite": 0, "imageOutput": 10 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12628,7 +12739,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 2.3, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": { "input": 2.3, "output": 0, "cacheRead": 0, "cacheWrite": 0, "imageOutput": 3.8 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12644,7 +12755,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 2.3, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": { "input": 2.3, "output": 0, "cacheRead": 0, "cacheWrite": 0, "imageOutput": 7.6 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12660,7 +12771,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["image", "text"],
       "output": ["image", "text"],
-      "cost": { "input": 10, "output": 10, "cacheRead": 1.25, "cacheWrite": 0 },
+      "cost": { "input": 10, "output": 10, "cacheRead": 1.25, "cacheWrite": 0, "imageOutput": 40 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12676,7 +12787,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["image", "text"],
       "output": ["image", "text"],
-      "cost": { "input": 2.5, "output": 2, "cacheRead": 0.25, "cacheWrite": 0 },
+      "cost": { "input": 2.5, "output": 2, "cacheRead": 0.25, "cacheWrite": 0, "imageOutput": 8 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12692,7 +12803,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["image", "text"],
       "output": ["image", "text"],
-      "cost": { "input": 8, "output": 15, "cacheRead": 2, "cacheWrite": 0 },
+      "cost": { "input": 8, "output": 15, "cacheRead": 2, "cacheWrite": 0, "imageOutput": 30 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12708,7 +12819,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 10, "output": 10, "cacheRead": 1.25, "cacheWrite": 0 },
+      "cost": { "input": 10, "output": 10, "cacheRead": 1.25, "cacheWrite": 0, "imageOutput": 40 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12724,7 +12835,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 2.5, "output": 2.5, "cacheRead": 0.25, "cacheWrite": 0 },
+      "cost": { "input": 2.5, "output": 2.5, "cacheRead": 0.25, "cacheWrite": 0, "imageOutput": 8 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12740,7 +12851,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 8, "output": 8, "cacheRead": 2, "cacheWrite": 0 },
+      "cost": { "input": 8, "output": 8, "cacheRead": 2, "cacheWrite": 0, "imageOutput": 30 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12756,7 +12867,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 8, "output": 8, "cacheRead": 2, "cacheWrite": 0 },
+      "cost": { "input": 8, "output": 8, "cacheRead": 2, "cacheWrite": 0, "imageOutput": 30 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12772,7 +12883,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 8, "output": 8, "cacheRead": 2, "cacheWrite": 0 },
+      "cost": { "input": 8, "output": 8, "cacheRead": 2, "cacheWrite": 0, "imageOutput": 30 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12788,7 +12899,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 8, "output": 8, "cacheRead": 2, "cacheWrite": 10 },
+      "cost": { "input": 8, "output": 8, "cacheRead": 2, "cacheWrite": 10, "imageOutput": 30 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12804,7 +12915,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 8, "output": 8, "cacheRead": 2, "cacheWrite": 10 },
+      "cost": { "input": 8, "output": 8, "cacheRead": 2, "cacheWrite": 10, "imageOutput": 30 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12868,7 +12979,13 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "imageOutput": 11.017964
+      },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12884,7 +13001,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "imageOutput": 4.407186 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12900,7 +13017,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "imageOutput": 7.185629 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12916,7 +13033,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "imageOutput": 9.580838 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12932,7 +13049,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "imageOutput": 9.580838 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12948,7 +13065,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "imageOutput": 9.580838 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12964,7 +13081,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "imageOutput": 59.88024 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12980,7 +13097,13 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "imageOutput": 71.856287
+      },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -12996,7 +13119,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "imageOutput": 8.383234 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -13012,7 +13135,13 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "imageOutput": 23.952096
+      },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -13028,7 +13157,13 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "imageOutput": 28.742515
+      },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -13044,7 +13179,13 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "imageOutput": 11.976048
+      },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -13060,7 +13201,13 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "imageOutput": 19.161677
+      },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -13076,7 +13223,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "imageOutput": 8.383234 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -13092,7 +13239,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text"],
       "output": ["image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "imageOutput": 1.676647 }
     },
     "image:recraft/recraft-v4.1-flash-v2": {
       "type": "image",
@@ -13103,7 +13250,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text"],
       "output": ["image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "imageOutput": 1.676647 }
     },
     "image:recraft/recraft-v4.1-flash-v2:free": {
       "type": "image",
@@ -13125,7 +13272,13 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "imageOutput": 50.299401
+      },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -13141,7 +13294,13 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "imageOutput": 71.856287
+      },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -13157,7 +13316,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "imageOutput": 8.383234 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -13173,7 +13332,13 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "imageOutput": 50.299401
+      },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -13189,7 +13354,13 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "imageOutput": 19.161677
+      },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -13205,7 +13376,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "imageOutput": 4.790419 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -13221,7 +13392,13 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "imageOutput": 35.928144
+      },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -13237,7 +13414,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "imageOutput": 4.550898 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -13253,7 +13430,13 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "imageOutput": 31.137725
+      },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -13269,7 +13452,13 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "imageOutput": 31.137725
+      },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -13285,7 +13474,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "imageOutput": 1.6 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -13301,7 +13490,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text"],
       "output": ["image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "imageOutput": 1.6 }
     },
     "image:x-ai/grok-imagine-image-2.0": {
       "type": "image",
@@ -13312,7 +13501,7 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "input": ["text", "image"],
       "output": ["image"],
-      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "imageOutput": 9.580838 },
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -13379,6 +13568,18 @@
       "input": ["text", "image"],
       "cost": { "input": 0.042, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 262144,
+      "compat": { "imageInput": "state-image-urls", "sendImageOptInHeader": false }
+    },
+    "classifier:antdigital/lingdt-decision-fast-1.0:free": {
+      "type": "classifier",
+      "id": "antdigital/lingdt-decision-fast-1.0:free",
+      "name": "Ant Digital: LingDT Decision Fast 1.0 (free)",
+      "api": "typesafe-system-one",
+      "provider": "openrouter",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "input": ["text"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 32768,
       "compat": { "imageInput": "state-image-urls", "sendImageOptInHeader": false }
     },
     "classifier:baseten/bison-1": {

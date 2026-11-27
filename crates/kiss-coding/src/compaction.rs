@@ -35,6 +35,8 @@ pub fn estimate_message_tokens(message: &AgentMessage) -> u64 {
                 _ => 1600,
             })
             .sum(),
+        // `!!` output never reaches the model.
+        AgentMessage::BashExecution(b) if b.exclude_from_context => 0,
         AgentMessage::BashExecution(b) => b.command.len() + b.output.len(),
         AgentMessage::Custom(c) => c.content.as_text().len(),
         AgentMessage::BranchSummary(b) => b.summary.len(),
@@ -395,18 +397,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn shell_output_counts_its_characters() {
-        let message = AgentMessage::BashExecution(kiss_agent::BashExecutionMessage {
-            command: "ls".into(),
-            output: "x".repeat(10_000),
-            exit_code: Some(0),
-            cancelled: false,
-            truncated: false,
-            full_output_path: None,
-            exclude_from_context: false,
-            timestamp: 0,
-        });
-        assert_eq!(estimate_message_tokens(&message), 2_501);
+    fn shell_output_counts_its_characters_unless_the_model_never_sees_it() {
+        let shell = |exclude_from_context| {
+            AgentMessage::BashExecution(kiss_agent::BashExecutionMessage {
+                command: "ls".into(),
+                output: "x".repeat(10_000),
+                exit_code: Some(0),
+                cancelled: false,
+                truncated: false,
+                full_output_path: None,
+                exclude_from_context,
+                timestamp: 0,
+            })
+        };
+        assert_eq!(estimate_message_tokens(&shell(false)), 2_501);
+        assert_eq!(estimate_message_tokens(&shell(true)), 0);
     }
     use kiss_ai::{AssistantMessage, StopReason, ToolCall, ToolResultMessage};
 

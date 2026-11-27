@@ -1895,7 +1895,9 @@ async fn run_with_hosts(args: &Args, hosts: &crate::terminal_hosts::TerminalHost
         voice: VoiceState::Idle,
         voice_generation: 0,
         theme,
-        cells: Vec::new(),
+        // A session opened with --session, -c, or the startup picker shows
+        // its earlier messages, as after /resume.
+        cells: session_cells(&session),
         cell_render_cache: Vec::new(),
         keybindings,
         startup_lines,
@@ -4144,8 +4146,21 @@ fn handle_input(
                 return Flow::Continue;
             }
             Some(Action::QueueFollowUp) => {
+                // An open menu applies its selection first, as Enter does. A
+                // completed command name is queued; another completion is only
+                // inserted, because its command still needs its argument.
+                if let Some(mut menu) = app.command_menu.take()
+                    && let Some(selected) = menu
+                        .list
+                        .current()
+                        .and_then(|item| menu.replacements.get(item.value))
+                {
+                    apply_completion(&mut app.editor, selected);
+                    if !matches!(selected, CompletionReplacement::CommandName(_)) {
+                        return Flow::Continue;
+                    }
+                }
                 let submission = app.editor.take_submission();
-                app.command_menu = None;
                 reset_file_search(app, file_search);
                 if !submission.text.trim().is_empty() {
                     let model_text = match prepare_skill_input(&submission, resources) {
@@ -9831,6 +9846,31 @@ mod tests {
         );
         assert_eq!(app.editor.text(), "/mod");
         assert!(app.command_menu.is_none());
+    }
+
+    #[test]
+    fn follow_up_key_applies_an_open_menu_choice_instead_of_queuing_the_draft() {
+        let mut app = test_app();
+        let session = synthetic_session();
+        let mut resources = test_resources();
+        open_menu(&mut app, "/thinking hi");
+        let follow_up = KeyEvent {
+            key: Key::Enter,
+            ctrl: true,
+            ..KeyEvent::default()
+        };
+        assert!(matches!(
+            press(
+                &mut app,
+                &session,
+                &mut resources,
+                InputEvent::Key(follow_up)
+            ),
+            Flow::Continue
+        ));
+        assert_eq!(app.editor.text(), "/thinking high");
+        assert!(app.command_menu.is_none());
+        assert!(!session.is_running());
     }
 
     #[test]

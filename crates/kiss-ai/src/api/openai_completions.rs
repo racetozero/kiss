@@ -44,7 +44,14 @@ fn detect_compat(model: &Model) -> Compat {
         reasoning_content_on_assistant: c
             .requires_reasoning_content_on_assistant_messages
             .unwrap_or(false),
-        thinking_format: c.thinking_format,
+        // "ant-ling" is the old name of the DeepSeek toggle that Ant Ling uses.
+        thinking_format: c.thinking_format.map(|format| {
+            if format == "ant-ling" {
+                "deepseek".into()
+            } else {
+                format
+            }
+        }),
         max_tokens_field: match c.max_tokens_field.as_deref() {
             Some("max_tokens") => "max_tokens",
             Some("max_completion_tokens") => "max_completion_tokens",
@@ -168,6 +175,10 @@ struct DecodeState {
     text_idx: Option<usize>,
     thinking_idx: Option<usize>,
     reasoning_details: Vec<Value>,
+    /// GitHub Copilot's latest `reasoning_opaque`, replayed with the text.
+    reasoning_opaque: Option<String>,
+    /// The field that carried the reasoning text.
+    reasoning_field: Option<&'static str>,
     /// Provider tool-call index -> builder content index.
     tool_map: std::collections::HashMap<u64, usize>,
     finish_reason: Option<String>,
@@ -267,6 +278,9 @@ fn finish_thinking(builder: &mut PartialBuilder, state: &mut DecodeState) {
         && let Ok(signature) = serde_json::to_string(&state.reasoning_details)
     {
         builder.set_thinking_signature(idx, signature);
+    } else if let Some(opaque) = state.reasoning_opaque.take() {
+        let signature = json!({"field": state.reasoning_field, "reasoning_opaque": opaque});
+        builder.set_thinking_signature(idx, signature.to_string());
     }
     builder.end_thinking(idx);
 }
@@ -437,6 +451,15 @@ fn handle_chunk(
             .get_or_insert_with(|| builder.begin_thinking());
         builder.set_thinking_signature(idx, field.into());
         builder.append_thinking(idx, reasoning);
+        state.reasoning_field = Some(field);
+    }
+    // Copilot sends one opaque value per reasoning segment. Like its VS Code
+    // client, KISS replays the latest one with the joined reasoning text.
+    if let Some(opaque) = delta["reasoning_opaque"].as_str().filter(|s| !s.is_empty()) {
+        state
+            .thinking_idx
+            .get_or_insert_with(|| builder.begin_thinking());
+        state.reasoning_opaque = Some(opaque.to_string());
     }
     if let Some(details) = delta["reasoning_details"].as_array() {
         if details.iter().any(is_reasoning_detail) {
@@ -557,13 +580,31 @@ fn build_request(
                 if !tool_calls.is_empty() {
                     m["tool_calls"] = Value::Array(tool_calls);
                 }
+                // Copilot's opaque reasoning state: `{"field", "reasoning_opaque"}`.
+                let opaque = thinking.iter().rev().find_map(|(_, signature)| {
+                    let value: Value =
+                        serde_json::from_str(signature.filter(|s| s.starts_with('{'))?).ok()?;
+                    let opaque = value["reasoning_opaque"]
+                        .as_str()
+                        .filter(|s| !s.is_empty())?;
+                    Some((
+                        opaque.to_string(),
+                        value["field"].as_str().map(str::to_string),
+                    ))
+                });
+                let is_field = |field: &str| {
+                    matches!(field, "reasoning" | "reasoning_content" | "reasoning_text")
+                };
+                let field = match &opaque {
+                    Some((_, field)) => field.clone().filter(|field| is_field(field)),
+                    None => thinking
+                        .iter()
+                        .find_map(|(_, signature)| signature.filter(|field| is_field(field)))
+                        .map(str::to_string),
+                };
                 if let Some(details) = reasoning_details {
                     m["reasoning_details"] = Value::Array(details);
-                } else if let Some(field) = thinking.iter().find_map(|(_, signature)| {
-                    signature.filter(|field| {
-                        matches!(*field, "reasoning" | "reasoning_content" | "reasoning_text")
-                    })
-                }) {
+                } else if let Some(field) = field {
                     let reasoning = thinking
                         .iter()
                         .map(|(text, _)| *text)
@@ -571,8 +612,11 @@ fn build_request(
                         .collect::<Vec<_>>()
                         .join("\n");
                     if !reasoning.is_empty() {
-                        m[field] = Value::String(reasoning);
+                        m[field.as_str()] = Value::String(reasoning);
                     }
+                }
+                if let (None, Some((opaque, _))) = (m.get("reasoning_details"), opaque) {
+                    m["reasoning_opaque"] = Value::String(opaque);
                 }
                 if compat.reasoning_content_on_assistant && m.get("reasoning_content").is_none() {
                     m["reasoning_content"] = Value::String(String::new());
@@ -909,7 +953,7 @@ mod tests {
         for (reference, developer) in [
             ("cerebras/gpt-oss-120b", false),
             ("groq/openai/gpt-oss-120b", false),
-            ("together/openai/gpt-oss-120b", false),
+            ("together/moonshotai/Kimi-K3", false),
             ("openrouter/openai/gpt-6.2-sol", false),
         ] {
             let (model, _) = registry.resolve(reference, None).expect(reference);
@@ -1098,6 +1142,39 @@ mod tests {
             assert_eq!(body["messages"][0][field], "Think");
             assert_eq!(body["messages"][0]["content"], "Answer");
         }
+    }
+
+    #[test]
+    fn copilot_reasoning_opaque_is_replayed_with_the_text() {
+        let model = model_with_compat(OpenAICompat::default());
+        let (sink, _stream) = crate::EventStream::channel();
+        let mut builder = PartialBuilder::new(&model, sink);
+        let mut state = DecodeState::default();
+        for delta in [
+            json!({"reasoning_text": "Step one.", "reasoning_opaque": "first"}),
+            json!({"reasoning_text": " Step two.", "reasoning_opaque": "latest"}),
+            json!({"content": "Answer"}),
+        ] {
+            handle_chunk(
+                &json!({"choices":[{"delta":delta}]}).to_string(),
+                &mut builder,
+                &mut state,
+            )
+            .unwrap();
+        }
+        let context = Context {
+            messages: vec![Message::Assistant(builder.message)],
+            ..Default::default()
+        };
+        let body = build_request(
+            &model,
+            &context,
+            &StreamOptions::default(),
+            &detect_compat(&model),
+        );
+        let replayed = &body["messages"][0];
+        assert_eq!(replayed["reasoning_text"], "Step one. Step two.");
+        assert_eq!(replayed["reasoning_opaque"], "latest");
     }
 
     #[test]

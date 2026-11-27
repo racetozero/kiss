@@ -5309,7 +5309,7 @@
       "compat": { "allowEmptySignature": true },
       "cost": { "input": 0.125, "output": 0.5, "cacheRead": 0.015, "cacheWrite": 0 },
       "contextWindow": 1048576,
-      "maxTokens": 131072,
+      "maxTokens": 1048576,
       "inputLimits": {
         "images": {
           "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
@@ -6040,7 +6040,7 @@
     },
     "chat:tencent/hy4-flash": {
       "id": "tencent/hy4-flash",
-      "name": "Tencent Hy4 Flash",
+      "name": "Hy4 Flash",
       "api": "anthropic-messages",
       "baseUrl": "https://ai-gateway.vercel.sh",
       "provider": "vercel-ai-gateway",
@@ -6652,6 +6652,17 @@
       "type": "classifier",
       "id": "nace-ai/drex-max-v1.1",
       "name": "Drex Max v1.1",
+      "api": "typesafe-system-one",
+      "provider": "vercel-ai-gateway",
+      "baseUrl": "https://ai-gateway.vercel.sh/typesafe/v1",
+      "input": ["text"],
+      "cost": { "input": 0.03, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 262144
+    },
+    "classifier:nace-ai/drex-max-v1.2": {
+      "type": "classifier",
+      "id": "nace-ai/drex-max-v1.2",
+      "name": "Drex Max v1.2",
       "api": "typesafe-system-one",
       "provider": "vercel-ai-gateway",
       "baseUrl": "https://ai-gateway.vercel.sh/typesafe/v1",

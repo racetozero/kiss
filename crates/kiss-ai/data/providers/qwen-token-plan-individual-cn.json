@@ -339,9 +339,9 @@
       },
       "type": "chat"
     },
-    "chat:qwen4-max-preview": {
-      "id": "qwen4-max-preview",
-      "name": "Qwen4 Max Preview",
+    "chat:qwen4-max": {
+      "id": "qwen4-max",
+      "name": "Qwen4 Max",
       "api": "openai-completions",
       "provider": "qwen-token-plan-individual-cn",
       "baseUrl": "https://token-plan.maas.qianwenaiapi.com/compatible-mode/v1",
@@ -349,7 +349,7 @@
       "input": ["text", "image"],
       "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 1000000,
-      "maxTokens": 393216,
+      "maxTokens": 262144,
       "compat": {
         "supportsStrictMode": true,
         "thinkingFormat": "qwen",
@@ -357,11 +357,11 @@
         "supportsReasoningEffort": true
       },
       "thinkingLevelMap": {
-        "off": null,
+        "off": "none",
         "minimal": null,
         "low": "low",
-        "medium": "medium",
-        "high": null,
+        "medium": null,
+        "high": "high",
         "xhigh": "xhigh",
         "max": null
       },

@@ -341,61 +341,23 @@
     }
   },
   "openai-completions": {
-    "chat:workers-ai/@cf/deepseek-ai/deepseek-v4-flash-0731": {
-      "id": "workers-ai/@cf/deepseek-ai/deepseek-v4-flash-0731",
-      "name": "DeepSeek V4 Flash 0731",
+    "chat:workers-ai/@cf/daily-co/phonellm-mini-alpha-2": {
+      "id": "workers-ai/@cf/daily-co/phonellm-mini-alpha-2",
+      "name": "PhoneLLM Mini Alpha 2",
       "api": "openai-completions",
       "provider": "cloudflare-ai-gateway",
       "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
-      "reasoning": true,
+      "reasoning": false,
       "input": ["text"],
-      "cost": { "input": 0.44, "output": 1.32, "cacheRead": 0.014, "cacheWrite": 0 },
-      "contextWindow": 1048576,
-      "maxTokens": 1048576,
+      "cost": { "input": 0.06, "output": 0.24, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 262140,
+      "maxTokens": 262140,
       "compat": {
         "supportsStore": false,
         "supportsReasoningEffort": false,
         "maxTokensField": "max_tokens",
         "supportsLongCacheRetention": false,
-        "sendSessionAffinityHeaders": true,
-        "requiresReasoningContentOnAssistantMessages": true,
-        "thinkingFormat": "deepseek"
-      },
-      "thinkingLevelMap": {
-        "minimal": null,
-        "low": null,
-        "medium": null,
-        "high": "high",
-        "max": "max"
-      },
-      "type": "chat"
-    },
-    "chat:workers-ai/@cf/deepseek-ai/deepseek-v4-pro-0813": {
-      "id": "workers-ai/@cf/deepseek-ai/deepseek-v4-pro-0813",
-      "name": "DeepSeek V4 Pro 0813",
-      "api": "openai-completions",
-      "provider": "cloudflare-ai-gateway",
-      "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
-      "reasoning": true,
-      "input": ["text"],
-      "cost": { "input": 1.32, "output": 3.96, "cacheRead": 0.044, "cacheWrite": 0 },
-      "contextWindow": 1048576,
-      "maxTokens": 1048576,
-      "compat": {
-        "supportsStore": false,
-        "supportsReasoningEffort": false,
-        "maxTokensField": "max_tokens",
-        "supportsLongCacheRetention": false,
-        "sendSessionAffinityHeaders": true,
-        "requiresReasoningContentOnAssistantMessages": true,
-        "thinkingFormat": "deepseek"
-      },
-      "thinkingLevelMap": {
-        "minimal": null,
-        "low": null,
-        "medium": null,
-        "high": "high",
-        "max": "max"
+        "sendSessionAffinityHeaders": true
       },
       "type": "chat"
     },
@@ -548,76 +510,6 @@
       },
       "type": "chat"
     },
-    "chat:workers-ai/@cf/moonshotai/kimi-k2.6": {
-      "id": "workers-ai/@cf/moonshotai/kimi-k2.6",
-      "name": "Kimi K2.6",
-      "api": "openai-completions",
-      "provider": "cloudflare-ai-gateway",
-      "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
-      "reasoning": true,
-      "input": ["text", "image"],
-      "cost": { "input": 0.95, "output": 4, "cacheRead": 0.16, "cacheWrite": 0 },
-      "contextWindow": 262144,
-      "maxTokens": 256000,
-      "compat": {
-        "supportsStore": false,
-        "supportsReasoningEffort": false,
-        "maxTokensField": "max_tokens",
-        "supportsLongCacheRetention": false,
-        "sendSessionAffinityHeaders": true
-      },
-      "inputLimits": {
-        "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
-        }
-      },
-      "type": "chat"
-    },
-    "chat:workers-ai/@cf/moonshotai/kimi-k2.7-code": {
-      "id": "workers-ai/@cf/moonshotai/kimi-k2.7-code",
-      "name": "Kimi K2.7 Code",
-      "api": "openai-completions",
-      "provider": "cloudflare-ai-gateway",
-      "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
-      "reasoning": true,
-      "input": ["text", "image"],
-      "cost": { "input": 0.95, "output": 4, "cacheRead": 0.19, "cacheWrite": 0 },
-      "contextWindow": 262144,
-      "maxTokens": 262144,
-      "compat": {
-        "supportsStore": false,
-        "supportsReasoningEffort": false,
-        "maxTokensField": "max_tokens",
-        "supportsLongCacheRetention": false,
-        "sendSessionAffinityHeaders": true
-      },
-      "inputLimits": {
-        "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
-        }
-      },
-      "type": "chat"
-    },
-    "chat:workers-ai/@cf/nvidia/nemotron-3-120b-a12b": {
-      "id": "workers-ai/@cf/nvidia/nemotron-3-120b-a12b",
-      "name": "Nemotron 3 Super 120B",
-      "api": "openai-completions",
-      "provider": "cloudflare-ai-gateway",
-      "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
-      "reasoning": true,
-      "input": ["text"],
-      "cost": { "input": 0.5, "output": 1.5, "cacheRead": 0, "cacheWrite": 0 },
-      "contextWindow": 256000,
-      "maxTokens": 256000,
-      "compat": {
-        "supportsStore": false,
-        "supportsReasoningEffort": false,
-        "maxTokensField": "max_tokens",
-        "supportsLongCacheRetention": false,
-        "sendSessionAffinityHeaders": true
-      },
-      "type": "chat"
-    },
     "chat:workers-ai/@cf/openai/gpt-oss-120b": {
       "id": "workers-ai/@cf/openai/gpt-oss-120b",
       "name": "GPT OSS 120B",
@@ -649,26 +541,6 @@
       "cost": { "input": 0.2, "output": 0.3, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 128000,
       "maxTokens": 16384,
-      "compat": {
-        "supportsStore": false,
-        "supportsReasoningEffort": false,
-        "maxTokensField": "max_tokens",
-        "supportsLongCacheRetention": false,
-        "sendSessionAffinityHeaders": true
-      },
-      "type": "chat"
-    },
-    "chat:workers-ai/@cf/qwen/qwen3-30b-a3b-fp8": {
-      "id": "workers-ai/@cf/qwen/qwen3-30b-a3b-fp8",
-      "name": "Qwen3 30B A3b fp8",
-      "api": "openai-completions",
-      "provider": "cloudflare-ai-gateway",
-      "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
-      "reasoning": true,
-      "input": ["text"],
-      "cost": { "input": 0.0509, "output": 0.335, "cacheRead": 0, "cacheWrite": 0 },
-      "contextWindow": 32768,
-      "maxTokens": 32768,
       "compat": {
         "supportsStore": false,
         "supportsReasoningEffort": false,
@@ -748,26 +620,6 @@
       },
       "type": "chat"
     },
-    "chat:workers-ai/@cf/zai-org/glm-5.2": {
-      "id": "workers-ai/@cf/zai-org/glm-5.2",
-      "name": "Glm 5.2",
-      "api": "openai-completions",
-      "provider": "cloudflare-ai-gateway",
-      "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
-      "reasoning": true,
-      "input": ["text"],
-      "cost": { "input": 1.4, "output": 4.4, "cacheRead": 0.26, "cacheWrite": 0 },
-      "contextWindow": 262144,
-      "maxTokens": 256000,
-      "compat": {
-        "supportsStore": false,
-        "supportsReasoningEffort": false,
-        "maxTokensField": "max_tokens",
-        "supportsLongCacheRetention": false,
-        "sendSessionAffinityHeaders": true
-      },
-      "type": "chat"
-    },
     "chat:workers-ai/@cf/zai-org/glm-5.3": {
       "id": "workers-ai/@cf/zai-org/glm-5.3",
       "name": "Glm 5.3",
@@ -785,31 +637,6 @@
         "maxTokensField": "max_tokens",
         "supportsLongCacheRetention": false,
         "sendSessionAffinityHeaders": true
-      },
-      "type": "chat"
-    },
-    "chat:workers-ai/@cf/zai-org/glm-5.3-flash": {
-      "id": "workers-ai/@cf/zai-org/glm-5.3-flash",
-      "name": "Glm 5.3 Flash",
-      "api": "openai-completions",
-      "provider": "cloudflare-ai-gateway",
-      "baseUrl": "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/compat",
-      "reasoning": true,
-      "input": ["text", "image"],
-      "cost": { "input": 0.15, "output": 0.5, "cacheRead": 0.03, "cacheWrite": 0 },
-      "contextWindow": 1048576,
-      "maxTokens": 1048576,
-      "compat": {
-        "supportsStore": false,
-        "supportsReasoningEffort": false,
-        "maxTokensField": "max_tokens",
-        "supportsLongCacheRetention": false,
-        "sendSessionAffinityHeaders": true
-      },
-      "inputLimits": {
-        "images": {
-          "resize": { "maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80 }
-        }
       },
       "type": "chat"
     }

@@ -69,9 +69,12 @@ pub struct OpenAICompat {
     /// Send `"tools": []` when a request has no tools but the history has
     /// tool calls, as some proxies in front of Anthropic require.
     pub requires_tools_with_tool_history: Option<bool>,
-    /// Use Anthropic message threads. The default is on for the `anthropic`
-    /// provider on `api.anthropic.com`.
+    /// Use Anthropic message threads. The default is on for a base URL on
+    /// `api.anthropic.com`.
     pub supports_message_threads: Option<bool>,
+    /// Send reasoning from earlier assistant messages back (Amazon Bedrock).
+    /// Kimi K3 fails on Converse when it is sent. The default is true.
+    pub supports_reasoning_replay: Option<bool>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -136,6 +139,9 @@ impl OpenAICompat {
             supports_message_threads: override_values
                 .supports_message_threads
                 .or(self.supports_message_threads),
+            supports_reasoning_replay: override_values
+                .supports_reasoning_replay
+                .or(self.supports_reasoning_replay),
         }
     }
 }

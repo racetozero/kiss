@@ -1,33 +1,5 @@
 {
   "openai-completions": {
-    "chat:deepseek-ai/DeepSeek-V4-Pro-0813": {
-      "id": "deepseek-ai/DeepSeek-V4-Pro-0813",
-      "name": "DeepSeek V4 Pro 0813",
-      "api": "openai-completions",
-      "provider": "together",
-      "baseUrl": "https://api.together.ai/v1",
-      "reasoning": true,
-      "input": ["text"],
-      "cost": { "input": 1.32, "output": 3.96, "cacheRead": 0.13, "cacheWrite": 0 },
-      "contextWindow": 1048576,
-      "maxTokens": 384000,
-      "compat": {
-        "supportsStore": false,
-        "supportsReasoningEffort": true,
-        "maxTokensField": "max_tokens",
-        "thinkingFormat": "together",
-        "supportsLongCacheRetention": false,
-        "supportsStrictMode": false
-      },
-      "thinkingLevelMap": {
-        "minimal": null,
-        "low": null,
-        "medium": null,
-        "high": "high",
-        "xhigh": null
-      },
-      "type": "chat"
-    },
     "chat:deepseek-ai/DeepSeek-V4.1-Flash": {
       "id": "deepseek-ai/DeepSeek-V4.1-Flash",
       "name": "DeepSeek V4.1 Flash",
@@ -298,36 +270,6 @@
       },
       "type": "chat"
     },
-    "chat:openai/gpt-oss-120b": {
-      "id": "openai/gpt-oss-120b",
-      "name": "GPT OSS 120B",
-      "api": "openai-completions",
-      "provider": "together",
-      "baseUrl": "https://api.together.ai/v1",
-      "reasoning": true,
-      "input": ["text"],
-      "cost": { "input": 0.15, "output": 0.6, "cacheRead": 0, "cacheWrite": 0 },
-      "contextWindow": 131072,
-      "maxTokens": 131072,
-      "compat": {
-        "supportsStore": false,
-        "supportsReasoningEffort": true,
-        "maxTokensField": "max_tokens",
-        "thinkingFormat": "openai",
-        "supportsLongCacheRetention": false,
-        "supportsStrictMode": false
-      },
-      "thinkingLevelMap": {
-        "off": null,
-        "minimal": null,
-        "low": "low",
-        "medium": "medium",
-        "high": "high",
-        "xhigh": null,
-        "max": null
-      },
-      "type": "chat"
-    },
     "chat:Prism-ML/Ternary-Bonsai-27B": {
       "id": "Prism-ML/Ternary-Bonsai-27B",
       "name": "Ternary Bonsai 27B",
@@ -436,7 +378,7 @@
       "input": ["text"],
       "cost": { "input": 0.32, "output": 1.28, "cacheRead": 0, "cacheWrite": 0 },
       "contextWindow": 1000000,
-      "maxTokens": 64000,
+      "maxTokens": 131072,
       "compat": {
         "supportsStore": false,
         "supportsReasoningEffort": false,

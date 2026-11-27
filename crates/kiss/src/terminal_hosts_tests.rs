@@ -641,3 +641,66 @@ async fn herdr_socket_reports_without_launching_cli() {
     .await
     .expect("Herdr socket delivery timed out");
 }
+
+#[test]
+fn program_resume_reports_are_signed_and_clear_what_they_cannot_carry() {
+    use base64::Engine as _;
+    let resume = Resume {
+        id: "id".into(),
+        file: "/tmp/session.jsonl".into(),
+        cwd: "/work/project".into(),
+        argv: vec![
+            "kiss".into(),
+            "--session".into(),
+            "/tmp/session.jsonl".into(),
+        ],
+    };
+    let sequence = program_resume_sequence("secret", Some(&resume), 42, 1_800_000_000);
+    let inner = sequence
+        .strip_prefix("\x1b]7577;")
+        .and_then(|rest| rest.strip_suffix("\x1b\\"))
+        .unwrap();
+    let (body, mac) = inner.rsplit_once(":mac=").unwrap();
+    let encode = |text: &str| base64::engine::general_purpose::STANDARD.encode(text);
+    assert_eq!(
+        body,
+        format!(
+            "pid=42:time=1800000000:argv={},{},{}:cwd={}",
+            encode("kiss"),
+            encode("--session"),
+            encode("/tmp/session.jsonl"),
+            encode("/work/project")
+        )
+    );
+    // The protocol signs with plain SHA-256 so shell scripts can use sha256sum.
+    let mut shasum = std::process::Command::new("shasum")
+        .args(["-a", "256"])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    use std::io::Write as _;
+    shasum
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(format!("{body}:secret").as_bytes())
+        .unwrap();
+    let output = shasum.wait_with_output().unwrap();
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap().split(' ').next(),
+        Some(mac)
+    );
+
+    let mut relative = resume.clone();
+    relative.argv[0] = "./kiss".into();
+    let mut control = resume;
+    control.argv.push("line\nbreak".into());
+    for unreportable in [None, Some(&relative), Some(&control)] {
+        let sequence = program_resume_sequence("secret", unreportable, 42, 1);
+        assert!(
+            sequence.starts_with("\x1b]7577;pid=42:time=1:clear=1:mac="),
+            "{sequence:?}"
+        );
+    }
+}

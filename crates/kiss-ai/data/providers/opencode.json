@@ -1221,6 +1221,33 @@
       },
       "type": "chat"
     },
+    "chat:seaglass-alpha-free": {
+      "id": "seaglass-alpha-free",
+      "name": "Seaglass Alpha Free",
+      "api": "openai-completions",
+      "provider": "opencode",
+      "baseUrl": "https://opencode.ai/inference/openai/v1",
+      "reasoning": true,
+      "input": ["text"],
+      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+      "contextWindow": 1048576,
+      "maxTokens": 131072,
+      "compat": {
+        "supportsStore": false,
+        "supportsStrictMode": true,
+        "maxTokensField": "max_tokens"
+      },
+      "thinkingLevelMap": {
+        "off": null,
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh",
+        "max": "max"
+      },
+      "type": "chat"
+    },
     "chat:tidepool-alpha-free": {
       "id": "tidepool-alpha-free",
       "name": "Tidepool Alpha Free",

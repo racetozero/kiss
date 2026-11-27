@@ -242,7 +242,7 @@ async fn build_request(
         config = config.bearer_token(Token::new(token, None));
     }
     let client = aws_sdk_bedrockruntime::Client::from_conf(config.build());
-    let messages = convert_messages(context)?;
+    let messages = convert_messages(model, context)?;
     let system = context
         .system_prompt
         .as_ref()
@@ -270,11 +270,27 @@ async fn build_request(
 
 /// OpenAI models on Bedrock take a reasoning effort, not a thinking budget.
 /// gpt-oss takes a flat `reasoning_effort` and accepts only low, medium, and high.
-/// `max_tokens` is the request's output limit; a thinking budget must stay
-/// below it.
+/// Other families than Claude and GPT, such as Kimi K3 and GLM 5.3, take a flat
+/// `reasoning_effort` from the thinking level map. `max_tokens` is the
+/// request's output limit; a thinking budget must stay below it.
 fn reasoning_fields(model: &Model, level: crate::ThinkingLevel, max_tokens: u64) -> Option<Value> {
     use crate::ThinkingLevel::*;
+    if !model.reasoning {
+        return None;
+    }
     let id = model.id.to_ascii_lowercase();
+    let name = model.name.to_ascii_lowercase();
+    let claude = id.contains("claude") || name.contains("claude");
+    if !claude && !id.contains("gpt-") {
+        // Converse does not check this value, so send only mapped values. Off
+        // is sent too: without a value, Kimi K3.1 reasons at max.
+        return model
+            .thinking_level_map
+            .get(level.as_str())
+            .cloned()
+            .flatten()
+            .map(|effort| serde_json::json!({ "reasoning_effort": effort }));
+    }
     if level == Off {
         return None;
     }
@@ -360,7 +376,12 @@ fn should_use_catalog_endpoint(model: &Model) -> bool {
             .all(|name| crate::auth::provider_env("amazon-bedrock", name).is_none())
 }
 
-fn convert_messages(context: &Context) -> Result<Vec<Message>> {
+fn convert_messages(model: &Model, context: &Context) -> Result<Vec<Message>> {
+    let replay_reasoning = model
+        .compat
+        .as_ref()
+        .and_then(|compat| compat.supports_reasoning_replay)
+        != Some(false);
     let mut output = Vec::new();
     for message in &context.messages {
         let (role, content) = match message {
@@ -382,7 +403,9 @@ fn convert_messages(context: &Context) -> Result<Vec<Message>> {
                             thinking,
                             thinking_signature,
                             redacted,
-                        } if !thinking.trim().is_empty() || thinking_signature.is_some() => {
+                        } if replay_reasoning
+                            && (!thinking.trim().is_empty() || thinking_signature.is_some()) =>
+                        {
                             if *redacted {
                                 if let Some(encoded) = thinking_signature
                                     .as_deref()
@@ -604,6 +627,41 @@ mod tests {
     }
 
     #[test]
+    fn kimi_takes_the_mapped_effort_and_no_earlier_reasoning() {
+        let (kimi, _) = crate::registry::Registry::from_builtin()
+            .resolve("amazon-bedrock/us.moonshotai.kimi-k3.1", None)
+            .unwrap();
+        for (level, effort) in [
+            (crate::ThinkingLevel::Off, "none"),
+            (crate::ThinkingLevel::High, "high"),
+        ] {
+            assert_eq!(
+                reasoning_fields(&kimi, level, kimi.max_tokens).unwrap(),
+                serde_json::json!({"reasoning_effort": effort})
+            );
+        }
+        let mut reply = crate::AssistantMessage::empty(&kimi.api, &kimi.provider, &kimi.id);
+        reply.content = vec![
+            ContentBlock::Thinking {
+                thinking: "earlier reasoning".into(),
+                thinking_signature: Some("sig".into()),
+                redacted: false,
+            },
+            ContentBlock::text("answer"),
+        ];
+        let reply = KissMessage::Assistant(reply);
+        let context = Context {
+            messages: vec![reply],
+            ..Default::default()
+        };
+        let messages = convert_messages(&kimi, &context).unwrap();
+        assert_eq!(messages[0].content().len(), 1);
+        assert!(matches!(messages[0].content()[0], BedrockContent::Text(_)));
+        let messages = convert_messages(&model(), &context).unwrap();
+        assert_eq!(messages[0].content().len(), 2);
+    }
+
+    #[test]
     fn fast_mode_uses_priority_service_tier() {
         assert!(bedrock_service_tier(&StreamOptions::default()).is_none());
         let tier = bedrock_service_tier(&StreamOptions {
@@ -629,7 +687,7 @@ mod tests {
                 parameters: json!({"type":"object","properties":{"path":{"type":"string"}}}),
             }],
         };
-        let messages = convert_messages(&context).unwrap();
+        let messages = convert_messages(&model(), &context).unwrap();
         assert_eq!(messages.len(), 1);
         assert_eq!(messages[0].role(), &ConversationRole::User);
         assert_eq!(messages[0].content()[0].as_text().unwrap(), "hello");
