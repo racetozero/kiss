@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.0.45 - 2026-11-27
+
 ### Added
 
 - Terminals with the Program Resume Protocol (OSC 7577), such as Rex, can

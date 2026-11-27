@@ -2498,7 +2498,7 @@ dependencies = [
 
 [[package]]
 name = "kiss"
-version = "0.0.44"
+version = "0.0.45"
 dependencies = [
  "agent-client-protocol",
  "anyhow",
@@ -2537,7 +2537,7 @@ dependencies = [
 
 [[package]]
 name = "kiss-agent"
-version = "0.0.44"
+version = "0.0.45"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2557,7 +2557,7 @@ dependencies = [
 
 [[package]]
 name = "kiss-agent-ai"
-version = "0.0.44"
+version = "0.0.45"
 dependencies = [
  "anyhow",
  "aws-config",
@@ -2597,7 +2597,7 @@ dependencies = [
 
 [[package]]
 name = "kiss-agent-sdk"
-version = "0.0.44"
+version = "0.0.45"
 dependencies = [
  "anyhow",
  "dirs",
@@ -2619,11 +2619,11 @@ dependencies = [
 
 [[package]]
 name = "kiss-bench"
-version = "0.0.44"
+version = "0.0.45"
 
 [[package]]
 name = "kiss-coding"
-version = "0.0.44"
+version = "0.0.45"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2655,7 +2655,7 @@ dependencies = [
 
 [[package]]
 name = "kiss-mcp"
-version = "0.0.44"
+version = "0.0.45"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2680,7 +2680,7 @@ dependencies = [
 
 [[package]]
 name = "kiss-tui"
-version = "0.0.44"
+version = "0.0.45"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -2701,7 +2701,7 @@ dependencies = [
 
 [[package]]
 name = "kiss-webmcp"
-version = "0.0.44"
+version = "0.0.45"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2719,7 +2719,7 @@ dependencies = [
 
 [[package]]
 name = "kiss-workflow"
-version = "0.0.44"
+version = "0.0.45"
 dependencies = [
  "anyhow",
  "async-trait",
